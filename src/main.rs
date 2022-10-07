@@ -210,9 +210,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
                         visible_boards[2].1.push(j as i32);
                     }
                 }
-                // if card selection is out of bounds for current board, set it to the nearest available card
-                if selection.1 > (playground.boards[selection.0 as usize].cards.len() - 1) as i32 {
-                    selection.1 = (playground.boards[selection.0 as usize].cards.len() - 1) as i32;
+                // check if selection.1 is not in visible cards, if not, set it to the nearest available card
+                if !visible_boards[1].1.contains(&selection.1) {
+                    selection.1 = visible_boards[1].1[0];
                 }
                 
             }
@@ -237,9 +237,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
                         visible_boards[0].1.push(j as i32);
                     }
                 }
-                // if card selection is out of bounds for current board, set it to the nearest available card
-                if selection.1 > (playground.boards[selection.0 as usize].cards.len() - 1) as i32 {
-                    selection.1 = (playground.boards[selection.0 as usize].cards.len() - 1) as i32;
+                // check if selection.1 is not in visible cards, if not, set it to the nearest available card
+                if !visible_boards[1].1.contains(&selection.1) {
+                    selection.1 = visible_boards[1].1[0];
                 }
             }
 
@@ -256,23 +256,30 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
                         visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.push(selection.1);
                     }
                 }
+                // sort the visible cards
+                visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.sort();
             }
 
             if let KeyCode::Up = key.code {
                 if selection.1 > 0 {
                     selection.1 -= 1;
-                    // check if selection.1 is there in visible_boards[selection.0] if not and selection.1 is > 1
-                    // update visible_boards
-                    let current_visible_cards = visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.clone();
-                    if !current_visible_cards.contains(&selection.1) && selection.1 > 1 {
-                        // remove the last card from the visible cards
-                        visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.remove(2);
-                        // add the previous card to the visible cards
-                        visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.insert(0, selection.1);
-                    }
                 }
+                // check if selection.1 is there in visible_boards[selection.0] if not and selection.1 is > 1
+                // update visible_boards
+                let current_visible_cards = visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.clone();
+                if (!current_visible_cards.contains(&selection.1)) && selection.1 >= 0 {
+                    // remove the last card from the visible cards
+                    if visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.len() > CARD_LIMIT {
+                        visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.remove(CARD_LIMIT);
+                    }
+                    // add the previous card to the visible cards
+                    visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.insert(0, selection.1);
+                }
+                // sort the visible cards
+                visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.sort();
             }
         }
+        terminal.draw(|f| ui(f, playground, &mut selection, visible_boards.clone()))?; // draw the ui
     }
 }
 
@@ -328,6 +335,17 @@ fn ui<B: Backend>(f: &mut Frame<B>, playground: &mut Playground, selection: &mut
         f.render_widget(block, chunk);
         for j in 0..visible_boards[i].1.len() {
             // check if visible_boards[i].1[j] check if j is in the visible_boards[i].1 else break
+
+
+
+            
+
+            // review this
+            
+
+
+
+
             if visible_boards[i].1[j] > (board.cards.len() - 1) as i32 {
                 break;
             }
