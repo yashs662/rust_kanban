@@ -185,6 +185,10 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
                 return Ok(());
             }
 
+            if let KeyCode::Char('d') = key.code {
+                println!("{:?}", visible_boards);
+            }
+
             if let KeyCode::Right = key.code {
                 selection.1 = 0;
                 if selection.0 < (playground.boards.len() - 1) as i32 {
@@ -234,12 +238,31 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
             if let KeyCode::Down = key.code {
                 if selection.1 < playground.boards[selection.0 as usize].cards.len() as i32 {
                     selection.1 += 1;
+                    // check if selection.1 is there in visible_boards[selection.0] if not and selection.1 is < playground.boards[selection.0 as usize].cards.len()
+                    // update visible_boards
+                    let current_visible_cards = visible_boards[selection.0 as usize].1.clone();
+                    if !current_visible_cards.contains(&selection.1) && selection.1 < playground.boards[selection.0 as usize].cards.len() as i32 {
+                        // remove the first card from the visible cards
+                        visible_boards[selection.0 as usize].1.remove(0);
+                        // add the next card to the visible cards
+                        visible_boards[selection.0 as usize].1.push(selection.1);
+                    }
                 }
             }
 
             if let KeyCode::Up = key.code {
+                println!("{:?}", selection.1);
                 if selection.1 > 1 {
                     selection.1 -= 1;
+                    // check if selection.1 is there in visible_boards[selection.0] if not and selection.1 is > 1
+                    // update visible_boards
+                    let current_visible_cards = visible_boards[selection.0 as usize].1.clone();
+                    if !current_visible_cards.contains(&selection.1) && selection.1 > 1 {
+                        // remove the last card from the visible cards
+                        visible_boards[selection.0 as usize].1.remove(2);
+                        // add the previous card to the visible cards
+                        visible_boards[selection.0 as usize].1.insert(0, selection.1);
+                    }
                 }
             }
         }
@@ -248,8 +271,10 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
 
 fn ui<B: Backend>(f: &mut Frame<B>, playground: &mut Playground, selection: (i32,i32), visible_boards: Vec<(i32,Vec<i32>)>) {
     
-    let selected_style = style::Style::default().fg(Color::White);
-    let normal_style = style::Style::default().fg(Color::DarkGray);
+    let board_selected_style = style::Style::default().fg(Color::LightYellow);
+    let board_normal_style = style::Style::default().fg(Color::DarkGray);
+    let card_selected_style = style::Style::default().fg(Color::LightCyan);
+    let card_normal_style = style::Style::default().fg(Color::DarkGray);
 
     // initialise chunks based on the number of boards in the playground max 3 if more than 3 allow horizontal scrolling
     // if number of boards is 1 then take up the whole screen
@@ -271,10 +296,11 @@ fn ui<B: Backend>(f: &mut Frame<B>, playground: &mut Playground, selection: (i32
     for i in 0..visible_boards.len() {
         let board = &playground.boards[visible_boards[i].0 as usize];
         let chunk = chunks[i];
-        let block = if i == selection.0 as usize {
-            Block::default().borders(Borders::ALL).title(board.title.as_str()).style(selected_style)
+        let board_selection_position = visible_boards.iter().position(|x| x.0 == selection.0 as i32).unwrap();
+        let block = if i == board_selection_position as usize {
+            Block::default().borders(Borders::ALL).title(board.title.as_str()).style(board_selected_style)
         } else {
-            Block::default().borders(Borders::ALL).title(board.title.as_str()).style(normal_style)
+            Block::default().borders(Borders::ALL).title(board.title.as_str()).style(board_normal_style)
         };
 
         // add the cards to the board with a margin of 1
@@ -282,28 +308,31 @@ fn ui<B: Backend>(f: &mut Frame<B>, playground: &mut Playground, selection: (i32
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Percentage(33),
-                Constraint::Percentage(33),
-                Constraint::Percentage(33),
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
+                Constraint::Percentage(10),
             ]
             .as_ref(),
         )
         .margin(1)
         .split(chunk);
 
+        f.render_widget(block, chunk);
         for j in 0..visible_boards[i].1.len() {
             let card = &board.cards[visible_boards[i].1[j] as usize];
             let card_chunk = card_chunks[j];
-            let card_block = if j == selection.1 as usize {
-                Block::default().borders(Borders::ALL).title(card.title.as_str()).style(selected_style)
+            // find the position of j in board.cards[visible_boards[i].1
+            let card_selection_position = visible_boards[i].1.iter().position(|&x| x == selection.1).unwrap();
+            let card_block = if j == card_selection_position as usize && i == selection.0 as usize {
+                Block::default().borders(Borders::ALL).title(card.title.as_str()).style(card_selected_style)
             } else {
-                Block::default().borders(Borders::ALL).title(card.title.as_str()).style(normal_style)
+                Block::default().borders(Borders::ALL).title(card.title.as_str()).style(card_normal_style)
             };
             
             let card_text = Text::raw(card.content.as_str());
             let card_paragraph = Paragraph::new(card_text).block(card_block);
             f.render_widget(card_paragraph, card_chunk);
         }
-        f.render_widget(block, chunk);
     }
 }
