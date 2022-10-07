@@ -173,7 +173,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
     }
 
     loop {
-        terminal.draw(|f| ui(f, playground, selection, visible_boards.clone()))?; // draw the ui
+        terminal.draw(|f| ui(f, playground, &mut selection, visible_boards.clone()))?; // draw the ui
         if let Event::Key(key) = event::read()? {
 
             // if right arrow key is pressed, move to the next board till length of boards
@@ -186,11 +186,11 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
             }
 
             if let KeyCode::Char('d') = key.code {
+                print!("{:?}", selection);
                 println!("{:?}", visible_boards);
             }
 
             if let KeyCode::Right = key.code {
-                selection.1 = 0;
                 if selection.0 < (playground.boards.len() - 1) as i32 {
                     selection.0 += 1;
                 }
@@ -210,10 +210,14 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
                         visible_boards[2].1.push(j as i32);
                     }
                 }
+                // if card selection is out of bounds for current board, set it to the nearest available card
+                if selection.1 > (playground.boards[selection.0 as usize].cards.len() - 1) as i32 {
+                    selection.1 = (playground.boards[selection.0 as usize].cards.len() - 1) as i32;
+                }
+                
             }
 
             if let KeyCode::Left = key.code {
-                selection.1 = 0;
                 if selection.0 > 0 {
                     selection.0 -= 1;
                 }
@@ -233,35 +237,38 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
                         visible_boards[0].1.push(j as i32);
                     }
                 }
+                // if card selection is out of bounds for current board, set it to the nearest available card
+                if selection.1 > (playground.boards[selection.0 as usize].cards.len() - 1) as i32 {
+                    selection.1 = (playground.boards[selection.0 as usize].cards.len() - 1) as i32;
+                }
             }
 
             if let KeyCode::Down = key.code {
-                if selection.1 < playground.boards[selection.0 as usize].cards.len() as i32 {
+                if selection.1 < (playground.boards[selection.0 as usize].cards.len() - 1) as i32 {
                     selection.1 += 1;
                     // check if selection.1 is there in visible_boards[selection.0] if not and selection.1 is < playground.boards[selection.0 as usize].cards.len()
                     // update visible_boards
-                    let current_visible_cards = visible_boards[selection.0 as usize].1.clone();
+                    let current_visible_cards = visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.clone();
                     if !current_visible_cards.contains(&selection.1) && selection.1 < playground.boards[selection.0 as usize].cards.len() as i32 {
                         // remove the first card from the visible cards
-                        visible_boards[selection.0 as usize].1.remove(0);
+                        visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.remove(0);
                         // add the next card to the visible cards
-                        visible_boards[selection.0 as usize].1.push(selection.1);
+                        visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.push(selection.1);
                     }
                 }
             }
 
             if let KeyCode::Up = key.code {
-                println!("{:?}", selection.1);
-                if selection.1 > 1 {
+                if selection.1 > 0 {
                     selection.1 -= 1;
                     // check if selection.1 is there in visible_boards[selection.0] if not and selection.1 is > 1
                     // update visible_boards
-                    let current_visible_cards = visible_boards[selection.0 as usize].1.clone();
+                    let current_visible_cards = visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.clone();
                     if !current_visible_cards.contains(&selection.1) && selection.1 > 1 {
                         // remove the last card from the visible cards
-                        visible_boards[selection.0 as usize].1.remove(2);
+                        visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.remove(2);
                         // add the previous card to the visible cards
-                        visible_boards[selection.0 as usize].1.insert(0, selection.1);
+                        visible_boards[(selection.0 as usize % (CARD_LIMIT + 1)) as usize].1.insert(0, selection.1);
                     }
                 }
             }
@@ -269,7 +276,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, playground: &mut Playground) 
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, playground: &mut Playground, selection: (i32,i32), visible_boards: Vec<(i32,Vec<i32>)>) {
+fn ui<B: Backend>(f: &mut Frame<B>, playground: &mut Playground, selection: &mut (i32,i32), visible_boards: Vec<(i32,Vec<i32>)>) {
     
     let board_selected_style = style::Style::default().fg(Color::LightYellow);
     let board_normal_style = style::Style::default().fg(Color::DarkGray);
@@ -320,11 +327,15 @@ fn ui<B: Backend>(f: &mut Frame<B>, playground: &mut Playground, selection: (i32
 
         f.render_widget(block, chunk);
         for j in 0..visible_boards[i].1.len() {
+            // check if visible_boards[i].1[j] check if j is in the visible_boards[i].1 else break
+            if visible_boards[i].1[j] > (board.cards.len() - 1) as i32 {
+                break;
+            }
             let card = &board.cards[visible_boards[i].1[j] as usize];
             let card_chunk = card_chunks[j];
             // find the position of j in board.cards[visible_boards[i].1
-            let card_selection_position = visible_boards[i].1.iter().position(|&x| x == selection.1).unwrap();
-            let card_block = if j == card_selection_position as usize && i == selection.0 as usize {
+            let card_selection_position = visible_boards[(selection.0 as usize % (BOARD_LIMIT + 1)) as usize].1.iter().position(|&x| x == selection.1 as i32);
+            let card_block = if card_selection_position.is_some() && card_selection_position.unwrap() == j && selection.0 == visible_boards[i].0 {
                 Block::default().borders(Borders::ALL).title(card.title.as_str()).style(card_selected_style)
             } else {
                 Block::default().borders(Borders::ALL).title(card.title.as_str()).style(card_normal_style)
