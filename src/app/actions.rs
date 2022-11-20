@@ -39,7 +39,7 @@ impl Action {
             Action::IncrementDelay => &[Key::Char('+')],
             Action::DecrementDelay => &[Key::Char('-')],
             Action::NextFocus => &[Key::Tab],
-            Action::PreviousFocus => &[Key::Shift("Tab")],
+            Action::PreviousFocus => &[Key::Shift('\t')],
         }
     }
 }
@@ -94,6 +94,7 @@ impl From<Vec<Action>> for Actions {
     fn from(actions: Vec<Action>) -> Self {
         // Check key unicity
         let mut map: HashMap<Key, Vec<Action>> = HashMap::new();
+        debug!("actions: {:?}", actions);
         for action in actions.iter() {
             for key in action.keys().iter() {
                 match map.get_mut(key) {

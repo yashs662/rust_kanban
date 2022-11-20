@@ -2,24 +2,24 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::error;
+use log::{error};
 
 use super::key::Key;
 use super::InputEvent;
 
 /// A small event handler that wrap crossterm input and tick event. Each event
 /// type is handled in its own thread and returned to a common `Receiver`
-pub struct Events<'a> {
-    rx: tokio::sync::mpsc::Receiver<InputEvent<'a>>,
+pub struct Events {
+    rx: tokio::sync::mpsc::Receiver<InputEvent>,
     // Need to be kept around to prevent disposing the sender side.
-    _tx: tokio::sync::mpsc::Sender<InputEvent<'a>>,
+    _tx: tokio::sync::mpsc::Sender<InputEvent>,
     // To stop the loop
     stop_capture: Arc<AtomicBool>,
 }
 
-impl Events<'_> {
+impl Events {
     /// Constructs an new instance of `Events` with the default config.
-    pub fn new(tick_rate: Duration) -> Events<'static> {
+    pub fn new(tick_rate: Duration) -> Events {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let stop_capture = Arc::new(AtomicBool::new(false));
 

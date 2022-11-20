@@ -3,9 +3,9 @@ use self::key::Key;
 pub mod events;
 pub mod key;
 
-pub enum InputEvent<'a> {
+pub enum InputEvent {
     /// An input event occurred.
-    Input(Key<'a>),
+    Input(Key),
     /// An tick event occurred.
     Tick,
 }
