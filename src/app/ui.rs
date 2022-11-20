@@ -3,7 +3,7 @@ use std::time::Duration;
 use symbols::line;
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Modifier, Style};
+use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, Cell, LineGauge, Paragraph, Row, Table};
 use tui::{symbols, Frame};
@@ -11,6 +11,7 @@ use tui_logger::TuiLoggerWidget;
 
 use super::actions::Actions;
 use super::state::AppState;
+use super::state::Focus;
 use crate::app::App;
 
 pub fn draw<B>(rect: &mut Frame<B>, app: &App)
@@ -18,7 +19,16 @@ where
     B: Backend,
 {
     let size = rect.size();
-    check_size(&size);
+
+    let msg = check_size(&size);
+    // match to check if msg is size OK
+    if &msg == "Size OK" {
+        // pass
+    } else {
+        // draw error message
+        draw_size_error(rect, &size, msg);
+        return;
+    }
 
     // Vertical layout
     let chunks = Layout::default()
@@ -35,7 +45,8 @@ where
         .split(size);
 
     // Title
-    let title = draw_title();
+    // pass focus to title
+    let title = draw_title(&app.focus);
     rect.render_widget(title, chunks[0]);
 
     // Body & Help
@@ -44,26 +55,56 @@ where
         .constraints([Constraint::Min(20), Constraint::Length(32)].as_ref())
         .split(chunks[1]);
 
-    let body = draw_body(app.is_loading(), app.state());
+    let body = draw_body(app.is_loading(), app.state(), &app.focus);
     rect.render_widget(body, body_chunks[0]);
 
-    let help = draw_help(app.actions());
+    let help = draw_help(app.actions(), &app.focus);
     rect.render_widget(help, body_chunks[1]);
 
     // Duration LineGauge
     if let Some(duration) = app.state().duration() {
-        let duration_block = draw_duration(duration);
+        let duration_block = draw_duration(duration, &app.focus);
         rect.render_widget(duration_block, chunks[2]);
     }
 
     // Logs
-    let logs = draw_logs();
+    let logs = draw_logs(&app.focus);
     rect.render_widget(logs, chunks[3]);
 }
 
-fn draw_title<'a>() -> Paragraph<'a> {
-    Paragraph::new("Plop with TUI")
-        .style(Style::default().fg(Color::LightCyan))
+fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)
+where
+    B: Backend,
+{
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .split(*size);
+
+    let title = draw_title(&Focus::default());
+    rect.render_widget(title, chunks[0]);
+
+    let body = draw_body_error(msg);
+    rect.render_widget(body, chunks[1]);
+}
+
+fn draw_body_error<'a>(msg: String) -> Paragraph<'a> {
+    let mut text = vec![Spans::from(Span::styled(msg, Style::default().fg(Color::LightRed)))];
+    text.append(&mut vec![Spans::from(Span::raw("Resize the window to continue, or press 'q' to quit."))]);
+    Paragraph::new(text)
+    .block(Block::default().borders(Borders::ALL))
+    .alignment(Alignment::Center)
+}
+
+fn draw_title<'a>(focus: &Focus) -> Paragraph<'a> {
+    // check if focus is on title
+    let title_style = if matches!(focus, Focus::Title) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    Paragraph::new("Rust 🦀 Kanban")
+        .style(title_style)
         .alignment(Alignment::Center)
         .block(
             Block::default()
@@ -73,16 +114,26 @@ fn draw_title<'a>() -> Paragraph<'a> {
         )
 }
 
-fn check_size(rect: &Rect) {
-    if rect.width < 52 {
-        panic!("Require width >= 52, (got {})", rect.width);
+fn check_size(rect: &Rect) -> String {
+    let mut msg = String::new();
+    if rect.width < 80 {
+        msg.push_str(&format!("Terminal width should be >= 80, (current {})", rect.width));
     }
-    if rect.height < 28 {
-        panic!("Require height >= 28, (got {})", rect.height);
+    else if rect.height < 28 {
+        msg.push_str(&format!("Terminal height should be >= 28, (current {})", rect.height));
     }
+    else {
+        msg.push_str("Size OK");
+    }
+    msg
 }
 
-fn draw_body<'a>(loading: bool, state: &AppState) -> Paragraph<'a> {
+fn draw_body<'a>(loading: bool, state: &AppState, focus: &Focus) -> Paragraph<'a> {
+    let body_style = if matches!(focus, Focus::Body) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
     let initialized_text = if state.is_initialized() {
         "Initialized"
     } else {
@@ -105,7 +156,7 @@ fn draw_body<'a>(loading: bool, state: &AppState) -> Paragraph<'a> {
         Spans::from(Span::raw(sleep_text)),
         Spans::from(Span::raw(tick_text)),
     ])
-    .style(Style::default().fg(Color::LightCyan))
+    .style(body_style)
     .alignment(Alignment::Left)
     .block(
         Block::default()
@@ -116,10 +167,15 @@ fn draw_body<'a>(loading: bool, state: &AppState) -> Paragraph<'a> {
     )
 }
 
-fn draw_duration(duration: &Duration) -> LineGauge {
+fn draw_duration<'a>(duration: &Duration, focus: &Focus) -> LineGauge<'a> {
     let sec = duration.as_secs();
     let label = format!("{}s", sec);
     let ratio = sec as f64 / 10.0;
+    let gauge_style = if matches!(focus, Focus::Duration) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
     LineGauge::default()
         .block(
             Block::default()
@@ -127,17 +183,19 @@ fn draw_duration(duration: &Duration) -> LineGauge {
                 .title("Sleep duration"),
         )
         .gauge_style(
-            Style::default()
-                .fg(Color::Cyan)
-                .bg(Color::Black)
-                .add_modifier(Modifier::BOLD),
+            gauge_style
         )
         .line_set(line::THICK)
         .label(label)
         .ratio(ratio)
 }
 
-fn draw_help(actions: &Actions) -> Table {
+fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Table<'a> {
+    let helpbox_style = if matches!(focus, Focus::Help) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
     let key_style = Style::default().fg(Color::LightCyan);
     let help_style = Style::default().fg(Color::Gray);
 
@@ -166,11 +224,17 @@ fn draw_help(actions: &Actions) -> Table {
                 .border_type(BorderType::Plain)
                 .title("Help"),
         )
+        .style(helpbox_style)
         .widths(&[Constraint::Length(11), Constraint::Min(20)])
         .column_spacing(1)
 }
 
-fn draw_logs<'a>() -> TuiLoggerWidget<'a> {
+fn draw_logs<'a>(focus: &Focus) -> TuiLoggerWidget<'a> {
+    let logbox_style = if matches!(focus, Focus::Logs) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
     TuiLoggerWidget::default()
         .style_error(Style::default().fg(Color::Red))
         .style_debug(Style::default().fg(Color::Green))
@@ -183,5 +247,5 @@ fn draw_logs<'a>() -> TuiLoggerWidget<'a> {
                 .border_style(Style::default().fg(Color::White).bg(Color::Black))
                 .borders(Borders::ALL),
         )
-        .style(Style::default().fg(Color::White).bg(Color::Black))
+        .style(logbox_style)
 }

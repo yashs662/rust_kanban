@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::slice::Iter;
 
+use log::debug;
+
 use crate::inputs::key::Key;
 
 /// We define all available action
@@ -11,16 +13,20 @@ pub enum Action {
     Sleep,
     IncrementDelay,
     DecrementDelay,
+    NextFocus,
+    PreviousFocus,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 4] = [
+        static ACTIONS: [Action; 6] = [
             Action::Quit,
             Action::Sleep,
             Action::IncrementDelay,
             Action::DecrementDelay,
+            Action::NextFocus,
+            Action::PreviousFocus,
         ];
         ACTIONS.iter()
     }
@@ -32,6 +38,8 @@ impl Action {
             Action::Sleep => &[Key::Char('s')],
             Action::IncrementDelay => &[Key::Char('+')],
             Action::DecrementDelay => &[Key::Char('-')],
+            Action::NextFocus => &[Key::Tab],
+            Action::PreviousFocus => &[Key::Shift("Tab")],
         }
     }
 }
@@ -44,6 +52,8 @@ impl Display for Action {
             Action::Sleep => "Sleep",
             Action::IncrementDelay => "Increment delay",
             Action::DecrementDelay => "Decrement delay",
+            Action::NextFocus => "Focus next",
+            Action::PreviousFocus => "Focus previous",
         };
         write!(f, "{}", str)
     }
@@ -56,9 +66,16 @@ pub struct Actions(Vec<Action>);
 impl Actions {
     /// Given a key, find the corresponding action
     pub fn find(&self, key: Key) -> Option<&Action> {
-        Action::iterator()
-            .filter(|action| self.0.contains(action))
-            .find(|action| action.keys().contains(&key))
+        debug!("Find action for key [{:?}]", key);
+        let return_action = self
+            .0
+            .iter()
+            .find(|action| action.keys().iter().any(|k| *k == key));
+        debug!("Found action [{:?}]", return_action);
+        return_action
+        // Action::iterator()
+        //     .filter(|action| self.0.contains(action))
+        //     .find(|action| action.keys().contains(&key))
     }
 
     /// Get contextual actions.
@@ -104,6 +121,7 @@ impl From<Vec<Action>> for Actions {
         }
 
         // Ok, we can create contextual actions
+        debug!("Contextual actions: {:?}", actions);
         Self(actions)
     }
 }
@@ -133,6 +151,8 @@ mod tests {
             Action::Sleep,
             Action::IncrementDelay,
             Action::DecrementDelay,
+            Action::NextFocus,
+            Action::PreviousFocus,
         ]
         .into();
     }

@@ -4,63 +4,37 @@ use crossterm::event;
 
 /// Represents an key.
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
-pub enum Key {
-    /// Both Enter (or Return) and numpad Enter
+pub enum Key<'a> {
     Enter,
-    /// Tabulation key
     Tab,
-    /// Backspace key
     Backspace,
-    /// Escape key
     Esc,
+    Shift(&'a str),
 
-    /// Left arrow
     Left,
-    /// Right arrow
     Right,
-    /// Up arrow
     Up,
-    /// Down arrow
     Down,
 
-    /// Insert key
     Ins,
-    /// Delete key
     Delete,
-    /// Home key
     Home,
-    /// End key
     End,
-    /// Page Up key
     PageUp,
-    /// Page Down key
     PageDown,
 
-    /// F0 key
     F0,
-    /// F1 key
     F1,
-    /// F2 key
     F2,
-    /// F3 key
     F3,
-    /// F4 key
     F4,
-    /// F5 key
     F5,
-    /// F6 key
     F6,
-    /// F7 key
     F7,
-    /// F8 key
     F8,
-    /// F9 key
     F9,
-    /// F10 key
     F10,
-    /// F11 key
     F11,
-    /// F12 key
     F12,
     Char(char),
     Ctrl(char),
@@ -68,20 +42,12 @@ pub enum Key {
     Unknown,
 }
 
-impl Key {
+impl Key<'_> {
     /// If exit
     pub fn is_exit(&self) -> bool {
         matches!(self, Key::Ctrl('c') | Key::Char('q') | Key::Esc)
     }
-
-    /// Returns the function key corresponding to the given number
-    ///
-    /// 1 -> F1, etc...
-    ///
-    /// # Panics
-    ///
-    /// If `n == 0 || n > 12`
-    pub fn from_f(n: u8) -> Key {
+    pub fn from_f(n: u8) -> Key<'static> {
         match n {
             0 => Key::F0,
             1 => Key::F1,
@@ -101,7 +67,7 @@ impl Key {
     }
 }
 
-impl Display for Key {
+impl Display for Key<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             Key::Alt(' ') => write!(f, "<Alt+Space>"),
@@ -110,12 +76,14 @@ impl Display for Key {
             Key::Alt(c) => write!(f, "<Alt+{}>", c),
             Key::Ctrl(c) => write!(f, "<Ctrl+{}>", c),
             Key::Char(c) => write!(f, "<{}>", c),
+            Key::Tab => write!(f, "<Tab>"),
+            Key::Shift("Tab") => write!(f, "<Shift+Tab>"),
             _ => write!(f, "<{:?}>", self),
         }
     }
 }
 
-impl From<event::KeyEvent> for Key {
+impl From<event::KeyEvent> for Key<'_> {
     fn from(key_event: event::KeyEvent) -> Self {
         match key_event {
             event::KeyEvent {
@@ -174,6 +142,13 @@ impl From<event::KeyEvent> for Key {
                 code: event::KeyCode::Enter,
                 ..
             } => Key::Enter,
+            
+            event::KeyEvent {
+                code: event::KeyCode::BackTab,
+                modifiers: event::KeyModifiers::SHIFT,
+                ..
+            } => Key::Shift("Tab"),
+
             event::KeyEvent {
                 code: event::KeyCode::Tab,
                 ..
@@ -183,14 +158,12 @@ impl From<event::KeyEvent> for Key {
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
                 modifiers: event::KeyModifiers::ALT,
-                kind: _,
-                state: _,
+                ..
             } => Key::Alt(c),
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
                 modifiers: event::KeyModifiers::CONTROL,
-                kind: _,
-                state: _,
+                ..
             } => Key::Ctrl(c),
 
             event::KeyEvent {

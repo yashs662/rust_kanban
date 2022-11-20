@@ -9,17 +9,17 @@ use super::InputEvent;
 
 /// A small event handler that wrap crossterm input and tick event. Each event
 /// type is handled in its own thread and returned to a common `Receiver`
-pub struct Events {
-    rx: tokio::sync::mpsc::Receiver<InputEvent>,
+pub struct Events<'a> {
+    rx: tokio::sync::mpsc::Receiver<InputEvent<'a>>,
     // Need to be kept around to prevent disposing the sender side.
-    _tx: tokio::sync::mpsc::Sender<InputEvent>,
+    _tx: tokio::sync::mpsc::Sender<InputEvent<'a>>,
     // To stop the loop
     stop_capture: Arc<AtomicBool>,
 }
 
-impl Events {
+impl Events<'_> {
     /// Constructs an new instance of `Events` with the default config.
-    pub fn new(tick_rate: Duration) -> Events {
+    pub fn new(tick_rate: Duration) -> Events<'static> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let stop_capture = Arc::new(AtomicBool::new(false));
 

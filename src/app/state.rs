@@ -7,7 +7,16 @@ pub enum AppState {
         duration: Duration,
         counter_sleep: u32,
         counter_tick: u64,
+        focus: Focus,
     },
+}
+#[derive(Clone)]
+pub enum Focus {
+    Title,
+    Body,
+    Help,
+    Duration,
+    Logs
 }
 
 impl AppState {
@@ -15,10 +24,12 @@ impl AppState {
         let duration = Duration::from_secs(1);
         let counter_sleep = 0;
         let counter_tick = 0;
+        let focus = Focus::Title;
         Self::Initialized {
             duration,
             counter_sleep,
             counter_tick,
+            focus,
         }
     }
 
@@ -77,10 +88,50 @@ impl AppState {
             *duration = Duration::from_secs(secs);
         }
     }
+
+    pub fn next_focus(&mut self) {
+        if let Self::Initialized { focus, .. } = self {
+            focus.next();
+        }
+    }
+
+    pub fn prev_focus(&mut self) {
+        if let Self::Initialized { focus, .. } = self {
+            focus.prev();
+        }
+    }
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self::Init
+    }
+}
+
+impl Focus {
+    pub fn next(&mut self) {
+        *self = match self {
+            Self::Title => Self::Body,
+            Self::Body => Self::Help,
+            Self::Help => Self::Duration,
+            Self::Duration => Self::Logs,
+            Self::Logs => Self::Title,
+        }
+    }
+
+    pub fn prev(&mut self) {
+        *self = match self {
+            Self::Title => Self::Logs,
+            Self::Body => Self::Title,
+            Self::Help => Self::Body,
+            Self::Duration => Self::Help,
+            Self::Logs => Self::Duration,
+        }
+    }
+}
+
+impl Default for Focus {
+    fn default() -> Self {
+        Self::Body
     }
 }

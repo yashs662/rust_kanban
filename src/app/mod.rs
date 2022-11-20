@@ -2,6 +2,7 @@ use log::{debug, error, warn};
 
 use self::actions::Actions;
 use self::state::AppState;
+use self::state::Focus;
 use crate::app::actions::Action;
 use crate::inputs::key::Key;
 use crate::io::IoEvent;
@@ -25,6 +26,7 @@ pub struct App {
     /// State
     is_loading: bool,
     state: AppState,
+    focus: Focus,
 }
 
 impl App {
@@ -38,11 +40,12 @@ impl App {
             actions,
             is_loading,
             state,
+            focus: Focus::default(),
         }
     }
 
     /// Handle a user action
-    pub async fn do_action(&mut self, key: Key) -> AppReturn {
+    pub async fn do_action(&mut self, key: Key<'_>) -> AppReturn {
         if let Some(action) = self.actions.find(key) {
             debug!("Run action [{:?}]", action);
             match action {
@@ -62,6 +65,14 @@ impl App {
                 // Note, that we clamp the duration, so we stay >= 0
                 Action::DecrementDelay => {
                     self.state.decrement_delay();
+                    AppReturn::Continue
+                }
+                Action::NextFocus => {
+                    self.state.next_focus();
+                    AppReturn::Continue
+                }
+                Action::PreviousFocus => {
+                    self.state.prev_focus();
                     AppReturn::Continue
                 }
             }
