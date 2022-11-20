@@ -117,6 +117,8 @@ impl App {
             Action::Sleep,
             Action::IncrementDelay,
             Action::DecrementDelay,
+            Action::NextFocus,
+            Action::PreviousFocus,
         ]
         .into();
         self.state = AppState::initialized()

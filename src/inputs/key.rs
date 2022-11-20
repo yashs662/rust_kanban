@@ -1,7 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
 use crossterm::event;
-use log::debug;
 
 /// Represents an key.
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
@@ -39,7 +38,7 @@ pub enum Key {
     Char(char),
     Ctrl(char),
     Alt(char),
-    Shift(char),
+    ShiftTab,
     Unknown,
 }
 
@@ -66,18 +65,6 @@ impl Key {
             _ => panic!("unknown function key: F{}", n),
         }
     }
-    pub fn from_char_to_key(c: char) -> Key {
-        debug!("from_char_to_key: {}", c);
-        match c {
-            '\t' => Key::Tab,
-            '\r' => Key::Enter,
-            '\x08' => Key::Backspace,
-            '\x1b' => Key::Esc,
-            '\x1b'..='\x1f' => Key::Ctrl((c as u8 + 0x60) as char),
-            '\x7f' => Key::Delete,
-            _ => Key::Char(c),
-        }
-    }
 }
 
 impl Display for Key {
@@ -90,7 +77,7 @@ impl Display for Key {
             Key::Ctrl(c) => write!(f, "<Ctrl+{}>", c),
             Key::Char(c) => write!(f, "<{}>", c),
             Key::Tab => write!(f, "<Tab>"),
-            Key::Shift('\t') => write!(f, "<Shift+Tab>"),
+            Key::ShiftTab => write!(f, "<Shift+Tab>"),
             _ => write!(f, "<{:?}>", self),
         }
     }
@@ -160,7 +147,7 @@ impl From<event::KeyEvent> for Key {
                 code: event::KeyCode::BackTab,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
-            } => Key::from_char_to_key('\t'),
+            } => Key::ShiftTab,
 
             event::KeyEvent {
                 code: event::KeyCode::Tab,

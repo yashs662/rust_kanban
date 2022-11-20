@@ -128,6 +128,16 @@ impl Focus {
             Self::Logs => Self::Duration,
         }
     }
+
+    pub fn current(&self) -> &str {
+        match self {
+            Self::Title => "Title",
+            Self::Body => "Body",
+            Self::Help => "Help",
+            Self::Duration => "Duration",
+            Self::Logs => "Logs",
+        }
+    }
 }
 
 impl Default for Focus {

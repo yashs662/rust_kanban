@@ -39,7 +39,7 @@ impl Action {
             Action::IncrementDelay => &[Key::Char('+')],
             Action::DecrementDelay => &[Key::Char('-')],
             Action::NextFocus => &[Key::Tab],
-            Action::PreviousFocus => &[Key::Shift('\t')],
+            Action::PreviousFocus => &[Key::ShiftTab],
         }
     }
 }
@@ -66,16 +66,9 @@ pub struct Actions(Vec<Action>);
 impl Actions {
     /// Given a key, find the corresponding action
     pub fn find(&self, key: Key) -> Option<&Action> {
-        debug!("Find action for key [{:?}]", key);
-        let return_action = self
-            .0
-            .iter()
-            .find(|action| action.keys().iter().any(|k| *k == key));
-        debug!("Found action [{:?}]", return_action);
-        return_action
-        // Action::iterator()
-        //     .filter(|action| self.0.contains(action))
-        //     .find(|action| action.keys().contains(&key))
+        Action::iterator()
+            .filter(|action| self.0.contains(action))
+            .find(|action| action.keys().contains(&key))
     }
 
     /// Get contextual actions.
