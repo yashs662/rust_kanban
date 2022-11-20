@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::slice::Iter;
 
-use log::debug;
 
 use crate::inputs::key::Key;
 
@@ -87,7 +86,6 @@ impl From<Vec<Action>> for Actions {
     fn from(actions: Vec<Action>) -> Self {
         // Check key unicity
         let mut map: HashMap<Key, Vec<Action>> = HashMap::new();
-        debug!("actions: {:?}", actions);
         for action in actions.iter() {
             for key in action.keys().iter() {
                 match map.get_mut(key) {
@@ -115,7 +113,6 @@ impl From<Vec<Action>> for Actions {
         }
 
         // Ok, we can create contextual actions
-        debug!("Contextual actions: {:?}", actions);
         Self(actions)
     }
 }

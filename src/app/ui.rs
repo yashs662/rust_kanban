@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use log::debug;
 use symbols::line;
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Style};
+use tui::style::{Color, Style, Modifier};
 use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, Cell, LineGauge, Paragraph, Row, Table};
 use tui::{symbols, Frame};
@@ -30,8 +29,6 @@ where
         draw_size_error(rect, &size, msg);
         return;
     }
-
-    debug!("Focus: {:?}", app.focus.current());
 
     // Vertical layout
     let chunks = Layout::default()
@@ -182,11 +179,15 @@ fn draw_duration<'a>(duration: &Duration, focus: &Focus) -> LineGauge<'a> {
     LineGauge::default()
         .block(
             Block::default()
+                .style(gauge_style)
                 .borders(Borders::ALL)
                 .title("Sleep duration"),
         )
         .gauge_style(
-            gauge_style
+            Style::default()
+                .fg(Color::Cyan)
+                .bg(Color::Black)
+                .add_modifier(Modifier::BOLD),
         )
         .line_set(line::THICK)
         .label(label)
@@ -248,8 +249,7 @@ fn draw_logs<'a>(focus: &Focus) -> TuiLoggerWidget<'a> {
         .block(
             Block::default()
                 .title("Logs")
-                .border_style(Style::default().fg(Color::White).bg(Color::Black))
+                .border_style(logbox_style)
                 .borders(Borders::ALL),
         )
-        .style(logbox_style)
 }

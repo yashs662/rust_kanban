@@ -1,4 +1,4 @@
-use log::{debug, error, warn};
+use log::{error, warn};
 
 use self::actions::Actions;
 use self::state::AppState;
@@ -48,7 +48,6 @@ impl App {
     /// Handle a user action
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
         if let Some(action) = self.actions.find(key) {
-            debug!("Run action [{:?}]", action);
             match action {
                 Action::Quit => AppReturn::Exit,
                 Action::Sleep => {
@@ -69,11 +68,11 @@ impl App {
                     AppReturn::Continue
                 }
                 Action::NextFocus => {
-                    self.state.next_focus();
+                    self.focus = self.focus.next();
                     AppReturn::Continue
                 }
                 Action::PreviousFocus => {
-                    self.state.prev_focus();
+                    self.focus = self.focus.prev();
                     AppReturn::Continue
                 }
             }
@@ -131,5 +130,13 @@ impl App {
 
     pub fn slept(&mut self) {
         self.state.incr_sleep();
+    }
+
+    pub fn current_focus(&self) -> &Focus {
+        &self.focus
+    }
+
+    pub fn change_focus(&mut self, focus: Focus) {
+        self.focus = focus;
     }
 }
