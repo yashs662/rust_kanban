@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use log::debug;
 use symbols::line;
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
@@ -29,6 +30,8 @@ where
         draw_size_error(rect, &size, msg);
         return;
     }
+
+    debug!("Focus: {:?}", app.focus.current());
 
     // Vertical layout
     let chunks = Layout::default()
@@ -104,12 +107,12 @@ fn draw_title<'a>(focus: &Focus) -> Paragraph<'a> {
         Style::default().fg(Color::White)
     };
     Paragraph::new("Rust 🦀 Kanban")
-        .style(title_style)
+        .style(Style::default().fg(Color::White))
         .alignment(Alignment::Center)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .style(Style::default().fg(Color::White))
+                .style(title_style)
                 .border_type(BorderType::Plain),
         )
 }
@@ -156,13 +159,13 @@ fn draw_body<'a>(loading: bool, state: &AppState, focus: &Focus) -> Paragraph<'a
         Spans::from(Span::raw(sleep_text)),
         Spans::from(Span::raw(tick_text)),
     ])
-    .style(body_style)
+    .style(Style::default().fg(Color::White))
     .alignment(Alignment::Left)
     .block(
         Block::default()
             // .title("Body")
             .borders(Borders::ALL)
-            .style(Style::default().fg(Color::White))
+            .style(body_style)
             .border_type(BorderType::Plain),
     )
 }
@@ -172,9 +175,9 @@ fn draw_duration<'a>(duration: &Duration, focus: &Focus) -> LineGauge<'a> {
     let label = format!("{}s", sec);
     let ratio = sec as f64 / 10.0;
     let gauge_style = if matches!(focus, Focus::Duration) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightBlue).bg(Color::Black)
     } else {
-        Style::default().fg(Color::White)
+        Style::default().fg(Color::White).bg(Color::Black)
     };
     LineGauge::default()
         .block(
@@ -222,9 +225,10 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Table<'a> {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Plain)
-                .title("Help"),
+                .title("Help")
+                .style(helpbox_style),
         )
-        .style(helpbox_style)
+        .style(Style::default().fg(Color::White))
         .widths(&[Constraint::Length(11), Constraint::Min(20)])
         .column_spacing(1)
 }

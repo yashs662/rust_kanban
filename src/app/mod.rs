@@ -34,13 +34,14 @@ impl App {
         let actions = vec![Action::Quit].into();
         let is_loading = false;
         let state = AppState::default();
+        let focus = Focus::Title;
 
         Self {
             io_tx,
             actions,
             is_loading,
             state,
-            focus: Focus::default(),
+            focus,
         }
     }
 

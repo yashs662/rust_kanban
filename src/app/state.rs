@@ -91,13 +91,25 @@ impl AppState {
 
     pub fn next_focus(&mut self) {
         if let Self::Initialized { focus, .. } = self {
-            focus.next();
+            *focus = match focus {
+                Focus::Title => Focus::Body,
+                Focus::Body => Focus::Help,
+                Focus::Help => Focus::Duration,
+                Focus::Duration => Focus::Logs,
+                Focus::Logs => Focus::Title,
+            }
         }
     }
 
     pub fn prev_focus(&mut self) {
         if let Self::Initialized { focus, .. } = self {
-            focus.prev();
+            *focus = match focus {
+                Focus::Title => Focus::Logs,
+                Focus::Body => Focus::Title,
+                Focus::Help => Focus::Body,
+                Focus::Duration => Focus::Help,
+                Focus::Logs => Focus::Duration,
+            }
         }
     }
 }
@@ -109,26 +121,6 @@ impl Default for AppState {
 }
 
 impl Focus {
-    pub fn next(&mut self) {
-        *self = match self {
-            Self::Title => Self::Body,
-            Self::Body => Self::Help,
-            Self::Help => Self::Duration,
-            Self::Duration => Self::Logs,
-            Self::Logs => Self::Title,
-        }
-    }
-
-    pub fn prev(&mut self) {
-        *self = match self {
-            Self::Title => Self::Logs,
-            Self::Body => Self::Title,
-            Self::Help => Self::Body,
-            Self::Duration => Self::Help,
-            Self::Logs => Self::Duration,
-        }
-    }
-
     pub fn current(&self) -> &str {
         match self {
             Self::Title => "Title",
