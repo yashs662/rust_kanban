@@ -1,0 +1,126 @@
+# Adapted from <https://mateuscosta.me/rust-releases-with-github-actions>
+
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  release:
+    name: Build Rust for target (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            name: "🐧 ARM64 Linux (kernel 4.2, glibc 2.17+)"
+            os: ubuntu-latest
+            sccache-path: /home/runner/.cache/sccache
+          - target: x86_64-apple-darwin
+            name: "🍏 64-bit macOS (10.7+, Lion+)"
+            os: macos-latest
+            sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
+          - target: aarch64-apple-darwin
+            name: "🍏 ARM64 macOS (11.0+, Big Sur+)"
+            sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
+            os: macos-latest
+          - target: x86_64-pc-windows-gnu
+            name: "🪟 64-bit MinGW (Windows 7+)"
+            sccache-path: "C:\\Users\\runner\\AppData\\Local\\Mozilla\\sccache"
+            os: windows-latest
+          - target: x86_64-pc-windows-msvc
+            name: "🪟 64-bit MSVC (Windows 7+)"
+            sccache-path: "C:\\Users\\runner\\AppData\\Local\\Mozilla\\sccache"
+            os: windows-latest
+          - target: x86_64-unknown-linux-gnu
+            name: "🐧 64-bit Linux (kernel 2.6.32+, glibc 2.11+)"
+            os: ubuntu-latest
+            sccache-path: /home/runner/.cache/sccache
+          - target: x86_64-unknown-linux-musl
+            name: "🐧 64-bit Linux with MUSL"
+            os: ubuntu-latest
+            sccache-path: /home/runner/.cache/sccache
+    env:
+      RUST_BACKTRACE: full
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 2G
+      SCCACHE_DIR: /home/runner/.cache/sccache
+      # SCCACHE_RECACHE: 1 # Uncomment this to clear cache, then comment it back out
+    steps:
+      - name: 📥 Git checkout
+        uses: actions/checkout@v2
+      - name: Install sccache (🐧)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.2.15
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod a+x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" | tee -a $GITHUB_PATH
+      - name: Install sccache (🍏)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Install sccache (🪟)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Set-Location "$env:USERPROFILE"
+          $client = new-object System.Net.WebClient
+          $client.DownloadFile("https://github.com/mozilla/sccache/releases/download/v0.2.15/sccache-v0.2.15-x86_64-pc-windows-msvc.tar.gz", "$pwd\sccache.tar.gz")
+          tar -xvzf .\sccache.tar.gz
+          Move-Item -Path .\sccache-v0.2.15-x86_64-pc-windows-msvc\sccache.exe -Destination .\.cargo\bin\sccache.exe
+      - name: 🦀 Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          profile: minimal
+          override: true
+      - name: Cache cargo registry
+        uses: actions/cache@v2
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Save sccache
+        uses: actions/cache@v2
+        continue-on-error: false
+        with:
+          path: /home/runner/.cache/sccache
+          key: ${{ runner.os }}-sccache-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-sccache-
+      - name: ▶️ Start sccache server
+        run: sccache --start-server
+      # Build
+      - name: 🏗 Build 
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build
+          args: --release --locked --target ${{ matrix.target }}
+      # Upload
+      - name: Upload binary to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/plop-tui
+          asset_name: plop-tui-${{ matrix.target }}
+          tag: ${{ github.event.client_payload.new_version }}
+      # End
+      - name: 📊 Print sccache stats
+        run: sccache --show-stats
+      - name: 🛑 Stop sccache server
+        run: sccache --stop-server || true

@@ -1,13 +1,18 @@
 [package]
-name = "rust_kanban"
-version = "0.1.0"
+name = "rust-kanban"
+version = "0.1.2"
+authors = ["igor <ilaborie@gmail.com>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ilaborie/plop-tui"
 
 [dependencies]
-crossterm = "0.25.0"
-serde = "1.0.145"
-serde_derive = "1.0.145"
-serde_json = "1.0.85"
+log = "0.4"
+
+tui-logger = "0.8.1"
+
 tui = "0.19.0"
+crossterm = "0.25.0"
+tokio = { version = "1", features = ["full"] }
+
+eyre = "0.6"

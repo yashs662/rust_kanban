@@ -1,2 +1,1 @@
-# rust_kanban
-A kanban TUI created in rust
+## Kanban App for the terminal written in rust
