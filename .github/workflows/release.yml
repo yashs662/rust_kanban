@@ -110,7 +110,7 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --release --locked --target ${{ matrix.target }}
+          args: --release --target ${{ matrix.target }}
       # Upload
       - name: Upload binary to release
         uses: svenstaro/upload-release-action@v1-release

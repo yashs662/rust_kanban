@@ -142,7 +142,7 @@ impl From<event::KeyEvent> for Key {
                 code: event::KeyCode::Enter,
                 ..
             } => Key::Enter,
-            
+
             event::KeyEvent {
                 code: event::KeyCode::BackTab,
                 modifiers: event::KeyModifiers::SHIFT,
