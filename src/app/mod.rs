@@ -41,6 +41,7 @@ pub struct App {
     go_down: bool,
     current_obj_index: usize,
     current_user_input: String,
+    prev_ui_mode: UiMode,
 }
 
 impl App {
@@ -67,6 +68,7 @@ impl App {
             boards: boards,
             current_obj_index,
             current_user_input: String::new(),
+            prev_ui_mode: UiMode::Zen,
         }
     }
 
@@ -115,8 +117,10 @@ impl App {
                     }
                     Action::ToggleConfig => {
                         if self.ui_mode == UiMode::Config {
-                            self.ui_mode = data_handler::get_default_ui_mode();
+                            self.ui_mode = self.prev_ui_mode.clone();
+                            self.current_obj_index = 0;
                         } else {
+                            self.prev_ui_mode = self.ui_mode.clone();
                             self.ui_mode = UiMode::Config;
                         }
                         AppReturn::Continue

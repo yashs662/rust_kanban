@@ -103,7 +103,12 @@ impl Focus {
     }
     pub fn next(&self, available_tabs: &Vec<String>) -> Self {
         let current = self.current();
-        let index = available_tabs.iter().position(|x| x == current).unwrap();
+        let index = available_tabs.iter().position(|x| x == current);
+        // check if index is None
+        let index = match index {
+            Some(i) => i,
+            None => 0,
+        };
         let next_index = (index + 1) % available_tabs.len();
         match available_tabs[next_index].as_str() {
             "Title" => Self::Title,
@@ -116,7 +121,12 @@ impl Focus {
 
     pub fn prev(&self, available_tabs: &Vec<String>) -> Self {
         let current = self.current();
-        let index = available_tabs.iter().position(|x| x == current).unwrap();
+        let index = available_tabs.iter().position(|x| x == current);
+        // check if index is None
+        let index = match index {
+            Some(i) => i,
+            None => 0,
+        };
         let prev_index = if index == 0 {
             available_tabs.len() - 1
         } else {

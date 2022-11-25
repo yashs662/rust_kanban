@@ -1,6 +1,5 @@
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use log::debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::constants::{
     FIELD_NOT_SET,
@@ -17,17 +16,6 @@ impl CardStatus {
         match self {
             CardStatus::Active => "Active".to_string(),
             CardStatus::Complete => "Complete".to_string(),
-        }
-    }
-
-    fn from_string(s: &str) -> Option<Self> {
-        match s {
-            "Active" => Some(CardStatus::Active),
-            "Complete" => Some(CardStatus::Complete),
-            _ => {
-                debug!("Invalid card status: {}", s);
-                None
-            }
         }
     }
 }
