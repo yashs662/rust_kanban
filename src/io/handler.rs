@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use eyre::Result;
 use log::{error, info};
@@ -21,7 +20,8 @@ impl IoAsyncHandler {
     pub async fn handle_io_event(&mut self, io_event: IoEvent) {
         let result = match io_event {
             IoEvent::Initialize => self.do_initialize().await,
-            IoEvent::Sleep(duration) => self.do_sleep(duration).await,
+            IoEvent::GetLocalData => self.get_local_save().await,
+            IoEvent::GetCloudData => self.get_cloud_save().await,
         };
 
         if let Err(err) = result {
@@ -36,22 +36,24 @@ impl IoAsyncHandler {
     async fn do_initialize(&mut self) -> Result<()> {
         info!("🚀 Initialize the application");
         let mut app = self.app.lock().await;
-        tokio::time::sleep(Duration::from_secs(1)).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
-
         Ok(())
     }
 
-    /// Just take a little break
-    async fn do_sleep(&mut self, duration: Duration) -> Result<()> {
-        info!("😴 Go sleeping for {:?}...", duration);
-        tokio::time::sleep(duration).await;
-        info!("⏰ Wake up !");
-        // Notify the app for having slept
+    async fn get_local_save(&mut self) -> Result<()> {
+        info!("🚀 Get local save");
         let mut app = self.app.lock().await;
-        app.slept();
+        app.set_boards(vec![]);
+        info!("👍 Local save loaded");
+        Ok(())
+    }
 
+    async fn get_cloud_save(&mut self) -> Result<()> {
+        info!("🚀 Get cloud save");
+        let mut app = self.app.lock().await;
+        app.set_boards(vec![]);
+        info!("👍 Cloud save loaded");
         Ok(())
     }
 }

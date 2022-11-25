@@ -8,11 +8,10 @@ repository = "https://github.com/ilaborie/plop-tui"
 
 [dependencies]
 log = "0.4"
-
 tui-logger = "0.8.1"
-
 tui = "0.19.0"
 crossterm = "0.25.0"
 tokio = { version = "1", features = ["full"] }
-
+chrono = "0.4.23"
+textwrap = "0.16"
 eyre = "0.6"

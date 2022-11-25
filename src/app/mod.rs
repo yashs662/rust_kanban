@@ -1,8 +1,11 @@
+use log::debug;
 use log::{error, warn};
 
 use self::actions::Actions;
 use self::state::AppState;
 use self::state::Focus;
+use self::state::UiMode;
+use self::kanban::Board;
 use crate::app::actions::Action;
 use crate::inputs::key::Key;
 use crate::io::IoEvent;
@@ -10,6 +13,7 @@ use crate::io::IoEvent;
 pub mod actions;
 pub mod state;
 pub mod ui;
+pub mod kanban;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AppReturn {
@@ -27,6 +31,8 @@ pub struct App {
     is_loading: bool,
     state: AppState,
     focus: Focus,
+    ui_mode: UiMode,
+    boards: Vec<kanban::Board>,
 }
 
 impl App {
@@ -35,6 +41,7 @@ impl App {
         let is_loading = false;
         let state = AppState::default();
         let focus = Focus::Title;
+        let ui_mode = UiMode::Title;
 
         Self {
             io_tx,
@@ -42,6 +49,8 @@ impl App {
             is_loading,
             state,
             focus,
+            ui_mode,
+            boards: vec![],
         }
     }
 
@@ -50,29 +59,30 @@ impl App {
         if let Some(action) = self.actions.find(key) {
             match action {
                 Action::Quit => AppReturn::Exit,
-                Action::Sleep => {
-                    if let Some(duration) = self.state.duration().cloned() {
-                        // Sleep is an I/O action, we dispatch on the IO channel that's run on another thread
-                        self.dispatch(IoEvent::Sleep(duration)).await
-                    }
-                    AppReturn::Continue
-                }
-                // IncrementDelay and DecrementDelay is handled in the UI thread
-                Action::IncrementDelay => {
-                    self.state.increment_delay();
-                    AppReturn::Continue
-                }
-                // Note, that we clamp the duration, so we stay >= 0
-                Action::DecrementDelay => {
-                    self.state.decrement_delay();
-                    AppReturn::Continue
-                }
+                // Action::Sleep => {
+                //     if let Some(duration) = self.state.duration().cloned() {
+                //         // Sleep is an I/O action, we dispatch on the IO channel that's run on another thread
+                //         self.dispatch(IoEvent::Sleep(duration)).await
+                //     }
+                //     AppReturn::Continue
+                // }
                 Action::NextFocus => {
-                    self.focus = self.focus.next();
+                    self.focus = self.focus.next(&UiMode::get_available_tabs(&self.ui_mode));
                     AppReturn::Continue
                 }
                 Action::PreviousFocus => {
-                    self.focus = self.focus.prev();
+                    self.focus = self.focus.prev(&UiMode::get_available_tabs(&self.ui_mode));
+                    AppReturn::Continue
+                }
+                Action::SetUiMode => {
+                    let new_ui_mode = UiMode::from_number(key.to_digit() as u8);
+                    let available_tabs = UiMode::get_available_tabs(&new_ui_mode);
+                    // check if focus is still available in the new ui_mode if not set it to the first available tab
+                    if !available_tabs.contains(&self.focus.current().to_owned()) {
+                        self.focus = Focus::from_str(available_tabs[0].as_str());
+                    }
+                    debug!("Setting ui_mode to {}", new_ui_mode.to_string());
+                    self.ui_mode = new_ui_mode;
                     AppReturn::Continue
                 }
             }
@@ -80,13 +90,6 @@ impl App {
             warn!("No action accociated to {}", key);
             AppReturn::Continue
         }
-    }
-
-    /// We could update the app or dispatch event on tick
-    pub async fn update_on_tick(&mut self) -> AppReturn {
-        // here we just increment a counter
-        self.state.incr_tick();
-        AppReturn::Continue
     }
 
     /// Send a network event to the IO thread
@@ -114,22 +117,20 @@ impl App {
         // Update contextual actions
         self.actions = vec![
             Action::Quit,
-            Action::Sleep,
-            Action::IncrementDelay,
-            Action::DecrementDelay,
             Action::NextFocus,
             Action::PreviousFocus,
+            Action::SetUiMode,
         ]
         .into();
         self.state = AppState::initialized()
     }
 
-    pub fn loaded(&mut self) {
-        self.is_loading = false;
+    pub fn set_boards(&mut self, boards: Vec<Board>) {
+        self.boards = boards;
     }
 
-    pub fn slept(&mut self) {
-        self.state.incr_sleep();
+    pub fn loaded(&mut self) {
+        self.is_loading = false;
     }
 
     pub fn current_focus(&self) -> &Focus {

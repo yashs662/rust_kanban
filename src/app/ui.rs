@@ -1,16 +1,14 @@
-use std::time::Duration;
-
-use symbols::line;
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Style, Modifier};
+use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, BorderType, Borders, Cell, LineGauge, Paragraph, Row, Table};
-use tui::{symbols, Frame};
+use tui::widgets::{Block, BorderType, Borders, Paragraph};
+use tui::{Frame};
 use tui_logger::TuiLoggerWidget;
 
 use super::actions::Actions;
-use super::state::AppState;
+use super::kanban::Board;
+use super::state::{UiMode};
 use super::state::Focus;
 use crate::app::App;
 
@@ -30,46 +28,177 @@ where
         return;
     }
 
-    // Vertical layout
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(3),
-                Constraint::Min(10),
-                Constraint::Length(3),
-                Constraint::Length(12),
-            ]
-            .as_ref(),
-        )
-        .split(size);
+    let current_ui_mode = &app.ui_mode;
 
-    // Title
-    // pass focus to title
-    let title = draw_title(&app.focus);
-    rect.render_widget(title, chunks[0]);
+    match current_ui_mode {
+        UiMode::Zen => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage(100),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
 
-    // Body & Help
-    let body_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(20), Constraint::Length(32)].as_ref())
-        .split(chunks[1]);
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[0]);
+        }
 
-    let body = draw_body(app.is_loading(), app.state(), &app.focus);
-    rect.render_widget(body, body_chunks[0]);
+        UiMode::Title => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(3),
+                        Constraint::Percentage(80),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
 
-    let help = draw_help(app.actions(), &app.focus);
-    rect.render_widget(help, body_chunks[1]);
+            let title = draw_title(&app.focus);
+            rect.render_widget(title, chunks[0]);
+            
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[1]);
+        }
+        
+        UiMode::Help => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage(90),
+                        Constraint::Length(4),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+            
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[0]);
 
-    // Duration LineGauge
-    if let Some(duration) = app.state().duration() {
-        let duration_block = draw_duration(duration, &app.focus);
-        rect.render_widget(duration_block, chunks[2]);
+            let help = draw_help(app.actions(), &app.focus);
+            rect.render_widget(help, chunks[1]);
+        }
+
+        UiMode::Log => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage(80),
+                        Constraint::Length(8),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[0]);
+
+            let log = draw_logs(&app.focus);
+            rect.render_widget(log, chunks[1]);
+        }
+
+        UiMode::TitleHelp => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(3),
+                        Constraint::Percentage(80),
+                        Constraint::Length(4),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+
+            let title = draw_title(&app.focus);
+            rect.render_widget(title, chunks[0]);
+
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[1]);
+
+            let help = draw_help(app.actions(), &app.focus);
+            rect.render_widget(help, chunks[2]);
+        }
+
+        UiMode::TitleLog => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(3),
+                        Constraint::Percentage(70),
+                        Constraint::Length(8),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+
+            let title = draw_title(&app.focus);
+            rect.render_widget(title, chunks[0]);
+
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[1]);
+
+            let log = draw_logs(&app.focus);
+            rect.render_widget(log, chunks[2]);
+        }
+
+        UiMode::HelpLog => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage(70),
+                        Constraint::Length(4),
+                        Constraint::Length(8),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[0]);
+
+            let help = draw_help(app.actions(), &app.focus);
+            rect.render_widget(help, chunks[1]);
+
+            let log = draw_logs(&app.focus);
+            rect.render_widget(log, chunks[2]);
+        }
+
+        UiMode::TitleHelpLog => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(3),
+                        Constraint::Percentage(60),
+                        Constraint::Length(4),
+                        Constraint::Length(8),
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+
+            let title = draw_title(&app.focus);
+            rect.render_widget(title, chunks[0]);
+
+            let body = draw_body(&app.focus, &app.boards);
+            rect.render_widget(body, chunks[1]);
+
+            let help = draw_help(app.actions(), &app.focus);
+            rect.render_widget(help, chunks[2]);
+
+            let log = draw_logs(&app.focus);
+            rect.render_widget(log, chunks[3]);
+        }
     }
-
-    // Logs
-    let logs = draw_logs(&app.focus);
-    rect.render_widget(logs, chunks[3]);
 }
 
 fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)
@@ -128,73 +257,24 @@ fn check_size(rect: &Rect) -> String {
     msg
 }
 
-fn draw_body<'a>(loading: bool, state: &AppState, focus: &Focus) -> Paragraph<'a> {
+fn draw_body<'a>(focus: &Focus, boards: &Vec<Board>) -> Paragraph<'a> {
     let body_style = if matches!(focus, Focus::Body) {
         Style::default().fg(Color::LightBlue)
     } else {
         Style::default().fg(Color::White)
     };
-    let initialized_text = if state.is_initialized() {
-        "Initialized"
-    } else {
-        "Not Initialized !"
-    };
-    let loading_text = if loading { "Loading..." } else { "" };
-    let sleep_text = if let Some(sleeps) = state.count_sleep() {
-        format!("Sleep count: {}", sleeps)
-    } else {
-        String::default()
-    };
-    let tick_text = if let Some(ticks) = state.count_tick() {
-        format!("Tick count: {}", ticks)
-    } else {
-        String::default()
-    };
-    Paragraph::new(vec![
-        Spans::from(Span::raw(initialized_text)),
-        Spans::from(Span::raw(loading_text)),
-        Spans::from(Span::raw(sleep_text)),
-        Spans::from(Span::raw(tick_text)),
-    ])
-    .style(Style::default().fg(Color::White))
-    .alignment(Alignment::Left)
-    .block(
-        Block::default()
-            // .title("Body")
-            .borders(Borders::ALL)
-            .style(body_style)
-            .border_type(BorderType::Plain),
-    )
-}
-
-fn draw_duration<'a>(duration: &Duration, focus: &Focus) -> LineGauge<'a> {
-    let sec = duration.as_secs();
-    let label = format!("{}s", sec);
-    let ratio = sec as f64 / 10.0;
-    let gauge_style = if matches!(focus, Focus::Duration) {
-        Style::default().fg(Color::LightBlue).bg(Color::Black)
-    } else {
-        Style::default().fg(Color::White).bg(Color::Black)
-    };
-    LineGauge::default()
+    Paragraph::new("Temp")
+        .style(body_style)
+        .alignment(Alignment::Left)
         .block(
             Block::default()
-                .style(gauge_style)
                 .borders(Borders::ALL)
-                .title("Sleep duration"),
+                .style(body_style)
+                .border_type(BorderType::Plain),
         )
-        .gauge_style(
-            Style::default()
-                .fg(Color::Cyan)
-                .bg(Color::Black)
-                .add_modifier(Modifier::BOLD),
-        )
-        .line_set(line::THICK)
-        .label(label)
-        .ratio(ratio)
 }
 
-fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Table<'a> {
+fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
     let helpbox_style = if matches!(focus, Focus::Help) {
         Style::default().fg(Color::LightBlue)
     } else {
@@ -203,39 +283,48 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Table<'a> {
     let key_style = Style::default().fg(Color::LightCyan);
     let help_style = Style::default().fg(Color::Gray);
 
-    let mut rows = vec![];
-    for action in actions.actions().iter() {
-        let mut first = true;
-        for key in action.keys() {
-            let help = if first {
-                first = false;
-                action.to_string()
-            } else {
-                String::from("")
-            };
-            let row = Row::new(vec![
-                Cell::from(Span::styled(key.to_string(), key_style)),
-                Cell::from(Span::styled(help, help_style)),
-            ]);
-            rows.push(row);
+    // make a new string with the format key - action, or key1, key2 - action if there are multiple keys and join all pairs with ;
+
+    let actions_iter = actions.actions().iter();
+    let mut help_spans = vec![];
+    for action in actions_iter {
+        let keys = action.keys();
+        let keys_span = if keys.len() > 1 {
+            let keys_str = keys
+                .iter()
+                .map(|k| k.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+            Span::styled(keys_str, key_style)
+        } else {
+            Span::styled(keys[0].to_string(), key_style)
+        };
+        let action_span = Span::styled(action.to_string(), help_style);
+        help_spans.push(keys_span);
+        help_spans.push(Span::raw(" - "));
+        help_spans.push(action_span);
+        // if action is not last
+        if action != actions.actions().last().unwrap() {
+            help_spans.push(Span::raw(" ; "));
         }
     }
+    let help_span = Spans::from(help_spans);
 
-    Table::new(rows)
+    Paragraph::new(help_span)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Left)
         .block(
             Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Plain)
                 .title("Help")
-                .style(helpbox_style),
+                .borders(Borders::ALL)
+                .style(helpbox_style)
+                .border_type(BorderType::Plain),
         )
-        .style(Style::default().fg(Color::White))
-        .widths(&[Constraint::Length(11), Constraint::Min(20)])
-        .column_spacing(1)
+        .wrap(tui::widgets::Wrap { trim: true })
 }
 
 fn draw_logs<'a>(focus: &Focus) -> TuiLoggerWidget<'a> {
-    let logbox_style = if matches!(focus, Focus::Logs) {
+    let logbox_style = if matches!(focus, Focus::Log) {
         Style::default().fg(Color::LightBlue)
     } else {
         Style::default().fg(Color::White)

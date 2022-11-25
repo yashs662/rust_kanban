@@ -1,13 +1,69 @@
-use std::time::Duration;
+use log::debug;
+
+#[derive(Clone)]
+pub enum UiMode {
+    Zen,
+    Title,
+    Help,
+    Log,
+    TitleHelp,
+    TitleLog,
+    HelpLog,
+    TitleHelpLog,
+}
+
+impl UiMode {
+    pub fn to_string(&self) -> String {
+        match self {
+            UiMode::Zen => "Zen".to_string(),
+            UiMode::Title => "Title".to_string(),
+            UiMode::Help => "Help".to_string(),
+            UiMode::Log => "Log".to_string(),
+            UiMode::TitleHelp => "Title and Help".to_string(),
+            UiMode::TitleLog => "Title and Log".to_string(),
+            UiMode::HelpLog => "Help and Log".to_string(),
+            UiMode::TitleHelpLog => "Title, Help and Log".to_string(),
+        }
+    }
+
+    pub fn from_number(n: u8) -> UiMode {
+        match n {
+            1 => UiMode::Zen,
+            2 => UiMode::Title,
+            3 => UiMode::Help,
+            4 => UiMode::Log,
+            5 => UiMode::TitleHelp,
+            6 => UiMode::TitleLog,
+            7 => UiMode::HelpLog,
+            8 => UiMode::TitleHelpLog,
+            _ => {
+                debug!("Invalid UiMode: {}", n);
+                UiMode::Title
+            }
+        }
+    }
+
+    pub fn get_available_tabs(&self) -> Vec<String> {
+        match self {
+            UiMode::Zen => vec!["Body".to_string()],
+            UiMode::Title => vec!["Title".to_string(), "Body".to_string()],
+            UiMode::Help => vec!["Body".to_string(), "Help".to_string()],
+            UiMode::Log => vec!["Body".to_string(), "Log".to_string()],
+            UiMode::TitleHelp => vec!["Title".to_string(), "Body".to_string(), "Help".to_string()],
+            UiMode::TitleLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
+            UiMode::HelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
+            UiMode::TitleHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum AppState {
     Init,
     Initialized {
-        duration: Duration,
-        counter_sleep: u32,
-        counter_tick: u64,
         focus: Focus,
+        ui_mode: UiMode,
+        scroll_length: usize,
     },
 }
 #[derive(Clone)]
@@ -15,78 +71,22 @@ pub enum Focus {
     Title,
     Body,
     Help,
-    Duration,
-    Logs
+    Log
 }
 
 impl AppState {
     pub fn initialized() -> Self {
-        let duration = Duration::from_secs(1);
-        let counter_sleep = 0;
-        let counter_tick = 0;
         let focus = Focus::Title;
+        let ui_mode = UiMode::Title;
         Self::Initialized {
-            duration,
-            counter_sleep,
-            counter_tick,
             focus,
+            ui_mode,
+            scroll_length: 0,
         }
     }
 
     pub fn is_initialized(&self) -> bool {
         matches!(self, &Self::Initialized { .. })
-    }
-
-    pub fn incr_sleep(&mut self) {
-        if let Self::Initialized { counter_sleep, .. } = self {
-            *counter_sleep += 1;
-        }
-    }
-
-    pub fn incr_tick(&mut self) {
-        if let Self::Initialized { counter_tick, .. } = self {
-            *counter_tick += 1;
-        }
-    }
-
-    pub fn count_sleep(&self) -> Option<u32> {
-        if let Self::Initialized { counter_sleep, .. } = self {
-            Some(*counter_sleep)
-        } else {
-            None
-        }
-    }
-
-    pub fn count_tick(&self) -> Option<u64> {
-        if let Self::Initialized { counter_tick, .. } = self {
-            Some(*counter_tick)
-        } else {
-            None
-        }
-    }
-
-    pub fn duration(&self) -> Option<&Duration> {
-        if let Self::Initialized { duration, .. } = self {
-            Some(duration)
-        } else {
-            None
-        }
-    }
-
-    pub fn increment_delay(&mut self) {
-        if let Self::Initialized { duration, .. } = self {
-            // Set the duration, note that the duration is in 1s..10s
-            let secs = (duration.as_secs() + 1).clamp(1, 10);
-            *duration = Duration::from_secs(secs);
-        }
-    }
-
-    pub fn decrement_delay(&mut self) {
-        if let Self::Initialized { duration, .. } = self {
-            // Set the duration, note that the duration is in 1s..10s
-            let secs = (duration.as_secs() - 1).clamp(1, 10);
-            *duration = Duration::from_secs(secs);
-        }
     }
 }
 
@@ -102,26 +102,46 @@ impl Focus {
             Self::Title => "Title",
             Self::Body => "Body",
             Self::Help => "Help",
-            Self::Duration => "Duration",
-            Self::Logs => "Logs",
+            Self::Log => "Log",
         }
     }
-    pub fn next(&self) -> Self {
-        match self {
-            Self::Title => Self::Body,
-            Self::Body => Self::Help,
-            Self::Help => Self::Duration,
-            Self::Duration => Self::Logs,
-            Self::Logs => Self::Title,
+    pub fn next(&self, available_tabs: &Vec<String>) -> Self {
+        let current = self.current();
+        let index = available_tabs.iter().position(|x| x == current).unwrap();
+        let next_index = (index + 1) % available_tabs.len();
+        match available_tabs[next_index].as_str() {
+            "Title" => Self::Title,
+            "Body" => Self::Body,
+            "Help" => Self::Help,
+            "Log" => Self::Log,
+            _ => Self::Title,
         }
     }
-    pub fn prev(&self) -> Self {
-        match self {
-            Self::Title => Self::Logs,
-            Self::Body => Self::Title,
-            Self::Help => Self::Body,
-            Self::Duration => Self::Help,
-            Self::Logs => Self::Duration,
+
+    pub fn prev(&self, available_tabs: &Vec<String>) -> Self {
+        let current = self.current();
+        let index = available_tabs.iter().position(|x| x == current).unwrap();
+        let prev_index = if index == 0 {
+            available_tabs.len() - 1
+        } else {
+            index - 1
+        };
+        match available_tabs[prev_index].as_str() {
+            "Title" => Self::Title,
+            "Body" => Self::Body,
+            "Help" => Self::Help,
+            "Log" => Self::Log,
+            _ => Self::Title,
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "Title" => Self::Title,
+            "Body" => Self::Body,
+            "Help" => Self::Help,
+            "Log" => Self::Log,
+            _ => Self::Title,
         }
     }
 }

@@ -65,6 +65,13 @@ impl Key {
             _ => panic!("unknown function key: F{}", n),
         }
     }
+    pub fn to_digit(&self) -> u8 {
+        // check if char is a digit if so return it
+        match self {
+            Key::Char(c) => c.to_digit(10).unwrap() as u8,
+            _ => panic!("not a digit"),
+        }
+    }
 }
 
 impl Display for Key {

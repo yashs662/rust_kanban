@@ -1,31 +1,25 @@
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::slice::Iter;
-
-
 use crate::inputs::key::Key;
 
 /// We define all available action
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Action {
     Quit,
-    Sleep,
-    IncrementDelay,
-    DecrementDelay,
     NextFocus,
     PreviousFocus,
+    SetUiMode,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 6] = [
+        static ACTIONS: [Action; 4] = [
             Action::Quit,
-            Action::Sleep,
-            Action::IncrementDelay,
-            Action::DecrementDelay,
             Action::NextFocus,
             Action::PreviousFocus,
+            Action::SetUiMode,
         ];
         ACTIONS.iter()
     }
@@ -34,11 +28,12 @@ impl Action {
     pub fn keys(&self) -> &[Key] {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
-            Action::Sleep => &[Key::Char('s')],
-            Action::IncrementDelay => &[Key::Char('+')],
-            Action::DecrementDelay => &[Key::Char('-')],
             Action::NextFocus => &[Key::Tab],
             Action::PreviousFocus => &[Key::ShiftTab],
+            Action::SetUiMode => &[Key::Char('1'), Key::Char('2'), Key::Char('3'),
+                                   Key::Char('4'), Key::Char('5'), Key::Char('6'),
+                                   Key::Char('7'), Key::Char('8')
+                                   ],
         }
     }
 }
@@ -48,11 +43,9 @@ impl Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
             Action::Quit => "Quit",
-            Action::Sleep => "Sleep",
-            Action::IncrementDelay => "Increment delay",
-            Action::DecrementDelay => "Decrement delay",
             Action::NextFocus => "Focus next",
             Action::PreviousFocus => "Focus previous",
+            Action::SetUiMode => "Set UI mode",
         };
         write!(f, "{}", str)
     }
@@ -123,14 +116,14 @@ mod tests {
 
     #[test]
     fn should_find_action_by_key() {
-        let actions: Actions = vec![Action::Quit, Action::Sleep].into();
+        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
         let result = actions.find(Key::Ctrl('c'));
         assert_eq!(result, Some(&Action::Quit));
     }
 
     #[test]
     fn should_find_action_by_key_not_found() {
-        let actions: Actions = vec![Action::Quit, Action::Sleep].into();
+        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
         let result = actions.find(Key::Alt('w'));
         assert_eq!(result, None);
     }
@@ -139,9 +132,6 @@ mod tests {
     fn should_create_actions_from_vec() {
         let _actions: Actions = vec![
             Action::Quit,
-            Action::Sleep,
-            Action::IncrementDelay,
-            Action::DecrementDelay,
             Action::NextFocus,
             Action::PreviousFocus,
         ]
@@ -153,12 +143,10 @@ mod tests {
     fn should_panic_when_create_actions_conflict_key() {
         let _actions: Actions = vec![
             Action::Quit,
-            Action::DecrementDelay,
-            Action::Sleep,
-            Action::IncrementDelay,
-            Action::IncrementDelay,
             Action::Quit,
-            Action::DecrementDelay,
+            Action::NextFocus,
+            Action::NextFocus,
+            Action::NextFocus,
         ]
         .into();
     }
