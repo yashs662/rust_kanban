@@ -17,12 +17,15 @@ pub fn get_config() -> AppConfig {
             // if config file has been found, parse it, if an error occurs, use default config and write it to file
             ..serde_json::from_str(&config).unwrap_or_else(|e| {
                 error!("Error parsing config file: {}", e);
+                write_config(&AppConfig::default());
                 AppConfig::default()
             })
         },
-        Err(_) => AppConfig{
+        Err(_) => {
             // if config file has not been found, use default config and write it to file
-            ..AppConfig::default()
+            let config = AppConfig::default();
+            write_config(&config);
+            AppConfig::default()
         }
     };
     config

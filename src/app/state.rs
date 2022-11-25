@@ -61,14 +61,12 @@ impl UiMode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum AppState {
     Init,
-    Initialized {
-        focus: Focus,
-        ui_mode: UiMode,
-        scroll_length: usize,
-    },
+    Initialized,
+    UserInput
+
 }
 #[derive(Clone)]
 pub enum Focus {
@@ -80,13 +78,7 @@ pub enum Focus {
 
 impl AppState {
     pub fn initialized() -> Self {
-        let focus = Focus::Title;
-        let ui_mode = UiMode::Title;
-        Self::Initialized {
-            focus,
-            ui_mode,
-            scroll_length: 0,
-        }
+        Self::Initialized
     }
 
     pub fn is_initialized(&self) -> bool {

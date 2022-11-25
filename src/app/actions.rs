@@ -11,17 +11,23 @@ pub enum Action {
     PreviousFocus,
     SetUiMode,
     ToggleConfig,
+    GoUp,
+    GoDown,
+    TakeUserInput,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 5] = [
+        static ACTIONS: [Action; 8] = [
             Action::Quit,
             Action::NextFocus,
             Action::PreviousFocus,
             Action::SetUiMode,
             Action::ToggleConfig,
+            Action::GoUp,
+            Action::GoDown,
+            Action::TakeUserInput,
         ];
         ACTIONS.iter()
     }
@@ -37,6 +43,9 @@ impl Action {
                                    Key::Char('7'), Key::Char('8')
                                    ],
             Action::ToggleConfig => &[Key::Char('c')],
+            Action::GoUp => &[Key::Up],
+            Action::GoDown => &[Key::Down],
+            Action::TakeUserInput => &[Key::Char('i')],
         }
     }
 }
@@ -50,6 +59,9 @@ impl Display for Action {
             Action::PreviousFocus => "Focus previous",
             Action::SetUiMode => "Set UI mode",
             Action::ToggleConfig => "Open config Menu",
+            Action::GoUp => "Go up",
+            Action::GoDown => "Go down",
+            Action::TakeUserInput => "Enter input mode",
         };
         write!(f, "{}", str)
     }

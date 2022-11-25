@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use log::debug;
 use log::{error, warn};
 use serde::{Serialize, Deserialize};
-use tui::widgets::ListItem;
 
 use self::actions::Actions;
 use self::state::AppState;
@@ -38,6 +37,10 @@ pub struct App {
     focus: Focus,
     ui_mode: UiMode,
     boards: Vec<kanban::Board>,
+    go_up: bool,
+    go_down: bool,
+    current_obj_index: usize,
+    current_user_input: String,
 }
 
 impl App {
@@ -47,6 +50,10 @@ impl App {
         let state = AppState::default();
         let focus = Focus::Title;
         let ui_mode = data_handler::get_default_ui_mode();
+        let boards = vec![];
+        let go_up = false;
+        let go_down = false;
+        let current_obj_index = 0;
 
         Self {
             io_tx,
@@ -55,53 +62,87 @@ impl App {
             state,
             focus,
             ui_mode,
-            boards: vec![],
+            go_up,
+            go_down,
+            boards: boards,
+            current_obj_index,
+            current_user_input: String::new(),
         }
     }
 
     /// Handle a user action
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
-        if let Some(action) = self.actions.find(key) {
-            match action {
-                Action::Quit => AppReturn::Exit,
-                // Action::Sleep => {
-                //     if let Some(duration) = self.state.duration().cloned() {
-                //         // Sleep is an I/O action, we dispatch on the IO channel that's run on another thread
-                //         self.dispatch(IoEvent::Sleep(duration)).await
-                //     }
-                //     AppReturn::Continue
-                // }
-                Action::NextFocus => {
-                    self.focus = self.focus.next(&UiMode::get_available_tabs(&self.ui_mode));
-                    AppReturn::Continue
-                }
-                Action::PreviousFocus => {
-                    self.focus = self.focus.prev(&UiMode::get_available_tabs(&self.ui_mode));
-                    AppReturn::Continue
-                }
-                Action::SetUiMode => {
-                    let new_ui_mode = UiMode::from_number(key.to_digit() as u8);
-                    let available_tabs = UiMode::get_available_tabs(&new_ui_mode);
-                    // check if focus is still available in the new ui_mode if not set it to the first available tab
-                    if !available_tabs.contains(&self.focus.current().to_owned()) {
-                        self.focus = Focus::from_str(available_tabs[0].as_str());
-                    }
-                    debug!("Setting ui_mode to {}", new_ui_mode.to_string());
-                    self.ui_mode = new_ui_mode;
-                    AppReturn::Continue
-                }
-                Action::ToggleConfig => {
-                    if self.ui_mode == UiMode::Config {
-                        self.ui_mode = data_handler::get_default_ui_mode();
-                    } else {
-                        self.ui_mode = UiMode::Config;
-                    }
-                    AppReturn::Continue
-                }
+        // check if we are in a user input mode
+        if self.state == AppState::UserInput {
+            debug!("User input mode");
+            // append to current user input if key is not enter else change state to Initialized
+            if key != Key::Enter {
+                self.current_user_input.push_str(&key.to_string());
+            } else {
+                self.state = AppState::Initialized;
+                debug!("User input: {}", self.current_user_input);
             }
+            return AppReturn::Continue;
         } else {
-            warn!("No action accociated to {}", key);
-            AppReturn::Continue
+            if let Some(action) = self.actions.find(key) {
+                match action {
+                    Action::Quit => AppReturn::Exit,
+                    // Action::Sleep => {
+                    //     if let Some(duration) = self.state.duration().cloned() {
+                    //         // Sleep is an I/O action, we dispatch on the IO channel that's run on another thread
+                    //         self.dispatch(IoEvent::Sleep(duration)).await
+                    //     }
+                    //     AppReturn::Continue
+                    // }
+                    Action::NextFocus => {
+                        self.focus = self.focus.next(&UiMode::get_available_tabs(&self.ui_mode));
+                        AppReturn::Continue
+                    }
+                    Action::PreviousFocus => {
+                        self.focus = self.focus.prev(&UiMode::get_available_tabs(&self.ui_mode));
+                        AppReturn::Continue
+                    }
+                    Action::SetUiMode => {
+                        let new_ui_mode = UiMode::from_number(key.to_digit() as u8);
+                        let available_tabs = UiMode::get_available_tabs(&new_ui_mode);
+                        // check if focus is still available in the new ui_mode if not set it to the first available tab
+                        if !available_tabs.contains(&self.focus.current().to_owned()) {
+                            self.focus = Focus::from_str(available_tabs[0].as_str());
+                        }
+                        debug!("Setting ui_mode to {}", new_ui_mode.to_string());
+                        self.ui_mode = new_ui_mode;
+                        AppReturn::Continue
+                    }
+                    Action::ToggleConfig => {
+                        if self.ui_mode == UiMode::Config {
+                            self.ui_mode = data_handler::get_default_ui_mode();
+                        } else {
+                            self.ui_mode = UiMode::Config;
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::GoUp => {
+                        if self.ui_mode == UiMode::Config {
+                            self.go_up = true;
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::GoDown => {
+                        if self.ui_mode == UiMode::Config {
+                            self.go_down = true;
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::TakeUserInput => {
+                        debug!("Taking user input");
+                        self.state = AppState::UserInput;
+                        AppReturn::Continue
+                    }
+                }
+            } else {
+                warn!("No action accociated to {}", key);
+                AppReturn::Continue
+            }
         }
     }
 
@@ -134,6 +175,9 @@ impl App {
             Action::PreviousFocus,
             Action::SetUiMode,
             Action::ToggleConfig,
+            Action::GoUp,
+            Action::GoDown,
+            Action::TakeUserInput,
         ]
         .into();
         self.state = AppState::initialized()
@@ -154,6 +198,12 @@ impl App {
     pub fn change_focus(&mut self, focus: Focus) {
         self.focus = focus;
     }
+
+    pub fn set_current_user_input(&mut self, input: String) {
+        let new_input = input;
+        debug!("Setting current user input to {}", new_input);
+        self.current_user_input = new_input;
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -165,17 +215,17 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn default() -> Self {
         let db_path = handler::get_config_dir().join(DB_NAME);
-        let default_view = UiMode::Title;
+        let default_view = UiMode::TitleHelpLog;
         Self {
             db_path,
             default_view
         }
     }
 
-    pub fn to_list(&self) -> Vec<ListItem> {
+    pub fn to_list(&self) -> Vec<String> {
         vec![
-            ListItem::new(format!("db_path: {}", self.db_path.to_str().unwrap())),
-            ListItem::new(format!("default_view: {}", self.default_view.to_string())),
+            format!("db_path: {}", self.db_path.to_str().unwrap()),
+            format!("default_view: {}", self.default_view.to_string()),
         ]
     }
 }

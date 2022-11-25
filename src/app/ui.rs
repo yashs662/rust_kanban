@@ -1,19 +1,20 @@
+use log::{error, debug};
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, BorderType, Borders, Paragraph, List, ListState};
+use tui::widgets::{Block, BorderType, Borders, Paragraph};
 use tui::{Frame};
 use tui_logger::TuiLoggerWidget;
 
-use super::actions::Actions;
+use super::actions::{Actions, Action};
 use super::kanban::Board;
 use super::state::{UiMode};
 use super::state::Focus;
 use crate::app::App;
 use crate::io::data_handler::get_config;
 
-pub fn draw<B>(rect: &mut Frame<B>, app: &App)
+pub fn draw<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
@@ -201,23 +202,69 @@ where
         }
 
         UiMode::Config => {
-            draw_config(rect);
+            draw_config(rect, app);
         }
     }
 }
 
-fn draw_config<B>(rect: &mut Frame<B>)
+fn draw_config<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
     let config = get_config();
     let config_list = config.to_list();
-    let list = List::new(config_list)
-        .block(Block::default().borders(Borders::ALL).title("Config"))
-        .highlight_style(Style::default().fg(Color::Yellow))
-        .highlight_symbol(">> ");
+    // if len of config_list is 0, then set UiMode to Title and put log message
+    if config_list.len() == 0 {
+        error!("No config file found. Please create a config file at ~/.config/zenith/config.toml");
+        return;
+    }
+    // check if current_option is in range of config_list
+    if app.current_obj_index >= config_list.len() {
+        // if not, set current_option to 0
+        app.current_obj_index = 0;
+        debug!("current_option is out of range. Setting to 0");
+    }
+    debug!("current_option: {}", app.current_obj_index);
 
-    rect.render_stateful_widget(list, rect.size(), &mut ListState::default());
+    // if app.go_up is true, then decrement current_option
+    if app.go_up {
+        if app.current_obj_index > 0 {
+            app.current_obj_index -= 1;
+        }
+        app.go_up = false;
+    }
+    // if app.go_down is true, then increment current_option
+    if app.go_down {
+        if app.current_obj_index < config_list.len() - 1 {
+            app.current_obj_index += 1;
+        }
+        app.go_down = false;
+    }
+    let highlight_style = Style::default().bg(Color::LightGreen).fg(Color::Black);
+    let normal_style = Style::default().bg(Color::Black).fg(Color::White);
+
+    let mut config_spans = vec![];
+
+    for (i, config) in config_list.iter().enumerate() {
+        let style = if i == app.current_obj_index {
+            highlight_style
+        } else {
+            normal_style
+        };
+        config_spans.push(Span::styled(config, style));
+        // if not last element, add newline
+        if i != config_list.len() - 1 {
+            config_spans.push(Span::raw("\n"));
+        } 
+    }
+
+    let config_text = Spans::from(config_spans);
+    let config_paragraph = Paragraph::new(config_text)
+        .block(Block::default().borders(Borders::ALL).title("Config"))
+        .alignment(Alignment::Left)
+        .wrap(tui::widgets::Wrap { trim: false });
+
+    rect.render_widget(config_paragraph, rect.size());
 }
 
 fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)
@@ -307,8 +354,9 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
     let actions_iter = actions.actions().iter();
     let mut help_spans = vec![];
     for action in actions_iter {
+        // check if action is SetUiMode if so then keys should be changed to string <1..8>
         let keys = action.keys();
-        let keys_span = if keys.len() > 1 {
+        let mut keys_span = if keys.len() > 1 {
             let keys_str = keys
                 .iter()
                 .map(|k| k.to_string())
@@ -319,6 +367,10 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
             Span::styled(keys[0].to_string(), key_style)
         };
         let action_span = Span::styled(action.to_string(), help_style);
+        keys_span = match action {
+            Action::SetUiMode => Span::styled("<1..8>", key_style),
+            _ => keys_span,
+        };
         help_spans.push(keys_span);
         help_spans.push(Span::raw(" - "));
         help_spans.push(action_span);
