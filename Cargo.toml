@@ -15,3 +15,7 @@ tokio = { version = "1", features = ["full"] }
 chrono = "0.4.23"
 textwrap = "0.16"
 eyre = "0.6"
+home = "0.5.4"
+serde = { version = "1.0.147", features = ["derive"]}
+serde_json = "1.0.89"
+diesel = "2.0.2"

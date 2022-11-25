@@ -2,7 +2,7 @@ use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, BorderType, Borders, Paragraph};
+use tui::widgets::{Block, BorderType, Borders, Paragraph, List, ListState};
 use tui::{Frame};
 use tui_logger::TuiLoggerWidget;
 
@@ -11,6 +11,7 @@ use super::kanban::Board;
 use super::state::{UiMode};
 use super::state::Focus;
 use crate::app::App;
+use crate::io::data_handler::get_config;
 
 pub fn draw<B>(rect: &mut Frame<B>, app: &App)
 where
@@ -198,7 +199,25 @@ where
             let log = draw_logs(&app.focus);
             rect.render_widget(log, chunks[3]);
         }
+
+        UiMode::Config => {
+            draw_config(rect);
+        }
     }
+}
+
+fn draw_config<B>(rect: &mut Frame<B>)
+where
+    B: Backend,
+{
+    let config = get_config();
+    let config_list = config.to_list();
+    let list = List::new(config_list)
+        .block(Block::default().borders(Borders::ALL).title("Config"))
+        .highlight_style(Style::default().fg(Color::Yellow))
+        .highlight_symbol(">> ");
+
+    rect.render_stateful_widget(list, rect.size(), &mut ListState::default());
 }
 
 fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)

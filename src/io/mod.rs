@@ -1,4 +1,5 @@
 pub mod handler;
+pub mod data_handler;
 // For this dummy application we only need two IO event
 #[derive(Debug, Clone)]
 pub enum IoEvent {

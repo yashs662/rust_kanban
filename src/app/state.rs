@@ -1,6 +1,7 @@
 use log::debug;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum UiMode {
     Zen,
     Title,
@@ -10,6 +11,7 @@ pub enum UiMode {
     TitleLog,
     HelpLog,
     TitleHelpLog,
+    Config
 }
 
 impl UiMode {
@@ -23,6 +25,7 @@ impl UiMode {
             UiMode::TitleLog => "Title and Log".to_string(),
             UiMode::HelpLog => "Help and Log".to_string(),
             UiMode::TitleHelpLog => "Title, Help and Log".to_string(),
+            UiMode::Config => "Config".to_string(),
         }
     }
 
@@ -53,6 +56,7 @@ impl UiMode {
             UiMode::TitleLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
             UiMode::HelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::TitleHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
+            UiMode::Config => vec!["Config".to_string()],
         }
     }
 }

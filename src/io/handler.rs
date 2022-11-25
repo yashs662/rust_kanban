@@ -1,5 +1,9 @@
-use std::sync::Arc;
-
+use std::{sync::Arc, path::PathBuf};
+use crate::constants::{
+    CONFIG_DIR_NAME,
+    CONFIG_FILE_NAME
+};
+use crate::app::AppConfig;
 use eyre::Result;
 use log::{error, info};
 
@@ -36,13 +40,16 @@ impl IoAsyncHandler {
     async fn do_initialize(&mut self) -> Result<()> {
         info!("🚀 Initialize the application");
         let mut app = self.app.lock().await;
+        if !prepare_config_dir() {
+            error!("Cannot create config directory");
+        }
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
         Ok(())
     }
 
     async fn get_local_save(&mut self) -> Result<()> {
-        info!("🚀 Get local save");
+        info!("🚀 Getting local save");
         let mut app = self.app.lock().await;
         app.set_boards(vec![]);
         info!("👍 Local save loaded");
@@ -50,10 +57,33 @@ impl IoAsyncHandler {
     }
 
     async fn get_cloud_save(&mut self) -> Result<()> {
-        info!("🚀 Get cloud save");
+        info!("🚀 Getting cloud save");
         let mut app = self.app.lock().await;
         app.set_boards(vec![]);
         info!("👍 Cloud save loaded");
         Ok(())
     }
+}
+
+pub(crate) fn get_config_dir() -> PathBuf {
+    let mut config_dir = home::home_dir().unwrap();
+    config_dir.push(".config");
+    config_dir.push(CONFIG_DIR_NAME);
+    config_dir
+}
+
+fn prepare_config_dir() -> bool {
+    let config_dir = get_config_dir();
+    if !config_dir.exists() {
+        std::fs::create_dir_all(&config_dir).unwrap();
+    }
+    // make config file if it doesn't exist and write default config to it
+    let mut config_file = config_dir.clone();
+    config_file.push(CONFIG_FILE_NAME);
+    if !config_file.exists() {
+        let default_config = AppConfig::default();
+        let config_json = serde_json::to_string_pretty(&default_config).unwrap();
+        std::fs::write(&config_file, config_json).unwrap();
+    }
+    true
 }

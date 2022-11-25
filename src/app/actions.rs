@@ -10,16 +10,18 @@ pub enum Action {
     NextFocus,
     PreviousFocus,
     SetUiMode,
+    ToggleConfig,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 4] = [
+        static ACTIONS: [Action; 5] = [
             Action::Quit,
             Action::NextFocus,
             Action::PreviousFocus,
             Action::SetUiMode,
+            Action::ToggleConfig,
         ];
         ACTIONS.iter()
     }
@@ -34,6 +36,7 @@ impl Action {
                                    Key::Char('4'), Key::Char('5'), Key::Char('6'),
                                    Key::Char('7'), Key::Char('8')
                                    ],
+            Action::ToggleConfig => &[Key::Char('c')],
         }
     }
 }
@@ -46,6 +49,7 @@ impl Display for Action {
             Action::NextFocus => "Focus next",
             Action::PreviousFocus => "Focus previous",
             Action::SetUiMode => "Set UI mode",
+            Action::ToggleConfig => "Open config Menu",
         };
         write!(f, "{}", str)
     }

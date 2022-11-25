@@ -1,9 +1,12 @@
-
+use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use log::debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::constants::{
+    FIELD_NOT_SET,
+};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CardStatus {
     Active,
     Complete,
@@ -29,8 +32,7 @@ impl CardStatus {
     }
 }
 
-static FIELD_NOT_SET: &str = "Not Set";
-
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Card {
     id: u32,
     name: String,
@@ -47,6 +49,7 @@ pub struct Card {
     action_history: Vec<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Board {
     pub name: String,
     pub description: String,
@@ -99,7 +102,7 @@ impl Default for Board {
         Self {
             name: String::from("Default Board"),
             description: String::from("Default Board Description"),
-            cards: Vec::new(),
+            cards: vec![Card::default()],
             action_history: Vec::new(),
         }
     }

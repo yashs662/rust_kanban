@@ -15,6 +15,7 @@ use crate::app::ui;
 pub mod app;
 pub mod inputs;
 pub mod io;
+pub mod constants;
 
 pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     // Configure Crossterm backend for tui

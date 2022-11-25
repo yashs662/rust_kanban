@@ -1,5 +1,9 @@
+use std::path::PathBuf;
+
 use log::debug;
 use log::{error, warn};
+use serde::{Serialize, Deserialize};
+use tui::widgets::ListItem;
 
 use self::actions::Actions;
 use self::state::AppState;
@@ -7,8 +11,9 @@ use self::state::Focus;
 use self::state::UiMode;
 use self::kanban::Board;
 use crate::app::actions::Action;
+use crate::constants::DB_NAME;
 use crate::inputs::key::Key;
-use crate::io::IoEvent;
+use crate::io::{IoEvent, handler, data_handler};
 
 pub mod actions;
 pub mod state;
@@ -41,7 +46,7 @@ impl App {
         let is_loading = false;
         let state = AppState::default();
         let focus = Focus::Title;
-        let ui_mode = UiMode::Title;
+        let ui_mode = data_handler::get_default_ui_mode();
 
         Self {
             io_tx,
@@ -85,6 +90,14 @@ impl App {
                     self.ui_mode = new_ui_mode;
                     AppReturn::Continue
                 }
+                Action::ToggleConfig => {
+                    if self.ui_mode == UiMode::Config {
+                        self.ui_mode = data_handler::get_default_ui_mode();
+                    } else {
+                        self.ui_mode = UiMode::Config;
+                    }
+                    AppReturn::Continue
+                }
             }
         } else {
             warn!("No action accociated to {}", key);
@@ -120,6 +133,7 @@ impl App {
             Action::NextFocus,
             Action::PreviousFocus,
             Action::SetUiMode,
+            Action::ToggleConfig,
         ]
         .into();
         self.state = AppState::initialized()
@@ -139,5 +153,29 @@ impl App {
 
     pub fn change_focus(&mut self, focus: Focus) {
         self.focus = focus;
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AppConfig {
+    pub db_path: PathBuf,
+    pub default_view: UiMode
+}
+
+impl AppConfig {
+    pub fn default() -> Self {
+        let db_path = handler::get_config_dir().join(DB_NAME);
+        let default_view = UiMode::Title;
+        Self {
+            db_path,
+            default_view
+        }
+    }
+
+    pub fn to_list(&self) -> Vec<ListItem> {
+        vec![
+            ListItem::new(format!("db_path: {}", self.db_path.to_str().unwrap())),
+            ListItem::new(format!("default_view: {}", self.default_view.to_string())),
+        ]
     }
 }
