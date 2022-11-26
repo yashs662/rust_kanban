@@ -240,7 +240,6 @@ impl App {
                                         debug!("Setting ui_mode to {}", self.ui_mode.to_string());
                                         AppReturn::Continue
                                     }
-                                    _ => AppReturn::Continue
                                 }
                             }
                             _ => {
