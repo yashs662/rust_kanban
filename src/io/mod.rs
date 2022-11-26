@@ -6,4 +6,5 @@ pub enum IoEvent {
     Initialize,      // Launch to initialize the application
     GetLocalData,  // Launch to get local data
     GetCloudData,  // Launch to get cloud data
+    Reset
 }

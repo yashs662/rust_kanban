@@ -4,6 +4,7 @@ use crate::constants::{
     CONFIG_FILE_NAME
 };
 use crate::app::AppConfig;
+use crate::io::data_handler::reset_config;
 use eyre::Result;
 use log::{error, info};
 
@@ -26,6 +27,7 @@ impl IoAsyncHandler {
             IoEvent::Initialize => self.do_initialize().await,
             IoEvent::GetLocalData => self.get_local_save().await,
             IoEvent::GetCloudData => self.get_cloud_save().await,
+            IoEvent::Reset => self.reset_config().await,
         };
 
         if let Err(err) = result {
@@ -61,6 +63,13 @@ impl IoAsyncHandler {
         let mut app = self.app.lock().await;
         app.set_boards(vec![]);
         info!("👍 Cloud save loaded");
+        Ok(())
+    }
+
+    async fn reset_config(&mut self) -> Result<()> {
+        info!("🚀 Resetting config");
+        reset_config();
+        info!("👍 Config reset");
         Ok(())
     }
 }

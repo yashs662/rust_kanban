@@ -41,3 +41,8 @@ pub fn get_default_ui_mode() -> UiMode {
     let config = get_config();
     config.default_view
 }
+
+pub fn reset_config() {
+    let config = AppConfig::default();
+    write_config(&config);
+}

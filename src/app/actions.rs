@@ -47,7 +47,7 @@ impl Action {
             Action::PreviousFocus => &[Key::ShiftTab],
             Action::SetUiMode => &[Key::Char('1'), Key::Char('2'), Key::Char('3'),
                                    Key::Char('4'), Key::Char('5'), Key::Char('6'),
-                                   Key::Char('7'), Key::Char('8')
+                                   Key::Char('7'), Key::Char('8'), Key::Char('9')
                                    ],
             Action::ToggleConfig => &[Key::Char('c')],
             Action::GoUp => &[Key::Up],

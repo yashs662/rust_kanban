@@ -19,7 +19,7 @@ use super::ui_helper::{
     render_config,
     render_edit_config,
     render_main_menu,
-    render_help_menu
+    render_help_menu, render_logs_only
 };
 use crate::app::App;
 
@@ -80,6 +80,9 @@ where
         }
         UiMode::HelpMenu => {
             render_help_menu(rect, &app.focus);
+        }
+        UiMode::LogsOnly => {
+            render_logs_only(rect, &app.focus)
         }
         UiMode::ViewCard => {
             todo!("ViewCard");

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use clap::{Parser};
 
 use eyre::Result;
 use log::LevelFilter;
@@ -7,8 +8,21 @@ use rust_kanban::io::handler::IoAsyncHandler;
 use rust_kanban::io::IoEvent;
 use rust_kanban::start_ui;
 
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct CliArgs {
+    
+    // optional argument to reset config
+    #[arg(short, long)]
+    reset: Option<bool>
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+
+    // parse cli args
+    let args = CliArgs::parse();
+
     let (sync_io_tx, mut sync_io_rx) = tokio::sync::mpsc::channel::<IoEvent>(100);
 
     // We need to share the App between thread
@@ -26,6 +40,11 @@ async fn main() -> Result<()> {
             handler.handle_io_event(io_event).await;
         }
     });
+
+    // check if we need to reset config
+    if args.reset.is_some() {
+        sync_io_tx.send(IoEvent::Reset).await.unwrap();
+    }
 
     start_ui(&app_ui).await?;
 

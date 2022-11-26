@@ -15,43 +15,46 @@ pub enum UiMode {
     EditConfig,
     MainMenu,
     ViewCard,
-    HelpMenu
+    HelpMenu,
+    LogsOnly
 }
 
 impl UiMode {
     pub fn to_string(&self) -> String {
         match self {
             UiMode::Zen => "Zen".to_string(),
-            UiMode::TitleBody => "Title".to_string(),
-            UiMode::BodyHelp => "Help".to_string(),
-            UiMode::BodyLog => "Log".to_string(),
-            UiMode::TitleBodyHelp => "Title and Help".to_string(),
-            UiMode::TitleBodyLog => "Title and Log".to_string(),
-            UiMode::BodyHelpLog => "Help and Log".to_string(),
-            UiMode::TitleBodyHelpLog => "Title, Help and Log".to_string(),
+            UiMode::TitleBody => "Title and Body".to_string(),
+            UiMode::BodyHelp => "Body and Help".to_string(),
+            UiMode::BodyLog => "Body and Log".to_string(),
+            UiMode::TitleBodyHelp => "Title, Body and Help".to_string(),
+            UiMode::TitleBodyLog => "Title, Body and Log".to_string(),
+            UiMode::BodyHelpLog => "Body, Help and Log".to_string(),
+            UiMode::TitleBodyHelpLog => "Title, Body, Help and Log".to_string(),
             UiMode::Config => "Config".to_string(),
             UiMode::EditConfig => "Edit Config".to_string(),
             UiMode::MainMenu => "Main Menu".to_string(),
             UiMode::ViewCard => "View Card".to_string(),
             UiMode::HelpMenu => "Help Menu".to_string(),
+            UiMode::LogsOnly => "Logs Only".to_string(),
         }
     }
 
     pub fn from_string(s: &str) -> Option<UiMode> {
         match s {
             "Zen" => Some(UiMode::Zen),
-            "Title" => Some(UiMode::TitleBody),
-            "Help" => Some(UiMode::BodyHelp),
-            "Log" => Some(UiMode::BodyLog),
-            "Title and Help" => Some(UiMode::TitleBodyHelp),
-            "Title and Log" => Some(UiMode::TitleBodyLog),
-            "Help and Log" => Some(UiMode::BodyHelpLog),
-            "Title, Help and Log" => Some(UiMode::TitleBodyHelpLog),
+            "Title and Body" => Some(UiMode::TitleBody),
+            "Body and Help" => Some(UiMode::BodyHelp),
+            "Body and Log" => Some(UiMode::BodyLog),
+            "Title, Body and Help" => Some(UiMode::TitleBodyHelp),
+            "Title, Body and Log" => Some(UiMode::TitleBodyLog),
+            "Body, Help and Log" => Some(UiMode::BodyHelpLog),
+            "Title, Body, Help and Log" => Some(UiMode::TitleBodyHelpLog),
             "Config" => Some(UiMode::Config),
             "Edit Config" => Some(UiMode::EditConfig),
             "Main Menu" => Some(UiMode::MainMenu),
             "View Card" => Some(UiMode::ViewCard),
             "Help Menu" => Some(UiMode::HelpMenu),
+            "Logs Only" => Some(UiMode::LogsOnly),
             _ => None,
         }
     }
@@ -66,6 +69,7 @@ impl UiMode {
             6 => UiMode::TitleBodyLog,
             7 => UiMode::BodyHelpLog,
             8 => UiMode::TitleBodyHelpLog,
+            9 => UiMode::LogsOnly,
             _ => {
                 debug!("Invalid UiMode: {}", n);
                 UiMode::TitleBody
@@ -88,12 +92,13 @@ impl UiMode {
             UiMode::MainMenu => vec![],
             UiMode::ViewCard => vec!["View Card".to_string()],
             UiMode::HelpMenu => vec![],
+            UiMode::LogsOnly => vec!["Log".to_string()],
         }
     }
 
     pub fn all() -> String {
         let mut s = String::new();
-        for i in 1..9 {
+        for i in 1..10 {
             s.push_str(&format!("{}: {} ||| ", i, UiMode::from_number(i).to_string()));
         }
         s

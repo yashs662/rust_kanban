@@ -345,6 +345,23 @@ where
     rect.render_widget(log, chunks[1]);
 }
 
+pub fn render_logs_only<'a,B>(rect: &mut Frame<B>, focus: &Focus)
+where
+    B: Backend,
+{
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(100),
+            ]
+            .as_ref(),
+        )
+        .split(rect.size());
+    let log = draw_logs(focus);
+    rect.render_widget(log, chunks[0]);
+}
+
 /// Draws Help section for normal mode
 fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
     let helpbox_style = if matches!(focus, Focus::Help) {
