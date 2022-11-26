@@ -1,11 +1,34 @@
-use log::{error, debug};
 use tui::backend::Backend;
-use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Style};
-use tui::text::{Span, Spans};
-use tui::widgets::{Block, BorderType, Borders, Paragraph};
-use tui::{Frame};
+use tui::Frame;
 use tui_logger::TuiLoggerWidget;
+use tui::layout::{
+    Alignment,
+    Constraint,
+    Direction,
+    Layout,
+    Rect
+};
+use tui::style::{
+    Color,
+    Style, Modifier,
+};
+use tui::text::{
+    Span,
+    Spans
+};
+use tui::widgets::{
+    Block,
+    BorderType,
+    Borders,
+    Paragraph,
+    Clear,
+    List,
+    ListItem,
+    ListState
+};
+use crate::constants::{
+    APP_TITLE,
+};
 
 use super::actions::{Actions, Action};
 use super::kanban::Board;
@@ -14,7 +37,7 @@ use super::state::Focus;
 use crate::app::App;
 use crate::io::data_handler::get_config;
 
-pub fn draw<B>(rect: &mut Frame<B>, app: &mut App)
+pub fn draw<B>(rect: &mut Frame<B>, app: &App, config_state: &mut ListState)
 where
     B: Backend,
 {
@@ -202,69 +225,59 @@ where
         }
 
         UiMode::Config => {
-            draw_config(rect, app);
+            let list_items = draw_config();
+            let config = List::new(list_items)
+            .block(Block::default().borders(Borders::ALL).title("Config"))
+            .highlight_style(
+                Style::default()
+                .bg(Color::LightGreen)
+                .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(">> ");
+            let area = centered_rect(90, 90, size);
+            rect.render_widget(Clear, area); //this clears out the background
+            rect.render_stateful_widget(config, size, config_state);
         }
     }
 }
 
-fn draw_config<B>(rect: &mut Frame<B>, app: &mut App)
-where
-    B: Backend,
+fn draw_config<'action>() -> Vec<ListItem<'action>>
 {
     let config = get_config();
     let config_list = config.to_list();
-    // if len of config_list is 0, then set UiMode to Title and put log message
-    if config_list.len() == 0 {
-        error!("No config file found. Please create a config file at ~/.config/zenith/config.toml");
-        return;
-    }
-    // check if current_option is in range of config_list
-    if app.current_obj_index >= config_list.len() {
-        // if not, set current_option to 0
-        app.current_obj_index = 0;
-        debug!("current_option is out of range. Setting to 0");
-    }
-    debug!("current_option: {}", app.current_obj_index);
-
-    // if app.go_up is true, then decrement current_option
-    if app.go_up {
-        if app.current_obj_index > 0 {
-            app.current_obj_index -= 1;
-        }
-        app.go_up = false;
-    }
-    // if app.go_down is true, then increment current_option
-    if app.go_down {
-        if app.current_obj_index < config_list.len() - 1 {
-            app.current_obj_index += 1;
-        }
-        app.go_down = false;
-    }
-    let highlight_style = Style::default().bg(Color::LightGreen).fg(Color::Black);
-    let normal_style = Style::default().bg(Color::Black).fg(Color::White);
-
     let mut config_spans = vec![];
 
-    for (i, config) in config_list.iter().enumerate() {
-        let style = if i == app.current_obj_index {
-            highlight_style
-        } else {
-            normal_style
-        };
-        config_spans.push(Span::styled(config, style));
-        // if not last element, add newline
-        if i != config_list.len() - 1 {
-            config_spans.push(Span::raw("\n"));
-        } 
+    for (_i, config) in config_list.iter().enumerate() {
+        config_spans.push(ListItem::new(Span::from(config.clone())));
     }
+    return config_spans;
+}
 
-    let config_text = Spans::from(config_spans);
-    let config_paragraph = Paragraph::new(config_text)
-        .block(Block::default().borders(Borders::ALL).title("Config"))
-        .alignment(Alignment::Left)
-        .wrap(tui::widgets::Wrap { trim: false });
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+let popup_layout = Layout::default()
+    .direction(Direction::Vertical)
+    .constraints(
+        [
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ]
+        .as_ref(),
+    )
+    .split(r);
 
-    rect.render_widget(config_paragraph, rect.size());
+Layout::default()
+    .direction(Direction::Horizontal)
+    .constraints(
+        [
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ]
+        .as_ref(),
+    )
+    .split(popup_layout[1])[1]
 }
 
 fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)
@@ -298,7 +311,7 @@ fn draw_title<'a>(focus: &Focus) -> Paragraph<'a> {
     } else {
         Style::default().fg(Color::White)
     };
-    Paragraph::new("Rust 🦀 Kanban")
+    Paragraph::new(APP_TITLE)
         .style(Style::default().fg(Color::White))
         .alignment(Alignment::Center)
         .block(

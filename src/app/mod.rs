@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use log::debug;
 use log::{error, warn};
 use serde::{Serialize, Deserialize};
+use tui::widgets::ListState;
 
 use self::actions::Actions;
 use self::state::AppState;
@@ -37,11 +38,10 @@ pub struct App {
     focus: Focus,
     ui_mode: UiMode,
     boards: Vec<kanban::Board>,
-    go_up: bool,
-    go_down: bool,
-    current_obj_index: usize,
     current_user_input: String,
     prev_ui_mode: UiMode,
+    pub config_state: ListState,
+    config: AppConfig
 }
 
 impl App {
@@ -52,9 +52,7 @@ impl App {
         let focus = Focus::Title;
         let ui_mode = data_handler::get_default_ui_mode();
         let boards = vec![];
-        let go_up = false;
-        let go_down = false;
-        let current_obj_index = 0;
+
 
         Self {
             io_tx,
@@ -63,12 +61,11 @@ impl App {
             state,
             focus,
             ui_mode,
-            go_up,
-            go_down,
             boards: boards,
-            current_obj_index,
             current_user_input: String::new(),
             prev_ui_mode: UiMode::Zen,
+            config_state: ListState::default(),
+            config: AppConfig::default()
         }
     }
 
@@ -118,7 +115,6 @@ impl App {
                     Action::ToggleConfig => {
                         if self.ui_mode == UiMode::Config {
                             self.ui_mode = self.prev_ui_mode.clone();
-                            self.current_obj_index = 0;
                         } else {
                             self.prev_ui_mode = self.ui_mode.clone();
                             self.ui_mode = UiMode::Config;
@@ -127,18 +123,17 @@ impl App {
                     }
                     Action::GoUp => {
                         if self.ui_mode == UiMode::Config {
-                            self.go_up = true;
+                            self.config_previous();
                         }
                         AppReturn::Continue
                     }
                     Action::GoDown => {
                         if self.ui_mode == UiMode::Config {
-                            self.go_down = true;
+                            self.config_next();
                         }
                         AppReturn::Continue
                     }
                     Action::TakeUserInput => {
-                        debug!("Taking user input");
                         self.state = AppState::UserInput;
                         AppReturn::Continue
                     }
@@ -208,6 +203,42 @@ impl App {
         debug!("Setting current user input to {}", new_input);
         self.current_user_input = new_input;
     }
+
+    pub fn set_config_state(&mut self, config_state: ListState) {
+        self.config_state = config_state;
+    }
+
+    pub fn config_next(&mut self) {
+        let i = match self.config_state.selected() {
+            Some(i) => {
+                if i >= self.config.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.config_state.select(Some(i));
+    }
+
+    pub fn config_previous(&mut self) {
+        let i = match self.config_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.config.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.config_state.select(Some(i));
+    }
+
+    pub fn config_unselect(&mut self) {
+        self.config_state.select(None);
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -231,5 +262,9 @@ impl AppConfig {
             format!("db_path: {}", self.db_path.to_str().unwrap()),
             format!("default_view: {}", self.default_view.to_string()),
         ]
+    }
+
+    pub fn len(&self) -> usize {
+        self.to_list().len()
     }
 }
