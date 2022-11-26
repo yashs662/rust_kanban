@@ -11,7 +11,8 @@ pub enum UiMode {
     TitleLog,
     HelpLog,
     TitleHelpLog,
-    Config
+    Config,
+    EditConfig,
 }
 
 impl UiMode {
@@ -26,6 +27,23 @@ impl UiMode {
             UiMode::HelpLog => "Help and Log".to_string(),
             UiMode::TitleHelpLog => "Title, Help and Log".to_string(),
             UiMode::Config => "Config".to_string(),
+            UiMode::EditConfig => "Edit Config".to_string(),
+        }
+    }
+
+    pub fn from_string(s: &str) -> Option<UiMode> {
+        match s {
+            "Zen" => Some(UiMode::Zen),
+            "Title" => Some(UiMode::Title),
+            "Help" => Some(UiMode::Help),
+            "Log" => Some(UiMode::Log),
+            "Title and Help" => Some(UiMode::TitleHelp),
+            "Title and Log" => Some(UiMode::TitleLog),
+            "Help and Log" => Some(UiMode::HelpLog),
+            "Title, Help and Log" => Some(UiMode::TitleHelpLog),
+            "Config" => Some(UiMode::Config),
+            "Edit Config" => Some(UiMode::EditConfig),
+            _ => None,
         }
     }
 
@@ -56,8 +74,17 @@ impl UiMode {
             UiMode::TitleLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
             UiMode::HelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::TitleHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
-            UiMode::Config => vec!["Config".to_string()],
+            UiMode::Config => vec!["Config".to_string(), "Config Help".to_string(), "Log".to_string()],
+            UiMode::EditConfig => vec!["Edit Config".to_string()],
         }
+    }
+
+    pub fn all() -> String {
+        let mut s = String::new();
+        for i in 1..9 {
+            s.push_str(&format!("{}: {} ||| ", i, UiMode::from_number(i).to_string()));
+        }
+        s
     }
 }
 
@@ -73,7 +100,9 @@ pub enum Focus {
     Title,
     Body,
     Help,
-    Log
+    Log,
+    Config,
+    ConfigHelp
 }
 
 impl AppState {
@@ -99,6 +128,8 @@ impl Focus {
             Self::Body => "Body",
             Self::Help => "Help",
             Self::Log => "Log",
+            Self::Config => "Config",
+            Self::ConfigHelp => "Config Help",
         }
     }
     pub fn next(&self, available_tabs: &Vec<String>) -> Self {
@@ -115,6 +146,8 @@ impl Focus {
             "Body" => Self::Body,
             "Help" => Self::Help,
             "Log" => Self::Log,
+            "Config" => Self::Config,
+            "Config Help" => Self::ConfigHelp,
             _ => Self::Title,
         }
     }
@@ -137,6 +170,8 @@ impl Focus {
             "Body" => Self::Body,
             "Help" => Self::Help,
             "Log" => Self::Log,
+            "Config" => Self::Config,
+            "Config Help" => Self::ConfigHelp,
             _ => Self::Title,
         }
     }
@@ -147,6 +182,8 @@ impl Focus {
             "Body" => Self::Body,
             "Help" => Self::Help,
             "Log" => Self::Log,
+            "Config" => Self::Config,
+            "Config Help" => Self::ConfigHelp,
             _ => Self::Title,
         }
     }

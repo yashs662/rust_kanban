@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use log::debug;
+use log::{debug, info};
 use log::{error, warn};
 use serde::{Serialize, Deserialize};
 use tui::widgets::ListState;
@@ -13,6 +13,7 @@ use self::kanban::Board;
 use crate::app::actions::Action;
 use crate::constants::DB_NAME;
 use crate::inputs::key::Key;
+use crate::io::data_handler::write_config;
 use crate::io::{IoEvent, handler, data_handler};
 
 pub mod actions;
@@ -41,7 +42,8 @@ pub struct App {
     current_user_input: String,
     prev_ui_mode: UiMode,
     pub config_state: ListState,
-    config: AppConfig
+    config: AppConfig,
+    config_item_being_edited: Option<usize>,
 }
 
 impl App {
@@ -65,7 +67,8 @@ impl App {
             current_user_input: String::new(),
             prev_ui_mode: UiMode::Zen,
             config_state: ListState::default(),
-            config: AppConfig::default()
+            config: AppConfig::default(),
+            config_item_being_edited: None,
         }
     }
 
@@ -73,12 +76,25 @@ impl App {
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
         // check if we are in a user input mode
         if self.state == AppState::UserInput {
-            debug!("User input mode");
             // append to current user input if key is not enter else change state to Initialized
             if key != Key::Enter {
-                self.current_user_input.push_str(&key.to_string());
+                let mut current_key = key.to_string();
+                if current_key == "<Space>" {
+                    current_key = " ".to_string();
+                } else if current_key == "<ShiftEnter>" {
+                    current_key = "\n".to_string();
+                } else if current_key == "<Backspace>" {
+                    self.current_user_input.pop();
+                    return AppReturn::Continue;
+                } else if current_key.starts_with("<") && current_key.ends_with(">") {
+                    current_key = current_key[1..current_key.len() - 1].to_string();
+                } else {
+                    // do nothing
+                }
+                self.current_user_input.push_str(&current_key);
             } else {
                 self.state = AppState::Initialized;
+                info!("Exiting user input mode");
                 debug!("User input: {}", self.current_user_input);
             }
             return AppReturn::Continue;
@@ -135,7 +151,60 @@ impl App {
                     }
                     Action::TakeUserInput => {
                         self.state = AppState::UserInput;
+                        info!("Taking user input");
                         AppReturn::Continue
+                    }
+                    Action::Escape => {
+                        match self.ui_mode {
+                            UiMode::Config => {
+                                self.ui_mode = self.prev_ui_mode.clone();
+                                AppReturn::Continue
+                            }
+                            UiMode::EditConfig => {
+                                self.ui_mode = UiMode::Config;
+                                AppReturn::Continue
+                            }
+                            _ => {
+                                AppReturn::Exit
+                            }
+                        }
+                    }
+                    Action::Enter => {
+                        match self.ui_mode {
+                            UiMode::Config => {
+                                self.prev_ui_mode = self.ui_mode.clone();
+                                self.ui_mode = UiMode::EditConfig;
+                                debug!("Setting ui_mode to {}", self.ui_mode.to_string());
+                                self.config_item_being_edited = Some(self.config_state.selected().unwrap_or(0));
+                                AppReturn::Continue
+                            }
+                            UiMode::EditConfig => {
+                                let config_item_index = self.config_state.selected().unwrap_or(0);
+                                let config_item_list = AppConfig::to_list(&self.config);
+                                let config_item = &config_item_list[config_item_index];
+                                // split the config item on : and get the first part
+                                let config_item_key = config_item.split(":").collect::<Vec<&str>>()[0];
+                                let new_value = self.current_user_input.clone();
+                                // if new value is not empty update the config
+                                if !new_value.is_empty() {
+                                    let config_string = format!("{}: {}", config_item_key, new_value);
+                                    debug!("Setting config to {}", config_string);
+                                    let app_config = AppConfig::edit_with_string(&config_string, self);
+                                    self.config = app_config.clone();
+                                    write_config(&app_config);
+
+                                    // reset everything
+                                    self.config_state = ListState::default();
+                                    self.config_item_being_edited = None;
+                                    self.current_user_input = String::new();
+                                    self.ui_mode = UiMode::Config;
+                                }
+                                AppReturn::Continue
+                            }
+                            _ => {
+                                AppReturn::Continue
+                            }
+                        }
                     }
                 }
             } else {
@@ -177,6 +246,8 @@ impl App {
             Action::GoUp,
             Action::GoDown,
             Action::TakeUserInput,
+            Action::Escape,
+            Action::Enter,
         ]
         .into();
         self.state = AppState::initialized()
@@ -202,6 +273,10 @@ impl App {
         let new_input = input;
         debug!("Setting current user input to {}", new_input);
         self.current_user_input = new_input;
+    }
+
+    pub fn clear_current_user_input(&mut self) {
+        self.current_user_input = String::new();
     }
 
     pub fn set_config_state(&mut self, config_state: ListState) {
@@ -236,8 +311,12 @@ impl App {
         self.config_state.select(Some(i));
     }
 
-    pub fn config_unselect(&mut self) {
-        self.config_state.select(None);
+    pub fn config_state(&self) -> &ListState {
+        &self.config_state
+    }
+
+    pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
+        self.ui_mode = ui_mode;
     }
 }
 
@@ -262,6 +341,42 @@ impl AppConfig {
             format!("db_path: {}", self.db_path.to_str().unwrap()),
             format!("default_view: {}", self.default_view.to_string()),
         ]
+    }
+
+    pub fn edit_with_string(change_str: &str, app: &App) -> Self {
+        let mut config = app.config.clone();
+        let mut lines = change_str.lines();
+        while let Some(line) = lines.next() {
+            let mut parts = line.split(":");
+            let key = parts.next().unwrap_or("").trim();
+            let value = parts.next().unwrap_or("").trim();
+            debug!("Editing config with key: {} and value: {}", key, value);
+            match key {
+                "db_path" => {
+                    let new_path = PathBuf::from(value);
+                    // check if the new path is valid
+                    if new_path.exists() {
+                        config.db_path = new_path;
+                    } else {
+                        warn!("Invalid path: {}", value);
+                    }
+                }
+                "default_view" => {
+                    let new_ui_mode = UiMode::from_string(value);
+                    if new_ui_mode.is_some() {
+                        config.default_view = new_ui_mode.unwrap();
+                    } else {
+                        warn!("Invalid UiMode: {}", value);
+                        info!("Valid UiModes are: {:?}", UiMode::all());
+                    }
+                }
+                _ => {
+                    return config;
+                }
+            }
+        }
+        debug!("Config: {:?}", config);
+        config
     }
 
     pub fn len(&self) -> usize {

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::slice::Iter;
+
 use crate::inputs::key::Key;
 
 /// We define all available action
@@ -14,12 +15,14 @@ pub enum Action {
     GoUp,
     GoDown,
     TakeUserInput,
+    Escape,
+    Enter,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 8] = [
+        static ACTIONS: [Action; 10] = [
             Action::Quit,
             Action::NextFocus,
             Action::PreviousFocus,
@@ -28,6 +31,8 @@ impl Action {
             Action::GoUp,
             Action::GoDown,
             Action::TakeUserInput,
+            Action::Escape,
+            Action::Enter
         ];
         ACTIONS.iter()
     }
@@ -46,6 +51,8 @@ impl Action {
             Action::GoUp => &[Key::Up],
             Action::GoDown => &[Key::Down],
             Action::TakeUserInput => &[Key::Char('i')],
+            Action::Escape => &[Key::Esc],
+            Action::Enter => &[Key::Enter]
         }
     }
 }
@@ -62,6 +69,8 @@ impl Display for Action {
             Action::GoUp => "Go up",
             Action::GoDown => "Go down",
             Action::TakeUserInput => "Enter input mode",
+            Action::Escape => "Go to previous mode",
+            Action::Enter => "Accept"
         };
         write!(f, "{}", str)
     }

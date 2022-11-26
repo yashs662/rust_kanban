@@ -1,5 +1,5 @@
 use std::fs;
-use log::error;
+use log::{error, info};
 
 use crate::app::{
     AppConfig,
@@ -34,6 +34,7 @@ pub fn get_config() -> AppConfig {
 pub fn write_config(config: &AppConfig) {
     let config_str = serde_json::to_string(&config).unwrap();
     fs::write(get_config_dir().join(CONFIG_FILE_NAME), config_str).unwrap();
+    info!("Config file written");
 }
 
 pub fn get_default_ui_mode() -> UiMode {
