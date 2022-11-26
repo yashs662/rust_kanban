@@ -21,15 +21,17 @@ use tui::widgets::{
     BorderType,
     Borders,
     Paragraph,
-    Clear,
     List,
     ListItem,
     ListState
 };
 use crate::constants::{
     APP_TITLE,
+    MIN_TERM_WIDTH,
+    MIN_TERM_HEIGHT,
 };
 
+use super::MainMenuItems;
 use super::actions::{Actions, Action};
 use super::kanban::Board;
 use super::state::{UiMode};
@@ -38,7 +40,7 @@ use crate::app::App;
 use crate::io::data_handler::get_config;
 
 /// Main UI Drawing handler
-pub fn draw<B>(rect: &mut Frame<B>, app: &App, config_state: &mut ListState)
+pub fn draw<B>(rect: &mut Frame<B>, app: &App, config_state: &mut ListState, main_menu_state: &mut ListState)
 where
     B: Backend,
 {
@@ -55,6 +57,8 @@ where
     }
 
     let current_ui_mode = &app.ui_mode;
+    let current_board = &app.current_board;
+    let current_card = &app.current_card;
 
     match current_ui_mode {
         UiMode::Zen => {
@@ -72,7 +76,7 @@ where
             rect.render_widget(body, chunks[0]);
         }
 
-        UiMode::Title => {
+        UiMode::TitleBody => {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
@@ -91,7 +95,7 @@ where
             rect.render_widget(body, chunks[1]);
         }
         
-        UiMode::Help => {
+        UiMode::BodyHelp => {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
@@ -110,7 +114,7 @@ where
             rect.render_widget(help, chunks[1]);
         }
 
-        UiMode::Log => {
+        UiMode::BodyLog => {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
@@ -129,7 +133,7 @@ where
             rect.render_widget(log, chunks[1]);
         }
 
-        UiMode::TitleHelp => {
+        UiMode::TitleBodyHelp => {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
@@ -152,7 +156,7 @@ where
             rect.render_widget(help, chunks[2]);
         }
 
-        UiMode::TitleLog => {
+        UiMode::TitleBodyLog => {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
@@ -175,7 +179,7 @@ where
             rect.render_widget(log, chunks[2]);
         }
 
-        UiMode::HelpLog => {
+        UiMode::BodyHelpLog => {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
@@ -198,7 +202,7 @@ where
             rect.render_widget(log, chunks[2]);
         }
 
-        UiMode::TitleHelpLog => {
+        UiMode::TitleBodyHelpLog => {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
@@ -287,48 +291,53 @@ where
             rect.render_widget(edit_item, chunks[1]);
             rect.render_widget(log, chunks[2]);
         }
+    
+        UiMode::MainMenu => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(3),
+                        Constraint::Percentage(70),
+                        Constraint::Length(4)
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+            
+            let title = draw_title(&app.focus);
+            rect.render_widget(title, chunks[0]);
+            
+            let main_menu = draw_main_menu(&app.focus, app.main_menu.items.clone());
+            rect.render_stateful_widget(main_menu, chunks[1], main_menu_state);
+
+            let main_menu_help = draw_main_menu_help(&app.focus);
+            rect.render_widget(main_menu_help, chunks[2]);
+        }
+
+        UiMode::HelpMenu => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage(70),
+                        Constraint::Length(4)
+                    ]
+                    .as_ref(),
+                )
+                .split(size);
+            let help_menu = draw_help_menu(&app.focus);
+            rect.render_widget(help_menu, chunks[0]);
+
+            let log = draw_logs(&app.focus);
+            rect.render_widget(log, chunks[1]);
+        }
+
+        UiMode::ViewCard => {
+            todo!("ViewCard");
+        }
+
     }
-}
-
-/// Returns a list of ListItems for the config list selector
-fn get_config_list_items<'action>() -> Vec<ListItem<'action>>
-{
-    let config = get_config();
-    let config_list = config.to_list();
-    let mut config_spans = vec![];
-
-    for (_i, config) in config_list.iter().enumerate() {
-        config_spans.push(ListItem::new(Span::from(config.clone())));
-    }
-    return config_spans;
-}
-
-/// Draws config list selector
-fn draw_config_list_selector(focus: &Focus) -> List<'static> {
-    let config_style = if matches!(focus, Focus::Config) {
-        Style::default().fg(Color::LightBlue)
-    } else {
-        Style::default().fg(Color::White)
-    };
-    let list_items = get_config_list_items();
-    let config = List::new(list_items)
-    .block(Block::default().borders(Borders::ALL).title("Config"))
-    .highlight_style(
-        Style::default()
-        .bg(Color::LightGreen)
-        .add_modifier(Modifier::BOLD),
-    )
-    .highlight_symbol(">> ")
-    .style(config_style);
-    return config;
-}
-
-/// returns a list of all config items as a vector of strings
-fn get_config_items() -> Vec<String>
-{
-    let config = get_config();
-    let config_list = config.to_list();
-    return config_list;
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
@@ -401,11 +410,11 @@ fn draw_title<'a>(focus: &Focus) -> Paragraph<'a> {
 /// Helper function to check terminal size
 fn check_size(rect: &Rect) -> String {
     let mut msg = String::new();
-    if rect.width < 80 {
-        msg.push_str(&format!("Terminal width should be >= 80, (current {})", rect.width));
+    if rect.width < MIN_TERM_WIDTH {
+        msg.push_str(&format!("For optimal viewing experience, Terminal width should be >= {}, (current {})",MIN_TERM_WIDTH, rect.width));
     }
-    else if rect.height < 28 {
-        msg.push_str(&format!("Terminal height should be >= 28, (current {})", rect.height));
+    else if rect.height < MIN_TERM_HEIGHT {
+        msg.push_str(&format!("For optimal viewing experience, Terminal height should be >= {}, (current {})",MIN_TERM_HEIGHT, rect.height));
     }
     else {
         msg.push_str("Size OK");
@@ -508,6 +517,12 @@ fn draw_config_help(focus: &Focus) -> Paragraph {
     help_spans.push(keys_span);
     help_spans.push(Span::raw(" - "));
     help_spans.push(action_span);
+    let keys_span = Span::styled("<Esc>", key_style);
+    let action_span = Span::styled("Exit config mode", help_style);
+    help_spans.push(Span::raw(" ; "));
+    help_spans.push(keys_span);
+    help_spans.push(Span::raw(" - "));
+    help_spans.push(action_span);
 
     let help_span = Spans::from(help_spans);
 
@@ -543,4 +558,170 @@ fn draw_logs<'a>(focus: &Focus) -> TuiLoggerWidget<'a> {
                 .border_style(logbox_style)
                 .borders(Borders::ALL),
         )
+}
+
+/// Draws Main menu
+fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItems>) -> List<'a> {
+    let menu_style = if matches!(focus, Focus::MainMenu) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let list_items = main_menu_items
+        .iter()
+        .map(|i| ListItem::new(i.to_string()))
+        .collect::<Vec<ListItem>>();
+    List::new(list_items)
+        .block(
+            Block::default()
+                .title("Main menu")
+                .borders(Borders::ALL)
+                .style(menu_style)
+                .border_type(BorderType::Plain),
+        )
+        .highlight_style(Style::default().fg(Color::LightBlue))
+        .highlight_symbol(">")
+}
+
+/// Draws Main menu help
+fn draw_main_menu_help<'a>(focus: &Focus) -> Paragraph<'a> {
+    let helpbox_style = if matches!(focus, Focus::MainMenuHelp) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let key_style = Style::default().fg(Color::LightCyan);
+    let help_style = Style::default().fg(Color::Gray);
+
+    let mut help_spans = vec![];
+    let keys_span = Span::styled("<Up>, <Down>", key_style);
+    let action_span = Span::styled("Select menu item", help_style);
+    help_spans.push(keys_span);
+    help_spans.push(Span::raw(" - "));
+    help_spans.push(action_span);
+    help_spans.push(Span::raw(" ; "));
+    let keys_span = Span::styled("<Enter>", key_style);
+    let action_span = Span::styled("Select menu item", help_style);
+    help_spans.push(keys_span);
+    help_spans.push(Span::raw(" - "));
+    help_spans.push(action_span);
+    let keys_span = Span::styled("<Esc>,<Ctrl+C>,<q>", key_style);
+    let action_span = Span::styled("Quit", help_style);
+    help_spans.push(Span::raw(" ; "));
+    help_spans.push(keys_span);
+    help_spans.push(Span::raw(" - "));
+    help_spans.push(action_span);
+
+    let help_span = Spans::from(help_spans);
+
+    Paragraph::new(help_span)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .style(helpbox_style)
+                .border_type(BorderType::Plain),
+        )
+        .wrap(tui::widgets::Wrap { trim: true })
+}
+
+/// Draws Kanban boards
+fn draw_board(current_board: String, current_card: String, focus: &Focus) {
+    
+}
+
+/// Draws a card for a board
+fn draw_card(current_card: String, focus: &Focus) {
+
+}
+
+/// Returns a list of ListItems for the config list selector
+fn get_config_list_items<'action>() -> Vec<ListItem<'action>>
+{
+    let config_list = get_config_items();
+    let mut config_spans = vec![];
+
+    for (_i, config) in config_list.iter().enumerate() {
+        config_spans.push(ListItem::new(Span::from(config.clone())));
+    }
+    return config_spans;
+}
+
+/// Draws config list selector
+fn draw_config_list_selector(focus: &Focus) -> List<'static> {
+    let config_style = if matches!(focus, Focus::Config) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let list_items = get_config_list_items();
+    let config = List::new(list_items)
+    .block(Block::default().borders(Borders::ALL).title("Config"))
+    .highlight_style(
+        Style::default()
+        .bg(Color::LightGreen)
+        .add_modifier(Modifier::BOLD),
+    )
+    .highlight_symbol(">> ")
+    .style(config_style);
+    return config;
+}
+
+/// returns a list of all config items as a vector of strings
+fn get_config_items() -> Vec<String>
+{
+    let config = get_config();
+    let config_list = config.to_list();
+    return config_list;
+}
+
+/// Draws Help Menu
+fn draw_help_menu<'a>(focus: &Focus) -> Paragraph<'a> {
+    let helpbox_style = if matches!(focus, Focus::Help) {
+        Style::default().fg(Color::LightBlue)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let key_style = Style::default().fg(Color::LightCyan);
+    let help_style = Style::default().fg(Color::Gray);
+    let general_style = Style::default().fg(Color::White);
+
+    let general_help = "General help ; ";
+    // TODO: Add help text
+
+    let mut help_spans = vec![];
+    help_spans.push(Span::styled(general_help, general_style));
+    let keys_span = Span::styled("<Up>, <Down>", key_style);
+    let action_span = Span::styled("Scroll up/down", help_style);
+    help_spans.push(keys_span);
+    help_spans.push(Span::raw(" - "));
+    help_spans.push(action_span);
+    help_spans.push(Span::raw(" ; "));
+    let keys_span = Span::styled("<Left>, <Right>", key_style);
+    let action_span = Span::styled("Scroll left/right", help_style);
+    help_spans.push(keys_span);
+    help_spans.push(Span::raw(" - "));
+    help_spans.push(action_span);
+    help_spans.push(Span::raw(" ; "));
+    let keys_span = Span::styled("<Esc>", key_style);
+    let action_span = Span::styled("Exit", help_style);
+    help_spans.push(keys_span);
+    help_spans.push(Span::raw(" - "));
+    help_spans.push(action_span);
+
+    let help_span = Spans::from(help_spans);
+
+    Paragraph::new(help_span)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .style(helpbox_style)
+                .border_type(BorderType::Plain),
+        )
+        .wrap(tui::widgets::Wrap { trim: true })
 }

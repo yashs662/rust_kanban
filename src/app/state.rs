@@ -4,45 +4,54 @@ use serde::{Serialize, Deserialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum UiMode {
     Zen,
-    Title,
-    Help,
-    Log,
-    TitleHelp,
-    TitleLog,
-    HelpLog,
-    TitleHelpLog,
+    TitleBody,
+    BodyHelp,
+    BodyLog,
+    TitleBodyHelp,
+    TitleBodyLog,
+    TitleBodyHelpLog,
+    BodyHelpLog,
     Config,
     EditConfig,
+    MainMenu,
+    ViewCard,
+    HelpMenu
 }
 
 impl UiMode {
     pub fn to_string(&self) -> String {
         match self {
             UiMode::Zen => "Zen".to_string(),
-            UiMode::Title => "Title".to_string(),
-            UiMode::Help => "Help".to_string(),
-            UiMode::Log => "Log".to_string(),
-            UiMode::TitleHelp => "Title and Help".to_string(),
-            UiMode::TitleLog => "Title and Log".to_string(),
-            UiMode::HelpLog => "Help and Log".to_string(),
-            UiMode::TitleHelpLog => "Title, Help and Log".to_string(),
+            UiMode::TitleBody => "Title".to_string(),
+            UiMode::BodyHelp => "Help".to_string(),
+            UiMode::BodyLog => "Log".to_string(),
+            UiMode::TitleBodyHelp => "Title and Help".to_string(),
+            UiMode::TitleBodyLog => "Title and Log".to_string(),
+            UiMode::BodyHelpLog => "Help and Log".to_string(),
+            UiMode::TitleBodyHelpLog => "Title, Help and Log".to_string(),
             UiMode::Config => "Config".to_string(),
             UiMode::EditConfig => "Edit Config".to_string(),
+            UiMode::MainMenu => "Main Menu".to_string(),
+            UiMode::ViewCard => "View Card".to_string(),
+            UiMode::HelpMenu => "Help Menu".to_string(),
         }
     }
 
     pub fn from_string(s: &str) -> Option<UiMode> {
         match s {
             "Zen" => Some(UiMode::Zen),
-            "Title" => Some(UiMode::Title),
-            "Help" => Some(UiMode::Help),
-            "Log" => Some(UiMode::Log),
-            "Title and Help" => Some(UiMode::TitleHelp),
-            "Title and Log" => Some(UiMode::TitleLog),
-            "Help and Log" => Some(UiMode::HelpLog),
-            "Title, Help and Log" => Some(UiMode::TitleHelpLog),
+            "Title" => Some(UiMode::TitleBody),
+            "Help" => Some(UiMode::BodyHelp),
+            "Log" => Some(UiMode::BodyLog),
+            "Title and Help" => Some(UiMode::TitleBodyHelp),
+            "Title and Log" => Some(UiMode::TitleBodyLog),
+            "Help and Log" => Some(UiMode::BodyHelpLog),
+            "Title, Help and Log" => Some(UiMode::TitleBodyHelpLog),
             "Config" => Some(UiMode::Config),
             "Edit Config" => Some(UiMode::EditConfig),
+            "Main Menu" => Some(UiMode::MainMenu),
+            "View Card" => Some(UiMode::ViewCard),
+            "Help Menu" => Some(UiMode::HelpMenu),
             _ => None,
         }
     }
@@ -50,16 +59,16 @@ impl UiMode {
     pub fn from_number(n: u8) -> UiMode {
         match n {
             1 => UiMode::Zen,
-            2 => UiMode::Title,
-            3 => UiMode::Help,
-            4 => UiMode::Log,
-            5 => UiMode::TitleHelp,
-            6 => UiMode::TitleLog,
-            7 => UiMode::HelpLog,
-            8 => UiMode::TitleHelpLog,
+            2 => UiMode::TitleBody,
+            3 => UiMode::BodyHelp,
+            4 => UiMode::BodyLog,
+            5 => UiMode::TitleBodyHelp,
+            6 => UiMode::TitleBodyLog,
+            7 => UiMode::BodyHelpLog,
+            8 => UiMode::TitleBodyHelpLog,
             _ => {
                 debug!("Invalid UiMode: {}", n);
-                UiMode::Title
+                UiMode::TitleBody
             }
         }
     }
@@ -67,15 +76,18 @@ impl UiMode {
     pub fn get_available_tabs(&self) -> Vec<String> {
         match self {
             UiMode::Zen => vec!["Body".to_string()],
-            UiMode::Title => vec!["Title".to_string(), "Body".to_string()],
-            UiMode::Help => vec!["Body".to_string(), "Help".to_string()],
-            UiMode::Log => vec!["Body".to_string(), "Log".to_string()],
-            UiMode::TitleHelp => vec!["Title".to_string(), "Body".to_string(), "Help".to_string()],
-            UiMode::TitleLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
-            UiMode::HelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
-            UiMode::TitleHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
+            UiMode::TitleBody => vec!["Title".to_string(), "Body".to_string()],
+            UiMode::BodyHelp => vec!["Body".to_string(), "Help".to_string()],
+            UiMode::BodyLog => vec!["Body".to_string(), "Log".to_string()],
+            UiMode::TitleBodyHelp => vec!["Title".to_string(), "Body".to_string(), "Help".to_string()],
+            UiMode::TitleBodyLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
+            UiMode::BodyHelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
+            UiMode::TitleBodyHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::Config => vec!["Config".to_string(), "Config Help".to_string(), "Log".to_string()],
             UiMode::EditConfig => vec!["Edit Config".to_string()],
+            UiMode::MainMenu => vec!["Main Menu".to_string()],
+            UiMode::ViewCard => vec!["View Card".to_string()],
+            UiMode::HelpMenu => vec!["Help Menu".to_string()],
         }
     }
 
@@ -93,16 +105,19 @@ pub enum AppState {
     Init,
     Initialized,
     UserInput
-
 }
-#[derive(Clone)]
+
+#[derive(Clone, PartialEq)]
 pub enum Focus {
     Title,
     Body,
     Help,
     Log,
     Config,
-    ConfigHelp
+    ConfigHelp,
+    MainMenu,
+    MainMenuHelp,
+    NoFocus
 }
 
 impl AppState {
@@ -130,6 +145,9 @@ impl Focus {
             Self::Log => "Log",
             Self::Config => "Config",
             Self::ConfigHelp => "Config Help",
+            Self::MainMenu => "Main Menu",
+            Self::MainMenuHelp => "Main Menu Help",
+            Self::NoFocus => "No Focus",
         }
     }
     pub fn next(&self, available_tabs: &Vec<String>) -> Self {
@@ -148,6 +166,9 @@ impl Focus {
             "Log" => Self::Log,
             "Config" => Self::Config,
             "Config Help" => Self::ConfigHelp,
+            "Main Menu" => Self::MainMenu,
+            "Main Menu Help" => Self::MainMenuHelp,
+            "No Focus" => Self::NoFocus,
             _ => Self::Title,
         }
     }
@@ -172,6 +193,9 @@ impl Focus {
             "Log" => Self::Log,
             "Config" => Self::Config,
             "Config Help" => Self::ConfigHelp,
+            "Main Menu" => Self::MainMenu,
+            "Main Menu Help" => Self::MainMenuHelp,
+            "No Focus" => Self::NoFocus,
             _ => Self::Title,
         }
     }
@@ -184,7 +208,10 @@ impl Focus {
             "Log" => Self::Log,
             "Config" => Self::Config,
             "Config Help" => Self::ConfigHelp,
-            _ => Self::Title,
+            "Main Menu" => Self::MainMenu,
+            "Main Menu Help" => Self::MainMenuHelp,
+            "No Focus" => Self::NoFocus,
+            _ => Self::NoFocus
         }
     }
 }

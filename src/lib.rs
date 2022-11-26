@@ -40,9 +40,10 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     loop {
         let mut app = app.lock().await;
         let mut config_state = app.config_state.clone();
+        let mut main_menu_state = app.main_menu.state.clone();
 
         // Render
-        terminal.draw(|rect| ui::draw(rect, &mut app, &mut config_state))?;
+        terminal.draw(|rect| ui::draw(rect, &mut app, &mut config_state, &mut main_menu_state))?;
 
         // Handle inputs
         let result = match events.next().await {

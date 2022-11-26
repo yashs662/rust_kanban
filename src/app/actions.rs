@@ -17,12 +17,13 @@ pub enum Action {
     TakeUserInput,
     Escape,
     Enter,
+    Hide,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 10] = [
+        static ACTIONS: [Action; 11] = [
             Action::Quit,
             Action::NextFocus,
             Action::PreviousFocus,
@@ -32,7 +33,8 @@ impl Action {
             Action::GoDown,
             Action::TakeUserInput,
             Action::Escape,
-            Action::Enter
+            Action::Enter,
+            Action::Hide,
         ];
         ACTIONS.iter()
     }
@@ -52,8 +54,13 @@ impl Action {
             Action::GoDown => &[Key::Down],
             Action::TakeUserInput => &[Key::Char('i')],
             Action::Escape => &[Key::Esc],
-            Action::Enter => &[Key::Enter]
+            Action::Enter => &[Key::Enter],
+            Action::Hide => &[Key::Char('h')],
         }
+    }
+
+    pub fn all() -> Vec<Action> {
+        Action::iterator().cloned().collect()
     }
 }
 
@@ -70,7 +77,8 @@ impl Display for Action {
             Action::GoDown => "Go down",
             Action::TakeUserInput => "Enter input mode",
             Action::Escape => "Go to previous mode",
-            Action::Enter => "Accept"
+            Action::Enter => "Accept",
+            Action::Hide => "Hide Focused element",
         };
         write!(f, "{}", str)
     }

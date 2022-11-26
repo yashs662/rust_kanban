@@ -1,3 +1,4 @@
+use std::fmt::{self, Formatter, Display};
 use std::path::PathBuf;
 
 use log::{debug, info};
@@ -29,11 +30,8 @@ pub enum AppReturn {
 
 /// The main application, containing the state
 pub struct App {
-    /// We could dispatch an IO event
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
-    /// Contextual actions
     actions: Actions,
-    /// State
     is_loading: bool,
     state: AppState,
     focus: Focus,
@@ -42,8 +40,11 @@ pub struct App {
     current_user_input: String,
     prev_ui_mode: UiMode,
     pub config_state: ListState,
+    pub main_menu: MainMenu,
     config: AppConfig,
     config_item_being_edited: Option<usize>,
+    current_board: String,
+    current_card: String
 }
 
 impl App {
@@ -67,8 +68,11 @@ impl App {
             current_user_input: String::new(),
             prev_ui_mode: UiMode::Zen,
             config_state: ListState::default(),
+            main_menu: MainMenu::default(),
             config: AppConfig::default(),
             config_item_being_edited: None,
+            current_board: "None".to_string(),
+            current_card: "None".to_string()
         }
     }
 
@@ -141,11 +145,17 @@ impl App {
                         if self.ui_mode == UiMode::Config {
                             self.config_previous();
                         }
+                        else if self.ui_mode == UiMode::MainMenu {
+                            self.main_menu_previous();
+                        }
                         AppReturn::Continue
                     }
                     Action::GoDown => {
                         if self.ui_mode == UiMode::Config {
                             self.config_next();
+                        }
+                        else if self.ui_mode == UiMode::MainMenu {
+                            self.main_menu_next();
                         }
                         AppReturn::Continue
                     }
@@ -164,8 +174,12 @@ impl App {
                                 self.ui_mode = UiMode::Config;
                                 AppReturn::Continue
                             }
-                            _ => {
+                            UiMode::MainMenu => {
                                 AppReturn::Exit
+                            }
+                            _ => {
+                                self.ui_mode = UiMode::MainMenu;
+                                AppReturn::Continue
                             }
                         }
                     }
@@ -201,10 +215,121 @@ impl App {
                                 }
                                 AppReturn::Continue
                             }
+                            UiMode::MainMenu => {
+                                let selected = self.main_menu.state.selected().unwrap_or(0);
+                                let selected_item = &self.main_menu.items[selected];
+                                match selected_item {
+                                    MainMenuItems::Quit => {
+                                        AppReturn::Exit
+                                    }
+                                    MainMenuItems::Config => {
+                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.ui_mode = UiMode::Config;
+                                        debug!("Setting ui_mode to {}", self.ui_mode.to_string());
+                                        AppReturn::Continue
+                                    }
+                                    MainMenuItems::View => {
+                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.ui_mode = self.config.default_view.clone();
+                                        debug!("Setting ui_mode to {}", self.ui_mode.to_string());
+                                        AppReturn::Continue
+                                    }
+                                    MainMenuItems::Help => {
+                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.ui_mode = UiMode::HelpMenu;
+                                        debug!("Setting ui_mode to {}", self.ui_mode.to_string());
+                                        AppReturn::Continue
+                                    }
+                                    _ => AppReturn::Continue
+                                }
+                            }
                             _ => {
                                 AppReturn::Continue
                             }
                         }
+                    }
+                    Action::Hide => {
+                        let current_focus = Focus::from_str(self.focus.current());
+                        let current_ui_mode = self.ui_mode.clone();
+                        // hide the current focus by switching to a view where it is not available
+                        // for example if current uimode is Title and focus is on Title then switch to Zen
+                        if current_ui_mode == UiMode::Zen {
+                            self.ui_mode = UiMode::MainMenu;
+                        } else if current_ui_mode == UiMode::TitleBody {
+                            if current_focus == Focus::Title {
+                                self.ui_mode = UiMode::Zen;
+                                self.focus = Focus::Body;
+                            } else {
+                                self.ui_mode = UiMode::MainMenu;
+                            }
+                        } else if current_ui_mode == UiMode::BodyHelp {
+                            if current_focus == Focus::Help {
+                                self.ui_mode = UiMode::Zen;
+                                self.focus = Focus::Body;
+                            } else {
+                                self.ui_mode = UiMode::MainMenu;
+                            }
+                        } else if current_ui_mode == UiMode::BodyLog {
+                            if current_focus == Focus::Log {
+                                self.ui_mode = UiMode::Zen;
+                                self.focus = Focus::Body;
+                            } else {
+                                self.ui_mode = UiMode::MainMenu;
+                            }
+                        } else if current_ui_mode == UiMode::TitleBodyHelp {
+                            if current_focus == Focus::Title {
+                                self.ui_mode = UiMode::BodyHelp;
+                                self.focus = Focus::Body;
+                            }
+                            else if current_focus == Focus::Help {
+                                self.ui_mode = UiMode::TitleBody;
+                                self.focus = Focus::Title;
+                            }
+                            else {
+                                self.ui_mode = UiMode::MainMenu;
+                            }
+                        } else if current_ui_mode == UiMode::TitleBodyLog {
+                            if current_focus == Focus::Title {
+                                self.ui_mode = UiMode::BodyLog;
+                                self.focus = Focus::Body;
+                            }
+                            else if current_focus == Focus::Log {
+                                self.ui_mode = UiMode::TitleBody;
+                                self.focus = Focus::Title;
+                            }
+                            else {
+                                self.ui_mode = UiMode::MainMenu;
+                            }
+                        } else if current_ui_mode == UiMode::TitleBodyHelpLog {
+                            if current_focus == Focus::Title {
+                                self.ui_mode = UiMode::BodyHelpLog;
+                                self.focus = Focus::Body;
+                            }
+                            else if current_focus == Focus::Help {
+                                self.ui_mode = UiMode::TitleBodyLog;
+                                self.focus = Focus::Title;
+                            }
+                            else if current_focus == Focus::Log {
+                                self.ui_mode = UiMode::TitleBodyHelp;
+                                self.focus = Focus::Title;
+                            }
+                            else {
+                                self.ui_mode = UiMode::MainMenu;
+                            }
+                        } else if current_ui_mode == UiMode::BodyHelpLog {
+                            if current_focus == Focus::Help {
+                                self.ui_mode = UiMode::BodyLog;
+                                self.focus = Focus::Body;
+                            }
+                            else if current_focus == Focus::Log {
+                                self.ui_mode = UiMode::BodyHelp;
+                                self.focus = Focus::Body;
+                            }
+                            else {
+                                self.ui_mode = UiMode::MainMenu;
+                            }
+                        }
+                        AppReturn::Continue
                     }
                 }
             } else {
@@ -223,66 +348,44 @@ impl App {
             error!("Error from dispatch {}", e);
         };
     }
-
     pub fn actions(&self) -> &Actions {
         &self.actions
     }
     pub fn state(&self) -> &AppState {
         &self.state
     }
-
     pub fn is_loading(&self) -> bool {
         self.is_loading
     }
-
     pub fn initialized(&mut self) {
         // Update contextual actions
-        self.actions = vec![
-            Action::Quit,
-            Action::NextFocus,
-            Action::PreviousFocus,
-            Action::SetUiMode,
-            Action::ToggleConfig,
-            Action::GoUp,
-            Action::GoDown,
-            Action::TakeUserInput,
-            Action::Escape,
-            Action::Enter,
-        ]
+        self.actions = Action::all()
         .into();
         self.state = AppState::initialized()
     }
-
     pub fn set_boards(&mut self, boards: Vec<Board>) {
         self.boards = boards;
     }
-
     pub fn loaded(&mut self) {
         self.is_loading = false;
     }
-
     pub fn current_focus(&self) -> &Focus {
         &self.focus
     }
-
     pub fn change_focus(&mut self, focus: Focus) {
         self.focus = focus;
     }
-
     pub fn set_current_user_input(&mut self, input: String) {
         let new_input = input;
         debug!("Setting current user input to {}", new_input);
         self.current_user_input = new_input;
     }
-
     pub fn clear_current_user_input(&mut self) {
         self.current_user_input = String::new();
     }
-
     pub fn set_config_state(&mut self, config_state: ListState) {
         self.config_state = config_state;
     }
-
     pub fn config_next(&mut self) {
         let i = match self.config_state.selected() {
             Some(i) => {
@@ -296,7 +399,6 @@ impl App {
         };
         self.config_state.select(Some(i));
     }
-
     pub fn config_previous(&mut self) {
         let i = match self.config_state.selected() {
             Some(i) => {
@@ -310,11 +412,35 @@ impl App {
         };
         self.config_state.select(Some(i));
     }
-
+    pub fn main_menu_next(&mut self) {
+        let i = match self.main_menu.state.selected() {
+            Some(i) => {
+                if i >= self.main_menu.items.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.main_menu.state.select(Some(i));
+    }
+    pub fn main_menu_previous(&mut self) {
+        let i = match self.main_menu.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.main_menu.items.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.main_menu.state.select(Some(i));
+    }
     pub fn config_state(&self) -> &ListState {
         &self.config_state
     }
-
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
         self.ui_mode = ui_mode;
     }
@@ -329,7 +455,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn default() -> Self {
         let db_path = handler::get_config_dir().join(DB_NAME);
-        let default_view = UiMode::TitleHelpLog;
+        let default_view = UiMode::TitleBodyHelpLog;
         Self {
             db_path,
             default_view
@@ -381,5 +507,44 @@ impl AppConfig {
 
     pub fn len(&self) -> usize {
         self.to_list().len()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum MainMenuItems {
+    View,
+    Config,
+    Help,
+    Quit
+}
+
+impl Display for MainMenuItems {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            MainMenuItems::View => write!(f, "View your Boards"),
+            MainMenuItems::Config => write!(f, "Configure"),
+            MainMenuItems::Help => write!(f, "Help"),
+            MainMenuItems::Quit => write!(f, "Quit"),
+        }
+    }
+}
+
+pub struct MainMenu {
+    pub state: ListState,
+    pub items: Vec<MainMenuItems>
+}
+
+impl MainMenu {
+    fn default() -> Self {
+        let items = vec![
+            MainMenuItems::View,
+            MainMenuItems::Config,
+            MainMenuItems::Help,
+            MainMenuItems::Quit
+        ];
+        Self {
+            state: ListState::default(),
+            items: items
+        }
     }
 }
