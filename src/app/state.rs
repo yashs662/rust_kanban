@@ -73,7 +73,7 @@ impl UiMode {
         }
     }
 
-    pub fn get_available_tabs(&self) -> Vec<String> {
+    pub fn get_available_targets(&self) -> Vec<String> {
         match self {
             UiMode::Zen => vec!["Body".to_string()],
             UiMode::TitleBody => vec!["Title".to_string(), "Body".to_string()],
@@ -85,9 +85,9 @@ impl UiMode {
             UiMode::TitleBodyHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::Config => vec!["Config".to_string(), "Config Help".to_string(), "Log".to_string()],
             UiMode::EditConfig => vec!["Edit Config".to_string()],
-            UiMode::MainMenu => vec!["Main Menu".to_string()],
+            UiMode::MainMenu => vec![],
             UiMode::ViewCard => vec!["View Card".to_string()],
-            UiMode::HelpMenu => vec!["Help Menu".to_string()],
+            UiMode::HelpMenu => vec![],
         }
     }
 
@@ -137,7 +137,7 @@ impl Default for AppState {
 }
 
 impl Focus {
-    pub fn current(&self) -> &str {
+    pub fn to_str(&self) -> &str {
         match self {
             Self::Title => "Title",
             Self::Body => "Body",
@@ -151,13 +151,16 @@ impl Focus {
         }
     }
     pub fn next(&self, available_tabs: &Vec<String>) -> Self {
-        let current = self.current();
+        let current = self.to_str();
         let index = available_tabs.iter().position(|x| x == current);
         // check if index is None
         let index = match index {
             Some(i) => i,
             None => 0,
         };
+        if available_tabs.len() <= 1 {
+            return Self::NoFocus;
+        }
         let next_index = (index + 1) % available_tabs.len();
         match available_tabs[next_index].as_str() {
             "Title" => Self::Title,
@@ -174,7 +177,7 @@ impl Focus {
     }
 
     pub fn prev(&self, available_tabs: &Vec<String>) -> Self {
-        let current = self.current();
+        let current = self.to_str();
         let index = available_tabs.iter().position(|x| x == current);
         // check if index is None
         let index = match index {
@@ -218,6 +221,6 @@ impl Focus {
 
 impl Default for Focus {
     fn default() -> Self {
-        Self::Body
+        Self::NoFocus
     }
 }

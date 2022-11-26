@@ -21,6 +21,7 @@ pub mod actions;
 pub mod state;
 pub mod ui;
 pub mod kanban;
+pub mod ui_helper;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AppReturn {
@@ -52,7 +53,7 @@ impl App {
         let actions = vec![Action::Quit].into();
         let is_loading = false;
         let state = AppState::default();
-        let focus = Focus::Title;
+        let focus = Focus::NoFocus;
         let ui_mode = data_handler::get_default_ui_mode();
         let boards = vec![];
 
@@ -114,18 +115,21 @@ impl App {
                     //     AppReturn::Continue
                     // }
                     Action::NextFocus => {
-                        self.focus = self.focus.next(&UiMode::get_available_tabs(&self.ui_mode));
+                        self.focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
                         AppReturn::Continue
                     }
                     Action::PreviousFocus => {
-                        self.focus = self.focus.prev(&UiMode::get_available_tabs(&self.ui_mode));
+                        self.focus = self.focus.prev(&UiMode::get_available_targets(&self.ui_mode));
                         AppReturn::Continue
                     }
                     Action::SetUiMode => {
                         let new_ui_mode = UiMode::from_number(key.to_digit() as u8);
-                        let available_tabs = UiMode::get_available_tabs(&new_ui_mode);
+                        if new_ui_mode == UiMode::MainMenu {
+                            self.main_menu_next();
+                        }
+                        let available_tabs = UiMode::get_available_targets(&new_ui_mode);
                         // check if focus is still available in the new ui_mode if not set it to the first available tab
-                        if !available_tabs.contains(&self.focus.current().to_owned()) {
+                        if !available_tabs.contains(&self.focus.to_str().to_owned()) {
                             self.focus = Focus::from_str(available_tabs[0].as_str());
                         }
                         debug!("Setting ui_mode to {}", new_ui_mode.to_string());
@@ -138,6 +142,10 @@ impl App {
                         } else {
                             self.prev_ui_mode = self.ui_mode.clone();
                             self.ui_mode = UiMode::Config;
+                            let available_focus_targets = self.ui_mode.get_available_targets();
+                            if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
+                                self.focus = Focus::from_str(&available_focus_targets[0]);
+                            }
                         }
                         AppReturn::Continue
                     }
@@ -179,6 +187,7 @@ impl App {
                             }
                             _ => {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                                 AppReturn::Continue
                             }
                         }
@@ -248,18 +257,20 @@ impl App {
                         }
                     }
                     Action::Hide => {
-                        let current_focus = Focus::from_str(self.focus.current());
+                        let current_focus = Focus::from_str(self.focus.to_str());
                         let current_ui_mode = self.ui_mode.clone();
                         // hide the current focus by switching to a view where it is not available
                         // for example if current uimode is Title and focus is on Title then switch to Zen
                         if current_ui_mode == UiMode::Zen {
                             self.ui_mode = UiMode::MainMenu;
+                            self.main_menu_next();
                         } else if current_ui_mode == UiMode::TitleBody {
                             if current_focus == Focus::Title {
                                 self.ui_mode = UiMode::Zen;
                                 self.focus = Focus::Body;
                             } else {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                             }
                         } else if current_ui_mode == UiMode::BodyHelp {
                             if current_focus == Focus::Help {
@@ -267,6 +278,7 @@ impl App {
                                 self.focus = Focus::Body;
                             } else {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                             }
                         } else if current_ui_mode == UiMode::BodyLog {
                             if current_focus == Focus::Log {
@@ -274,6 +286,7 @@ impl App {
                                 self.focus = Focus::Body;
                             } else {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                             }
                         } else if current_ui_mode == UiMode::TitleBodyHelp {
                             if current_focus == Focus::Title {
@@ -286,6 +299,7 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                             }
                         } else if current_ui_mode == UiMode::TitleBodyLog {
                             if current_focus == Focus::Title {
@@ -298,6 +312,7 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                             }
                         } else if current_ui_mode == UiMode::TitleBodyHelpLog {
                             if current_focus == Focus::Title {
@@ -314,6 +329,7 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                             }
                         } else if current_ui_mode == UiMode::BodyHelpLog {
                             if current_focus == Focus::Help {
@@ -326,6 +342,7 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
+                                self.main_menu_next();
                             }
                         }
                         AppReturn::Continue
@@ -360,6 +377,9 @@ impl App {
         // Update contextual actions
         self.actions = Action::all()
         .into();
+        if self.ui_mode == UiMode::MainMenu {
+            self.main_menu_next();
+        }
         self.state = AppState::initialized()
     }
     pub fn set_boards(&mut self, boards: Vec<Board>) {
@@ -442,6 +462,10 @@ impl App {
     }
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
         self.ui_mode = ui_mode;
+        let available_focus_targets = self.ui_mode.get_available_targets();
+        if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
+            self.focus = Focus::from_str(&available_focus_targets[0]);
+        }
     }
 }
 
