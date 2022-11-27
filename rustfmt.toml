@@ -1,5 +1,0 @@
-# Unstable
-unstable_features = true
-
-imports_granularity = "Module"
-group_imports = "StdExternalCrate"

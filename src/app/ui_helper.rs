@@ -51,7 +51,7 @@ where
         )
         .split(rect.size());
 
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, false);
     rect.render_widget(body, chunks[0]);
 }
 
@@ -73,7 +73,7 @@ where
     let title = draw_title(focus);
     rect.render_widget(title, chunks[0]);
     
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, true);
     rect.render_widget(body, chunks[1]);
 }
 
@@ -85,14 +85,14 @@ where
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Percentage(90),
-                Constraint::Length(4),
+                Constraint::Percentage(85),
+                Constraint::Length(5),
             ]
             .as_ref(),
         )
         .split(rect.size());
 
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, true);
     rect.render_widget(body, chunks[0]);
 
     let help = draw_help(actions, focus);
@@ -114,10 +114,10 @@ where
         )
         .split(rect.size());
 
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, true);
     rect.render_widget(body, chunks[0]);
 
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, true);
     rect.render_widget(log, chunks[1]);
 }
 
@@ -130,8 +130,8 @@ where
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(80),
-                Constraint::Length(4),
+                Constraint::Percentage(75),
+                Constraint::Length(5),
             ]
             .as_ref(),
         )
@@ -140,7 +140,7 @@ where
     let title = draw_title(focus);
     rect.render_widget(title, chunks[0]);
 
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, true);
     rect.render_widget(body, chunks[1]);
 
     let help = draw_help(actions, focus);
@@ -156,7 +156,7 @@ where
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(80),
+                Constraint::Percentage(75),
                 Constraint::Length(8),
             ]
             .as_ref(),
@@ -166,10 +166,10 @@ where
     let title = draw_title(focus);
     rect.render_widget(title, chunks[0]);
 
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, true);
     rect.render_widget(body, chunks[1]);
 
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, true);
     rect.render_widget(log, chunks[2]);
 }
 
@@ -182,20 +182,20 @@ where
         .constraints(
             [
                 Constraint::Percentage(70),
-                Constraint::Length(4),
+                Constraint::Length(5),
                 Constraint::Length(8),
             ]
             .as_ref(),
         )
         .split(rect.size());
 
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, true);
     rect.render_widget(body, chunks[0]);
 
     let help = draw_help(actions, focus);
     rect.render_widget(help, chunks[1]);
 
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, true);
     rect.render_widget(log, chunks[2]);
 }
 
@@ -209,7 +209,7 @@ where
             [
                 Constraint::Length(3),
                 Constraint::Percentage(60),
-                Constraint::Length(4),
+                Constraint::Length(5),
                 Constraint::Length(8),
             ]
             .as_ref(),
@@ -219,13 +219,13 @@ where
     let title = draw_title(focus);
     rect.render_widget(title, chunks[0]);
 
-    let body = draw_body(focus, boards, current_board, current_card);
+    let body = draw_body(focus, boards, current_board, current_card, true);
     rect.render_widget(body, chunks[1]);
 
     let help = draw_help(actions, focus);
     rect.render_widget(help, chunks[2]);
 
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, true);
     rect.render_widget(log, chunks[3]);
 }
 
@@ -250,7 +250,7 @@ where
     let config_help = draw_config_help(focus);
     rect.render_widget(config_help, chunks[1]);
 
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, true);
     rect.render_widget(log, chunks[2]);
 }
 
@@ -285,7 +285,7 @@ where
     .block(Block::default().borders(Borders::ALL).title("Edit"))
     .wrap(tui::widgets::Wrap { trim: false });
 
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, true);
     
     rect.set_cursor(
         // Put cursor past the end of the input text
@@ -341,7 +341,7 @@ where
     let help_menu = draw_help_menu(focus);
     rect.render_widget(help_menu, chunks[0]);
 
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, true);
     rect.render_widget(log, chunks[1]);
 }
 
@@ -358,7 +358,7 @@ where
             .as_ref(),
         )
         .split(rect.size());
-    let log = draw_logs(focus);
+    let log = draw_logs(focus, false);
     rect.render_widget(log, chunks[0]);
 }
 
@@ -462,8 +462,8 @@ fn draw_config_help(focus: &Focus) -> Paragraph {
 }
 
 /// Draws logs
-fn draw_logs<'a>(focus: &Focus) -> TuiLoggerWidget<'a> {
-    let logbox_style = if matches!(focus, Focus::Log) {
+fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool) -> TuiLoggerWidget<'a> {
+    let logbox_style = if matches!(focus, Focus::Log) && enable_focus_highlight {
         Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
@@ -501,7 +501,11 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItems>) -> Lis
                 .style(menu_style)
                 .border_type(BorderType::Plain),
         )
-        .highlight_style(Style::default().fg(Color::LightYellow))
+        .highlight_style(
+            Style::default()
+                .bg(Color::LightMagenta)
+                .add_modifier(Modifier::BOLD)
+        )
         .highlight_symbol(">")
 }
 
@@ -583,7 +587,7 @@ fn draw_config_list_selector(focus: &Focus) -> List<'static> {
     .block(Block::default().borders(Borders::ALL).title("Config"))
     .highlight_style(
         Style::default()
-        .bg(Color::LightGreen)
+        .bg(Color::LightMagenta)
         .add_modifier(Modifier::BOLD),
     )
     .highlight_symbol(">> ")
@@ -649,8 +653,8 @@ fn draw_help_menu<'a>(focus: &Focus) -> Paragraph<'a> {
 }
 
 /// Draws Kanban boards
-pub fn draw_body<'a>(focus: &Focus, boards: &Vec<Board>, current_board: &String, current_card: &String) -> Paragraph<'a> {
-    let body_style = if matches!(focus, Focus::Body) {
+pub fn draw_body<'a>(focus: &Focus, boards: &Vec<Board>, current_board: &String, current_card: &String, enable_focus_highlight: bool) -> Paragraph<'a> {
+    let body_style = if matches!(focus, Focus::Body) && enable_focus_highlight {
         Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)

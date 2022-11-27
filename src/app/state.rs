@@ -87,12 +87,12 @@ impl UiMode {
             UiMode::TitleBodyLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
             UiMode::BodyHelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::TitleBodyHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
-            UiMode::Config => vec!["Config".to_string(), "Config Help".to_string(), "Log".to_string()],
-            UiMode::EditConfig => vec!["Edit Config".to_string()],
+            UiMode::Config => vec![],
+            UiMode::EditConfig => vec![],
             UiMode::MainMenu => vec![],
-            UiMode::ViewCard => vec!["View Card".to_string()],
+            UiMode::ViewCard => vec![],
             UiMode::HelpMenu => vec![],
-            UiMode::LogsOnly => vec!["Log".to_string()],
+            UiMode::LogsOnly => vec![],
         }
     }
 
@@ -177,7 +177,7 @@ impl Focus {
             "Main Menu" => Self::MainMenu,
             "Main Menu Help" => Self::MainMenuHelp,
             "No Focus" => Self::NoFocus,
-            _ => Self::Title,
+            _ => Self::NoFocus,
         }
     }
 
@@ -204,7 +204,7 @@ impl Focus {
             "Main Menu" => Self::MainMenu,
             "Main Menu Help" => Self::MainMenuHelp,
             "No Focus" => Self::NoFocus,
-            _ => Self::Title,
+            _ => Self::NoFocus,
         }
     }
 

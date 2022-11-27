@@ -121,11 +121,25 @@ impl App {
                     //     AppReturn::Continue
                     // }
                     Action::NextFocus => {
-                        self.focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
+                        let current_focus = self.focus.clone();
+                        let next_focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
+                        // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
+                        if next_focus == current_focus || next_focus == Focus::NoFocus {
+                            self.focus = current_focus;
+                        } else {
+                            self.focus = next_focus;
+                        }
                         AppReturn::Continue
                     }
                     Action::PreviousFocus => {
-                        self.focus = self.focus.prev(&UiMode::get_available_targets(&self.ui_mode));
+                        let current_focus = self.focus.clone();
+                        let next_focus = self.focus.prev(&UiMode::get_available_targets(&self.ui_mode));
+                        // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
+                        if next_focus == current_focus || next_focus == Focus::NoFocus {
+                            self.focus = current_focus;
+                        } else {
+                            self.focus = next_focus;
+                        }
                         AppReturn::Continue
                     }
                     Action::SetUiMode => {
@@ -133,10 +147,15 @@ impl App {
                         if new_ui_mode == UiMode::MainMenu {
                             self.main_menu_next();
                         }
-                        let available_tabs = UiMode::get_available_targets(&new_ui_mode);
+                        let available_focus_targets = UiMode::get_available_targets(&new_ui_mode);
                         // check if focus is still available in the new ui_mode if not set it to the first available tab
-                        if !available_tabs.contains(&self.focus.to_str().to_owned()) {
-                            self.focus = Focus::from_str(available_tabs[0].as_str());
+                        if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
+                            // check if available focus targets is empty
+                            if available_focus_targets.is_empty() {
+                                self.focus = Focus::NoFocus;
+                            } else {
+                                self.focus = Focus::from_str(available_focus_targets[0].as_str());
+                            }
                         }
                         debug!("Setting ui_mode to {}", new_ui_mode.to_string());
                         self.ui_mode = new_ui_mode;
@@ -150,7 +169,12 @@ impl App {
                             self.ui_mode = UiMode::Config;
                             let available_focus_targets = self.ui_mode.get_available_targets();
                             if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
-                                self.focus = Focus::from_str(&available_focus_targets[0]);
+                                // check if available focus targets is empty
+                                if available_focus_targets.is_empty() {
+                                    self.focus = Focus::NoFocus;
+                                } else {
+                                    self.focus = Focus::from_str(available_focus_targets[0].as_str());
+                                }
                             }
                         }
                         AppReturn::Continue
