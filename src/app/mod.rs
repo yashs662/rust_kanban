@@ -1,3 +1,4 @@
+use std::env;
 use std::fmt::{self, Formatter, Display};
 use std::path::PathBuf;
 
@@ -12,10 +13,10 @@ use self::state::Focus;
 use self::state::UiMode;
 use self::kanban::Board;
 use crate::app::actions::Action;
-use crate::constants::DB_NAME;
+use crate::constants::SAVE_DIR_NAME;
 use crate::inputs::key::Key;
 use crate::io::data_handler::write_config;
-use crate::io::{IoEvent, handler, data_handler};
+use crate::io::{IoEvent, data_handler};
 
 pub mod actions;
 pub mod state;
@@ -37,7 +38,7 @@ pub struct App {
     state: AppState,
     focus: Focus,
     ui_mode: UiMode,
-    boards: Vec<kanban::Board>,
+    pub boards: Vec<kanban::Board>,
     current_user_input: String,
     prev_ui_mode: UiMode,
     pub config_state: ListState,
@@ -47,6 +48,11 @@ pub struct App {
     current_board: String,
     current_card: String
 }
+
+// #[derive(Savefile)]
+// pub struct FileSave {
+//     pub boards: Vec<kanban::Board>
+// }
 
 impl App {
     pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>) -> Self {
@@ -347,6 +353,10 @@ impl App {
                         }
                         AppReturn::Continue
                     }
+                    Action::SaveState => {
+                        self.dispatch(IoEvent::SaveLocalData).await;
+                        AppReturn::Continue
+                    }
                 }
             } else {
                 warn!("No action accociated to {}", key);
@@ -354,7 +364,6 @@ impl App {
             }
         }
     }
-
     /// Send a network event to the IO thread
     pub async fn dispatch(&mut self, action: IoEvent) {
         // `is_loading` will be set to false again after the async action has finished in io/handler.rs
@@ -471,23 +480,23 @@ impl App {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppConfig {
-    pub db_path: PathBuf,
+    pub save_directory: PathBuf,
     pub default_view: UiMode
 }
 
 impl AppConfig {
     pub fn default() -> Self {
-        let db_path = handler::get_config_dir().join(DB_NAME);
+        let save_directory = env::temp_dir().join(SAVE_DIR_NAME);
         let default_view = UiMode::TitleBodyHelpLog;
         Self {
-            db_path,
+            save_directory: save_directory,
             default_view
         }
     }
 
     pub fn to_list(&self) -> Vec<String> {
         vec![
-            format!("db_path: {}", self.db_path.to_str().unwrap()),
+            format!("save_directory: {}", self.save_directory.to_str().unwrap()),
             format!("default_view: {}", self.default_view.to_string()),
         ]
     }
@@ -501,11 +510,11 @@ impl AppConfig {
             let value = parts.next().unwrap_or("").trim();
             debug!("Editing config with key: {} and value: {}", key, value);
             match key {
-                "db_path" => {
+                "save_directory" => {
                     let new_path = PathBuf::from(value);
                     // check if the new path is valid
                     if new_path.exists() {
-                        config.db_path = new_path;
+                        config.save_directory = new_path;
                     } else {
                         warn!("Invalid path: {}", value);
                     }

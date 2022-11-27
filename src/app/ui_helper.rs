@@ -365,7 +365,7 @@ where
 /// Draws Help section for normal mode
 fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
     let helpbox_style = if matches!(focus, Focus::Help) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
@@ -420,7 +420,7 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
 /// Draws help section for config mode
 fn draw_config_help(focus: &Focus) -> Paragraph {
     let helpbox_style = if matches!(focus, Focus::ConfigHelp) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
@@ -464,16 +464,16 @@ fn draw_config_help(focus: &Focus) -> Paragraph {
 /// Draws logs
 fn draw_logs<'a>(focus: &Focus) -> TuiLoggerWidget<'a> {
     let logbox_style = if matches!(focus, Focus::Log) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
     TuiLoggerWidget::default()
-        .style_error(Style::default().fg(Color::Red))
-        .style_debug(Style::default().fg(Color::Green))
-        .style_warn(Style::default().fg(Color::Yellow))
+        .style_error(Style::default().fg(Color::LightRed))
+        .style_debug(Style::default().fg(Color::LightGreen))
+        .style_warn(Style::default().fg(Color::LightYellow))
         .style_trace(Style::default().fg(Color::Gray))
-        .style_info(Style::default().fg(Color::Blue))
+        .style_info(Style::default().fg(Color::LightCyan))
         .block(
             Block::default()
                 .title("Logs")
@@ -485,7 +485,7 @@ fn draw_logs<'a>(focus: &Focus) -> TuiLoggerWidget<'a> {
 /// Draws Main menu
 fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItems>) -> List<'a> {
     let menu_style = if matches!(focus, Focus::MainMenu) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
@@ -501,14 +501,14 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItems>) -> Lis
                 .style(menu_style)
                 .border_type(BorderType::Plain),
         )
-        .highlight_style(Style::default().fg(Color::LightBlue))
+        .highlight_style(Style::default().fg(Color::LightYellow))
         .highlight_symbol(">")
 }
 
 /// Draws Main menu help
 fn draw_main_menu_help<'a>(focus: &Focus) -> Paragraph<'a> {
     let helpbox_style = if matches!(focus, Focus::MainMenuHelp) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
@@ -574,7 +574,7 @@ fn get_config_list_items<'action>() -> Vec<ListItem<'action>>
 /// Draws config list selector
 fn draw_config_list_selector(focus: &Focus) -> List<'static> {
     let config_style = if matches!(focus, Focus::Config) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
@@ -602,7 +602,7 @@ fn get_config_items() -> Vec<String>
 /// Draws Help Menu
 fn draw_help_menu<'a>(focus: &Focus) -> Paragraph<'a> {
     let helpbox_style = if matches!(focus, Focus::Help) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
@@ -651,7 +651,7 @@ fn draw_help_menu<'a>(focus: &Focus) -> Paragraph<'a> {
 /// Draws Kanban boards
 pub fn draw_body<'a>(focus: &Focus, boards: &Vec<Board>, current_board: &String, current_card: &String) -> Paragraph<'a> {
     let body_style = if matches!(focus, Focus::Body) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };
@@ -718,7 +718,7 @@ where
 pub fn draw_title<'a>(focus: &Focus) -> Paragraph<'a> {
     // check if focus is on title
     let title_style = if matches!(focus, Focus::Title) {
-        Style::default().fg(Color::LightBlue)
+        Style::default().fg(Color::LightYellow)
     } else {
         Style::default().fg(Color::White)
     };

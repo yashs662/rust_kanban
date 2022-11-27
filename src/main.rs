@@ -8,6 +8,7 @@ use rust_kanban::io::handler::IoAsyncHandler;
 use rust_kanban::io::IoEvent;
 use rust_kanban::start_ui;
 
+extern crate savefile_derive;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct CliArgs {

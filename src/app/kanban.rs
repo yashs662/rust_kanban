@@ -1,3 +1,4 @@
+use savefile_derive::Savefile;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -5,7 +6,7 @@ use crate::constants::{
     FIELD_NOT_SET,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Savefile)]
 pub enum CardStatus {
     Active,
     Complete,
@@ -20,7 +21,7 @@ impl CardStatus {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
 pub struct Card {
     id: u32,
     name: String,
@@ -37,7 +38,7 @@ pub struct Card {
     action_history: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
 pub struct Board {
     pub name: String,
     pub description: String,
