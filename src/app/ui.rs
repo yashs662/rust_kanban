@@ -1,9 +1,7 @@
 use tui::backend::Backend;
 use tui::Frame;
-use tui::widgets::{
-    ListState
-};
 
+use super::AppState;
 use super::state::UiMode;
 use super::ui_helper::{
     check_size,
@@ -19,73 +17,66 @@ use super::ui_helper::{
     render_config,
     render_edit_config,
     render_main_menu,
-    render_help_menu, render_logs_only
+    render_help_menu, render_logs_only, render_new_board_form
 };
 use crate::app::App;
 
 /// Main UI Drawing handler
-pub fn draw<B>(rect: &mut Frame<B>, app: &App, config_state: &mut ListState, main_menu_state: &mut ListState)
+pub fn draw<B>(rect: &mut Frame<B>, app: &App, states: &mut AppState)
 where
     B: Backend,
-{
-    let size = rect.size();
-
-    let msg = check_size(&size);
-    // match to check if msg is size OK
-    if &msg == "Size OK" {
-        // pass
-    } else {
-        // draw error message
-        draw_size_error(rect, &size, msg);
+{   
+    let msg = check_size(&rect.size());
+    if &msg != "Size OK" {
+        draw_size_error(rect, &rect.size(), msg);
         return;
     }
 
-    let current_ui_mode = &app.ui_mode;
-    let current_board = &app.current_board;
-    let current_card = &app.current_card;
-
-    match current_ui_mode {
+    match &app.ui_mode {
         UiMode::Zen => {
-            render_zen_mode(&app.focus, &app.boards, rect, current_board, current_card);
+            render_zen_mode(rect, &app);
         }
         UiMode::TitleBody => {
-            render_title_body(&app.focus, &app.boards, rect, current_board, current_card);
+            render_title_body(rect, &app);
         }
         UiMode::BodyHelp => {
-            render_body_help(&app.focus, &app.boards, rect, app.actions(), current_board, current_card)
+            render_body_help(rect, &app);
         }
         UiMode::BodyLog => {
-            render_body_log(&app.focus, &app.boards, rect, current_board, current_card)
+            render_body_log(rect, &app);
         }
         UiMode::TitleBodyHelp => {
-            render_title_body_help(&app.focus, &app.boards, rect, app.actions(), current_board, current_card)
+            render_title_body_help(rect, &app);
         }
         UiMode::TitleBodyLog => {
-            render_title_body_log(&app.focus, &app.boards, rect, current_board, current_card)
+            render_title_body_log(rect, &app);
         }
         UiMode::BodyHelpLog => {
-            render_body_help_log(&app.focus, &app.boards, rect, app.actions(), current_board, current_card)
+            render_body_help_log(rect, &app);
         }
         UiMode::TitleBodyHelpLog => {
-            render_title_body_help_log(&app.focus, &app.boards, rect, app.actions(), current_board, current_card)
+            render_title_body_help_log(rect, &app);
         }
         UiMode::Config => {
-            render_config(rect, config_state, &app.focus);
+            render_config(rect, &app, &mut states.config_state);
         }
         UiMode::EditConfig => {
-            render_edit_config(rect, &app.focus, app.current_user_input.clone(), app.config_item_being_edited);
+            render_edit_config(rect, &app);
         }
         UiMode::MainMenu => {
-            render_main_menu(rect, main_menu_state, app.main_menu.items.clone(), &app.focus);
+            render_main_menu(rect, &app, &mut states.main_menu_state);
         }
         UiMode::HelpMenu => {
             render_help_menu(rect, &app.focus);
         }
         UiMode::LogsOnly => {
-            render_logs_only(rect, &app.focus)
+            render_logs_only(rect, &app.focus);
         }
         UiMode::ViewCard => {
             todo!("ViewCard");
+        }
+        UiMode::NewBoard => {
+            render_new_board_form(rect, &app, &mut states.new_board_state);
         }
 
     }

@@ -18,13 +18,15 @@ pub enum Action {
     Escape,
     Enter,
     Hide,
-    SaveState
+    SaveState,
+    NewBoard,
+    NewCard
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 12] = [
+        static ACTIONS: [Action; 14] = [
             Action::Quit,
             Action::NextFocus,
             Action::PreviousFocus,
@@ -36,7 +38,9 @@ impl Action {
             Action::Escape,
             Action::Enter,
             Action::Hide,
-            Action::SaveState
+            Action::SaveState,
+            Action::NewBoard,
+            Action::NewCard,
         ];
         ACTIONS.iter()
     }
@@ -58,7 +62,9 @@ impl Action {
             Action::Escape => &[Key::Esc],
             Action::Enter => &[Key::Enter],
             Action::Hide => &[Key::Char('h')],
-            Action::SaveState => &[Key::Ctrl('s')]
+            Action::SaveState => &[Key::Ctrl('s')],
+            Action::NewBoard => &[Key::Char('b')],
+            Action::NewCard => &[Key::Char('n')],
         }
     }
 
@@ -82,7 +88,9 @@ impl Display for Action {
             Action::Escape => "Go to previous mode",
             Action::Enter => "Accept",
             Action::Hide => "Hide Focused element",
-            Action::SaveState => "Save Kanban state"
+            Action::SaveState => "Save Kanban state",
+            Action::NewBoard => "Create new board",
+            Action::NewCard => "Create new card in current board",
         };
         write!(f, "{}", str)
     }

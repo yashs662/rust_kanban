@@ -1,7 +1,7 @@
 use savefile_derive::Savefile;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use uuid::Uuid;
 use crate::constants::{
     FIELD_NOT_SET,
 };
@@ -23,8 +23,8 @@ impl CardStatus {
 
 #[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
 pub struct Card {
-    id: u32,
-    name: String,
+    pub id: u128,
+    pub name: String,
     short_description: String,
     long_description: String,
     date_created: String,
@@ -40,6 +40,7 @@ pub struct Card {
 
 #[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
 pub struct Board {
+    pub id: u128,
     pub name: String,
     pub description: String,
     pub cards: Vec<Card>,
@@ -49,6 +50,7 @@ pub struct Board {
 impl Board {
     pub fn new(name: String, description: String) -> Self {
         Self {
+            id: get_id(),
             name,
             description,
             cards: Vec::new(),
@@ -67,7 +69,7 @@ impl Board {
         self.action_history.push(format!("Removed card {}", card.name));
     }
 
-    pub fn get_card(&self, id: u32) -> Option<&Card> {
+    pub fn get_card(&self, id: u128) -> Option<&Card> {
         self.cards.iter().find(|c| c.id == id)
     }
 
@@ -89,6 +91,7 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self {
+            id: get_id(),
             name: String::from("Default Board"),
             description: String::from("Default Board Description"),
             cards: vec![Card::default()],
@@ -203,7 +206,6 @@ impl Default for Card {
     }
 }
 
-fn get_id() -> u32 {
-    static ID: AtomicUsize = AtomicUsize::new(0);
-    ID.fetch_add(1, Ordering::SeqCst) as u32
+fn get_id() -> u128 {
+    Uuid::new_v4().as_u128()
 }

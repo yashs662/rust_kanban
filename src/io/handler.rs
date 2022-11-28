@@ -54,6 +54,8 @@ impl IoAsyncHandler {
         }
         app.boards = prepare_boards();
         debug!("Boards: {:?}", app.boards);
+        app.set_visible_boards_and_cards();
+        debug!("Visible boards: {:?}", app.visible_boards_and_cards);
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
         Ok(())
@@ -133,16 +135,35 @@ fn prepare_save_dir() -> bool {
 }
 
 fn prepare_boards () -> Vec<Board> {
-    let local_save_files = get_available_local_savefiles();
+    let mut local_save_files = get_available_local_savefiles();
+    // keep only the files which have _v 
+    local_save_files = local_save_files
+        .iter()
+        .filter(|file| file.contains("_v"))
+        .map(|file| file.to_string())
+        .collect();
+    debug!("Local save files: {:?}", local_save_files);
     let fall_back_version = "1".to_string();
-    let latest_version = local_save_files.iter().max().unwrap_or(&fall_back_version);
+    // parse file naming scheme to gett the latest file with the latest version
+    // kanban_DD-MM-YYYY_V{version}
+    let mut latest_save_file = local_save_files[0].clone();
+    let mut latest_version = fall_back_version.clone();
+    for save_file in local_save_files {
+        let save_file_name = &save_file;
+        let version = save_file_name.split("_v").collect::<Vec<&str>>()[1].to_string();
+        if version > latest_version {
+            latest_version = version.to_string();
+            latest_save_file = save_file;
+        }
+    }
     // get v1, v2 version number from latest_version
     let mut version_number = latest_version.split("v").collect::<Vec<&str>>();
     // get last version number
     let last_version_number = version_number.pop().unwrap_or("1");
     // convert to u32
     let last_version_number = last_version_number.parse::<u32>().unwrap_or(1);
-    let local_data = get_local_kanban_state(last_version_number);
+    debug!("Last version number: {}", last_version_number);
+    let local_data = get_local_kanban_state(latest_save_file, last_version_number);
     match local_data {
         Ok(data) => {
             info!("👍 Local data loaded from {}", latest_version);

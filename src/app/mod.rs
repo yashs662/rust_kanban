@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fmt::{self, Formatter, Display};
 use std::path::PathBuf;
@@ -8,7 +9,7 @@ use serde::{Serialize, Deserialize};
 use tui::widgets::ListState;
 
 use self::actions::Actions;
-use self::state::AppState;
+use self::state::AppStatus;
 use self::state::Focus;
 use self::state::UiMode;
 use self::kanban::Board;
@@ -35,24 +36,18 @@ pub struct App {
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
     actions: Actions,
     is_loading: bool,
-    state: AppState,
+    pub state: AppState,
     focus: Focus,
     ui_mode: UiMode,
     pub boards: Vec<kanban::Board>,
     current_user_input: String,
     prev_ui_mode: UiMode,
-    pub config_state: ListState,
-    pub main_menu: MainMenu,
     config: AppConfig,
     config_item_being_edited: Option<usize>,
-    current_board: String,
-    current_card: String
+    current_board: Option<u128>,
+    current_card: Option<u128>,
+    pub visible_boards_and_cards: Vec<HashMap<u128, Vec<u128>>>,
 }
-
-// #[derive(Savefile)]
-// pub struct FileSave {
-//     pub boards: Vec<kanban::Board>
-// }
 
 impl App {
     pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>) -> Self {
@@ -74,19 +69,18 @@ impl App {
             boards: boards,
             current_user_input: String::new(),
             prev_ui_mode: UiMode::Zen,
-            config_state: ListState::default(),
-            main_menu: MainMenu::default(),
             config: AppConfig::default(),
             config_item_being_edited: None,
-            current_board: "None".to_string(),
-            current_card: "None".to_string()
+            current_board: None,
+            current_card: None,
+            visible_boards_and_cards: vec![],
         }
     }
 
     /// Handle a user action
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
         // check if we are in a user input mode
-        if self.state == AppState::UserInput {
+        if self.state.status == AppStatus::UserInput {
             // append to current user input if key is not enter else change state to Initialized
             if key != Key::Enter {
                 let mut current_key = key.to_string();
@@ -99,27 +93,24 @@ impl App {
                     return AppReturn::Continue;
                 } else if current_key.starts_with("<") && current_key.ends_with(">") {
                     current_key = current_key[1..current_key.len() - 1].to_string();
-                } else {
-                    // do nothing
                 }
-                self.current_user_input.push_str(&current_key);
+
+                if self.focus == Focus::NewBoardName {
+                    self.state.new_board_form[0].push_str(&current_key);
+                } else if self.focus == Focus::NewBoardDescription {
+                    self.state.new_board_form[1].push_str(&current_key);
+                } else {
+                    self.current_user_input.push_str(&current_key);
+                }
             } else {
-                self.state = AppState::Initialized;
+                self.state.status = AppStatus::Initialized;
                 info!("Exiting user input mode");
-                debug!("User input: {}", self.current_user_input);
             }
             return AppReturn::Continue;
         } else {
             if let Some(action) = self.actions.find(key) {
                 match action {
                     Action::Quit => AppReturn::Exit,
-                    // Action::Sleep => {
-                    //     if let Some(duration) = self.state.duration().cloned() {
-                    //         // Sleep is an I/O action, we dispatch on the IO channel that's run on another thread
-                    //         self.dispatch(IoEvent::Sleep(duration)).await
-                    //     }
-                    //     AppReturn::Continue
-                    // }
                     Action::NextFocus => {
                         let current_focus = self.focus.clone();
                         let next_focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
@@ -157,7 +148,6 @@ impl App {
                                 self.focus = Focus::from_str(available_focus_targets[0].as_str());
                             }
                         }
-                        debug!("Setting ui_mode to {}", new_ui_mode.to_string());
                         self.ui_mode = new_ui_mode;
                         AppReturn::Continue
                     }
@@ -198,7 +188,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::TakeUserInput => {
-                        self.state = AppState::UserInput;
+                        self.state.status = AppStatus::UserInput;
                         info!("Taking user input");
                         AppReturn::Continue
                     }
@@ -215,6 +205,10 @@ impl App {
                             UiMode::MainMenu => {
                                 AppReturn::Exit
                             }
+                            UiMode::NewBoard => {
+                                self.ui_mode = self.prev_ui_mode.clone();
+                                AppReturn::Continue
+                            }
                             _ => {
                                 self.ui_mode = UiMode::MainMenu;
                                 self.main_menu_next();
@@ -227,12 +221,11 @@ impl App {
                             UiMode::Config => {
                                 self.prev_ui_mode = self.ui_mode.clone();
                                 self.ui_mode = UiMode::EditConfig;
-                                debug!("Setting ui_mode to {}", self.ui_mode.to_string());
-                                self.config_item_being_edited = Some(self.config_state.selected().unwrap_or(0));
+                                self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
                                 AppReturn::Continue
                             }
                             UiMode::EditConfig => {
-                                let config_item_index = self.config_state.selected().unwrap_or(0);
+                                let config_item_index = self.state.config_state.selected().unwrap_or(0);
                                 let config_item_list = AppConfig::to_list(&self.config);
                                 let config_item = &config_item_list[config_item_index];
                                 // split the config item on : and get the first part
@@ -241,13 +234,12 @@ impl App {
                                 // if new value is not empty update the config
                                 if !new_value.is_empty() {
                                     let config_string = format!("{}: {}", config_item_key, new_value);
-                                    debug!("Setting config to {}", config_string);
                                     let app_config = AppConfig::edit_with_string(&config_string, self);
                                     self.config = app_config.clone();
                                     write_config(&app_config);
 
                                     // reset everything
-                                    self.config_state = ListState::default();
+                                    self.state.config_state = ListState::default();
                                     self.config_item_being_edited = None;
                                     self.current_user_input = String::new();
                                     self.ui_mode = UiMode::Config;
@@ -255,31 +247,52 @@ impl App {
                                 AppReturn::Continue
                             }
                             UiMode::MainMenu => {
-                                let selected = self.main_menu.state.selected().unwrap_or(0);
-                                let selected_item = &self.main_menu.items[selected];
+                                let selected = self.state.main_menu_state.selected().unwrap_or(0);
+                                let selected_item = MainMenu::from_index(selected);
                                 match selected_item {
-                                    MainMenuItems::Quit => {
+                                    MainMenuItem::Quit => {
                                         AppReturn::Exit
                                     }
-                                    MainMenuItems::Config => {
+                                    MainMenuItem::Config => {
                                         self.prev_ui_mode = self.ui_mode.clone();
                                         self.ui_mode = UiMode::Config;
-                                        debug!("Setting ui_mode to {}", self.ui_mode.to_string());
                                         AppReturn::Continue
                                     }
-                                    MainMenuItems::View => {
+                                    MainMenuItem::View => {
                                         self.prev_ui_mode = self.ui_mode.clone();
                                         self.ui_mode = self.config.default_view.clone();
-                                        debug!("Setting ui_mode to {}", self.ui_mode.to_string());
                                         AppReturn::Continue
                                     }
-                                    MainMenuItems::Help => {
+                                    MainMenuItem::Help => {
                                         self.prev_ui_mode = self.ui_mode.clone();
                                         self.ui_mode = UiMode::HelpMenu;
-                                        debug!("Setting ui_mode to {}", self.ui_mode.to_string());
                                         AppReturn::Continue
                                     }
                                 }
+                            }
+                            UiMode::NewBoard => {
+                                if self.focus == Focus::SubmitButton {
+                                    // check if self.state.new_board_form[0] is not empty or is not the same as any of the existing boards
+                                    let new_board_name = self.state.new_board_form[0].clone();
+                                    let new_board_description = self.state.new_board_form[1].clone();
+                                    let mut same_name_exists = false;
+                                    for board in self.boards.iter() {
+                                        if board.name == new_board_name {
+                                            same_name_exists = true;
+                                            break;
+                                        }
+                                    }
+                                    if !new_board_name.is_empty() && !same_name_exists {
+                                        let new_board = Board::new(new_board_name, new_board_description);
+                                        self.boards.push(new_board);
+                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        self.state.new_board_form = vec![String::new(), String::new()];
+                                    } else {
+                                        warn!("New board name is empty or already exists");
+                                    }
+                                    self.ui_mode = self.prev_ui_mode.clone();
+                                }
+                                AppReturn::Continue
                             }
                             _ => {
                                 AppReturn::Continue
@@ -381,6 +394,14 @@ impl App {
                         self.dispatch(IoEvent::SaveLocalData).await;
                         AppReturn::Continue
                     }
+                    Action::NewBoard => {
+                        self.state.new_board_form = vec![String::new(), String::new()];
+                        self.set_ui_mode(UiMode::NewBoard);
+                        AppReturn::Continue
+                    }
+                    Action::NewCard => {
+                        AppReturn::Continue
+                    }
                 }
             } else {
                 warn!("No action accociated to {}", key);
@@ -400,8 +421,8 @@ impl App {
     pub fn actions(&self) -> &Actions {
         &self.actions
     }
-    pub fn state(&self) -> &AppState {
-        &self.state
+    pub fn status(&self) -> &AppStatus {
+        &self.state.status
     }
     pub fn is_loading(&self) -> bool {
         self.is_loading
@@ -413,7 +434,7 @@ impl App {
         if self.ui_mode == UiMode::MainMenu {
             self.main_menu_next();
         }
-        self.state = AppState::initialized()
+        self.state.status = AppStatus::initialized()
     }
     pub fn set_boards(&mut self, boards: Vec<Board>) {
         self.boards = boards;
@@ -427,19 +448,14 @@ impl App {
     pub fn change_focus(&mut self, focus: Focus) {
         self.focus = focus;
     }
-    pub fn set_current_user_input(&mut self, input: String) {
-        let new_input = input;
-        debug!("Setting current user input to {}", new_input);
-        self.current_user_input = new_input;
-    }
     pub fn clear_current_user_input(&mut self) {
         self.current_user_input = String::new();
     }
     pub fn set_config_state(&mut self, config_state: ListState) {
-        self.config_state = config_state;
+        self.state.config_state = config_state;
     }
     pub fn config_next(&mut self) {
-        let i = match self.config_state.selected() {
+        let i = match self.state.config_state.selected() {
             Some(i) => {
                 if i >= self.config.len() - 1 {
                     0
@@ -449,10 +465,10 @@ impl App {
             }
             None => 0,
         };
-        self.config_state.select(Some(i));
+        self.state.config_state.select(Some(i));
     }
     pub fn config_previous(&mut self) {
-        let i = match self.config_state.selected() {
+        let i = match self.state.config_state.selected() {
             Some(i) => {
                 if i == 0 {
                     self.config.len() - 1
@@ -462,12 +478,12 @@ impl App {
             }
             None => 0,
         };
-        self.config_state.select(Some(i));
+        self.state.config_state.select(Some(i));
     }
     pub fn main_menu_next(&mut self) {
-        let i = match self.main_menu.state.selected() {
+        let i = match self.state.main_menu_state.selected() {
             Some(i) => {
-                if i >= self.main_menu.items.len() - 1 {
+                if i >= MainMenu::all().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -475,29 +491,120 @@ impl App {
             }
             None => 0,
         };
-        self.main_menu.state.select(Some(i));
+        self.state.main_menu_state.select(Some(i));
     }
     pub fn main_menu_previous(&mut self) {
-        let i = match self.main_menu.state.selected() {
+        let i = match self.state.main_menu_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.main_menu.items.len() - 1
+                    MainMenu::all().len() - 1
                 } else {
                     i - 1
                 }
             }
             None => 0,
         };
-        self.main_menu.state.select(Some(i));
+        self.state.main_menu_state.select(Some(i));
     }
     pub fn config_state(&self) -> &ListState {
-        &self.config_state
+        &self.state.config_state
     }
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
+        self.prev_ui_mode = self.ui_mode.clone();
         self.ui_mode = ui_mode;
         let available_focus_targets = self.ui_mode.get_available_targets();
         if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
-            self.focus = Focus::from_str(&available_focus_targets[0]);
+            // check if available focus targets is empty
+            if available_focus_targets.is_empty() {
+                self.focus = Focus::NoFocus;
+            } else {
+                self.focus = Focus::from_str(available_focus_targets[0].as_str());
+            }
+        }
+    }
+    pub fn set_visible_boards_and_cards(&mut self) {
+        // get self.boards and make Vec<HashMap<u128, Vec<u128>>> of visible boards and cards
+        let mut visible_boards_and_cards: Vec<HashMap<u128, Vec<u128>>> = Vec::new();
+        for board in &self.boards {
+            let mut visible_cards: Vec<u128> = Vec::new();
+            for card in &board.cards {
+                visible_cards.push(card.id);
+            }
+            if visible_cards.len() > 0 {
+                let mut visible_board: HashMap<u128, Vec<u128>> = HashMap::new();
+                visible_board.insert(board.id, visible_cards);
+                visible_boards_and_cards.push(visible_board);
+            }
+        }
+        self.visible_boards_and_cards = visible_boards_and_cards;
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum MainMenuItem {
+    View,
+    Config,
+    Help,
+    Quit
+}
+
+impl Display for MainMenuItem {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            MainMenuItem::View => write!(f, "View your Boards"),
+            MainMenuItem::Config => write!(f, "Configure"),
+            MainMenuItem::Help => write!(f, "Help"),
+            MainMenuItem::Quit => write!(f, "Quit"),
+        }
+    }
+}
+
+pub struct MainMenu {
+    pub items: Vec<MainMenuItem>
+}
+
+impl MainMenu {
+    pub fn all() -> Vec<MainMenuItem> {
+        vec![
+            MainMenuItem::View,
+            MainMenuItem::Config,
+            MainMenuItem::Help,
+            MainMenuItem::Quit,
+        ]
+    }
+
+    pub fn from_index(index: usize) -> MainMenuItem {
+        match index {
+            0 => MainMenuItem::View,
+            1 => MainMenuItem::Config,
+            2 => MainMenuItem::Help,
+            3 => MainMenuItem::Quit,
+            _ => MainMenuItem::Quit
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AppState {
+    pub status: AppStatus,
+    pub main_menu_state: ListState,
+    pub config_state: ListState,
+    pub new_board_state: ListState,
+    pub new_board_form: Vec<String>,
+    pub new_card_state: ListState,
+    pub new_card_form: Vec<String>,
+}
+
+impl Default for AppState {
+    fn default() -> AppState {
+        AppState {
+            status: AppStatus::default(),
+            main_menu_state: ListState::default(),
+            config_state: ListState::default(),
+            new_board_state: ListState::default(),
+            new_board_form: vec![String::new(), String::new()],
+            new_card_state: ListState::default(),
+            new_card_form: vec![String::new(), String::new()],
         }
     }
 }
@@ -563,44 +670,5 @@ impl AppConfig {
 
     pub fn len(&self) -> usize {
         self.to_list().len()
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum MainMenuItems {
-    View,
-    Config,
-    Help,
-    Quit
-}
-
-impl Display for MainMenuItems {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
-            MainMenuItems::View => write!(f, "View your Boards"),
-            MainMenuItems::Config => write!(f, "Configure"),
-            MainMenuItems::Help => write!(f, "Help"),
-            MainMenuItems::Quit => write!(f, "Quit"),
-        }
-    }
-}
-
-pub struct MainMenu {
-    pub state: ListState,
-    pub items: Vec<MainMenuItems>
-}
-
-impl MainMenu {
-    fn default() -> Self {
-        let items = vec![
-            MainMenuItems::View,
-            MainMenuItems::Config,
-            MainMenuItems::Help,
-            MainMenuItems::Quit
-        ];
-        Self {
-            state: ListState::default(),
-            items: items
-        }
     }
 }

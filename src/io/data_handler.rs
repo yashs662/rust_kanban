@@ -1,5 +1,5 @@
 use std::{fs, env};
-use log::{error, info};
+use log::{error, info, debug};
 extern crate savefile;
 use savefile::prelude::*;
 
@@ -74,10 +74,10 @@ pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError
     }
 }
 
-pub fn get_local_kanban_state(version: u32) -> Result<Vec<Board>, SavefileError> {
+pub fn get_local_kanban_state(file_name: String, version: u32) -> Result<Vec<Board>, SavefileError> {
     let config = get_config();
-    let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), version);
     let file_path = config.save_directory.join(file_name);
+    debug!("Loading local save file: {:?}", file_path);
     let boards = load_file(file_path, version)?;
     Ok(boards)
 }
