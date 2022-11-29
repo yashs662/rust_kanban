@@ -16,7 +16,7 @@ use self::kanban::Board;
 use crate::app::actions::Action;
 use crate::constants::SAVE_DIR_NAME;
 use crate::inputs::key::Key;
-use crate::io::data_handler::write_config;
+use crate::io::data_handler::{write_config, get_available_local_savefiles};
 use crate::io::{IoEvent, data_handler};
 
 pub mod actions;
@@ -176,6 +176,9 @@ impl App {
                         else if self.ui_mode == UiMode::MainMenu {
                             self.main_menu_previous();
                         }
+                        else if self.ui_mode == UiMode::LoadSave {
+                            self.load_save_previous();
+                        }
                         AppReturn::Continue
                     }
                     Action::GoDown => {
@@ -184,6 +187,9 @@ impl App {
                         }
                         else if self.ui_mode == UiMode::MainMenu {
                             self.main_menu_next();
+                        }
+                        else if self.ui_mode == UiMode::LoadSave {
+                            self.load_save_next();
                         }
                         AppReturn::Continue
                     }
@@ -268,6 +274,11 @@ impl App {
                                         self.ui_mode = UiMode::HelpMenu;
                                         AppReturn::Continue
                                     }
+                                    MainMenuItem::LoadSave => {
+                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.ui_mode = UiMode::LoadSave;
+                                        AppReturn::Continue
+                                    }
                                 }
                             }
                             UiMode::NewBoard => {
@@ -292,6 +303,11 @@ impl App {
                                     }
                                     self.ui_mode = self.prev_ui_mode.clone();
                                 }
+                                AppReturn::Continue
+                            }
+                            UiMode::LoadSave => {
+                                self.dispatch(IoEvent::LoadSave).await;
+                                self.ui_mode = self.prev_ui_mode.clone();
                                 AppReturn::Continue
                             }
                             _ => {
@@ -402,6 +418,17 @@ impl App {
                     Action::NewCard => {
                         AppReturn::Continue
                     }
+                    Action::Delete => {
+                        match self.ui_mode {
+                            UiMode::LoadSave => {
+                                self.dispatch(IoEvent::DeleteSave).await;
+                                AppReturn::Continue
+                            }
+                            _ => {
+                                AppReturn::Continue
+                            }
+                        }
+                    }
                 }
             } else {
                 warn!("No action accociated to {}", key);
@@ -506,6 +533,32 @@ impl App {
         };
         self.state.main_menu_state.select(Some(i));
     }
+    pub fn load_save_next(&mut self) {
+        let i = match self.state.load_save_state.selected() {
+            Some(i) => {
+                if i >= get_available_local_savefiles().len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.load_save_state.select(Some(i));
+    }
+    pub fn load_save_previous(&mut self) {
+        let i = match self.state.load_save_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    get_available_local_savefiles().len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.load_save_state.select(Some(i));
+    }
     pub fn config_state(&self) -> &ListState {
         &self.state.config_state
     }
@@ -545,6 +598,7 @@ pub enum MainMenuItem {
     View,
     Config,
     Help,
+    LoadSave,
     Quit
 }
 
@@ -554,6 +608,7 @@ impl Display for MainMenuItem {
             MainMenuItem::View => write!(f, "View your Boards"),
             MainMenuItem::Config => write!(f, "Configure"),
             MainMenuItem::Help => write!(f, "Help"),
+            MainMenuItem::LoadSave => write!(f, "Load Save"),
             MainMenuItem::Quit => write!(f, "Quit"),
         }
     }
@@ -569,6 +624,7 @@ impl MainMenu {
             MainMenuItem::View,
             MainMenuItem::Config,
             MainMenuItem::Help,
+            MainMenuItem::LoadSave,
             MainMenuItem::Quit,
         ]
     }
@@ -578,7 +634,8 @@ impl MainMenu {
             0 => MainMenuItem::View,
             1 => MainMenuItem::Config,
             2 => MainMenuItem::Help,
-            3 => MainMenuItem::Quit,
+            3 => MainMenuItem::LoadSave,
+            4 => MainMenuItem::Quit,
             _ => MainMenuItem::Quit
         }
     }
@@ -593,6 +650,7 @@ pub struct AppState {
     pub new_board_form: Vec<String>,
     pub new_card_state: ListState,
     pub new_card_form: Vec<String>,
+    pub load_save_state: ListState,
 }
 
 impl Default for AppState {
@@ -605,6 +663,7 @@ impl Default for AppState {
             new_board_form: vec![String::new(), String::new()],
             new_card_state: ListState::default(),
             new_card_form: vec![String::new(), String::new()],
+            load_save_state: ListState::default(),
         }
     }
 }

@@ -10,7 +10,7 @@ use tui::layout::{
 };
 use tui::style::{
     Color,
-    Style, Modifier,
+    Style,
 };
 use tui::text::{
     Span,
@@ -31,13 +31,13 @@ use crate::constants::{
     NO_OF_BOARDS_PER_PAGE,
     DEFAULT_BOARD_TITLE_LENGTH,
     DEFAULT_CARD_TITLE_LENGTH,
-    NO_OF_CARDS_PER_BOARD
+    NO_OF_CARDS_PER_BOARD, LIST_SELECT_STYLE, LIST_SELECTED_SYMBOL
 };
 
 use super::{MainMenuItem, App, MainMenu};
 use super::actions::{Actions, Action};
 use super::state::Focus;
-use crate::io::data_handler::get_config;
+use crate::io::data_handler::{get_config, get_available_local_savefiles};
 
 /// Draws main screen with kanban boards
 pub fn render_zen_mode<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -310,8 +310,9 @@ where
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(70),
-                Constraint::Length(4)
+                Constraint::Percentage(50),
+                Constraint::Length(4),
+                Constraint::Length(8)
             ]
             .as_ref(),
         )
@@ -325,6 +326,9 @@ where
 
     let main_menu_help = draw_main_menu_help(&app.focus);
     rect.render_widget(main_menu_help, chunks[2]);
+
+    let log = draw_logs(&app.focus, true);
+    rect.render_widget(log, chunks[3]);
 }
 
 pub fn render_help_menu<'a,B>(rect: &mut Frame<B>, focus: &Focus)
@@ -504,12 +508,8 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
                 .style(menu_style)
                 .border_type(BorderType::Plain),
         )
-        .highlight_style(
-            Style::default()
-                .bg(Color::LightMagenta)
-                .add_modifier(Modifier::BOLD)
-        )
-        .highlight_symbol(">")
+        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_symbol(LIST_SELECTED_SYMBOL)
 }
 
 /// Draws Main menu help
@@ -578,12 +578,8 @@ fn draw_config_list_selector(focus: &Focus) -> List<'static> {
     let list_items = get_config_list_items();
     let config = List::new(list_items)
     .block(Block::default().borders(Borders::ALL).title("Config"))
-    .highlight_style(
-        Style::default()
-        .bg(Color::LightMagenta)
-        .add_modifier(Modifier::BOLD),
-    )
-    .highlight_symbol(">> ")
+    .highlight_style(LIST_SELECT_STYLE)
+    .highlight_symbol(LIST_SELECTED_SYMBOL)
     .style(config_style);
     return config;
 }
@@ -654,7 +650,6 @@ where
     let mut more_cards = false;
     let focus = &app.focus;
     let boards = &app.boards;
-    let mut board_title_multiplier = 1;
     let current_board = &app.current_board.unwrap_or(0);
     // check if current board is set
     let current_card = &app.current_card.unwrap_or(0);
@@ -699,7 +694,8 @@ where
         let board = &boards[board_index];
         let board_title = board.name.clone();
         let board_id = board.id.clone();
-        let board_cards = board_cards.get(&board_id).unwrap();
+        let board_cards_default = vec![];
+        let board_cards = board_cards.get(&board_id).unwrap_or(&board_cards_default);
         // if board title is longer than DEFAULT_BOARD_TITLE_LENGTH, truncate it and add ... at the end
         let board_title = if board_title.len() > DEFAULT_BOARD_TITLE_LENGTH.into() {
             format!("{}...", &board_title[0..DEFAULT_BOARD_TITLE_LENGTH as usize])
@@ -903,7 +899,7 @@ pub fn check_size(rect: &Rect) -> String {
     msg
 }
 
-pub fn render_new_board_form<B>(rect: &mut Frame<B>, app: &App, new_board_state: &mut ListState)
+pub fn render_new_board_form<B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
@@ -1008,4 +1004,66 @@ where
                 .border_type(BorderType::Plain),
         );
     rect.render_widget(submit_button, chunks[4]);
+}
+
+pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState)
+where
+    B: Backend,
+{
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Percentage(70),
+            Constraint::Length(3),
+            ].as_ref())
+        .split(rect.size());
+
+    let title_paragraph = Paragraph::new("Load a Save")
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::White))
+                .border_type(BorderType::Plain),
+        );
+    rect.render_widget(title_paragraph, chunks[0]);
+
+    let item_list = get_available_local_savefiles();
+    // make a list from the Vec<string> of savefiles
+    let items: Vec<ListItem> = item_list
+        .iter()
+        .map(|i| ListItem::new(i.to_string()))
+        .collect();
+    let choice_list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title("Available Saves"))
+        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    rect.render_stateful_widget(choice_list, chunks[1], load_save_state);
+
+    let key_style = Style::default().fg(Color::LightCyan);
+    let help_style = Style::default().fg(Color::Gray);
+    let help_text = Spans::from(vec![
+        Span::styled("<Up>", key_style),
+        Span::styled(" and ", help_style),
+        Span::styled("<Down>", key_style),
+        Span::styled(" to navigate", help_style),
+        Span::raw(" ; "),
+        Span::styled("<Enter>", key_style),
+        Span::styled(" to submit", help_style),
+        Span::raw(" ; "),
+        Span::styled("<Esc>", key_style),
+        Span::styled(" to cancel", help_style),
+    ]);
+    let help_paragraph = Paragraph::new(help_text)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::White))
+                .border_type(BorderType::Plain),
+        );
+    rect.render_widget(help_paragraph, chunks[2]);
 }

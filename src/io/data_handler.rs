@@ -82,7 +82,7 @@ pub fn get_local_kanban_state(file_name: String, version: u32) -> Result<Vec<Boa
     Ok(boards)
 }
 
-pub fn get_available_local_savefiles() -> Vec<String> {
+pub fn get_available_local_savefiles<'a>() -> Vec<String> {
     let config = get_config();
     let files = fs::read_dir(&config.save_directory).unwrap_or_else(|e| {
         error!("Error reading save directory: {}", e);
@@ -103,5 +103,8 @@ pub fn get_available_local_savefiles() -> Vec<String> {
             savefiles.push(file_name);
         }
     }
+    savefiles.retain(|file_name| {
+        file_name.starts_with(SAVE_FILE_NAME) && file_name.contains("_v")
+    });
     savefiles
 }

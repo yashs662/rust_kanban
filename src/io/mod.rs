@@ -8,4 +8,6 @@ pub enum IoEvent {
     GetCloudData,  // Launch to get cloud data
     Reset,
     SaveLocalData,
+    LoadSave,
+    DeleteSave
 }

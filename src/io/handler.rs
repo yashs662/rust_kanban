@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::{sync::Arc, path::PathBuf};
 use crate::app::kanban::Board;
 use std::env;
@@ -6,7 +7,7 @@ use crate::constants::{
     CONFIG_FILE_NAME, SAVE_DIR_NAME
 };
 use crate::app::AppConfig;
-use crate::io::data_handler::{reset_config, save_kanban_state_locally};
+use crate::io::data_handler::{reset_config, save_kanban_state_locally, get_config};
 use eyre::Result;
 use log::{error, info, debug};
 
@@ -32,6 +33,8 @@ impl IoAsyncHandler {
             IoEvent::GetCloudData => self.get_cloud_save().await,
             IoEvent::Reset => self.reset_config().await,
             IoEvent::SaveLocalData => self.save_local_data().await,
+            IoEvent::LoadSave => self.load_save_file().await,
+            IoEvent::DeleteSave => self.delete_save_file().await,
         };
 
         if let Err(err) = result {
@@ -92,6 +95,70 @@ impl IoAsyncHandler {
         match status {
             Ok(_) => info!("👍 Local data saved"),
             Err(err) => error!("Cannot save local data: {:?}", err),
+        }
+        Ok(())
+    }
+
+    async fn load_save_file(&mut self) -> Result<()> {
+        info!("🚀 Loading save file");
+        let mut app = self.app.lock().await;
+        let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
+        let local_files = get_available_local_savefiles();
+        // check if the file exists
+        if save_file_index >= local_files.len() {
+            error!("Cannot load save file: index out of range");
+            return Ok(());
+        }
+        let save_file_name = local_files[save_file_index].clone();
+        let version = save_file_name.split("_v").collect::<Vec<&str>>();
+        if version.len() < 2 {
+            error!("Cannot load save file: invalid file name");
+            return Ok(());
+        }
+        // convert to u32
+        let version = version[1].parse::<u32>();
+        if version.is_err() {
+            error!("Cannot load save file: invalid file name");
+            return Ok(());
+        }
+        let version = version.unwrap();
+        let board_data = get_local_kanban_state(save_file_name.clone(), version);
+        match board_data {
+            Ok(boards) => {
+                app.set_boards(boards);
+                info!("👍 Save file {:?} loaded", save_file_name);
+            }
+            Err(err) => error!("Cannot load save file: {:?}", err),
+        }
+        Ok(())
+    }
+
+    async fn delete_save_file(&mut self) -> Result<()> {
+        info!("🚀 Deleting save file");
+        // get app.state.load_save_state.selected() and delete the file
+        let app = self.app.lock().await;
+        let file_list = get_available_local_savefiles();
+        let selected = app.state.load_save_state.selected().unwrap_or(0);
+        if selected >= file_list.len() {
+            error!("Cannot delete save file: index out of range");
+            return Ok(());
+        }
+        let file_name = file_list[selected].clone();
+        let config = get_config();
+        let path = config.save_directory.join(file_name);
+        debug!("Deleting file {:?}", path);
+        // check if the file exists
+        if !Path::new(&path).exists() {
+            error!("Cannot delete save file: file not found");
+            return Ok(());
+        } else {
+            // delete the file
+            if let Err(err) = std::fs::remove_file(&path) {
+                error!("Cannot delete save file: {:?}", err);
+                return Ok(());
+            } else {
+                info!("👍 Save file deleted");
+            }
         }
         Ok(())
     }
@@ -158,15 +225,13 @@ fn prepare_boards () -> Vec<Board> {
     }
     // get v1, v2 version number from latest_version
     let mut version_number = latest_version.split("v").collect::<Vec<&str>>();
-    // get last version number
     let last_version_number = version_number.pop().unwrap_or("1");
-    // convert to u32
     let last_version_number = last_version_number.parse::<u32>().unwrap_or(1);
     debug!("Last version number: {}", last_version_number);
-    let local_data = get_local_kanban_state(latest_save_file, last_version_number);
+    let local_data = get_local_kanban_state(latest_save_file.clone(), last_version_number);
     match local_data {
         Ok(data) => {
-            info!("👍 Local data loaded from {}", latest_version);
+            info!("👍 Local data loaded from {:?}", latest_save_file);
             data
         },
         Err(err) => {

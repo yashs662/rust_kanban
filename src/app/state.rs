@@ -17,7 +17,8 @@ pub enum UiMode {
     ViewCard,
     HelpMenu,
     LogsOnly,
-    NewBoard
+    NewBoard,
+    LoadSave
 }
 
 impl UiMode {
@@ -38,6 +39,7 @@ impl UiMode {
             UiMode::HelpMenu => "Help Menu".to_string(),
             UiMode::LogsOnly => "Logs Only".to_string(),
             UiMode::NewBoard => "New Board".to_string(),
+            UiMode::LoadSave => "Load Save".to_string(),
         }
     }
 
@@ -58,6 +60,7 @@ impl UiMode {
             "Help Menu" => Some(UiMode::HelpMenu),
             "Logs Only" => Some(UiMode::LogsOnly),
             "New Board" => Some(UiMode::NewBoard),
+            "Load Save" => Some(UiMode::LoadSave),
             _ => None,
         }
     }
@@ -97,6 +100,7 @@ impl UiMode {
             UiMode::HelpMenu => vec![],
             UiMode::LogsOnly => vec![],
             UiMode::NewBoard => vec!["New Board Name".to_string(), "New Board Description".to_string(), "Submit Button".to_string()],
+            UiMode::LoadSave => vec![],
         }
     }
 

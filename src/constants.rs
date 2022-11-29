@@ -1,3 +1,4 @@
+use tui::style::{Style, Color, Modifier};
 
 pub const FIELD_NOT_SET: &str = "Not Set";
 pub const CONFIG_FILE_NAME: &str = "config.json";
@@ -11,3 +12,11 @@ pub const DEFAULT_CARD_TITLE_LENGTH: u16 = 10;
 pub const APP_TITLE: &str = "Rust 🦀 Kanban";
 pub const MIN_TERM_WIDTH: u16 = 110;
 pub const MIN_TERM_HEIGHT: u16 = 30;
+
+pub const LIST_SELECT_STYLE: Style = Style {
+    fg: Some(Color::White),
+    bg: Some(Color::LightMagenta),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const LIST_SELECTED_SYMBOL: &str = ">> ";
