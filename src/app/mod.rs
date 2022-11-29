@@ -88,8 +88,19 @@ impl App {
                     current_key = " ".to_string();
                 } else if current_key == "<ShiftEnter>" {
                     current_key = "\n".to_string();
+                } else if current_key == "<Tab>" {
+                    current_key = "\t".to_string();
                 } else if current_key == "<Backspace>" {
-                    self.current_user_input.pop();
+                    match self.ui_mode {
+                        UiMode::NewBoard => {
+                            match self.focus {
+                                Focus::NewBoardName => self.state.new_board_form[0].pop(),
+                                Focus::NewBoardDescription => self.state.new_board_form[1].pop(),
+                                _ => Option::None,
+                            }
+                        }
+                        _ => self.current_user_input.pop(),
+                    };
                     return AppReturn::Continue;
                 } else if current_key.starts_with("<") && current_key.ends_with(">") {
                     current_key = current_key[1..current_key.len() - 1].to_string();
@@ -169,7 +180,7 @@ impl App {
                         }
                         AppReturn::Continue
                     }
-                    Action::GoUp => {
+                    Action::Up => {
                         if self.ui_mode == UiMode::Config {
                             self.config_previous();
                         }
@@ -179,9 +190,14 @@ impl App {
                         else if self.ui_mode == UiMode::LoadSave {
                             self.load_save_previous();
                         }
+                        else {
+                            if self.focus == Focus::Body {
+                                info!("Scrolling up");
+                            }
+                        }
                         AppReturn::Continue
                     }
-                    Action::GoDown => {
+                    Action::Down => {
                         if self.ui_mode == UiMode::Config {
                             self.config_next();
                         }
@@ -191,11 +207,37 @@ impl App {
                         else if self.ui_mode == UiMode::LoadSave {
                             self.load_save_next();
                         }
+                        else {
+                            if self.focus == Focus::Body {
+                                info!("Scrolling down");
+                            }
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::Right => {
+                        if self.focus == Focus::Body {
+                            info!("Moving to next Board");
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::Left => {
+                        if self.focus == Focus::Body {
+                            info!("Moving to previous Board");
+                        }
                         AppReturn::Continue
                     }
                     Action::TakeUserInput => {
-                        self.state.status = AppStatus::UserInput;
-                        info!("Taking user input");
+                        match self.ui_mode {
+                            UiMode::NewBoard => {
+                                self.state.status = AppStatus::UserInput;
+                                info!("Taking user input");
+                            },
+                            UiMode::EditConfig => {
+                                self.state.status = AppStatus::UserInput;
+                                info!("Taking user input");
+                            },
+                            _ => {}
+                        }
                         AppReturn::Continue
                     }
                     Action::Escape => {
@@ -583,13 +625,18 @@ impl App {
             for card in &board.cards {
                 visible_cards.push(card.id);
             }
-            if visible_cards.len() > 0 {
-                let mut visible_board: HashMap<u128, Vec<u128>> = HashMap::new();
-                visible_board.insert(board.id, visible_cards);
-                visible_boards_and_cards.push(visible_board);
-            }
+            let mut visible_board: HashMap<u128, Vec<u128>> = HashMap::new();
+            visible_board.insert(board.id, visible_cards);
+            visible_boards_and_cards.push(visible_board);
         }
         self.visible_boards_and_cards = visible_boards_and_cards;
+        // if exists set first board and card as current_board and current_card
+        if let Some(board) = self.boards.first() {
+            self.current_board = Some(board.id);
+            if let Some(card) = board.cards.first() {
+                self.current_card = Some(card.id);
+            }
+        }
     }
 }
 
@@ -671,7 +718,8 @@ impl Default for AppState {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppConfig {
     pub save_directory: PathBuf,
-    pub default_view: UiMode
+    pub default_view: UiMode,
+    pub always_load_latest_save: bool,
 }
 
 impl AppConfig {
@@ -680,7 +728,8 @@ impl AppConfig {
         let default_view = UiMode::TitleBodyHelpLog;
         Self {
             save_directory: save_directory,
-            default_view
+            default_view,
+            always_load_latest_save: true,
         }
     }
 
@@ -688,6 +737,7 @@ impl AppConfig {
         vec![
             format!("save_directory: {}", self.save_directory.to_str().unwrap()),
             format!("default_view: {}", self.default_view.to_string()),
+            format!("always_load_latest_save: {}", self.always_load_latest_save),
         ]
     }
 
@@ -718,7 +768,17 @@ impl AppConfig {
                         info!("Valid UiModes are: {:?}", UiMode::all());
                     }
                 }
+                "always_load_latest_save" => {
+                    if value.to_lowercase() == "true" {
+                        config.always_load_latest_save = true;
+                    } else if value.to_lowercase() == "false" {
+                        config.always_load_latest_save = false;
+                    } else {
+                        warn!("Invalid boolean: {}", value);
+                    }
+                }
                 _ => {
+                    debug!("Invalid key: {}", key);
                     return config;
                 }
             }

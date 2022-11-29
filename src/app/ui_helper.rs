@@ -36,7 +36,7 @@ use crate::constants::{
 
 use super::{MainMenuItem, App, MainMenu};
 use super::actions::{Actions, Action};
-use super::state::Focus;
+use super::state::{Focus, AppStatus};
 use crate::io::data_handler::{get_config, get_available_local_savefiles};
 
 /// Draws main screen with kanban boards
@@ -277,7 +277,8 @@ where
     let config_item_index = &app.config_item_being_edited.unwrap_or(0);
     let list_items = get_config_items();
     let config_item_name = &list_items[*config_item_index];
-    let config_item_value = list_items.iter().find(|&x| x == config_item_name).unwrap();
+    let binding = String::from("");
+    let config_item_value = list_items.iter().find(|&x| x == config_item_name).unwrap_or(&binding);
     let paragraph_text = format!("Current Value for {} \n\n{}",config_item_value,
         "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
     let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
@@ -324,7 +325,7 @@ where
     let main_menu = draw_main_menu(&app.focus, MainMenu::all());
     rect.render_stateful_widget(main_menu, chunks[1], main_menu_state);
 
-    let main_menu_help = draw_main_menu_help(&app.focus);
+    let main_menu_help = draw_main_menu_help(&app.focus, app.actions());
     rect.render_widget(main_menu_help, chunks[2]);
 
     let log = draw_logs(&app.focus, true);
@@ -513,7 +514,7 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
 }
 
 /// Draws Main menu help
-fn draw_main_menu_help<'a>(focus: &Focus) -> Paragraph<'a> {
+fn draw_main_menu_help<'a>(focus: &Focus, actions: &Actions) -> Paragraph<'a> {
     let helpbox_style = if matches!(focus, Focus::MainMenuHelp) {
         Style::default().fg(Color::LightYellow)
     } else {
@@ -523,24 +524,33 @@ fn draw_main_menu_help<'a>(focus: &Focus) -> Paragraph<'a> {
     let help_style = Style::default().fg(Color::Gray);
 
     let mut help_spans = vec![];
-    let keys_span = Span::styled("<Up>, <Down>", key_style);
-    let action_span = Span::styled("Select menu item", help_style);
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-    help_spans.push(Span::raw(" ; "));
-    let keys_span = Span::styled("<Enter>", key_style);
-    let action_span = Span::styled("Select menu item", help_style);
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-    let keys_span = Span::styled("<Esc>,<Ctrl+C>,<q>", key_style);
-    let action_span = Span::styled("Quit", help_style);
-    help_spans.push(Span::raw(" ; "));
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-
+    let actions_iter = actions.actions().iter();
+    for action in actions_iter {
+        // check if action is SetUiMode if so then keys should be changed to string <1..8>
+        let keys = action.keys();
+        let mut keys_span = if keys.len() > 1 {
+            let keys_str = keys
+                .iter()
+                .map(|k| k.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+            Span::styled(keys_str, key_style)
+        } else {
+            Span::styled(keys[0].to_string(), key_style)
+        };
+        let action_span = Span::styled(action.to_string(), help_style);
+        keys_span = match action {
+            Action::SetUiMode => Span::styled("<1..8>", key_style),
+            _ => keys_span,
+        };
+        help_spans.push(keys_span);
+        help_spans.push(Span::raw(" - "));
+        help_spans.push(action_span);
+        // if action is not last
+        if action != actions.actions().last().unwrap() {
+            help_spans.push(Span::raw(" ; "));
+        }
+    }
     let help_span = Spans::from(help_spans);
 
     Paragraph::new(help_span)
@@ -554,6 +564,7 @@ fn draw_main_menu_help<'a>(focus: &Focus) -> Paragraph<'a> {
                 .border_type(BorderType::Plain),
         )
         .wrap(tui::widgets::Wrap { trim: true })
+
 }
 
 /// Returns a list of ListItems for the config list selector
@@ -651,14 +662,10 @@ where
     let focus = &app.focus;
     let boards = &app.boards;
     let current_board = &app.current_board.unwrap_or(0);
-    // check if current board is set
     let current_card = &app.current_card.unwrap_or(0);
-
-    let body_style = if matches!(focus, Focus::Body) && enable_focus_highlight {
-        Style::default().fg(Color::LightYellow)
-    } else {
-        Style::default().fg(Color::White)
-    };
+    let focused_board_style = Style::default().fg(Color::LightYellow);
+    let focused_card_style = Style::default().fg(Color::LightYellow);
+    
     // make a list of constraints depending on NO_OF_BOARDS_PER_PAGE constant
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -723,6 +730,11 @@ where
             }
         }
 
+        let card_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(card_constraints.as_ref())
+            .split(board_chunks[board_index]);
+
         for (card_index, card_id) in board_cards.iter().enumerate() {
             // unwrap card if panic skip it and log it
             let card = board.get_card(*card_id).unwrap();
@@ -739,65 +751,73 @@ where
                 card_title
             };
 
-            let card_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints(card_constraints.as_ref())
-                .split(board_chunks[board_index]);
+            // if card id is same as current_card, highlight it
+            let card_style = if card_index as u128 == *current_card && matches!(focus, Focus::Body){
+                focused_card_style
+            } else {
+                Style::default()
+            };
 
             let card_paragraph = Paragraph::new(&*card_title)
-                .style(body_style)
+                .style(Style::default())
                 .alignment(Alignment::Left)
                 .block(
                     Block::default()
                         .title(&*card_title)
                         .borders(Borders::ALL)
-                        .style(body_style)
+                        .style(card_style)
                         .border_type(BorderType::Plain),
                 )
                 .wrap(tui::widgets::Wrap { trim: true });
 
             rect.render_widget(card_paragraph, card_chunks[card_index]);
 
-            if more_cards {
-                let more_cards_paragraph = Paragraph::new("...")
-                    .style(body_style)
-                    .alignment(Alignment::Left)
-                    .block(
-                        Block::default()
-                            .title("...")
-                            .borders(Borders::ALL)
-                            .style(body_style)
-                            .border_type(BorderType::Plain),
-                    )
-                    .wrap(tui::widgets::Wrap { trim: true });
-    
-                rect.render_widget(more_cards_paragraph, card_chunks[card_chunks.len() - 1]);
-            }
         }
 
+        if more_cards {
+            let more_cards_paragraph = Paragraph::new("...")
+                .style(Style::default())
+                .alignment(Alignment::Left)
+                .block(
+                    Block::default()
+                        .title("...")
+                        .borders(Borders::ALL)
+                        .style(Style::default())
+                        .border_type(BorderType::Plain),
+                )
+                .wrap(tui::widgets::Wrap { trim: true });
+
+            rect.render_widget(more_cards_paragraph, card_chunks[card_chunks.len() - 1]);
+        }
+        
+        let board_style = if board_id == *current_board && matches!(focus, Focus::Body) {
+            focused_board_style
+        } else {
+            Style::default()
+        };
+        
         let board_block = Block::default()
             .title(&*board_title)
             .borders(Borders::ALL)
-            .style(body_style)
+            .style(board_style)
             .border_type(BorderType::Plain);
-
         rect.render_widget(board_block, board_chunks[board_index]);
     }
 
     if more_boards {
         let more_boards_paragraph = Paragraph::new("...")
-            .style(body_style)
+            .style(Style::default())
             .alignment(Alignment::Left)
             .block(
                 Block::default()
                     .title("...")
                     .borders(Borders::ALL)
-                    .style(body_style)
+                    .style(Style::default())
                     .border_type(BorderType::Plain),
             )
             .wrap(tui::widgets::Wrap { trim: true });
 
-        rect.render_widget(more_boards_paragraph, chunks[board_chunks.len() -1]);
+        rect.render_widget(more_boards_paragraph, board_chunks[board_chunks.len() -1]);
     }
 
     // draw line_gauge in chunks[1]
@@ -1004,6 +1024,22 @@ where
                 .border_type(BorderType::Plain),
         );
     rect.render_widget(submit_button, chunks[4]);
+
+    if app.focus == Focus::NewBoardName && app.state.status == AppStatus::UserInput{
+        rect.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[1].x + app.state.new_board_form[0].len() as u16 + 1,
+            // Move one line down, from the border to the input line
+            chunks[1].y + 1,
+        );
+    } else if app.focus == Focus::NewBoardDescription && app.state.status == AppStatus::UserInput{
+        rect.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[2].x + app.state.new_board_form[1].len() as u16 + 1,
+            // Move one line down, from the border to the input line
+            chunks[2].y + 1,
+        );
+    }
 }
 
 pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState)

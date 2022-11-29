@@ -161,7 +161,7 @@ impl Card {
     }
 
     pub fn remove_tag(&mut self, tag: String) {
-        let index = self.tags.iter().position(|t| t == &tag).unwrap();
+        let index = self.tags.iter().position(|t| t == &tag).unwrap_or(0);
         self.tags.remove(index);
         self.date_modified = Utc::now().to_string();
         self.action_history.push(format!("Tag {} removed", tag));
@@ -175,7 +175,7 @@ impl Card {
     }
 
     pub fn remove_comment(&mut self, comment: String) {
-        let index = self.comments.iter().position(|c| c == &comment).unwrap();
+        let index = self.comments.iter().position(|c| c == &comment).unwrap_or(0);
         self.comments.remove(index);
         self.date_modified = Utc::now().to_string();
         self.action_history.push(format!("Comment {} removed", comment));
