@@ -637,6 +637,7 @@ impl App {
                 self.current_card = Some(card.id);
             }
         }
+        debug!("Visible boards and cards: {:?}", self.visible_boards_and_cards);
     }
 }
 
@@ -748,7 +749,6 @@ impl AppConfig {
             let mut parts = line.split(":");
             let key = parts.next().unwrap_or("").trim();
             let value = parts.next().unwrap_or("").trim();
-            debug!("Editing config with key: {} and value: {}", key, value);
             match key {
                 "save_directory" => {
                     let new_path = PathBuf::from(value);
@@ -778,12 +778,11 @@ impl AppConfig {
                     }
                 }
                 _ => {
-                    debug!("Invalid key: {}", key);
+                    error!("Invalid key: {}", key);
                     return config;
                 }
             }
         }
-        debug!("Config: {:?}", config);
         config
     }
 

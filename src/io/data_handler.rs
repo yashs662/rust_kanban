@@ -77,7 +77,7 @@ pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError
 pub fn get_local_kanban_state(file_name: String, version: u32) -> Result<Vec<Board>, SavefileError> {
     let config = get_config();
     let file_path = config.save_directory.join(file_name);
-    debug!("Loading local save file: {:?}", file_path);
+    info!("Loading local save file: {:?}", file_path);
     let boards = load_file(file_path, version)?;
     Ok(boards)
 }

@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, error};
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -77,7 +77,7 @@ impl UiMode {
             8 => UiMode::TitleBodyHelpLog,
             9 => UiMode::LogsOnly,
             _ => {
-                debug!("Invalid UiMode: {}", n);
+                error!("Invalid UiMode: {}", n);
                 UiMode::TitleBody
             }
         }

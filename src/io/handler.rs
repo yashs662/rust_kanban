@@ -56,9 +56,7 @@ impl IoAsyncHandler {
             error!("Cannot create save directory");
         }
         app.boards = prepare_boards();
-        debug!("Boards: {:?}", app.boards);
         app.set_visible_boards_and_cards();
-        debug!("Visible boards: {:?}", app.visible_boards_and_cards);
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
         Ok(())
@@ -146,7 +144,6 @@ impl IoAsyncHandler {
         let file_name = file_list[selected].clone();
         let config = get_config();
         let path = config.save_directory.join(file_name);
-        debug!("Deleting file {:?}", path);
         // check if the file exists
         if !Path::new(&path).exists() {
             error!("Cannot delete save file: file not found");
@@ -209,7 +206,6 @@ fn prepare_boards () -> Vec<Board> {
         .filter(|file| file.contains("_v"))
         .map(|file| file.to_string())
         .collect();
-    debug!("Local save files: {:?}", local_save_files);
     let fall_back_version = "1".to_string();
     // parse file naming scheme to gett the latest file with the latest version
     // kanban_DD-MM-YYYY_V{version}
@@ -227,7 +223,6 @@ fn prepare_boards () -> Vec<Board> {
     let mut version_number = latest_version.split("v").collect::<Vec<&str>>();
     let last_version_number = version_number.pop().unwrap_or("1");
     let last_version_number = last_version_number.parse::<u32>().unwrap_or(1);
-    debug!("Last version number: {}", last_version_number);
     let local_data = get_local_kanban_state(latest_save_file.clone(), last_version_number);
     match local_data {
         Ok(data) => {
