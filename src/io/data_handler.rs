@@ -1,5 +1,5 @@
 use std::{fs, env};
-use log::{error, info, debug};
+use log::{error, info};
 extern crate savefile;
 use savefile::prelude::*;
 

@@ -54,7 +54,7 @@ where
         )
         .split(rect.size());
 
-    render_body(rect, chunks[0], app, false);
+    render_body(rect, chunks[0], app,);
 }
 
 pub fn render_title_body<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -75,7 +75,7 @@ where
     let title = draw_title(&app.focus);
     rect.render_widget(title, chunks[0]);
     
-    render_body(rect, chunks[1], app, true);
+    render_body(rect, chunks[1], app);
 }
 
 pub fn render_body_help<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -95,7 +95,7 @@ where
 
     let actions = app.actions();
     
-    render_body(rect, chunks[0], app, true);
+    render_body(rect, chunks[0], app);
 
     let help = draw_help(actions, &app.focus);
     rect.render_widget(help, chunks[1]);
@@ -116,7 +116,7 @@ where
         )
         .split(rect.size());
 
-    render_body(rect, chunks[0], app, true);
+    render_body(rect, chunks[0], app);
 
     let log = draw_logs(&app.focus, true);
     rect.render_widget(log, chunks[1]);
@@ -143,7 +143,7 @@ where
     let title = draw_title(&app.focus);
     rect.render_widget(title, chunks[0]);
 
-    render_body(rect, chunks[1], app, true);
+    render_body(rect, chunks[1], app);
 
     let help = draw_help(actions, &app.focus);
     rect.render_widget(help, chunks[2]);
@@ -168,7 +168,7 @@ where
     let title = draw_title(&app.focus);
     rect.render_widget(title, chunks[0]);
 
-    render_body(rect, chunks[1], app, true);
+    render_body(rect, chunks[1], app);
 
     let log = draw_logs(&app.focus, true);
     rect.render_widget(log, chunks[2]);
@@ -192,7 +192,7 @@ where
 
     let actions = app.actions();
 
-    render_body(rect, chunks[0], app, true);
+    render_body(rect, chunks[0], app);
 
     let help = draw_help(actions, &app.focus);
     rect.render_widget(help, chunks[1]);
@@ -223,7 +223,7 @@ where
     let title = draw_title(&app.focus);
     rect.render_widget(title, chunks[0]);
 
-    render_body(rect, chunks[1], app, true);
+    render_body(rect, chunks[1], app);
 
     let help = draw_help(actions, &app.focus);
     rect.render_widget(help, chunks[2]);
@@ -653,7 +653,7 @@ fn draw_help_menu<'a>(focus: &Focus) -> Paragraph<'a> {
 }
 
 /// Draws Kanban boards
-pub fn render_body<'a,B>(rect: &mut Frame<B>, area: Rect, app: &App, enable_focus_highlight: bool)
+pub fn render_body<'a,B>(rect: &mut Frame<B>, area: Rect, app: &App)
 where
     B: Backend,
 {
@@ -661,10 +661,27 @@ where
     let mut more_cards = false;
     let focus = &app.focus;
     let boards = &app.boards;
-    let current_board = &app.current_board.unwrap_or(0);
-    let current_card = &app.current_card.unwrap_or(0);
+    let current_board = &app.state.current_board.unwrap_or(0);
+    let current_card = &app.state.current_card.unwrap_or(0);
     let focused_board_style = Style::default().fg(Color::LightYellow);
     let focused_card_style = Style::default().fg(Color::LightYellow);
+
+    // check if self.visible_boards_and_cards is empty
+    if app.visible_boards_and_cards.is_empty() {
+        let empty_paragraph = Paragraph::new("No boards found, press <b> to add a board")
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .title("Boards")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::White))
+                    .border_type(BorderType::Plain),
+            )
+            .wrap(tui::widgets::Wrap { trim: true });
+        rect.render_widget(empty_paragraph, area);
+        return;
+    }
     
     // make a list of constraints depending on NO_OF_BOARDS_PER_PAGE constant
     let chunks = Layout::default()
@@ -694,15 +711,14 @@ where
         .direction(Direction::Horizontal)
         .constraints(constraints.as_ref())
         .split(chunks[0]);
-    // visible_boards_and_cards: Vec<HashMap<String, Vec<String>>>
+    // visible_boards_and_cards: Vec<BTreeMap<String, Vec<String>>>
     let visible_boards_and_cards = app.visible_boards_and_cards.clone();
-    for (board_index, board_cards) in visible_boards_and_cards.iter().enumerate() {
+    for (board_index, board_and_card_tuple) in visible_boards_and_cards.iter().enumerate() {
         // render board with title in board chunks alongside with cards in card chunks of the board
         let board = &boards[board_index];
         let board_title = board.name.clone();
         let board_id = board.id.clone();
-        let board_cards_default = vec![];
-        let board_cards = board_cards.get(&board_id).unwrap_or(&board_cards_default);
+        let board_cards = board_and_card_tuple.1;
         // if board title is longer than DEFAULT_BOARD_TITLE_LENGTH, truncate it and add ... at the end
         let board_title = if board_title.len() > DEFAULT_BOARD_TITLE_LENGTH.into() {
             format!("{}...", &board_title[0..DEFAULT_BOARD_TITLE_LENGTH as usize])
@@ -731,14 +747,21 @@ where
         }
 
         let card_chunks = Layout::default()
-            .direction(Direction::Horizontal)
+            .direction(Direction::Vertical)
+            .margin(1)
             .constraints(card_constraints.as_ref())
             .split(board_chunks[board_index]);
 
         for (card_index, card_id) in board_cards.iter().enumerate() {
             // unwrap card if panic skip it and log it
-            let card = board.get_card(*card_id).unwrap();
-            let card_title = card.name.clone();
+            let mut card = board.get_card(*card_id);
+            // check if card is None, if so skip it and log it
+            if card.is_none() {
+                continue;
+            } else {
+                card = Some(card.unwrap());
+            }
+            let card_title = card.unwrap().name.clone();
             let card_title = if card_title.len() > DEFAULT_CARD_TITLE_LENGTH.into() {
                 format!("{}...", &card_title[0..DEFAULT_CARD_TITLE_LENGTH as usize])
             } else {
@@ -751,6 +774,8 @@ where
                 card_title
             };
 
+            let card_description = card.unwrap().description.clone();
+
             // if card id is same as current_card, highlight it
             let card_style = if card_index as u128 == *current_card && matches!(focus, Focus::Body){
                 focused_card_style
@@ -758,7 +783,7 @@ where
                 Style::default()
             };
 
-            let card_paragraph = Paragraph::new(&*card_title)
+            let card_paragraph = Paragraph::new(card_description)
                 .style(Style::default())
                 .alignment(Alignment::Left)
                 .block(
@@ -822,7 +847,7 @@ where
 
     // draw line_gauge in chunks[1]
     // get the index of the current board in boards and set percentage
-    let current_board_id = app.current_board.unwrap_or(0);
+    let current_board_id = app.state.current_board.unwrap_or(0);
     // get the index of the board with the id
     let current_board_index = boards
         .iter()
@@ -994,6 +1019,12 @@ where
     let key_style = Style::default().fg(Color::LightCyan);
     let help_style = Style::default().fg(Color::Gray);
     let help_text = Spans::from(vec![
+        Span::styled("<i>", key_style),
+        Span::styled(" to start typing", help_style),
+        Span::raw(" | "),
+        Span::styled("<esc>", key_style),
+        Span::styled(" to stop typing", help_style),
+        Span::raw(" ; "),
         Span::styled("<Tab>", key_style),
         Span::styled(" to switch focus", help_style),
         Span::raw(" ; "),
@@ -1038,6 +1069,158 @@ where
             chunks[2].x + app.state.new_board_form[1].len() as u16 + 1,
             // Move one line down, from the border to the input line
             chunks[2].y + 1,
+        );
+    }
+}
+
+pub fn render_new_card_form<B>(rect: &mut Frame<B>, app: &App)
+where
+    B: Backend,
+{
+    let name_style = if matches!(app.focus, Focus::NewCardName) {
+        Style::default().fg(Color::LightYellow)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let description_style = if matches!(app.focus, Focus::NewCardDescription) {
+        Style::default().fg(Color::LightYellow)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let due_date_style = if matches!(app.focus, Focus::NewCardDueDate) {
+        Style::default().fg(Color::LightYellow)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let submit_style = if matches!(app.focus, Focus::SubmitButton) {
+        Style::default().fg(Color::LightYellow)
+    } else {
+        Style::default().fg(Color::White)
+    };
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Percentage(20),
+            Constraint::Percentage(40),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            ].as_ref())
+        .split(rect.size());
+
+    let title_paragraph = Paragraph::new("Create a new Card")
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::White))
+                .border_type(BorderType::Plain),
+        );
+    rect.render_widget(title_paragraph, chunks[0]);
+
+    let card_name_field = app.state.new_card_form[0].clone();
+    let card_description_field = app.state.new_card_form[1].clone();
+    let card_due_date_field = app.state.new_card_form[2].clone();
+    let card_name = Paragraph::new(card_name_field)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(name_style)
+                .border_type(BorderType::Plain)
+                .title("Card Name")
+        );
+    rect.render_widget(card_name, chunks[1]);
+
+    let card_description = Paragraph::new(card_description_field)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(description_style)
+                .border_type(BorderType::Plain)
+                .title("Card Description")
+        );
+    rect.render_widget(card_description, chunks[2]);
+
+    let card_due_date = Paragraph::new(card_due_date_field)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(due_date_style)
+                .border_type(BorderType::Plain)
+                .title("Card Due Date")
+        );
+    rect.render_widget(card_due_date, chunks[3]);
+
+    let key_style = Style::default().fg(Color::LightCyan);
+    let help_style = Style::default().fg(Color::Gray);
+    let help_text = Spans::from(vec![
+        Span::styled("<i>", key_style),
+        Span::styled(" to start typing", help_style),
+        Span::raw(" | "),
+        Span::styled("<esc>", key_style),
+        Span::styled(" to stop typing", help_style),
+        Span::raw(" ; "),
+        Span::styled("<Tab>", key_style),
+        Span::styled(" to switch focus", help_style),
+        Span::raw(" ; "),
+        Span::styled("<Enter>", key_style),
+        Span::styled(" to submit", help_style),
+        Span::raw(" ; "),
+        Span::styled("<Esc>", key_style),
+        Span::styled(" to cancel", help_style),
+    ]);
+
+    let help_paragraph = Paragraph::new(help_text)
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::White))
+                .border_type(BorderType::Plain),
+        );
+    rect.render_widget(help_paragraph, chunks[4]);
+
+    let submit_button = Paragraph::new("Submit")
+        .style(Style::default().fg(Color::White))
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(submit_style)
+                .border_type(BorderType::Plain),
+        );
+    rect.render_widget(submit_button, chunks[5]);
+
+    if app.focus == Focus::NewCardName && app.state.status == AppStatus::UserInput{
+        rect.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[1].x + app.state.new_card_form[0].len() as u16 + 1,
+            // Move one line down, from the border to the input line
+            chunks[1].y + 1,
+        );
+    } else if app.focus == Focus::NewCardDescription && app.state.status == AppStatus::UserInput{
+        rect.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[2].x + app.state.new_card_form[1].len() as u16 + 1,
+            // Move one line down, from the border to the input line
+            chunks[2].y + 1,
+        );
+    } else if app.focus == Focus::NewCardDueDate && app.state.status == AppStatus::UserInput{
+        rect.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[3].x + app.state.new_card_form[2].len() as u16 + 1,
+            // Move one line down, from the border to the input line
+            chunks[3].y + 1,
         );
     }
 }

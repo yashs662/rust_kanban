@@ -1,8 +1,9 @@
-use std::collections::HashMap;
-use std::env;
+use std::collections::BTreeMap;
+use std::{env, vec};
 use std::fmt::{self, Formatter, Display};
 use std::path::PathBuf;
 
+use chrono::NaiveDate;
 use log::{debug, info};
 use log::{error, warn};
 use serde::{Serialize, Deserialize};
@@ -12,9 +13,11 @@ use self::actions::Actions;
 use self::state::AppStatus;
 use self::state::Focus;
 use self::state::UiMode;
-use self::kanban::Board;
+use self::kanban::{Board, Card, CardPriority};
 use crate::app::actions::Action;
-use crate::constants::SAVE_DIR_NAME;
+use crate::constants::{
+    SAVE_DIR_NAME, NO_OF_BOARDS_PER_PAGE
+};
 use crate::inputs::key::Key;
 use crate::io::data_handler::{write_config, get_available_local_savefiles};
 use crate::io::{IoEvent, data_handler};
@@ -44,9 +47,7 @@ pub struct App {
     prev_ui_mode: UiMode,
     config: AppConfig,
     config_item_being_edited: Option<usize>,
-    current_board: Option<u128>,
-    current_card: Option<u128>,
-    pub visible_boards_and_cards: Vec<HashMap<u128, Vec<u128>>>,
+    pub visible_boards_and_cards: BTreeMap<u128, Vec<u128>>,
 }
 
 impl App {
@@ -71,9 +72,7 @@ impl App {
             prev_ui_mode: UiMode::Zen,
             config: AppConfig::default(),
             config_item_being_edited: None,
-            current_board: None,
-            current_card: None,
-            visible_boards_and_cards: vec![],
+            visible_boards_and_cards: BTreeMap::new(),
         }
     }
 
@@ -87,15 +86,23 @@ impl App {
                 if current_key == "<Space>" {
                     current_key = " ".to_string();
                 } else if current_key == "<ShiftEnter>" {
-                    current_key = "\n".to_string();
+                    current_key = "".to_string();
                 } else if current_key == "<Tab>" {
-                    current_key = "\t".to_string();
+                    current_key = "  ".to_string();
                 } else if current_key == "<Backspace>" {
                     match self.ui_mode {
                         UiMode::NewBoard => {
                             match self.focus {
                                 Focus::NewBoardName => self.state.new_board_form[0].pop(),
                                 Focus::NewBoardDescription => self.state.new_board_form[1].pop(),
+                                _ => Option::None,
+                            }
+                        }
+                        UiMode::NewCard => {
+                            match self.focus {
+                                Focus::NewCardName => self.state.new_card_form[0].pop(),
+                                Focus::NewCardDescription => self.state.new_card_form[1].pop(),
+                                Focus::NewCardDueDate => self.state.new_card_form[2].pop(),
                                 _ => Option::None,
                             }
                         }
@@ -110,6 +117,12 @@ impl App {
                     self.state.new_board_form[0].push_str(&current_key);
                 } else if self.focus == Focus::NewBoardDescription {
                     self.state.new_board_form[1].push_str(&current_key);
+                } else if self.focus == Focus::NewCardName {
+                    self.state.new_card_form[0].push_str(&current_key);
+                } else if self.focus == Focus::NewCardDescription {
+                    self.state.new_card_form[1].push_str(&current_key);
+                } else if self.focus == Focus::NewCardDueDate {
+                    self.state.new_card_form[2].push_str(&current_key);
                 } else {
                     self.current_user_input.push_str(&current_key);
                 }
@@ -122,7 +135,7 @@ impl App {
             if let Some(action) = self.actions.find(key) {
                 match action {
                     Action::Quit => AppReturn::Exit,
-                    Action::NextFocus => {
+                    Action::Tab => {
                         let current_focus = self.focus.clone();
                         let next_focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
@@ -133,7 +146,7 @@ impl App {
                         }
                         AppReturn::Continue
                     }
-                    Action::PreviousFocus => {
+                    Action::ShiftTab => {
                         let current_focus = self.focus.clone();
                         let next_focus = self.focus.prev(&UiMode::get_available_targets(&self.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
@@ -216,13 +229,13 @@ impl App {
                     }
                     Action::Right => {
                         if self.focus == Focus::Body {
-                            info!("Moving to next Board");
+                            
                         }
                         AppReturn::Continue
                     }
                     Action::Left => {
                         if self.focus == Focus::Body {
-                            info!("Moving to previous Board");
+                            
                         }
                         AppReturn::Continue
                     }
@@ -233,6 +246,10 @@ impl App {
                                 info!("Taking user input");
                             },
                             UiMode::EditConfig => {
+                                self.state.status = AppStatus::UserInput;
+                                info!("Taking user input");
+                            },
+                            UiMode::NewCard => {
                                 self.state.status = AppStatus::UserInput;
                                 info!("Taking user input");
                             },
@@ -344,6 +361,65 @@ impl App {
                                         warn!("New board name is empty or already exists");
                                     }
                                     self.ui_mode = self.prev_ui_mode.clone();
+                                    self.refresh_visible_boards();
+                                }
+                                AppReturn::Continue
+                            }
+                            UiMode::NewCard => {
+                                if self.focus == Focus::SubmitButton {
+                                    // check if self.state.new_card_form[0] is not empty or is not the same as any of the existing cards
+                                    let new_card_name = self.state.new_card_form[0].clone();
+                                    let new_card_description = self.state.new_card_form[1].clone();
+                                    let new_card_due_date = self.state.new_card_form[2].clone();
+                                    let mut same_name_exists = false;
+                                    let current_board_id = self.state.current_board.unwrap_or(0);
+                                    let current_board = self.boards.iter().find(|board| board.id == current_board_id);
+                                    if let Some(current_board) = current_board {
+                                        for card in current_board.cards.iter() {
+                                            if card.name == new_card_name {
+                                                same_name_exists = true;
+                                                break;
+                                            }
+                                        }
+                                    } else {
+                                        error!("Current board not found");
+                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        return AppReturn::Continue;
+                                    }
+                                    // check if due date is empty or is a valid date
+                                    let due_date = if new_card_due_date.is_empty() {
+                                        None
+                                    } else {
+                                        match NaiveDate::parse_from_str(&new_card_due_date, "%Y-%m-%d") {
+                                            Ok(due_date) => Some(due_date),
+                                            Err(e) => {
+                                                debug!("Invalid due date: {}", e);
+                                                debug!("Due date: {}", new_card_due_date);
+                                                None
+                                            }
+                                        }
+                                    };
+                                    if due_date.is_none() {
+                                        warn!("Invalid due date");
+                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        return AppReturn::Continue;
+                                    }
+                                    if !new_card_name.is_empty() && !same_name_exists {
+                                        let new_card = Card::new(new_card_name, new_card_description, due_date.unwrap().to_string(),
+                                            CardPriority::Low, vec![], vec![]);
+                                        let current_board = self.boards.iter_mut().find(|board| board.id == current_board_id);
+                                        if let Some(current_board) = current_board {
+                                            current_board.cards.push(new_card);
+                                        } else {
+                                            error!("Current board not found");
+                                            self.ui_mode = self.prev_ui_mode.clone();
+                                            return AppReturn::Continue;
+                                        }
+                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        self.refresh_visible_boards();
+                                    } else {
+                                        warn!("New card name is empty or already exists");
+                                    }
                                 }
                                 AppReturn::Continue
                             }
@@ -458,6 +534,13 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::NewCard => {
+                        // check if current board is not empty
+                        if self.state.current_board.is_none() {
+                            warn!("No board available to add card to");
+                            return AppReturn::Continue;
+                        }
+                        self.state.new_card_form = vec![String::new(), String::new(), String::new()];
+                        self.set_ui_mode(UiMode::NewCard);
                         AppReturn::Continue
                     }
                     Action::Delete => {
@@ -618,26 +701,41 @@ impl App {
         }
     }
     pub fn set_visible_boards_and_cards(&mut self) {
-        // get self.boards and make Vec<HashMap<u128, Vec<u128>>> of visible boards and cards
-        let mut visible_boards_and_cards: Vec<HashMap<u128, Vec<u128>>> = Vec::new();
+        // get self.boards and make Vec<BTreeMap<u128, Vec<u128>>> of visible boards and cards
+        let mut visible_boards_and_cards: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
         for board in &self.boards {
             let mut visible_cards: Vec<u128> = Vec::new();
             for card in &board.cards {
                 visible_cards.push(card.id);
             }
-            let mut visible_board: HashMap<u128, Vec<u128>> = HashMap::new();
+            let mut visible_board: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
             visible_board.insert(board.id, visible_cards);
-            visible_boards_and_cards.push(visible_board);
+            visible_boards_and_cards.extend(visible_board);
         }
         self.visible_boards_and_cards = visible_boards_and_cards;
         // if exists set first board and card as current_board and current_card
-        if let Some(board) = self.boards.first() {
-            self.current_board = Some(board.id);
-            if let Some(card) = board.cards.first() {
-                self.current_card = Some(card.id);
+        if let Some((board_id, card_ids)) = self.visible_boards_and_cards.iter().next() {
+            self.state.current_board = Some(*board_id);
+            if let Some(card_id) = card_ids.iter().next() {
+                self.state.current_card = Some(*card_id);
             }
         }
+        debug!("Current board: {:?}", self.state.current_board);
+        debug!("Current card: {:?}", self.state.current_card);
         debug!("Visible boards and cards: {:?}", self.visible_boards_and_cards);
+    }
+
+    pub fn refresh_visible_boards(&mut self) {
+        // check if self.visible_boards_and_cards is empty
+        if self.visible_boards_and_cards.is_empty() {
+            // if empty set self.boards as visible boards
+            self.set_visible_boards_and_cards();
+        } else {
+            // if visible boards and cards length is less than NO_BOARDS_PER_PAGE
+            if self.visible_boards_and_cards.len() < NO_OF_BOARDS_PER_PAGE.into() {
+                self.set_visible_boards_and_cards()
+            }
+        }
     }
 }
 
@@ -692,11 +790,11 @@ impl MainMenu {
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub status: AppStatus,
+    pub current_board: Option<u128>,
+    pub current_card: Option<u128>,
     pub main_menu_state: ListState,
     pub config_state: ListState,
-    pub new_board_state: ListState,
     pub new_board_form: Vec<String>,
-    pub new_card_state: ListState,
     pub new_card_form: Vec<String>,
     pub load_save_state: ListState,
 }
@@ -705,12 +803,12 @@ impl Default for AppState {
     fn default() -> AppState {
         AppState {
             status: AppStatus::default(),
+            current_board: None,
+            current_card: None,
             main_menu_state: ListState::default(),
             config_state: ListState::default(),
-            new_board_state: ListState::default(),
             new_board_form: vec![String::new(), String::new()],
-            new_card_state: ListState::default(),
-            new_card_form: vec![String::new(), String::new()],
+            new_card_form: vec![String::new(), String::new(), String::new()],
             load_save_state: ListState::default(),
         }
     }

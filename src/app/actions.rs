@@ -8,8 +8,8 @@ use crate::inputs::key::Key;
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Action {
     Quit,
-    NextFocus,
-    PreviousFocus,
+    Tab,
+    ShiftTab,
     SetUiMode,
     ToggleConfig,
     Up,
@@ -31,8 +31,8 @@ impl Action {
     pub fn iterator() -> Iter<'static, Action> {
         static ACTIONS: [Action; 17] = [
             Action::Quit,
-            Action::NextFocus,
-            Action::PreviousFocus,
+            Action::Tab,
+            Action::ShiftTab,
             Action::SetUiMode,
             Action::ToggleConfig,
             Action::Up,
@@ -55,8 +55,8 @@ impl Action {
     pub fn keys(&self) -> &[Key] {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
-            Action::NextFocus => &[Key::Tab],
-            Action::PreviousFocus => &[Key::ShiftTab],
+            Action::Tab => &[Key::Tab],
+            Action::ShiftTab => &[Key::ShiftTab],
             Action::SetUiMode => &[Key::Char('1'), Key::Char('2'), Key::Char('3'),
                                    Key::Char('4'), Key::Char('5'), Key::Char('6'),
                                    Key::Char('7'), Key::Char('8'), Key::Char('9')
@@ -87,8 +87,8 @@ impl Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
             Action::Quit => "Quit",
-            Action::NextFocus => "Focus next",
-            Action::PreviousFocus => "Focus previous",
+            Action::Tab => "Focus next",
+            Action::ShiftTab => "Focus previous",
             Action::SetUiMode => "Set UI mode",
             Action::ToggleConfig => "Open config Menu",
             Action::Up => "Go up",
@@ -173,14 +173,14 @@ mod tests {
 
     #[test]
     fn should_find_action_by_key() {
-        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
+        let actions: Actions = vec![Action::Quit, Action::Tab].into();
         let result = actions.find(Key::Ctrl('c'));
         assert_eq!(result, Some(&Action::Quit));
     }
 
     #[test]
     fn should_find_action_by_key_not_found() {
-        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
+        let actions: Actions = vec![Action::Quit, Action::Tab].into();
         let result = actions.find(Key::Alt('w'));
         assert_eq!(result, None);
     }
@@ -189,8 +189,8 @@ mod tests {
     fn should_create_actions_from_vec() {
         let _actions: Actions = vec![
             Action::Quit,
-            Action::NextFocus,
-            Action::PreviousFocus,
+            Action::Tab,
+            Action::ShiftTab,
         ]
         .into();
     }
@@ -201,9 +201,9 @@ mod tests {
         let _actions: Actions = vec![
             Action::Quit,
             Action::Quit,
-            Action::NextFocus,
-            Action::NextFocus,
-            Action::NextFocus,
+            Action::Tab,
+            Action::Tab,
+            Action::Tab,
         ]
         .into();
     }

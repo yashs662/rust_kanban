@@ -6,38 +6,6 @@ use crate::constants::{
     FIELD_NOT_SET,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, Savefile)]
-pub enum CardStatus {
-    Active,
-    Complete,
-}
-
-impl CardStatus {
-    fn to_string(&self) -> String {
-        match self {
-            CardStatus::Active => "Active".to_string(),
-            CardStatus::Complete => "Complete".to_string(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
-pub struct Card {
-    pub id: u128,
-    pub name: String,
-    short_description: String,
-    long_description: String,
-    date_created: String,
-    date_modified: String,
-    date_due: String,
-    date_completed: String,
-    priority: u8,
-    card_status: CardStatus,
-    tags: Vec<String>,
-    comments: Vec<String>,
-    action_history: Vec<String>,
-}
-
 #[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
 pub struct Board {
     pub id: u128,
@@ -100,21 +68,82 @@ impl Default for Board {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Savefile)]
+pub enum CardStatus {
+    Active,
+    Complete,
+}
+
+impl CardStatus {
+    fn to_string(&self) -> String {
+        match self {
+            CardStatus::Active => "Active".to_string(),
+            CardStatus::Complete => "Complete".to_string(),
+        }
+    }
+    fn from_string(s: &str) -> Self {
+        match s {
+            "Active" => CardStatus::Active,
+            "Complete" => CardStatus::Complete,
+            _ => panic!("Invalid CardStatus"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Savefile)]
+pub enum CardPriority {
+    Low,
+    Medium,
+    High,
+}
+
+impl CardPriority {
+    fn to_string(&self) -> String {
+        match self {
+            CardPriority::Low => "Low".to_string(),
+            CardPriority::Medium => "Medium".to_string(),
+            CardPriority::High => "High".to_string(),
+        }
+    }
+    fn from_string(s: &str) -> Self {
+        match s {
+            "Low" => CardPriority::Low,
+            "Medium" => CardPriority::Medium,
+            "High" => CardPriority::High,
+            _ => CardPriority::Low,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
+pub struct Card {
+    pub id: u128,
+    pub name: String,
+    pub description: String,
+    pub date_created: String,
+    pub date_modified: String,
+    pub date_due: String,
+    pub date_completed: String,
+    pub priority: CardPriority,
+    pub card_status: CardStatus,
+    pub tags: Vec<String>,
+    pub comments: Vec<String>,
+    pub action_history: Vec<String>,
+}
+
 impl Card {
-    pub fn new(name: String, short_description: String, long_description: String, date_due: String, priority: u8, tags: Vec<String>, comments: Vec<String>) -> Self {
+    pub fn new(name: String, description: String, date_due: String, priority: CardPriority, tags: Vec<String>, comments: Vec<String>) -> Self {
         let name = if name.is_empty() { FIELD_NOT_SET } else { &name };
-        let short_description = if short_description.is_empty() { FIELD_NOT_SET } else { &short_description };
-        let long_description = if long_description.is_empty() { FIELD_NOT_SET } else { &long_description };
+        let description = if description.is_empty() { FIELD_NOT_SET } else { &description };
         let date_due = if date_due.is_empty() { FIELD_NOT_SET } else { &date_due };
-        let priority = if priority == 0 { 1 } else { priority };
+        let priority = CardPriority::Low;
         let tags = if tags.is_empty() { Vec::new() } else { tags };
         let comments = if comments.is_empty() { Vec::new() } else { comments };
         
         Self {
             id: get_id(),
             name: name.to_string(),
-            short_description: short_description.to_string(),
-            long_description: long_description.to_string(),
+            description: description.to_string(),
             date_created: Utc::now().to_string(),
             date_modified: Utc::now().to_string(),
             date_due: date_due.to_string(),
@@ -139,10 +168,10 @@ impl Card {
         self.action_history.push(format!("Date Completed set to {}", date_completed));
     }
 
-    pub fn set_priority(&mut self, priority: u8) {
+    pub fn set_priority(&mut self, priority: CardPriority) {
         self.priority = priority;
         self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Priority set to {}", priority));
+        self.action_history.push(format!("Priority set to {}", self.priority.to_string()));
     }
 
     pub fn set_card_status(&mut self, card_status: CardStatus) {
@@ -191,13 +220,12 @@ impl Default for Card {
         Self {
             id: get_id(),
             name: String::from("Default Card"),
-            short_description: String::from("Default Card Short Description"),
-            long_description: String::from("Default Card Long Description"),
+            description: String::from("Default Card Description"),
             date_created: Utc::now().to_string(),
             date_modified: Utc::now().to_string(),
             date_due: FIELD_NOT_SET.to_string(),
             date_completed: FIELD_NOT_SET.to_string(),
-            priority: 1,
+            priority: CardPriority::Low,
             card_status: CardStatus::Active,
             tags: Vec::new(),
             comments: Vec::new(),

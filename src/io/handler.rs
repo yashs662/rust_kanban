@@ -9,7 +9,7 @@ use crate::constants::{
 use crate::app::AppConfig;
 use crate::io::data_handler::{reset_config, save_kanban_state_locally, get_config};
 use eyre::Result;
-use log::{error, info, debug};
+use log::{error, info};
 
 use super::IoEvent;
 use super::data_handler::{get_available_local_savefiles, get_local_kanban_state};
@@ -209,6 +209,10 @@ fn prepare_boards () -> Vec<Board> {
     let fall_back_version = "1".to_string();
     // parse file naming scheme to gett the latest file with the latest version
     // kanban_DD-MM-YYYY_V{version}
+    // if local_save_files is empty, return empty vec
+    if local_save_files.is_empty() {
+        return vec![];
+    }
     let mut latest_save_file = local_save_files[0].clone();
     let mut latest_version = fall_back_version.clone();
     for save_file in local_save_files {

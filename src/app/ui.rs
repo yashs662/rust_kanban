@@ -17,7 +17,7 @@ use super::ui_helper::{
     render_config,
     render_edit_config,
     render_main_menu,
-    render_help_menu, render_logs_only, render_new_board_form, render_load_save
+    render_help_menu, render_logs_only, render_new_board_form, render_load_save, render_new_card_form
 };
 use crate::app::App;
 
@@ -77,6 +77,9 @@ where
         }
         UiMode::NewBoard => {
             render_new_board_form(rect, &app);
+        }
+        UiMode::NewCard => {
+            render_new_card_form(rect, app)
         }
         UiMode::LoadSave => {
             render_load_save(rect, &mut states.load_save_state);

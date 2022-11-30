@@ -1,4 +1,4 @@
-use log::{debug, error};
+use log::error;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -18,6 +18,7 @@ pub enum UiMode {
     HelpMenu,
     LogsOnly,
     NewBoard,
+    NewCard,
     LoadSave
 }
 
@@ -39,6 +40,7 @@ impl UiMode {
             UiMode::HelpMenu => "Help Menu".to_string(),
             UiMode::LogsOnly => "Logs Only".to_string(),
             UiMode::NewBoard => "New Board".to_string(),
+            UiMode::NewCard => "New Card".to_string(),
             UiMode::LoadSave => "Load Save".to_string(),
         }
     }
@@ -60,6 +62,7 @@ impl UiMode {
             "Help Menu" => Some(UiMode::HelpMenu),
             "Logs Only" => Some(UiMode::LogsOnly),
             "New Board" => Some(UiMode::NewBoard),
+            "New Card" => Some(UiMode::NewCard),
             "Load Save" => Some(UiMode::LoadSave),
             _ => None,
         }
@@ -100,6 +103,7 @@ impl UiMode {
             UiMode::HelpMenu => vec![],
             UiMode::LogsOnly => vec![],
             UiMode::NewBoard => vec!["New Board Name".to_string(), "New Board Description".to_string(), "Submit Button".to_string()],
+            UiMode::NewCard => vec!["New Card Name".to_string(), "New Card Description".to_string(), "New Card Due Date".to_string(), "Submit Button".to_string()],
             UiMode::LoadSave => vec![],
         }
     }
@@ -132,6 +136,9 @@ pub enum Focus {
     MainMenuHelp,
     NewBoardName,
     NewBoardDescription,
+    NewCardName,
+    NewCardDescription,
+    NewCardDueDate,
     SubmitButton,
     NoFocus
 }
@@ -165,6 +172,9 @@ impl Focus {
             Self::MainMenuHelp => "Main Menu Help",
             Self::NewBoardName => "New Board Name",
             Self::NewBoardDescription => "New Board Description",
+            Self::NewCardName => "New Card Name",
+            Self::NewCardDescription => "New Card Description",
+            Self::NewCardDueDate => "New Card Due Date",
             Self::SubmitButton => "Submit Button",
             Self::NoFocus => "No Focus",
         }
@@ -193,6 +203,9 @@ impl Focus {
             "No Focus" => Self::NoFocus,
             "New Board Name" => Self::NewBoardName,
             "New Board Description" => Self::NewBoardDescription,
+            "New Card Name" => Self::NewCardName,
+            "New Card Description" => Self::NewCardDescription,
+            "New Card Due Date" => Self::NewCardDueDate,
             "Submit Button" => Self::SubmitButton,
             _ => Self::NoFocus,
         }
@@ -223,6 +236,9 @@ impl Focus {
             "No Focus" => Self::NoFocus,
             "New Board Name" => Self::NewBoardName,
             "New Board Description" => Self::NewBoardDescription,
+            "New Card Name" => Self::NewCardName,
+            "New Card Description" => Self::NewCardDescription,
+            "New Card Due Date" => Self::NewCardDueDate,
             "Submit Button" => Self::SubmitButton,
             _ => Self::NoFocus,
         }
@@ -241,6 +257,9 @@ impl Focus {
             "No Focus" => Self::NoFocus,
             "New Board Name" => Self::NewBoardName,
             "New Board Description" => Self::NewBoardDescription,
+            "New Card Name" => Self::NewCardName,
+            "New Card Description" => Self::NewCardDescription,
+            "New Card Due Date" => Self::NewCardDueDate,
             "Submit Button" => Self::SubmitButton,
             _ => Self::NoFocus
         }
