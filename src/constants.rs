@@ -19,4 +19,16 @@ pub const LIST_SELECT_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
+pub const CARD_DATE_DUE_STYLE: Style = Style {
+    fg: Some(Color::LightRed),
+    bg: Some(Color::Black),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const CARD_STATUS_STYLE: Style = Style {
+    fg: Some(Color::LightGreen),
+    bg: Some(Color::Black),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
 pub const LIST_SELECTED_SYMBOL: &str = ">> ";

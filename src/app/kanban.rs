@@ -75,7 +75,7 @@ pub enum CardStatus {
 }
 
 impl CardStatus {
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             CardStatus::Active => "Active".to_string(),
             CardStatus::Complete => "Complete".to_string(),

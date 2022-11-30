@@ -31,7 +31,7 @@ use crate::constants::{
     NO_OF_BOARDS_PER_PAGE,
     DEFAULT_BOARD_TITLE_LENGTH,
     DEFAULT_CARD_TITLE_LENGTH,
-    NO_OF_CARDS_PER_BOARD, LIST_SELECT_STYLE, LIST_SELECTED_SYMBOL
+    NO_OF_CARDS_PER_BOARD, LIST_SELECT_STYLE, LIST_SELECTED_SYMBOL, CARD_DATE_DUE_STYLE, CARD_STATUS_STYLE
 };
 
 use super::{MainMenuItem, App, MainMenu};
@@ -788,7 +788,16 @@ where
                 card_title
             };
 
-            let card_description = card.unwrap().description.clone();
+            let mut card_description = Text::from(card.unwrap().description.clone());
+            let card_due_date = card.unwrap().date_due.clone();
+            if !card_due_date.is_empty() {
+                let card_due_date_styled = Text::styled(
+                    format!("Due: {}",card_due_date), CARD_DATE_DUE_STYLE);
+                card_description.extend(card_due_date_styled);
+            }
+            let card_status = format!("Status: {}",card.unwrap().card_status.clone().to_string());
+            let card_status = Text::styled(card_status, CARD_STATUS_STYLE);
+            card_description.extend(card_status);
 
             // if card id is same as current_card, highlight it
             let card_style = if card_index as u128 == *current_card && matches!(focus, Focus::Body){
@@ -798,7 +807,6 @@ where
             };
 
             let card_paragraph = Paragraph::new(card_description)
-                .style(Style::default())
                 .alignment(Alignment::Left)
                 .block(
                     Block::default()
