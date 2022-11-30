@@ -14,7 +14,7 @@ use tui::style::{
 };
 use tui::text::{
     Span,
-    Spans
+    Spans, Text
 };
 use tui::widgets::{
     Block,
@@ -658,7 +658,6 @@ where
     B: Backend,
 {
     let mut more_boards = false;
-    let mut more_cards = false;
     let focus = &app.focus;
     let boards = &app.boards;
     let current_board = &app.state.current_board.unwrap_or(0);
@@ -715,9 +714,16 @@ where
     let visible_boards_and_cards = app.visible_boards_and_cards.clone();
     for (board_index, board_and_card_tuple) in visible_boards_and_cards.iter().enumerate() {
         // render board with title in board chunks alongside with cards in card chunks of the board
-        let board = &boards[board_index];
+        let mut more_cards = false;
+        let board_id = board_and_card_tuple.0;
+        // find index of board with board_id in boards
+        let board = app.boards.iter().find(|&b| b.id == *board_id);
+        // check if board is found if not continue
+        if board.is_none() {
+            continue;
+        }
+        let board = board.unwrap();
         let board_title = board.name.clone();
-        let board_id = board.id.clone();
         let board_cards = board_and_card_tuple.1;
         // if board title is longer than DEFAULT_BOARD_TITLE_LENGTH, truncate it and add ... at the end
         let board_title = if board_title.len() > DEFAULT_BOARD_TITLE_LENGTH.into() {
@@ -726,7 +732,7 @@ where
             board_title
         };
         let board_title = format!("{} ({})", board_title, board_cards.len());
-        let board_title = if board_index as u128 == *current_board {
+        let board_title = if *board_id as u128 == *current_board {
             format!("{} {}", ">>", board_title)
         } else {
             board_title
@@ -746,6 +752,11 @@ where
             }
         }
 
+        // check if board_index is >= board_chunks.len() if yes continue
+        if board_index >= board_chunks.len() {
+            continue;
+        }
+
         let card_chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
@@ -753,7 +764,7 @@ where
             .split(board_chunks[board_index]);
 
         for (card_index, card_id) in board_cards.iter().enumerate() {
-            if card_index > NO_OF_CARDS_PER_BOARD.into() {
+            if card_index >= NO_OF_CARDS_PER_BOARD.into() {
                 break;
             }
             // unwrap card if panic skip it and log it
@@ -796,29 +807,30 @@ where
                         .style(card_style)
                         .border_type(BorderType::Plain),
                 )
-                .wrap(tui::widgets::Wrap { trim: true });
+                .wrap(tui::widgets::Wrap { trim: false });
 
             rect.render_widget(card_paragraph, card_chunks[card_index]);
 
         }
 
         if more_cards {
-            let more_cards_paragraph = Paragraph::new("...")
+            // down arrow after more
+            let more_cards_text = Text::styled(" More Cards ↓ ",
+                Style::default(),
+            );
+            let more_cards_paragraph = Paragraph::new(more_cards_text)
                 .style(Style::default())
-                .alignment(Alignment::Left)
+                .alignment(Alignment::Center)
                 .block(
                     Block::default()
-                        .title("...")
-                        .borders(Borders::ALL)
-                        .style(Style::default())
-                        .border_type(BorderType::Plain),
+                    .style(Style::default()),
                 )
                 .wrap(tui::widgets::Wrap { trim: true });
 
             rect.render_widget(more_cards_paragraph, card_chunks[card_chunks.len() - 1]);
         }
         
-        let board_style = if board_id == *current_board && matches!(focus, Focus::Body) {
+        let board_style = if *board_id == *current_board && matches!(focus, Focus::Body) {
             focused_board_style
         } else {
             Style::default()
@@ -833,13 +845,12 @@ where
     }
 
     if more_boards {
-        let more_boards_paragraph = Paragraph::new("...")
+        let more_boards_paragraph = Paragraph::new(" →\n→\n→\n→\n→\n→\n→\n→\n→
+            →\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→")
             .style(Style::default())
-            .alignment(Alignment::Left)
+            .alignment(Alignment::Center)
             .block(
                 Block::default()
-                    .title("...")
-                    .borders(Borders::ALL)
                     .style(Style::default())
                     .border_type(BorderType::Plain),
             )

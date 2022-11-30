@@ -81,13 +81,6 @@ impl CardStatus {
             CardStatus::Complete => "Complete".to_string(),
         }
     }
-    fn from_string(s: &str) -> Self {
-        match s {
-            "Active" => CardStatus::Active,
-            "Complete" => CardStatus::Complete,
-            _ => panic!("Invalid CardStatus"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Savefile)]
@@ -103,14 +96,6 @@ impl CardPriority {
             CardPriority::Low => "Low".to_string(),
             CardPriority::Medium => "Medium".to_string(),
             CardPriority::High => "High".to_string(),
-        }
-    }
-    fn from_string(s: &str) -> Self {
-        match s {
-            "Low" => CardPriority::Low,
-            "Medium" => CardPriority::Medium,
-            "High" => CardPriority::High,
-            _ => CardPriority::Low,
         }
     }
 }
@@ -136,7 +121,7 @@ impl Card {
         let name = if name.is_empty() { FIELD_NOT_SET } else { &name };
         let description = if description.is_empty() { FIELD_NOT_SET } else { &description };
         let date_due = if date_due.is_empty() { FIELD_NOT_SET } else { &date_due };
-        let priority = CardPriority::Low;
+        let priority = if priority.to_string().is_empty() { CardPriority::Low } else { priority };
         let tags = if tags.is_empty() { Vec::new() } else { tags };
         let comments = if comments.is_empty() { Vec::new() } else { comments };
         

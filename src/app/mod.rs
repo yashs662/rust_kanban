@@ -16,7 +16,7 @@ use self::state::UiMode;
 use self::kanban::{Board, Card, CardPriority};
 use crate::app::actions::Action;
 use crate::constants::{
-    SAVE_DIR_NAME, NO_OF_BOARDS_PER_PAGE
+    SAVE_DIR_NAME, NO_OF_BOARDS_PER_PAGE, FIELD_NOT_SET
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{write_config, get_available_local_savefiles};
@@ -81,7 +81,7 @@ impl App {
         // check if we are in a user input mode
         if self.state.status == AppStatus::UserInput {
             // append to current user input if key is not enter else change state to Initialized
-            if key != Key::Enter {
+            if key != Key::Enter && key != Key::Esc {
                 let mut current_key = key.to_string();
                 if current_key == "<Space>" {
                     current_key = " ".to_string();
@@ -388,10 +388,10 @@ impl App {
                                     }
                                     // check if due date is empty or is a valid date
                                     let due_date = if new_card_due_date.is_empty() {
-                                        None
+                                        Some(FIELD_NOT_SET.to_string())
                                     } else {
                                         match NaiveDate::parse_from_str(&new_card_due_date, "%Y-%m-%d") {
-                                            Ok(due_date) => Some(due_date),
+                                            Ok(due_date) => Some(due_date.to_string()),
                                             Err(e) => {
                                                 debug!("Invalid due date: {}", e);
                                                 debug!("Due date: {}", new_card_due_date);
@@ -550,7 +550,24 @@ impl App {
                                 AppReturn::Continue
                             }
                             _ => {
-                                AppReturn::Continue
+                                match self.focus {
+                                    Focus::Body => {
+                                        // delete the current board from self.boards
+                                        if let Some(current_board) = self.state.current_board.clone() {
+                                            // find index of current board id in self.boards
+                                            let index = self.boards.iter().position(|board| board.id == current_board);
+                                            if let Some(index) = index {
+                                                self.boards.remove(index);
+                                                self.state.current_board = None;
+                                                // remove the key in self.visible_boards_and_cards
+                                                self.visible_boards_and_cards.remove(&current_board);
+                                                self.refresh_visible_boards();
+                                            }
+                                        }
+                                        AppReturn::Continue
+                                    },
+                                    _ => AppReturn::Continue   
+                                }
                             }
                         }
                     }
@@ -736,6 +753,7 @@ impl App {
                 self.set_visible_boards_and_cards()
             }
         }
+        debug!("Visible boards and cards: {:?}", self.visible_boards_and_cards);
     }
 }
 
