@@ -753,6 +753,9 @@ where
             .split(board_chunks[board_index]);
 
         for (card_index, card_id) in board_cards.iter().enumerate() {
+            if card_index > NO_OF_CARDS_PER_BOARD.into() {
+                break;
+            }
             // unwrap card if panic skip it and log it
             let mut card = board.get_card(*card_id);
             // check if card is None, if so skip it and log it
