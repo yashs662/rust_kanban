@@ -16,7 +16,7 @@ use self::state::UiMode;
 use self::kanban::{Board, Card, CardPriority};
 use crate::app::actions::Action;
 use crate::constants::{
-    SAVE_DIR_NAME, NO_OF_BOARDS_PER_PAGE, FIELD_NOT_SET
+    SAVE_DIR_NAME, NO_OF_BOARDS_PER_PAGE, FIELD_NOT_SET, NO_OF_CARDS_PER_BOARD
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{write_config, get_available_local_savefiles};
@@ -205,7 +205,7 @@ impl App {
                         }
                         else {
                             if self.focus == Focus::Body {
-                                info!("Scrolling up");
+                                self.dispatch(IoEvent::GoUp).await;
                             }
                         }
                         AppReturn::Continue
@@ -222,20 +222,20 @@ impl App {
                         }
                         else {
                             if self.focus == Focus::Body {
-                                info!("Scrolling down");
+                                self.dispatch(IoEvent::GoDown).await;
                             }
                         }
                         AppReturn::Continue
                     }
                     Action::Right => {
                         if self.focus == Focus::Body {
-                            
+                            self.dispatch(IoEvent::GoRight).await;
                         }
                         AppReturn::Continue
                     }
                     Action::Left => {
                         if self.focus == Focus::Body {
-                            
+                            self.dispatch(IoEvent::GoLeft).await;
                         }
                         AppReturn::Continue
                     }
@@ -361,7 +361,6 @@ impl App {
                                         warn!("New board name is empty or already exists");
                                     }
                                     self.ui_mode = self.prev_ui_mode.clone();
-                                    self.refresh_visible_boards();
                                 }
                                 AppReturn::Continue
                             }
@@ -372,7 +371,7 @@ impl App {
                                     let new_card_description = self.state.new_card_form[1].clone();
                                     let new_card_due_date = self.state.new_card_form[2].clone();
                                     let mut same_name_exists = false;
-                                    let current_board_id = self.state.current_board.unwrap_or(0);
+                                    let current_board_id = self.state.current_board_id.unwrap_or(0);
                                     let current_board = self.boards.iter().find(|board| board.id == current_board_id);
                                     if let Some(current_board) = current_board {
                                         for card in current_board.cards.iter() {
@@ -416,7 +415,6 @@ impl App {
                                             return AppReturn::Continue;
                                         }
                                         self.ui_mode = self.prev_ui_mode.clone();
-                                        self.refresh_visible_boards();
                                     } else {
                                         warn!("New card name is empty or already exists");
                                     }
@@ -535,7 +533,7 @@ impl App {
                     }
                     Action::NewCard => {
                         // check if current board is not empty
-                        if self.state.current_board.is_none() {
+                        if self.state.current_board_id.is_none() {
                             warn!("No board available to add card to");
                             return AppReturn::Continue;
                         }
@@ -553,15 +551,14 @@ impl App {
                                 match self.focus {
                                     Focus::Body => {
                                         // delete the current board from self.boards
-                                        if let Some(current_board) = self.state.current_board.clone() {
+                                        if let Some(current_board) = self.state.current_board_id.clone() {
                                             // find index of current board id in self.boards
                                             let index = self.boards.iter().position(|board| board.id == current_board);
                                             if let Some(index) = index {
                                                 self.boards.remove(index);
-                                                self.state.current_board = None;
+                                                self.state.current_board_id = None;
                                                 // remove the key in self.visible_boards_and_cards
                                                 self.visible_boards_and_cards.remove(&current_board);
-                                                self.refresh_visible_boards();
                                             }
                                         }
                                         AppReturn::Continue
@@ -717,14 +714,21 @@ impl App {
             }
         }
     }
-    pub fn set_visible_boards_and_cards(&mut self) {
+    pub fn set_visible_boards_and_cards_on_load(&mut self) {
         // get self.boards and make Vec<BTreeMap<u128, Vec<u128>>> of visible boards and cards
         let mut visible_boards_and_cards: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
         for board in &self.boards {
             let mut visible_cards: Vec<u128> = Vec::new();
-            for card in &board.cards {
-                visible_cards.push(card.id);
+            if board.cards.len() > NO_OF_CARDS_PER_BOARD.into() {
+                for card in board.cards.iter().take(NO_OF_CARDS_PER_BOARD.into()) {
+                    visible_cards.push(card.id);
+                }
+            } else {
+                for card in &board.cards {
+                    visible_cards.push(card.id);
+                }
             }
+
             let mut visible_board: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
             visible_board.insert(board.id, visible_cards);
             visible_boards_and_cards.extend(visible_board);
@@ -732,27 +736,13 @@ impl App {
         self.visible_boards_and_cards = visible_boards_and_cards;
         // if exists set first board and card as current_board and current_card
         if let Some((board_id, card_ids)) = self.visible_boards_and_cards.iter().next() {
-            self.state.current_board = Some(*board_id);
+            self.state.current_board_id = Some(*board_id);
             if let Some(card_id) = card_ids.iter().next() {
-                self.state.current_card = Some(*card_id);
+                self.state.current_card_id = Some(*card_id);
             }
         }
-        debug!("Current board: {:?}", self.state.current_board);
-        debug!("Current card: {:?}", self.state.current_card);
-        debug!("Visible boards and cards: {:?}", self.visible_boards_and_cards);
-    }
-
-    pub fn refresh_visible_boards(&mut self) {
-        // check if self.visible_boards_and_cards is empty
-        if self.visible_boards_and_cards.is_empty() {
-            // if empty set self.boards as visible boards
-            self.set_visible_boards_and_cards();
-        } else {
-            // if visible boards and cards length is less than NO_BOARDS_PER_PAGE
-            if self.visible_boards_and_cards.len() < NO_OF_BOARDS_PER_PAGE.into() {
-                self.set_visible_boards_and_cards()
-            }
-        }
+        debug!("Current board: {:?}", self.state.current_board_id);
+        debug!("Current card: {:?}", self.state.current_card_id);
         debug!("Visible boards and cards: {:?}", self.visible_boards_and_cards);
     }
 }
@@ -808,8 +798,8 @@ impl MainMenu {
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub status: AppStatus,
-    pub current_board: Option<u128>,
-    pub current_card: Option<u128>,
+    pub current_board_id: Option<u128>,
+    pub current_card_id: Option<u128>,
     pub main_menu_state: ListState,
     pub config_state: ListState,
     pub new_board_form: Vec<String>,
@@ -821,8 +811,8 @@ impl Default for AppState {
     fn default() -> AppState {
         AppState {
             status: AppStatus::default(),
-            current_board: None,
-            current_card: None,
+            current_board_id: None,
+            current_card_id: None,
             main_menu_state: ListState::default(),
             config_state: ListState::default(),
             new_board_form: vec![String::new(), String::new()],

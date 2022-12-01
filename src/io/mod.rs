@@ -9,5 +9,9 @@ pub enum IoEvent {
     Reset,
     SaveLocalData,
     LoadSave,
-    DeleteSave
+    DeleteSave,
+    GoRight,
+    GoLeft,
+    GoUp,
+    GoDown,
 }

@@ -1,10 +1,14 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::{sync::Arc, path::PathBuf};
 use crate::app::kanban::Board;
 use std::env;
 use crate::constants::{
     CONFIG_DIR_NAME,
-    CONFIG_FILE_NAME, SAVE_DIR_NAME
+    CONFIG_FILE_NAME,
+    SAVE_DIR_NAME,
+    NO_OF_BOARDS_PER_PAGE,
+    NO_OF_CARDS_PER_BOARD
 };
 use crate::app::AppConfig;
 use crate::io::data_handler::{reset_config, save_kanban_state_locally, get_config};
@@ -35,6 +39,10 @@ impl IoAsyncHandler {
             IoEvent::SaveLocalData => self.save_local_data().await,
             IoEvent::LoadSave => self.load_save_file().await,
             IoEvent::DeleteSave => self.delete_save_file().await,
+            IoEvent::GoRight => self.go_right().await,
+            IoEvent::GoLeft => self.go_left().await,
+            IoEvent::GoUp => self.go_up().await,
+            IoEvent::GoDown => self.go_down().await,
         };
 
         if let Err(err) = result {
@@ -56,7 +64,7 @@ impl IoAsyncHandler {
             error!("Cannot create save directory");
         }
         app.boards = prepare_boards();
-        app.set_visible_boards_and_cards();
+        app.set_visible_boards_and_cards_on_load();
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
         Ok(())
@@ -156,6 +164,330 @@ impl IoAsyncHandler {
             } else {
                 info!("👍 Save file deleted");
             }
+        }
+        Ok(())
+    }
+
+    async fn go_right(&mut self) -> Result<()> {
+        let mut app = self.app.lock().await;
+        let current_visible_boards = app.visible_boards_and_cards.clone();
+        let all_boards = app.boards.clone();
+        let current_board_id = app.state.current_board_id;
+        // check if current_board_id is set, if not assign to the first board
+        let current_board_id = if current_board_id.is_none() {
+            all_boards[0].id
+        } else {
+            current_board_id.unwrap()
+        };
+        // check if the current board is the last one in visible_boards which is a btreemap of board_id and card_ids
+        let current_board_index = current_visible_boards
+            .iter()
+            .position(|(board_id, _)| *board_id == current_board_id);
+        if current_board_index.is_none() {
+            error!("Cannot go right: current board not found");
+            return Ok(());
+        }
+        let current_board_index = current_board_index.unwrap();
+        if current_board_index == current_visible_boards.len() - 1 {
+            // we are at the last board, check the index for the current board in all boards, if it is the last one, we cannot go right
+            let current_board_index_in_all_boards = all_boards
+                .iter()
+                .position(|board| board.id == current_board_id);
+            if current_board_index_in_all_boards.is_none() {
+                error!("Cannot go right: current board not found");
+                return Ok(());
+            }
+            let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
+            if current_board_index_in_all_boards == all_boards.len() - 1 {
+                // we are at the last board, we cannot go right
+                error!("Cannot go right: we are at the last board");
+                return Ok(());
+            }
+            // we are not at the last board, we can go right
+            // get the next NO_OF_BOARDS_PER_PAGE boards
+            let next_board_index = current_board_index_in_all_boards + 1;
+            let next_board_index = if next_board_index + NO_OF_BOARDS_PER_PAGE as usize > all_boards.len() {
+                all_boards.len() - NO_OF_BOARDS_PER_PAGE as usize
+            } else {
+                next_board_index
+            };
+            let next_boards = all_boards[next_board_index..next_board_index + NO_OF_BOARDS_PER_PAGE as usize].to_vec();
+            let mut visible_boards_and_cards = BTreeMap::new();
+            for board in &next_boards {
+                let card_ids = board.cards.iter().map(|card| card.id).collect::<Vec<u128>>();
+                visible_boards_and_cards.insert(board.id, card_ids);
+            }
+            app.visible_boards_and_cards = visible_boards_and_cards;
+            app.state.current_board_id = Some(next_boards[0].id);
+            // reset the current card id
+            app.state.current_card_id = None;
+        } else {
+            // we are not at the last board, we can go right
+            let next_board_id = current_visible_boards
+                .iter()
+                .nth(current_board_index + 1)
+                .unwrap()
+                .0
+                .clone();
+            app.state.current_board_id = Some(next_board_id);
+            // reset the current card id
+            app.state.current_card_id = None;
+        }
+        Ok(())
+    }
+
+    async fn go_left(&mut self) -> Result<()> {
+        let mut app = self.app.lock().await;
+        let current_visible_boards = app.visible_boards_and_cards.clone();
+        let all_boards = app.boards.clone();
+        let current_board_id = app.state.current_board_id;
+        // check if current_board_id is set, if not assign to the first board
+        let current_board_id = if current_board_id.is_none() {
+            all_boards[0].id
+        } else {
+            current_board_id.unwrap()
+        };
+        // check if the current board is the first one in visible_boards which is a btreemap of board_id and card_ids
+        let current_board_index = current_visible_boards
+            .iter()
+            .position(|(board_id, _)| *board_id == current_board_id);
+        if current_board_index.is_none() {
+            error!("Cannot go left: current board not found");
+            return Ok(());
+        }
+        let current_board_index = current_board_index.unwrap();
+        if current_board_index == 0 {
+            // we are at the first board, check the index for the current board in all boards, if it is the first one, we cannot go left
+            let current_board_index_in_all_boards = all_boards
+                .iter()
+                .position(|board| board.id == current_board_id);
+            if current_board_index_in_all_boards.is_none() {
+                error!("Cannot go left: current board not found");
+                return Ok(());
+            }
+            let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
+            if current_board_index_in_all_boards == 0 {
+                // we are at the first board, we cannot go left
+                error!("Cannot go left: we are at the first board");
+                return Ok(());
+            }
+            // we are not at the first board, we can go left
+            // get the previous NO_OF_BOARDS_PER_PAGE boards
+            let previous_board_index = current_board_index_in_all_boards - 1;
+            let previous_board_index = if previous_board_index < NO_OF_BOARDS_PER_PAGE as usize {
+                0
+            } else {
+                previous_board_index - NO_OF_BOARDS_PER_PAGE as usize
+            };
+            let previous_boards = all_boards[previous_board_index..previous_board_index + NO_OF_BOARDS_PER_PAGE as usize].to_vec();
+            let mut visible_boards_and_cards = BTreeMap::new();
+            for board in &previous_boards {
+                let card_ids = board.cards.iter().map(|card| card.id).collect::<Vec<u128>>();
+                visible_boards_and_cards.insert(board.id, card_ids);
+            }
+            app.visible_boards_and_cards = visible_boards_and_cards;
+            app.state.current_board_id = Some(previous_boards[NO_OF_BOARDS_PER_PAGE as usize - 1].id);
+            // reset the current card id
+            app.state.current_card_id = None;
+        } else {
+            // we are not at the first board, we can go left
+            let previous_board_id = current_visible_boards
+                .iter()
+                .nth(current_board_index - 1)
+                .unwrap()
+                .0
+                .clone();
+            app.state.current_board_id = Some(previous_board_id);
+            // reset the current card id
+            app.state.current_card_id = None;
+        }
+        Ok(())
+    }
+
+    async fn go_up(&mut self) -> Result<()> {
+        let mut app = self.app.lock().await;
+        // up and down is for cards
+        let current_visible_boards = app.visible_boards_and_cards.clone();
+        let current_board_id = app.state.current_board_id;
+        let current_card_id = app.state.current_card_id;
+        let current_board_id = if current_board_id.is_none() {
+            app.boards[0].id
+        } else {
+            current_board_id.unwrap()
+        };
+        let current_card_id = if current_card_id.is_none() {
+            // get the first card of the current board
+            let current_board = app.boards.iter().find(|board| board.id == current_board_id);
+            if current_board.is_none() {
+                error!("Cannot go up: current board not found");
+                return Ok(());
+            }
+            let current_board = current_board.unwrap();
+            if current_board.cards.is_empty() {
+                error!("Cannot go up: current board has no cards");
+                return Ok(());
+            }
+            current_board.cards[0].id
+        } else {
+            current_card_id.unwrap()
+        };
+        let current_card_index = current_visible_boards
+            .iter()
+            .find(|(board_id, _)| **board_id == current_board_id)
+            .unwrap()
+            .1
+            .iter()
+            .position(|card_id| *card_id == current_card_id);
+        if current_card_index.is_none() {
+            error!("Cannot go up: current card not found");
+            return Ok(());
+        }
+        let current_card_index = current_card_index.unwrap();
+        if current_card_index == 0 {
+            let current_card_index_in_all_cards = app
+                .boards
+                .iter()
+                .find(|board| board.id == current_board_id)
+                .unwrap()
+                .cards
+                .iter()
+                .position(|card| card.id == current_card_id);
+            if current_card_index_in_all_cards.is_none() {
+                error!("Cannot go up: current card not found");
+                return Ok(());
+            }
+            let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
+            if current_card_index_in_all_cards == 0 {
+                // we are at the first card, we cannot go up
+                error!("Cannot go up: we are at the first card");
+                return Ok(());
+            }
+            // we are not at the first card, we can go up
+            // get the previous NO_OF_CARDS_PER_PAGE cards
+            let previous_card_index = current_card_index_in_all_cards - 1;
+            let previous_card_index = if previous_card_index < NO_OF_CARDS_PER_BOARD as usize {
+                0
+            } else {
+                previous_card_index - NO_OF_CARDS_PER_BOARD as usize
+            };
+            let previous_cards = app
+                .boards
+                .iter()
+                .find(|board| board.id == current_board_id)
+                .unwrap()
+                .cards[previous_card_index..previous_card_index + NO_OF_CARDS_PER_BOARD as usize]
+                .to_vec();
+            let mut visible_boards_and_cards = app.visible_boards_and_cards.clone();
+            // replace the cards of the current board
+            visible_boards_and_cards.insert(current_board_id, previous_cards.iter().map(|card| card.id).collect::<Vec<u128>>());
+            app.visible_boards_and_cards = visible_boards_and_cards;
+            app.state.current_card_id = Some(previous_cards[NO_OF_CARDS_PER_BOARD as usize - 1].id);
+        } else {
+            // we are not at the first card, we can go up
+            let previous_card_id = current_visible_boards
+                .iter()
+                .find(|(board_id, _)| **board_id == current_board_id)
+                .unwrap()
+                .1
+                .iter()
+                .nth(current_card_index - 1)
+                .unwrap()
+                .clone();
+            app.state.current_card_id = Some(previous_card_id);
+        }
+        Ok(())
+    }
+
+    async fn go_down(&mut self) -> Result<()> {
+        let mut app = self.app.lock().await;
+        // up and down is for cards
+        let current_visible_boards = app.visible_boards_and_cards.clone();
+        let current_board_id = app.state.current_board_id;
+        let current_card_id = app.state.current_card_id;
+        let current_board_id = if current_board_id.is_none() {
+            app.boards[0].id
+        } else {
+            current_board_id.unwrap()
+        };
+        let current_card_id = if current_card_id.is_none() {
+            // get the first card of the current board
+            let current_board = app.boards.iter().find(|board| board.id == current_board_id);
+            if current_board.is_none() {
+                error!("Cannot go down: current board not found");
+                return Ok(());
+            }
+            let current_board = current_board.unwrap();
+            if current_board.cards.is_empty() {
+                error!("Cannot go down: current board has no cards");
+                return Ok(());
+            }
+            current_board.cards[0].id
+        } else {
+            current_card_id.unwrap()
+        };
+        let current_card_index = current_visible_boards
+            .iter()
+            .find(|(board_id, _)| **board_id == current_board_id)
+            .unwrap()
+            .1
+            .iter()
+            .position(|card_id| *card_id == current_card_id);
+        if current_card_index.is_none() {
+            error!("Cannot go down: current card not found");
+            return Ok(());
+        }
+        let current_card_index = current_card_index.unwrap();
+        if current_card_index == NO_OF_CARDS_PER_BOARD as usize - 1 {
+            let current_card_index_in_all_cards = app
+                .boards
+                .iter()
+                .find(|board| board.id == current_board_id)
+                .unwrap()
+                .cards
+                .iter()
+                .position(|card| card.id == current_card_id);
+            if current_card_index_in_all_cards.is_none() {
+                error!("Cannot go down: current card not found");
+                return Ok(());
+            }
+            let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
+            if current_card_index_in_all_cards == app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.len() - 1 {
+                // we are at the last card, we cannot go down
+                error!("Cannot go down: we are at the last card");
+                return Ok(());
+            }
+            // we are not at the last card, we can go down
+            // get the next NO_OF_CARDS_PER_PAGE cards
+            let next_card_index = current_card_index_in_all_cards + 1;
+            let next_card_index = if next_card_index + NO_OF_CARDS_PER_BOARD as usize > app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.len() {
+                app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.len() - NO_OF_CARDS_PER_BOARD as usize
+            } else {
+                next_card_index
+            };
+            let next_cards = app
+                .boards
+                .iter()
+                .find(|board| board.id == current_board_id)
+                .unwrap()
+                .cards[next_card_index..next_card_index + NO_OF_CARDS_PER_BOARD as usize]
+                .to_vec();
+            let mut visible_boards_and_cards = app.visible_boards_and_cards.clone();
+            // replace the cards of the current board
+            visible_boards_and_cards.insert(current_board_id, next_cards.iter().map(|card| card.id).collect::<Vec<u128>>());
+            app.visible_boards_and_cards = visible_boards_and_cards;
+            app.state.current_card_id = Some(next_cards[0].id);
+        } else {
+            // we are not at the last card, we can go down
+            let next_card_id = current_visible_boards
+                .iter()
+                .find(|(board_id, _)| **board_id == current_board_id)
+                .unwrap()
+                .1
+                .iter()
+                .nth(current_card_index + 1)
+                .unwrap()
+                .clone();
+            app.state.current_card_id = Some(next_card_id);
         }
         Ok(())
     }
