@@ -13,7 +13,7 @@ use crate::constants::{
 use crate::app::AppConfig;
 use crate::io::data_handler::{reset_config, save_kanban_state_locally, get_config};
 use eyre::Result;
-use log::{error, info};
+use log::{error, info, debug};
 
 use super::IoEvent;
 use super::data_handler::{get_available_local_savefiles, get_local_kanban_state};
@@ -200,7 +200,6 @@ impl IoAsyncHandler {
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
             if current_board_index_in_all_boards == all_boards.len() - 1 {
                 // we are at the last board, we cannot go right
-                error!("Cannot go right: we are at the last board");
                 return Ok(());
             }
             // we are not at the last board, we can go right
@@ -230,8 +229,18 @@ impl IoAsyncHandler {
                 .0
                 .clone();
             app.state.current_board_id = Some(next_board_id);
-            // reset the current card id
-            app.state.current_card_id = None;
+            // reset the current card id to first card of current board from visible_boards if there is any
+            let current_board_cards = current_visible_boards
+                .iter()
+                .find(|(board_id, _)| **board_id == next_board_id)
+                .unwrap()
+                .1
+                .clone();
+            if current_board_cards.len() > 0 {
+                app.state.current_card_id = Some(current_board_cards[0]);
+            } else {
+                app.state.current_card_id = None;
+            }
         }
         Ok(())
     }
@@ -268,7 +277,6 @@ impl IoAsyncHandler {
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
             if current_board_index_in_all_boards == 0 {
                 // we are at the first board, we cannot go left
-                error!("Cannot go left: we are at the first board");
                 return Ok(());
             }
             // we are not at the first board, we can go left
@@ -298,8 +306,18 @@ impl IoAsyncHandler {
                 .0
                 .clone();
             app.state.current_board_id = Some(previous_board_id);
-            // reset the current card id
-            app.state.current_card_id = None;
+            // reset the current card id to first card of current board from visible_boards if there is any
+            let current_visible_cards = current_visible_boards
+                .iter()
+                .find(|(board_id, _)| **board_id == previous_board_id)
+                .unwrap()
+                .1
+                .clone();
+            if current_visible_cards.len() > 0 {
+                app.state.current_card_id = Some(current_visible_cards[0]);
+            } else {
+                app.state.current_card_id = None;
+            }
         }
         Ok(())
     }
@@ -359,7 +377,6 @@ impl IoAsyncHandler {
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
             if current_card_index_in_all_cards == 0 {
                 // we are at the first card, we cannot go up
-                error!("Cannot go up: we are at the first card");
                 return Ok(());
             }
             // we are not at the first card, we can go up
@@ -391,9 +408,15 @@ impl IoAsyncHandler {
                 .1
                 .iter()
                 .nth(current_card_index - 1)
-                .unwrap()
+                .unwrap_or(&0)
                 .clone();
-            app.state.current_card_id = Some(previous_card_id);
+            // check if previous_card_id is 0
+            if previous_card_id == 0 {
+                error!("Cannot go up: previous card not found");
+                return Ok(());
+            } else {
+                app.state.current_card_id = Some(previous_card_id);
+            }
         }
         Ok(())
     }
@@ -453,7 +476,6 @@ impl IoAsyncHandler {
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
             if current_card_index_in_all_cards == app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.len() - 1 {
                 // we are at the last card, we cannot go down
-                error!("Cannot go down: we are at the last card");
                 return Ok(());
             }
             // we are not at the last card, we can go down
@@ -485,9 +507,14 @@ impl IoAsyncHandler {
                 .1
                 .iter()
                 .nth(current_card_index + 1)
-                .unwrap()
+                .unwrap_or(&0)
                 .clone();
-            app.state.current_card_id = Some(next_card_id);
+            // check if next_card_id is not 0
+            if next_card_id == 0 {
+                return Ok(());
+            } else {
+                app.state.current_card_id = Some(next_card_id);
+            }
         }
         Ok(())
     }

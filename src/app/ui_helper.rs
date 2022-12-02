@@ -648,7 +648,6 @@ where
     let focus = &app.focus;
     let boards = &app.boards;
     let current_board = &app.state.current_board_id.unwrap_or(0);
-    let current_card = &app.state.current_card_id.unwrap_or(0);
 
     // check if self.visible_boards_and_cards is empty
     if app.visible_boards_and_cards.is_empty() {
@@ -697,6 +696,10 @@ where
     let visible_boards_and_cards = app.visible_boards_and_cards.clone();
     for (board_index, board_and_card_tuple) in visible_boards_and_cards.iter().enumerate() {
         // render board with title in board chunks alongside with cards in card chunks of the board
+        // break if board_index is more than NO_OF_BOARDS_PER_PAGE
+        if board_index >= NO_OF_BOARDS_PER_PAGE.into() {
+            break;
+        }
         let mut more_cards = false;
         let board_id = board_and_card_tuple.0;
         // find index of board with board_id in boards
@@ -740,6 +743,19 @@ where
             continue;
         }
 
+        let board_style = if *board_id == *current_board && matches!(focus, Focus::Body) && app.state.current_card_id == None {
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            NON_FOCUSED_ELEMENT_STYLE
+        };
+        
+        let board_block = Block::default()
+            .title(&*board_title)
+            .borders(Borders::ALL)
+            .style(board_style)
+            .border_type(BorderType::Plain);
+        rect.render_widget(board_block, board_chunks[board_index]);
+
         let card_chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
@@ -765,7 +781,7 @@ where
                 card_title
             };
 
-            let card_title = if card_index as u128 == *current_card {
+            let card_title = if app.state.current_card_id.unwrap_or(0) == *card_id {
                 format!("{} {}", ">>", card_title)
             } else {
                 card_title
@@ -783,7 +799,7 @@ where
             card_description.extend(card_status);
 
             // if card id is same as current_card, highlight it
-            let card_style = if card_index as u128 == *current_card && matches!(focus, Focus::Body){
+            let card_style = if app.state.current_card_id.unwrap_or(0) == *card_id && matches!(focus, Focus::Body) && *board_id == *current_board {
                 FOCUSED_ELEMENT_STYLE
             } else {
                 NON_FOCUSED_ELEMENT_STYLE
@@ -818,19 +834,6 @@ where
 
             rect.render_widget(more_cards_paragraph, card_chunks[card_chunks.len() - 1]);
         }
-        
-        let board_style = if *board_id == *current_board && matches!(focus, Focus::Body) {
-            FOCUSED_ELEMENT_STYLE
-        } else {
-            NON_FOCUSED_ELEMENT_STYLE
-        };
-        
-        let board_block = Block::default()
-            .title(&*board_title)
-            .borders(Borders::ALL)
-            .style(board_style)
-            .border_type(BorderType::Plain);
-        rect.render_widget(board_block, board_chunks[board_index]);
     }
 
     if more_boards {
@@ -850,7 +853,7 @@ where
     let current_board_index = boards
         .iter()
         .position(|board| board.id == current_board_id)
-        .unwrap_or(0);
+        .unwrap_or(0) + 1;
     let percentage = (current_board_index as f64 / boards.len() as f64) * 100.0;
     let line_gauge = Gauge::default()
         .block(Block::default())

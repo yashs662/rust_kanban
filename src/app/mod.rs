@@ -16,7 +16,9 @@ use self::state::UiMode;
 use self::kanban::{Board, Card, CardPriority};
 use crate::app::actions::Action;
 use crate::constants::{
-    SAVE_DIR_NAME, NO_OF_BOARDS_PER_PAGE, FIELD_NOT_SET, NO_OF_CARDS_PER_BOARD
+    SAVE_DIR_NAME,
+    FIELD_NOT_SET,
+    NO_OF_CARDS_PER_BOARD
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{write_config, get_available_local_savefiles};
@@ -599,6 +601,8 @@ impl App {
         .into();
         if self.ui_mode == UiMode::MainMenu {
             self.main_menu_next();
+        } else if self.focus == Focus::NoFocus {
+            self.focus = Focus::Body;
         }
         self.state.status = AppStatus::initialized()
     }
