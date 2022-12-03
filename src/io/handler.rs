@@ -416,7 +416,9 @@ impl IoAsyncHandler {
                 .to_vec();
             let mut visible_boards_and_cards = app.visible_boards_and_cards.clone();
             // replace the cards of the current board
-            visible_boards_and_cards.insert(current_board_id, previous_cards.iter().map(|card| card.id).collect::<Vec<u128>>());
+            visible_boards_and_cards.entry(current_board_id).and_modify(|cards| {
+                *cards = previous_cards.iter().map(|card| card.id).collect::<Vec<u128>>()
+            });
             app.visible_boards_and_cards = visible_boards_and_cards;
             app.state.current_card_id = Some(previous_cards[NO_OF_CARDS_PER_BOARD as usize - 1].id);
         } else {
@@ -515,7 +517,9 @@ impl IoAsyncHandler {
                 .to_vec();
             let mut visible_boards_and_cards = app.visible_boards_and_cards.clone();
             // replace the cards of the current board
-            visible_boards_and_cards.insert(current_board_id, next_cards.iter().map(|card| card.id).collect::<Vec<u128>>());
+            visible_boards_and_cards.entry(current_board_id).and_modify(|cards| {
+                *cards = next_cards.iter().map(|card| card.id).collect::<Vec<u128>>()
+            });
             app.visible_boards_and_cards = visible_boards_and_cards;
             app.state.current_card_id = Some(next_cards[0].id);
         } else {
