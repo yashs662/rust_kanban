@@ -70,7 +70,7 @@ pub struct App {
     pub boards: Vec<kanban::Board>,
     current_user_input: String,
     prev_ui_mode: UiMode,
-    config: AppConfig,
+    pub config: AppConfig,
     config_item_being_edited: Option<usize>,
     pub visible_boards_and_cards: BTreeMap<u128, Vec<u128>>,
 }
@@ -309,6 +309,7 @@ impl App {
                     Action::Enter => {
                         match self.ui_mode {
                             UiMode::Config => {
+                                self.state.config_state.select(Some(0));
                                 self.prev_ui_mode = self.ui_mode.clone();
                                 self.ui_mode = UiMode::EditConfig;
                                 self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
@@ -339,6 +340,7 @@ impl App {
                             UiMode::MainMenu => {
                                 let selected = self.state.main_menu_state.selected().unwrap_or(0);
                                 let selected_item = MainMenu::from_index(selected);
+                                self.state.main_menu_state.select(Some(0));
                                 match selected_item {
                                     MainMenuItem::Quit => {
                                         AppReturn::Exit

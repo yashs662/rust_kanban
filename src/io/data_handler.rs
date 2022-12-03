@@ -7,6 +7,7 @@ use log::{
     info
 };
 extern crate savefile;
+use regex::Regex;
 use savefile::prelude::*;
 
 
@@ -110,12 +111,12 @@ pub fn get_available_local_savefiles<'a>() -> Vec<String> {
     for file in files {
         let file = file.unwrap();
         let file_name = file.file_name().into_string().unwrap();
-        if file_name.contains(SAVE_FILE_NAME) {
-            savefiles.push(file_name);
-        }
+        savefiles.push(file_name);
     }
-    savefiles.retain(|file_name| {
-        file_name.starts_with(SAVE_FILE_NAME) && file_name.contains("_v")
-    });
+    // keep only the files which have follow the pattern SAVEFILE_NAME_<NaiveDate in format DD-MM-YYYY>_v<version number>
+    // example kanban_02-12-2022_v7
+    // use regex to match the pattern
+    let re = Regex::new(r"^kanban_\d{2}-\d{2}-\d{4}_v\d+$").unwrap();
+    savefiles.retain(|file| re.is_match(file));
     savefiles
 }

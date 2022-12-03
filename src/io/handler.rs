@@ -5,6 +5,7 @@ use std::{
     path::PathBuf
 };
 use crate::app::kanban::Board;
+use crate::app::state::UiMode;
 use std::env;
 use crate::constants::{
     CONFIG_DIR_NAME,
@@ -22,6 +23,7 @@ use crate::io::data_handler::{
     save_kanban_state_locally,
     get_config
 };
+use chrono::NaiveDate;
 use eyre::Result;
 use log::{
     error,
@@ -80,7 +82,7 @@ impl IoAsyncHandler {
         if !prepare_save_dir() {
             error!("Cannot create save directory");
         }
-        app.boards = prepare_boards();
+        app.boards = prepare_boards(&mut app);
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
@@ -676,45 +678,52 @@ fn prepare_save_dir() -> bool {
     true
 }
 
-fn prepare_boards () -> Vec<Board> {
-    let mut local_save_files = get_available_local_savefiles();
-    // keep only the files which have _v 
-    local_save_files = local_save_files
-        .iter()
-        .filter(|file| file.contains("_v"))
-        .map(|file| file.to_string())
-        .collect();
-    let fall_back_version = "1".to_string();
-    // parse file naming scheme to gett the latest file with the latest version
-    // kanban_DD-MM-YYYY_V{version}
-    // if local_save_files is empty, return empty vec
-    if local_save_files.is_empty() {
-        return vec![];
-    }
-    let mut latest_save_file = local_save_files[0].clone();
-    let mut latest_version = fall_back_version.clone();
-    for save_file in local_save_files {
-        let save_file_name = &save_file;
-        let version = save_file_name.split("_v").collect::<Vec<&str>>()[1].to_string();
-        if version > latest_version {
-            latest_version = version.to_string();
-            latest_save_file = save_file;
+fn prepare_boards (app: &mut App) -> Vec<Board> {
+    let config = get_config();
+    if config.always_load_latest_save {
+        let local_save_files = get_available_local_savefiles();
+        let fall_back_version = "1".to_string();
+        // if local_save_files is empty, return empty vec
+        if local_save_files.is_empty() {
+            return vec![];
         }
-    }
-    // get v1, v2 version number from latest_version
-    let mut version_number = latest_version.split("v").collect::<Vec<&str>>();
-    let last_version_number = version_number.pop().unwrap_or("1");
-    let last_version_number = last_version_number.parse::<u32>().unwrap_or(1);
-    let local_data = get_local_kanban_state(latest_save_file.clone(), last_version_number);
-    match local_data {
-        Ok(data) => {
-            info!("👍 Local data loaded from {:?}", latest_save_file);
-            data
-        },
-        Err(err) => {
-            error!("Cannot get local data: {:?}", err);
-            info!("👍 Local data loaded from default");
-            vec![Board::default()]
-        },
+        let latest_date = local_save_files
+            .iter()
+            .map(|file| {
+                let date = file.split("_").collect::<Vec<&str>>()[1];
+                let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
+                date
+            })
+            .max()
+            .unwrap();
+        let latest_version = local_save_files
+            .iter()
+            .filter(|file| {
+                let date = file.split("_").collect::<Vec<&str>>()[1];
+                let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
+                date == latest_date
+            })
+            .map(|file| {
+                let version = file.split("_v").collect::<Vec<&str>>()[1];
+                version.to_string()
+            })
+            .max()
+            .unwrap_or(fall_back_version);
+        let latest_version = latest_version.parse::<u32>().unwrap_or(1);
+        let latest_save_file = format!("kanban_{}_v{}", latest_date.format("%d-%m-%Y"), latest_version);
+        let local_data = get_local_kanban_state(latest_save_file.clone(), latest_version);
+        match local_data {
+            Ok(data) => {
+                info!("👍 Local data loaded from {:?}", latest_save_file);
+                data
+            },
+            Err(err) => {
+                error!("Cannot get local data: {:?}", err);
+                vec![]
+            },
+        }
+    } else {
+        app.set_ui_mode(UiMode::LoadSave);
+        vec![]
     }
 }
