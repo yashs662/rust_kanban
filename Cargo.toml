@@ -24,3 +24,4 @@ savefile-derive = "0.11.0"
 savefile = "0.11.0"
 uuid = { version = "1.2.2", features = ["v4"] }
 regex = "1.7.0"
+linked-hash-map = "0.5.6"

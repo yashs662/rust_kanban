@@ -719,7 +719,7 @@ where
         .direction(Direction::Horizontal)
         .constraints(constraints.as_ref())
         .split(chunks[0]);
-    // visible_boards_and_cards: Vec<BTreeMap<String, Vec<String>>>
+    // visible_boards_and_cards: Vec<LinkedHashMap<String, Vec<String>>>
     let visible_boards_and_cards = app.visible_boards_and_cards.clone();
     for (board_index, board_and_card_tuple) in visible_boards_and_cards.iter().enumerate() {
         // render board with title in board chunks alongside with cards in card chunks of the board

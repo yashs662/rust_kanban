@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use linked_hash_map::LinkedHashMap;
 use std::{
     env,
     vec
@@ -67,12 +67,12 @@ pub struct App {
     pub state: AppState,
     focus: Focus,
     ui_mode: UiMode,
-    pub boards: Vec<kanban::Board>,
+    pub boards: Vec<Board>,
     current_user_input: String,
     prev_ui_mode: UiMode,
     pub config: AppConfig,
     config_item_being_edited: Option<usize>,
-    pub visible_boards_and_cards: BTreeMap<u128, Vec<u128>>,
+    pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
 }
 
 impl App {
@@ -97,7 +97,7 @@ impl App {
             prev_ui_mode: UiMode::Zen,
             config: AppConfig::default(),
             config_item_being_edited: None,
-            visible_boards_and_cards: BTreeMap::new(),
+            visible_boards_and_cards: LinkedHashMap::new(),
         }
     }
 
@@ -614,7 +614,7 @@ impl App {
                                                         self.state.current_card_id = None;
                                                     }
                                                     info!("Deleted card {}", card_name);
-                                                    // remove card_id from self.visible_boards_and_cards if it is there, where visible_boards_and_cards is a BTreeMap of board_id to a vector of card_ids
+                                                    // remove card_id from self.visible_boards_and_cards if it is there, where visible_boards_and_cards is a LinkedHashMap of board_id to a vector of card_ids
                                                     if let Some(visible_cards) = self.visible_boards_and_cards.get_mut(&current_board) {
                                                         if let Some(card_index) = visible_cards.iter().position(|card_id| *card_id == current_card) {
                                                             visible_cards.remove(card_index);

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use linked_hash_map::LinkedHashMap;
 use std::path::Path;
 use std::{
     sync::Arc,
@@ -199,7 +199,7 @@ impl IoAsyncHandler {
         } else {
             current_board_id.unwrap()
         };
-        // check if the current board is the last one in visible_boards which is a btreemap of board_id and card_ids
+        // check if the current board is the last one in visible_boards which is a LinkedHashMap of board_id and card_ids
         let current_board_index = current_visible_boards
             .iter()
             .position(|(board_id, _)| *board_id == current_board_id);
@@ -231,7 +231,7 @@ impl IoAsyncHandler {
                 next_board_index
             };
             let next_boards = all_boards[next_board_index..next_board_index + NO_OF_BOARDS_PER_PAGE as usize].to_vec();
-            let mut visible_boards_and_cards = BTreeMap::new();
+            let mut visible_boards_and_cards = LinkedHashMap::new();
             for board in &next_boards {
                 let card_ids = board.cards.iter().map(|card| card.id).collect::<Vec<u128>>();
                 visible_boards_and_cards.insert(board.id, card_ids);
@@ -276,7 +276,7 @@ impl IoAsyncHandler {
         } else {
             current_board_id.unwrap()
         };
-        // check if the current board is the first one in visible_boards which is a btreemap of board_id and card_ids
+        // check if the current board is the first one in visible_boards which is a LinkedHashMap of board_id and card_ids
         let current_board_index = current_visible_boards
             .iter()
             .position(|(board_id, _)| *board_id == current_board_id);
@@ -308,7 +308,7 @@ impl IoAsyncHandler {
                 previous_board_index - NO_OF_BOARDS_PER_PAGE as usize
             };
             let previous_boards = all_boards[previous_board_index..previous_board_index + NO_OF_BOARDS_PER_PAGE as usize].to_vec();
-            let mut visible_boards_and_cards = BTreeMap::new();
+            let mut visible_boards_and_cards = LinkedHashMap::new();
             for board in &previous_boards {
                 let card_ids = board.cards.iter().map(|card| card.id).collect::<Vec<u128>>();
                 visible_boards_and_cards.insert(board.id, card_ids);
@@ -542,8 +542,8 @@ impl IoAsyncHandler {
     async fn refresh_visible_boards_and_cards(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
         debug!("Current Boards: {:?}", app.boards);
-        // get self.boards and make Vec<BTreeMap<u128, Vec<u128>>> of visible boards and cards
-        let mut visible_boards_and_cards: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
+        // get self.boards and make Vec<LinkedHashMap<u128, Vec<u128>>> of visible boards and cards
+        let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
         for board in &app.boards {
             let mut visible_cards: Vec<u128> = Vec::new();
             if board.cards.len() > NO_OF_CARDS_PER_BOARD.into() {
@@ -556,7 +556,7 @@ impl IoAsyncHandler {
                 }
             }
 
-            let mut visible_board: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
+            let mut visible_board: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
             visible_board.insert(board.id, visible_cards);
             visible_boards_and_cards.extend(visible_board);
         }
