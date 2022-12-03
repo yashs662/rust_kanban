@@ -125,13 +125,12 @@ impl IoAsyncHandler {
     }
 
     async fn load_save_file(&mut self) -> Result<()> {
-        info!("🚀 Loading save file");
         let mut app = self.app.lock().await;
         let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
         let local_files = get_available_local_savefiles();
         // check if the file exists
         if save_file_index >= local_files.len() {
-            error!("Cannot load save file: index out of range");
+            error!("Cannot load save file: No such file");
             return Ok(());
         }
         let save_file_name = local_files[save_file_index].clone();
@@ -146,6 +145,7 @@ impl IoAsyncHandler {
             error!("Cannot load save file: invalid file name");
             return Ok(());
         }
+        info!("🚀 Loading save file: {}", save_file_name);
         let version = version.unwrap();
         let board_data = get_local_kanban_state(save_file_name.clone(), version);
         match board_data {
@@ -225,7 +225,7 @@ impl IoAsyncHandler {
             // we are not at the last board, we can go right
             // get the next NO_OF_BOARDS_PER_PAGE boards
             let next_board_index = current_board_index_in_all_boards + 1;
-            let next_board_index = if next_board_index + NO_OF_BOARDS_PER_PAGE as usize > all_boards.len() {
+            let next_board_index = if (next_board_index + NO_OF_BOARDS_PER_PAGE as usize) > all_boards.len() {
                 all_boards.len() - NO_OF_BOARDS_PER_PAGE as usize
             } else {
                 next_board_index
@@ -541,6 +541,7 @@ impl IoAsyncHandler {
 
     async fn refresh_visible_boards_and_cards(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
+        debug!("Current Boards: {:?}", app.boards);
         // get self.boards and make Vec<BTreeMap<u128, Vec<u128>>> of visible boards and cards
         let mut visible_boards_and_cards: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
         for board in &app.boards {

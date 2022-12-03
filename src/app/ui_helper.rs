@@ -1256,16 +1256,28 @@ where
     rect.render_widget(title_paragraph, chunks[0]);
 
     let item_list = get_available_local_savefiles();
-    // make a list from the Vec<string> of savefiles
-    let items: Vec<ListItem> = item_list
-        .iter()
-        .map(|i| ListItem::new(i.to_string()))
-        .collect();
-    let choice_list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title("Available Saves"))
-        .highlight_style(LIST_SELECT_STYLE)
-        .highlight_symbol(LIST_SELECTED_SYMBOL);
-    rect.render_stateful_widget(choice_list, chunks[1], load_save_state);
+    if item_list.len() > 0 {
+        // make a list from the Vec<string> of savefiles
+        let items: Vec<ListItem> = item_list
+            .iter()
+            .map(|i| ListItem::new(i.to_string()))
+            .collect();
+        let choice_list = List::new(items)
+            .block(Block::default().borders(Borders::ALL).title("Available Saves"))
+            .highlight_style(LIST_SELECT_STYLE)
+            .highlight_symbol(LIST_SELECTED_SYMBOL);
+        rect.render_stateful_widget(choice_list, chunks[1], load_save_state);
+    } else {
+        let no_saves_paragraph = Paragraph::new("No saves found")
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Plain),
+            )
+            .style(LOG_ERROR_STYLE);
+        rect.render_widget(no_saves_paragraph, chunks[1]);
+    }
 
     let help_text = Spans::from(vec![
         Span::styled("<Up>", HELP_KEY_STYLE),

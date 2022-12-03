@@ -285,7 +285,11 @@ impl App {
                     Action::Escape => {
                         match self.ui_mode {
                             UiMode::Config => {
-                                self.ui_mode = self.prev_ui_mode.clone();
+                                if self.prev_ui_mode == UiMode::Config {
+                                    self.ui_mode = UiMode::MainMenu;
+                                } else {
+                                    self.ui_mode = self.prev_ui_mode.clone();
+                                }
                                 AppReturn::Continue
                             }
                             UiMode::EditConfig => {
@@ -299,6 +303,10 @@ impl App {
                                 self.ui_mode = self.prev_ui_mode.clone();
                                 AppReturn::Continue
                             }
+                            UiMode::NewCard => {
+                                self.ui_mode = self.prev_ui_mode.clone();
+                                AppReturn::Continue
+                            }
                             _ => {
                                 self.ui_mode = UiMode::MainMenu;
                                 self.main_menu_next();
@@ -309,7 +317,6 @@ impl App {
                     Action::Enter => {
                         match self.ui_mode {
                             UiMode::Config => {
-                                self.state.config_state.select(Some(0));
                                 self.prev_ui_mode = self.ui_mode.clone();
                                 self.ui_mode = UiMode::EditConfig;
                                 self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
@@ -330,11 +337,12 @@ impl App {
                                     write_config(&app_config);
 
                                     // reset everything
-                                    self.state.config_state = ListState::default();
+                                    self.state.config_state.select(Some(0));
                                     self.config_item_being_edited = None;
                                     self.current_user_input = String::new();
                                     self.ui_mode = UiMode::Config;
                                 }
+                                self.state.config_state.select(Some(0));
                                 AppReturn::Continue
                             }
                             UiMode::MainMenu => {
@@ -606,7 +614,7 @@ impl App {
                                                         self.state.current_card_id = None;
                                                     }
                                                     info!("Deleted card {}", card_name);
-                                                    // remove card_id from self.visible_boards_and_cards if it is there, where visible_boards_and_cards is a BtreeMap of board_id to a vector of card_ids
+                                                    // remove card_id from self.visible_boards_and_cards if it is there, where visible_boards_and_cards is a BTreeMap of board_id to a vector of card_ids
                                                     if let Some(visible_cards) = self.visible_boards_and_cards.get_mut(&current_board) {
                                                         if let Some(card_index) = visible_cards.iter().position(|card_id| *card_id == current_card) {
                                                             visible_cards.remove(card_index);
@@ -779,7 +787,10 @@ impl App {
     pub fn load_save_next(&mut self) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                if i >= get_available_local_savefiles().len() - 1 {
+                let local_save_files_len = get_available_local_savefiles().len();
+                if local_save_files_len == 0 {
+                    0
+                } else if i >= local_save_files_len - 1 {
                     0
                 } else {
                     i + 1
@@ -792,8 +803,11 @@ impl App {
     pub fn load_save_previous(&mut self) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                if i == 0 {
-                    get_available_local_savefiles().len() - 1
+                let local_save_files_len = get_available_local_savefiles().len();
+                if local_save_files_len == 0 {
+                    0
+                } else if i == 0 {
+                    local_save_files_len - 1
                 } else {
                     i - 1
                 }
