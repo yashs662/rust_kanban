@@ -118,5 +118,31 @@ pub fn get_available_local_savefiles<'a>() -> Vec<String> {
     // use regex to match the pattern
     let re = Regex::new(r"^kanban_\d{2}-\d{2}-\d{4}_v\d+$").unwrap();
     savefiles.retain(|file| re.is_match(file));
+    // order the files by date and version
+    savefiles.sort_by(|a, b| {
+        let a_date = a.split("_").nth(1).unwrap();
+        let b_date = b.split("_").nth(1).unwrap();
+        let a_version = a.split("_").nth(2).unwrap();
+        let b_version = b.split("_").nth(2).unwrap();
+        let a_date = chrono::NaiveDate::parse_from_str(a_date, "%d-%m-%Y").unwrap();
+        let b_date = chrono::NaiveDate::parse_from_str(b_date, "%d-%m-%Y").unwrap();
+        let a_version = a_version.split("v").nth(1).unwrap().parse::<u32>().unwrap();
+        let b_version = b_version.split("v").nth(1).unwrap().parse::<u32>().unwrap();
+        if a_date > b_date {
+            std::cmp::Ordering::Greater
+        } else if a_date < b_date {
+            std::cmp::Ordering::Less
+        } else {
+            if a_version > b_version {
+                std::cmp::Ordering::Greater
+            } else if a_version < b_version {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        }
+    });
+    // reverse the order so that the most recent save file is first
+    savefiles.reverse();
     savefiles
 }
