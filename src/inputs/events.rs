@@ -1,8 +1,11 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering
+};
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{error};
+use log::error;
 
 use super::key::Key;
 use super::InputEvent;

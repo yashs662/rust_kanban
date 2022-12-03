@@ -1,10 +1,14 @@
 use savefile_derive::Savefile;
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use crate::constants::{
-    FIELD_NOT_SET,
+use serde::{
+    Serialize,
+    Deserialize
 };
+use chrono::{
+    DateTime,
+    Utc
+};
+use uuid::Uuid;
+use crate::constants::FIELD_NOT_SET;
 
 #[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
 pub struct Board {

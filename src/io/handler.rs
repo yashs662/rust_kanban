@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::{sync::Arc, path::PathBuf};
+use std::{
+    sync::Arc,
+    path::PathBuf
+};
 use crate::app::kanban::Board;
 use std::env;
 use crate::constants::{
@@ -10,14 +13,27 @@ use crate::constants::{
     NO_OF_BOARDS_PER_PAGE,
     NO_OF_CARDS_PER_BOARD
 };
-use crate::app::AppConfig;
-use crate::io::data_handler::{reset_config, save_kanban_state_locally, get_config};
+use crate::app::{
+    AppConfig,
+    App
+};
+use crate::io::data_handler::{
+    reset_config,
+    save_kanban_state_locally,
+    get_config
+};
 use eyre::Result;
-use log::{error, info, debug};
+use log::{
+    error,
+    info,
+    debug
+};
 
 use super::IoEvent;
-use super::data_handler::{get_available_local_savefiles, get_local_kanban_state};
-use crate::app::App;
+use super::data_handler::{
+    get_available_local_savefiles,
+    get_local_kanban_state
+};
 
 /// In the IO thread, we handle IO event without blocking the UI thread
 pub struct IoAsyncHandler {
@@ -43,6 +59,7 @@ impl IoAsyncHandler {
             IoEvent::GoLeft => self.go_left().await,
             IoEvent::GoUp => self.go_up().await,
             IoEvent::GoDown => self.go_down().await,
+            IoEvent::RefreshVisibleBoardsandCards => self.refresh_visible_boards_and_cards().await,
         };
 
         if let Err(err) = result {
@@ -64,7 +81,7 @@ impl IoAsyncHandler {
             error!("Cannot create save directory");
         }
         app.boards = prepare_boards();
-        app.set_visible_boards_and_cards_on_load();
+        app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
         Ok(())
@@ -136,6 +153,7 @@ impl IoAsyncHandler {
             }
             Err(err) => error!("Cannot load save file: {:?}", err),
         }
+        app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
         Ok(())
     }
 
@@ -518,6 +536,107 @@ impl IoAsyncHandler {
         }
         Ok(())
     }
+
+    async fn refresh_visible_boards_and_cards(&mut self) -> Result<()> {
+        let mut app = self.app.lock().await;
+        // get self.boards and make Vec<BTreeMap<u128, Vec<u128>>> of visible boards and cards
+        let mut visible_boards_and_cards: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
+        for board in &app.boards {
+            let mut visible_cards: Vec<u128> = Vec::new();
+            if board.cards.len() > NO_OF_CARDS_PER_BOARD.into() {
+                for card in board.cards.iter().take(NO_OF_CARDS_PER_BOARD.into()) {
+                    visible_cards.push(card.id);
+                }
+            } else {
+                for card in &board.cards {
+                    visible_cards.push(card.id);
+                }
+            }
+
+            let mut visible_board: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
+            visible_board.insert(board.id, visible_cards);
+            visible_boards_and_cards.extend(visible_board);
+        }
+        app.visible_boards_and_cards = visible_boards_and_cards;
+        // check if current_board_id and current_card_id are still valid if not chack if current_board_id is still valid and
+        // set current_card_id to the first card of the current board, else set current_board_id to the first board and
+        // current_card_id to the first card of the current board if there are any boards and cards
+        let current_board_id = app.state.current_board_id;
+        let current_card_id = app.state.current_card_id;
+        if current_board_id.is_none() {
+            // set current_board_id to the first board
+            if app.boards.is_empty() {
+                // there are no boards
+                app.state.current_board_id = None;
+                app.state.current_card_id = None;
+            } else {
+                // there are boards
+                app.state.current_board_id = Some(app.boards[0].id);
+                // set current_card_id to the first card of the current board
+                if app.boards[0].cards.is_empty() {
+                    // there are no cards
+                    app.state.current_card_id = None;
+                } else {
+                    // there are cards
+                    app.state.current_card_id = Some(app.boards[0].cards[0].id);
+                }
+            }
+        } else {
+            // current_board_id is not None
+            let current_board_id = current_board_id.unwrap();
+            if app.boards.iter().find(|board| board.id == current_board_id).is_none() {
+                // current_board_id is not valid
+                // set current_board_id to the first board
+                if app.boards.is_empty() {
+                    // there are no boards
+                    app.state.current_board_id = None;
+                    app.state.current_card_id = None;
+                } else {
+                    // there are boards
+                    app.state.current_board_id = Some(app.boards[0].id);
+                    // set current_card_id to the first card of the current board
+                    if app.boards[0].cards.is_empty() {
+                        // there are no cards
+                        app.state.current_card_id = None;
+                    } else {
+                        // there are cards
+                        app.state.current_card_id = Some(app.boards[0].cards[0].id);
+                    }
+                }
+            } else {
+                // current_board_id is valid
+                if current_card_id.is_none() {
+                    // set current_card_id to the first card of the current board
+                    if app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.is_empty() {
+                        // there are no cards
+                        app.state.current_card_id = None;
+                    } else {
+                        // there are cards
+                        app.state.current_card_id = Some(app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards[0].id);
+                    }
+                } else {
+                    // current_card_id is not None
+                    let current_card_id = current_card_id.unwrap();
+                    if app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.iter().find(|card| card.id == current_card_id).is_none() {
+                        // current_card_id is not valid
+                        // set current_card_id to the first card of the current board
+                        if app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.is_empty() {
+                            // there are no cards
+                            app.state.current_card_id = None;
+                        } else {
+                            // there are cards
+                            app.state.current_card_id = Some(app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards[0].id);
+                        }
+                    }
+                }
+            }
+        }
+        debug!("Current board: {:?}", app.state.current_board_id);
+        debug!("Current card: {:?}", app.state.current_card_id);
+        debug!("Visible boards and cards: {:?}", app.visible_boards_and_cards);
+        Ok(())
+    }
+
 }
 
 pub(crate) fn get_config_dir() -> PathBuf {

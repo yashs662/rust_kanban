@@ -1,4 +1,8 @@
-use tui::style::{Style, Color, Modifier};
+use tui::style::{
+    Style,
+    Color,
+    Modifier
+};
 
 pub const FIELD_NOT_SET: &str = "Not Set";
 pub const CONFIG_FILE_NAME: &str = "config.json";

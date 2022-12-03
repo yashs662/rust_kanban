@@ -1,28 +1,51 @@
 use std::collections::BTreeMap;
-use std::{env, vec};
-use std::fmt::{self, Formatter, Display};
+use std::{
+    env,
+    vec
+};
+use std::fmt::{
+    self,
+    Formatter,
+    Display
+};
 use std::path::PathBuf;
 
 use chrono::NaiveDate;
-use log::{debug, info};
-use log::{error, warn};
-use serde::{Serialize, Deserialize};
+use log::{
+    debug,
+    info,
+    error,
+    warn
+};
+use serde::{
+    Serialize, 
+    Deserialize
+};
 use tui::widgets::ListState;
 
 use self::actions::Actions;
 use self::state::AppStatus;
 use self::state::Focus;
 use self::state::UiMode;
-use self::kanban::{Board, Card, CardPriority};
+use self::kanban::{
+    Board,
+    Card,
+    CardPriority
+};
 use crate::app::actions::Action;
 use crate::constants::{
     SAVE_DIR_NAME,
     FIELD_NOT_SET,
-    NO_OF_CARDS_PER_BOARD
 };
 use crate::inputs::key::Key;
-use crate::io::data_handler::{write_config, get_available_local_savefiles};
-use crate::io::{IoEvent, data_handler};
+use crate::io::data_handler::{
+    write_config,
+    get_available_local_savefiles
+};
+use crate::io::{
+    IoEvent,
+    data_handler
+};
 
 pub mod actions;
 pub mod state;
@@ -363,6 +386,10 @@ impl App {
                                         warn!("New board name is empty or already exists");
                                     }
                                     self.ui_mode = self.prev_ui_mode.clone();
+                                    if let Some(previous_focus) = &self.state.previous_focus {
+                                        self.focus = previous_focus.clone();
+                                    }
+                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
                                 }
                                 AppReturn::Continue
                             }
@@ -420,12 +447,17 @@ impl App {
                                     } else {
                                         warn!("New card name is empty or already exists");
                                     }
+
+                                    if let Some(previous_focus) = &self.state.previous_focus {
+                                        self.focus = previous_focus.clone();
+                                    }
+                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
                                 }
                                 AppReturn::Continue
                             }
                             UiMode::LoadSave => {
                                 self.dispatch(IoEvent::LoadSave).await;
-                                self.ui_mode = self.prev_ui_mode.clone();
+                                self.ui_mode = self.config.default_view.clone();
                                 AppReturn::Continue
                             }
                             _ => {
@@ -531,6 +563,7 @@ impl App {
                     Action::NewBoard => {
                         self.state.new_board_form = vec![String::new(), String::new()];
                         self.set_ui_mode(UiMode::NewBoard);
+                        self.state.previous_focus = Some(self.focus.clone());
                         AppReturn::Continue
                     }
                     Action::NewCard => {
@@ -541,6 +574,7 @@ impl App {
                         }
                         self.state.new_card_form = vec![String::new(), String::new(), String::new()];
                         self.set_ui_mode(UiMode::NewCard);
+                        self.state.previous_focus = Some(self.focus.clone());
                         AppReturn::Continue
                     }
                     Action::Delete => {
@@ -552,15 +586,52 @@ impl App {
                             _ => {
                                 match self.focus {
                                     Focus::Body => {
-                                        // delete the current board from self.boards
-                                        if let Some(current_board) = self.state.current_board_id.clone() {
+                                        // delete the current card
+                                        if let Some(current_board) = self.state.current_board_id {
                                             // find index of current board id in self.boards
                                             let index = self.boards.iter().position(|board| board.id == current_board);
-                                            if let Some(index) = index {
-                                                self.boards.remove(index);
-                                                self.state.current_board_id = None;
-                                                // remove the key in self.visible_boards_and_cards
-                                                self.visible_boards_and_cards.remove(&current_board);
+                                            if let Some(current_card) = self.state.current_card_id {
+                                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                                if let Some(card_index) = card_index {
+                                                    let card_name = self.boards[index.unwrap()].cards[card_index].name.clone();
+                                                    self.boards[index.unwrap()].cards.remove(card_index);
+                                                    // if index is > 0, set current card to previous card, else set to next card, else set to None
+                                                    if card_index > 0 {
+                                                        self.state.current_card_id = Some(self.boards[index.unwrap()].cards[card_index - 1].id);
+                                                    } else if self.boards[index.unwrap()].cards.len() > 0 {
+                                                        self.state.current_card_id = Some(self.boards[index.unwrap()].cards[0].id);
+                                                    } else {
+                                                        self.state.current_card_id = None;
+                                                    }
+                                                    info!("Deleted card {}", card_name);
+                                                    // remove card_id from self.visible_boards_and_cards if it is there, where visible_boards_and_cards is a BtreeMap of board_id to a vector of card_ids
+                                                    if let Some(visible_cards) = self.visible_boards_and_cards.get_mut(&current_board) {
+                                                        if let Some(card_index) = visible_cards.iter().position(|card_id| *card_id == current_card) {
+                                                            visible_cards.remove(card_index);
+                                                        }
+                                                    }
+                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                }
+
+                                            } else if let Some(current_board) = self.state.current_board_id {
+                                                // find index of current board id in self.boards
+                                                let index = self.boards.iter().position(|board| board.id == current_board);
+                                                if let Some(index) = index {
+                                                    let board_name = self.boards[index].name.clone();
+                                                    self.boards.remove(index);
+                                                    // if index is > 0, set current board to previous board, else set to next board, else set to None
+                                                    if index > 0 {
+                                                        self.state.current_board_id = Some(self.boards[index - 1].id);
+                                                    } else if self.boards.len() > 0 {
+                                                        self.state.current_board_id = Some(self.boards[0].id);
+                                                    } else {
+                                                        self.state.current_board_id = None;
+                                                    }
+                                                    info!("Deleted board {}", board_name);
+                                                    // remove board_id from self.visible_boards_and_cards if it is there
+                                                    self.visible_boards_and_cards.remove(&current_board);
+                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                }
                                             }
                                         }
                                         AppReturn::Continue
@@ -568,6 +639,33 @@ impl App {
                                     _ => AppReturn::Continue   
                                 }
                             }
+                        }
+                    }
+                    Action::AltDelete => {
+                        match self.focus {
+                            Focus::Body => {
+                                // delete the current board from self.boards
+                                if let Some(current_board) = self.state.current_board_id.clone() {
+                                    // find index of current board id in self.boards
+                                    let index = self.boards.iter().position(|board| board.id == current_board);
+                                    if let Some(index) = index {
+                                        let board_name = self.boards[index].name.clone();
+                                        self.boards.remove(index);
+                                        // if index is > 0, set current board to previous board, else set to next board, else set to None
+                                        if index > 0 {
+                                            self.state.current_board_id = Some(self.boards[index - 1].id.clone());
+                                        } else if index < self.boards.len() {
+                                            self.state.current_board_id = Some(self.boards[index].id.clone());
+                                        } else {
+                                            self.state.current_board_id = None;
+                                        }
+                                        self.visible_boards_and_cards.remove(&current_board);
+                                        info!("Deleted board: {}", board_name);
+                                    }
+                                }
+                                AppReturn::Continue
+                            },
+                            _ => AppReturn::Continue
                         }
                     }
                 }
@@ -718,37 +816,6 @@ impl App {
             }
         }
     }
-    pub fn set_visible_boards_and_cards_on_load(&mut self) {
-        // get self.boards and make Vec<BTreeMap<u128, Vec<u128>>> of visible boards and cards
-        let mut visible_boards_and_cards: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
-        for board in &self.boards {
-            let mut visible_cards: Vec<u128> = Vec::new();
-            if board.cards.len() > NO_OF_CARDS_PER_BOARD.into() {
-                for card in board.cards.iter().take(NO_OF_CARDS_PER_BOARD.into()) {
-                    visible_cards.push(card.id);
-                }
-            } else {
-                for card in &board.cards {
-                    visible_cards.push(card.id);
-                }
-            }
-
-            let mut visible_board: BTreeMap<u128, Vec<u128>> = BTreeMap::new();
-            visible_board.insert(board.id, visible_cards);
-            visible_boards_and_cards.extend(visible_board);
-        }
-        self.visible_boards_and_cards = visible_boards_and_cards;
-        // if exists set first board and card as current_board and current_card
-        if let Some((board_id, card_ids)) = self.visible_boards_and_cards.iter().next() {
-            self.state.current_board_id = Some(*board_id);
-            if let Some(card_id) = card_ids.iter().next() {
-                self.state.current_card_id = Some(*card_id);
-            }
-        }
-        debug!("Current board: {:?}", self.state.current_board_id);
-        debug!("Current card: {:?}", self.state.current_card_id);
-        debug!("Visible boards and cards: {:?}", self.visible_boards_and_cards);
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -804,6 +871,7 @@ pub struct AppState {
     pub status: AppStatus,
     pub current_board_id: Option<u128>,
     pub current_card_id: Option<u128>,
+    pub previous_focus: Option<Focus>,
     pub main_menu_state: ListState,
     pub config_state: ListState,
     pub new_board_form: Vec<String>,
@@ -817,6 +885,7 @@ impl Default for AppState {
             status: AppStatus::default(),
             current_board_id: None,
             current_card_id: None,
+            previous_focus: None,
             main_menu_state: ListState::default(),
             config_state: ListState::default(),
             new_board_form: vec![String::new(), String::new()],

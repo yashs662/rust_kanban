@@ -1,17 +1,28 @@
-use std::{fs, env};
-use log::{error, info};
+use std::{
+    fs,
+    env
+};
+use log::{
+    error,
+    info
+};
 extern crate savefile;
 use savefile::prelude::*;
 
 
-use crate::{app::{
-    AppConfig,
-    state::UiMode, kanban::Board
-}, constants::{SAVE_DIR_NAME, SAVE_FILE_NAME}};
-use super::handler::get_config_dir;
-use crate::constants::{
-    CONFIG_FILE_NAME
+use crate::{
+    app::{
+        AppConfig,
+        state::UiMode,
+        kanban::Board
+    },
+    constants::{
+        SAVE_DIR_NAME,
+        SAVE_FILE_NAME
+    }
 };
+use super::handler::get_config_dir;
+use crate::constants::CONFIG_FILE_NAME;
 
 pub fn get_config() -> AppConfig {
     let config_path = get_config_dir().join(CONFIG_FILE_NAME);

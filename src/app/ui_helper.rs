@@ -18,7 +18,9 @@ use tui::widgets::{
     Borders,
     Paragraph,
     List,
-    ListItem, ListState, Gauge,
+    ListItem,
+    ListState,
+    Gauge,
 };
 use crate::constants::{
     APP_TITLE,
@@ -31,13 +33,38 @@ use crate::constants::{
     LIST_SELECT_STYLE,
     LIST_SELECTED_SYMBOL,
     CARD_DATE_DUE_STYLE,
-    CARD_STATUS_STYLE, FOCUSED_ELEMENT_STYLE, NON_FOCUSED_ELEMENT_STYLE, HELP_KEY_STYLE, HELP_DESCRIPTION_STYLE, LOG_ERROR_STYLE, LOG_DEBUG_STYLE, LOG_WARN_STYLE, LOG_TRACE_STYLE, LOG_INFO_STYLE, DEFAULT_STYLE, PROGRESS_BAR_STYLE, ERROR_TEXT_STYLE
+    CARD_STATUS_STYLE,
+    FOCUSED_ELEMENT_STYLE,
+    NON_FOCUSED_ELEMENT_STYLE,
+    HELP_KEY_STYLE,
+    HELP_DESCRIPTION_STYLE,
+    LOG_ERROR_STYLE,
+    LOG_DEBUG_STYLE,
+    LOG_WARN_STYLE,
+    LOG_TRACE_STYLE,
+    LOG_INFO_STYLE,
+    DEFAULT_STYLE,
+    PROGRESS_BAR_STYLE,
+    ERROR_TEXT_STYLE,
 };
 
-use super::{MainMenuItem, App, MainMenu};
-use super::actions::{Actions, Action};
-use super::state::{Focus, AppStatus};
-use crate::io::data_handler::{get_config, get_available_local_savefiles};
+use super::{
+    MainMenuItem,
+    App,
+    MainMenu
+};
+use super::actions::{
+    Actions,
+    Action
+};
+use super::state::{
+    Focus,
+    AppStatus
+};
+use crate::io::data_handler::{
+    get_config,
+    get_available_local_savefiles
+};
 
 /// Draws main screen with kanban boards
 pub fn render_zen_mode<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -717,7 +744,7 @@ where
         } else {
             board_title
         };
-        let board_title = format!("{} ({})", board_title, board_cards.len());
+        let board_title = format!("{} ({})", board_title, board.cards.len());
         let board_title = if *board_id as u128 == *current_board {
             format!("{} {}", ">>", board_title)
         } else {

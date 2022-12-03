@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::{self, Display};
+use std::fmt::{
+    self,
+    Display
+};
 use std::slice::Iter;
 
 use crate::inputs::key::Key;
@@ -23,13 +26,14 @@ pub enum Action {
     SaveState,
     NewBoard,
     NewCard,
-    Delete
+    Delete,
+    AltDelete,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 17] = [
+        static ACTIONS: [Action; 18] = [
             Action::Quit,
             Action::Tab,
             Action::ShiftTab,
@@ -46,7 +50,8 @@ impl Action {
             Action::SaveState,
             Action::NewBoard,
             Action::NewCard,
-            Action::Delete
+            Action::Delete,
+            Action::AltDelete,
         ];
         ACTIONS.iter()
     }
@@ -74,6 +79,7 @@ impl Action {
             Action::NewBoard => &[Key::Char('b')],
             Action::NewCard => &[Key::Char('n')],
             Action::Delete => &[Key::Char('d')],
+            Action::AltDelete => &[Key::Char('D')],
         }
     }
 
@@ -103,6 +109,7 @@ impl Display for Action {
             Action::NewBoard => "Create new board",
             Action::NewCard => "Create new card in current board",
             Action::Delete => "Delete focused element",
+            Action::AltDelete => "Delete Board",
         };
         write!(f, "{}", str)
     }

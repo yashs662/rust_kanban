@@ -1,5 +1,8 @@
 use log::error;
-use serde::{Serialize, Deserialize};
+use serde::{
+    Serialize,
+    Deserialize
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum UiMode {

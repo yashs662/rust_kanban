@@ -1,11 +1,15 @@
 use std::sync::Arc;
-use clap::{Parser};
+use clap::Parser;
 
 use eyre::Result;
 use log::LevelFilter;
-use rust_kanban::app::App;
-use rust_kanban::io::handler::IoAsyncHandler;
-use rust_kanban::io::IoEvent;
+use rust_kanban::{
+    app::App,
+    io::{
+        handler::IoAsyncHandler,
+        IoEvent
+    }
+};
 use rust_kanban::start_ui;
 
 extern crate savefile_derive;

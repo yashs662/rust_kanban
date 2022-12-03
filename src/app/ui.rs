@@ -17,7 +17,11 @@ use super::ui_helper::{
     render_config,
     render_edit_config,
     render_main_menu,
-    render_help_menu, render_logs_only, render_new_board_form, render_load_save, render_new_card_form
+    render_help_menu,
+    render_logs_only,
+    render_new_board_form,
+    render_load_save,
+    render_new_card_form,
 };
 use crate::app::App;
 

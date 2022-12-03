@@ -2,7 +2,10 @@ use std::io::stdout;
 use std::sync::Arc;
 use std::time::Duration;
 
-use app::{App, AppReturn};
+use app::{
+    App,
+    AppReturn
+};
 use eyre::Result;
 use inputs::events::Events;
 use inputs::InputEvent;

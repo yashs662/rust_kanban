@@ -1,4 +1,8 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{
+    self,
+    Display,
+    Formatter
+};
 
 use crossterm::event;
 
