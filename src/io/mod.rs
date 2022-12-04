@@ -14,5 +14,6 @@ pub enum IoEvent {
     GoLeft,
     GoUp,
     GoDown,
-    RefreshVisibleBoardsandCards
+    RefreshVisibleBoardsandCards,
+    AutoSave
 }

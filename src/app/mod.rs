@@ -40,7 +40,8 @@ use crate::constants::{
 use crate::inputs::key::Key;
 use crate::io::data_handler::{
     write_config,
-    get_available_local_savefiles
+    get_available_local_savefiles,
+    get_config
 };
 use crate::io::{
     IoEvent,
@@ -159,7 +160,13 @@ impl App {
         } else {
             if let Some(action) = self.actions.find(key) {
                 match action {
-                    Action::Quit => AppReturn::Exit,
+                    Action::Quit => {
+                        let config = get_config();
+                        if config.save_on_exit {
+                            self.dispatch(IoEvent::AutoSave).await;
+                        }
+                        AppReturn::Exit
+                    }
                     Action::Tab => {
                         let current_focus = self.focus.clone();
                         let next_focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
@@ -916,6 +923,7 @@ pub struct AppConfig {
     pub save_directory: PathBuf,
     pub default_view: UiMode,
     pub always_load_latest_save: bool,
+    pub save_on_exit: bool,
 }
 
 impl AppConfig {
@@ -926,6 +934,7 @@ impl AppConfig {
             save_directory: save_directory,
             default_view,
             always_load_latest_save: true,
+            save_on_exit: true,
         }
     }
 
@@ -934,6 +943,7 @@ impl AppConfig {
             format!("save_directory: {}", self.save_directory.to_str().unwrap()),
             format!("default_view: {}", self.default_view.to_string()),
             format!("always_load_latest_save: {}", self.always_load_latest_save),
+            format!("save_on_exit: {}", self.save_on_exit),
         ]
     }
 
@@ -968,6 +978,15 @@ impl AppConfig {
                         config.always_load_latest_save = true;
                     } else if value.to_lowercase() == "false" {
                         config.always_load_latest_save = false;
+                    } else {
+                        warn!("Invalid boolean: {}", value);
+                    }
+                }
+                "save_on_exit" => {
+                    if value.to_lowercase() == "true" {
+                        config.save_on_exit = true;
+                    } else if value.to_lowercase() == "false" {
+                        config.save_on_exit = false;
                     } else {
                         warn!("Invalid boolean: {}", value);
                     }

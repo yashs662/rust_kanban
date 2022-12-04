@@ -1,4 +1,5 @@
 use linked_hash_map::LinkedHashMap;
+use savefile::{load_file, save_file};
 use std::path::Path;
 use std::{
     sync::Arc,
@@ -24,11 +25,10 @@ use crate::io::data_handler::{
     get_config
 };
 use chrono::NaiveDate;
-use eyre::Result;
+use eyre::{Result, anyhow};
 use log::{
     error,
     info,
-    debug
 };
 
 use super::IoEvent;
@@ -62,6 +62,7 @@ impl IoAsyncHandler {
             IoEvent::GoUp => self.go_up().await,
             IoEvent::GoDown => self.go_down().await,
             IoEvent::RefreshVisibleBoardsandCards => self.refresh_visible_boards_and_cards().await,
+            IoEvent::AutoSave => self.auto_save().await,
         };
 
         if let Err(err) = result {
@@ -237,7 +238,10 @@ impl IoAsyncHandler {
                 visible_boards_and_cards.insert(board.id, card_ids);
             }
             app.visible_boards_and_cards = visible_boards_and_cards;
-            app.state.current_board_id = Some(next_boards[0].id);
+            // check if the current board is in the next boards, if not, set the current board to the first board in the next boards
+            if !next_boards.iter().any(|board| board.id == current_board_id) {
+                app.state.current_board_id = Some(next_boards[0].id);
+            }
             // reset the current card id
             app.state.current_card_id = None;
         } else {
@@ -314,7 +318,10 @@ impl IoAsyncHandler {
                 visible_boards_and_cards.insert(board.id, card_ids);
             }
             app.visible_boards_and_cards = visible_boards_and_cards;
-            app.state.current_board_id = Some(previous_boards[NO_OF_BOARDS_PER_PAGE as usize - 1].id);
+            // check if the current board is in the previous boards, if not, set the current board to the last board in the previous boards
+            if !previous_boards.iter().any(|board| board.id == current_board_id) {
+                app.state.current_board_id = Some(previous_boards[previous_boards.len() - 1].id);
+            }
             // reset the current card id
             app.state.current_card_id = None;
         } else {
@@ -545,10 +552,13 @@ impl IoAsyncHandler {
 
     async fn refresh_visible_boards_and_cards(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
-        debug!("Current Boards: {:?}", app.boards);
+        let mut counter = 0;
         // get self.boards and make Vec<LinkedHashMap<u128, Vec<u128>>> of visible boards and cards
         let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
         for board in &app.boards {
+            if counter == NO_OF_BOARDS_PER_PAGE {
+                break;
+            }
             let mut visible_cards: Vec<u128> = Vec::new();
             if board.cards.len() > NO_OF_CARDS_PER_BOARD.into() {
                 for card in board.cards.iter().take(NO_OF_CARDS_PER_BOARD.into()) {
@@ -563,6 +573,7 @@ impl IoAsyncHandler {
             let mut visible_board: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
             visible_board.insert(board.id, visible_cards);
             visible_boards_and_cards.extend(visible_board);
+            counter += 1;
         }
         app.visible_boards_and_cards = visible_boards_and_cards;
         // check if current_board_id and current_card_id are still valid if not chack if current_board_id is still valid and
@@ -591,7 +602,7 @@ impl IoAsyncHandler {
         } else {
             // current_board_id is not None
             let current_board_id = current_board_id.unwrap();
-            if app.boards.iter().find(|board| board.id == current_board_id).is_none() {
+            if app.visible_boards_and_cards.iter().find(|board_card_tuple| *board_card_tuple.0 == current_board_id).is_none() {
                 // current_board_id is not valid
                 // set current_board_id to the first board
                 if app.boards.is_empty() {
@@ -614,7 +625,7 @@ impl IoAsyncHandler {
                 // current_board_id is valid
                 if current_card_id.is_none() {
                     // set current_card_id to the first card of the current board
-                    if app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.is_empty() {
+                    if app.visible_boards_and_cards.iter().find(|board_card_tuple| *board_card_tuple.0 == current_board_id).unwrap().1.is_empty() {
                         // there are no cards
                         app.state.current_card_id = None;
                     } else {
@@ -638,10 +649,26 @@ impl IoAsyncHandler {
                 }
             }
         }
-        debug!("Current board: {:?}", app.state.current_board_id);
-        debug!("Current card: {:?}", app.state.current_card_id);
-        debug!("Visible boards and cards: {:?}", app.visible_boards_and_cards);
         Ok(())
+    }
+    
+    async fn auto_save(&mut self) -> Result<()> {
+        let latest_save_file_info = get_latest_save_file();
+        if latest_save_file_info.is_ok() {
+            let latest_save_file_info = latest_save_file_info.unwrap();
+            let save_file_name = latest_save_file_info.0;
+            let version = latest_save_file_info.1;
+            let config = get_config();
+            let file_path = config.save_directory.join(save_file_name);
+            let boards = load_file(&file_path, version)?;
+            let save_status = save_file(file_path, version, &boards);
+            match save_status {
+                Ok(_) => Ok(()),
+                Err(_) => Err(anyhow!("Failed to save file")),
+            }
+        } else {
+            Err(latest_save_file_info.err().unwrap())
+        }
     }
 
 }
@@ -686,49 +713,62 @@ fn prepare_save_dir() -> bool {
 fn prepare_boards (app: &mut App) -> Vec<Board> {
     let config = get_config();
     if config.always_load_latest_save {
-        let local_save_files = get_available_local_savefiles();
-        let fall_back_version = "1".to_string();
-        // if local_save_files is empty, return empty vec
-        if local_save_files.is_empty() {
-            return vec![];
-        }
-        let latest_date = local_save_files
-            .iter()
-            .map(|file| {
-                let date = file.split("_").collect::<Vec<&str>>()[1];
-                let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
-                date
-            })
-            .max()
-            .unwrap();
-        let latest_version = local_save_files
-            .iter()
-            .filter(|file| {
-                let date = file.split("_").collect::<Vec<&str>>()[1];
-                let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
-                date == latest_date
-            })
-            .map(|file| {
-                let version = file.split("_v").collect::<Vec<&str>>()[1];
-                version.to_string()
-            })
-            .max()
-            .unwrap_or(fall_back_version);
-        let latest_version = latest_version.parse::<u32>().unwrap_or(1);
-        let latest_save_file = format!("kanban_{}_v{}", latest_date.format("%d-%m-%Y"), latest_version);
-        let local_data = get_local_kanban_state(latest_save_file.clone(), latest_version);
-        match local_data {
-            Ok(data) => {
-                info!("👍 Local data loaded from {:?}", latest_save_file);
-                data
-            },
-            Err(err) => {
-                error!("Cannot get local data: {:?}", err);
-                vec![]
-            },
+        let latest_save_file_info = get_latest_save_file();
+        if latest_save_file_info.is_ok() {
+            let latest_save_file_info = latest_save_file_info.unwrap();
+            let latest_save_file = latest_save_file_info.0;
+            let latest_version = latest_save_file_info.1;
+            let local_data = get_local_kanban_state(latest_save_file.clone(), latest_version);
+            match local_data {
+                Ok(data) => {
+                    info!("👍 Local data loaded from {:?}", latest_save_file);
+                    data
+                },
+                Err(err) => {
+                    error!("Cannot get local data: {:?}", err);
+                    vec![]
+                },
+            }
+        } else {
+            vec![]
         }
     } else {
         app.set_ui_mode(UiMode::LoadSave);
         vec![]
     }
+}
+
+// return save file name and the latest verison
+fn get_latest_save_file() -> Result<(String, u32)> {
+    let local_save_files = get_available_local_savefiles();
+    let fall_back_version = "1".to_string();
+    // if local_save_files is empty, return empty vec
+    if local_save_files.is_empty() {
+        return Err(anyhow!("No local save files found"));
+    }
+    let latest_date = local_save_files
+        .iter()
+        .map(|file| {
+            let date = file.split("_").collect::<Vec<&str>>()[1];
+            let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
+            date
+        })
+        .max()
+        .unwrap();
+    let latest_version = local_save_files
+        .iter()
+        .filter(|file| {
+            let date = file.split("_").collect::<Vec<&str>>()[1];
+            let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
+            date == latest_date
+        })
+        .map(|file| {
+            let version = file.split("_v").collect::<Vec<&str>>()[1];
+            version.to_string()
+        })
+        .max()
+        .unwrap_or(fall_back_version);
+    let latest_version = latest_version.parse::<u32>().unwrap_or(1);
+    let latest_save_file = format!("kanban_{}_v{}", latest_date.format("%d-%m-%Y"), latest_version);
+    Ok((latest_save_file, latest_version))
 }

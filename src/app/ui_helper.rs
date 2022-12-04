@@ -671,7 +671,6 @@ pub fn render_body<'a,B>(rect: &mut Frame<B>, area: Rect, app: &App)
 where
     B: Backend,
 {
-    let mut more_boards = false;
     let focus = &app.focus;
     let boards = &app.boards;
     let current_board = &app.state.current_board_id.unwrap_or(0);
@@ -708,8 +707,6 @@ where
         for _i in 0..NO_OF_BOARDS_PER_PAGE {
             constraints.push(Constraint::Percentage(100 / NO_OF_BOARDS_PER_PAGE as u16));
         }
-        constraints.push(Constraint::Length(2));
-        more_boards = true
     } else {
         for _i in 0..boards.len() {
             constraints.push(Constraint::Percentage(100 / boards.len() as u16));
@@ -727,7 +724,6 @@ where
         if board_index >= NO_OF_BOARDS_PER_PAGE.into() {
             break;
         }
-        let mut more_cards = false;
         let board_id = board_and_card_tuple.0;
         // find index of board with board_id in boards
         let board = app.boards.iter().find(|&b| b.id == *board_id);
@@ -757,8 +753,6 @@ where
             for _i in 0..NO_OF_CARDS_PER_BOARD {
                 card_constraints.push(Constraint::Percentage(90 / NO_OF_CARDS_PER_BOARD as u16));
             }
-            card_constraints.push(Constraint::Length(2));
-            more_cards = true
         } else {
             for _i in 0..board_cards.len() {
                 card_constraints.push(Constraint::Percentage(100 / board_cards.len() as u16));
@@ -846,31 +840,6 @@ where
             rect.render_widget(card_paragraph, card_chunks[card_index]);
 
         }
-
-        if more_cards {
-            // down arrow after more
-            let more_cards_text = Text::styled(" More Cards ↓ ",
-                DEFAULT_STYLE
-            );
-            let more_cards_paragraph = Paragraph::new(more_cards_text)
-                .alignment(Alignment::Center)
-                .block(
-                    Block::default()
-                )
-                .wrap(tui::widgets::Wrap { trim: true });
-
-            rect.render_widget(more_cards_paragraph, card_chunks[card_chunks.len() - 1]);
-        }
-    }
-
-    if more_boards {
-        let more_boards_paragraph = Paragraph::new(" →\n→\n→\n→\n→\n→\n→\n→\n→
-            →\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→\n→")
-            .alignment(Alignment::Center)
-            .block(Block::default().border_type(BorderType::Plain))
-            .wrap(tui::widgets::Wrap { trim: true });
-
-        rect.render_widget(more_boards_paragraph, board_chunks[board_chunks.len() -1]);
     }
 
     // draw line_gauge in chunks[1]
