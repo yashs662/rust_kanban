@@ -5,10 +5,14 @@
 ## Contribution
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
 ## TODO
-- [ ] Implement the Kanban Boards ( the main UI basically )
+- [ ] Implement Card View and Board View
+- [ ] Implement previews for loading a save
+- [ ] Implement Cloud saves (Google drive maybe? as i am not going to host a server)
 - [ ] Improve Help Messages
 - [ ] De-clutter Code
 ## Completed Features
+- [x] Implement the Kanban Boards ( the main UI basically )
+- [x] Auto Save on exit
 - [x] Save/Load Kanban state
 - [x] Hide/Unhide UI elements
 - [x] Refactoring UI Logic
