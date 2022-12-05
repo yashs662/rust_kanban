@@ -13,7 +13,8 @@ use crate::constants::{
     CONFIG_FILE_NAME,
     SAVE_DIR_NAME,
     NO_OF_BOARDS_PER_PAGE,
-    NO_OF_CARDS_PER_BOARD
+    NO_OF_CARDS_PER_BOARD,
+    SAVE_FILE_NAME
 };
 use crate::app::{
     AppConfig,
@@ -653,21 +654,77 @@ impl IoAsyncHandler {
     }
     
     async fn auto_save(&mut self) -> Result<()> {
+        let app = self.app.lock().await;
         let latest_save_file_info = get_latest_save_file();
+        let config = get_config();
         if latest_save_file_info.is_ok() {
             let latest_save_file_info = latest_save_file_info.unwrap();
+            let default_board = Board::new(String::from("Board not found"), String::from("Board not found"));
             let save_file_name = latest_save_file_info.0;
             let version = latest_save_file_info.1;
-            let config = get_config();
             let file_path = config.save_directory.join(save_file_name);
-            let boards = load_file(&file_path, version)?;
-            let save_status = save_file(file_path, version, &boards);
-            match save_status {
-                Ok(_) => Ok(()),
-                Err(_) => Err(anyhow!("Failed to save file")),
+            let boards: Vec<Board> = load_file(&file_path, version)?;
+
+            // check if boards are the same compare the length of the boards and the length of the cards of each board
+            if boards.len() == app.boards.len() {
+                let mut boards_are_the_same = true;
+                for board in &boards {
+                    let board_id = board.id;
+                    let board_cards = &board.cards;
+                    let app_board = app.boards.iter().find(|board| board.id == board_id)
+                        .unwrap_or_else(|| {
+                            info!("board with id {} not found", board_id);
+                            &default_board
+                        });
+                    // check if Board not found is returned
+                    if app_board.id == default_board.id {
+                        boards_are_the_same = false;
+                        break;
+                    }
+                    let app_board_cards = &app_board.cards;
+                    // compare the boards to check if the cards are the same by checking the id of the cards
+                    if board_cards.len() != app_board_cards.len() {
+                        boards_are_the_same = false;
+                        break;
+                    }
+                    for card in board_cards {
+                        let card_id = card.id;
+                        if app_board_cards.iter().find(|card| card.id == card_id).is_none() {
+                            boards_are_the_same = false;
+                            break;
+                        }
+                    }
+                }
+                if boards_are_the_same {
+                    return Ok(());
+                } else {
+                    let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), version + 1);
+                    let file_path = config.save_directory.join(file_name);
+                    let save_status = save_file(file_path, version, &app.boards);
+                    match save_status {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(anyhow!("Error saving file: {}", e)),
+                    }
+                }
+            } else {
+                // boards are not the same
+                let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), version + 1);
+                let file_path = config.save_directory.join(file_name);
+                let save_status = save_file(file_path, version, &app.boards);
+                match save_status {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(anyhow!("Error saving file: {}", e)),
+                }
             }
         } else {
-            Err(latest_save_file_info.err().unwrap())
+            // there is no save file
+            let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), 1);
+            let file_path = config.save_directory.join(file_name);
+            let save_status = save_file(file_path, 1, &app.boards);
+            match save_status {
+                Ok(_) => Ok(()),
+                Err(e) => Err(anyhow!("Error saving file: {}", e)),
+            }
         }
     }
 
