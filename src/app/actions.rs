@@ -11,47 +11,53 @@ use crate::inputs::key::Key;
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Action {
     Quit,
-    Tab,
-    ShiftTab,
-    SetUiMode,
+    NextFocus,
+    PrvFocus,
     ToggleConfig,
     Up,
     Down,
     Right,
     Left,
     TakeUserInput,
-    Escape,
+    GoToPreviousUIMode,
     Enter,
     Hide,
     SaveState,
     NewBoard,
     NewCard,
-    Delete,
-    AltDelete,
+    DeleteCard,
+    DeleteBoard,
+    ChangeCardStatusToCompleted,
+    ChangeCardStatusToActive,
+    ChangeCardStatusToStale,
+    ResetUI,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 18] = [
+        static ACTIONS: [Action; 21] = [
             Action::Quit,
-            Action::Tab,
-            Action::ShiftTab,
-            Action::SetUiMode,
+            Action::NextFocus,
+            Action::PrvFocus,
             Action::ToggleConfig,
             Action::Up,
             Action::Down,
             Action::Right,
             Action::Left,
             Action::TakeUserInput,
-            Action::Escape,
+            Action::GoToPreviousUIMode,
             Action::Enter,
             Action::Hide,
             Action::SaveState,
             Action::NewBoard,
             Action::NewCard,
-            Action::Delete,
-            Action::AltDelete,
+            Action::DeleteCard,
+            Action::DeleteBoard,
+            Action::ChangeCardStatusToCompleted,
+            Action::ChangeCardStatusToActive,
+            Action::ChangeCardStatusToStale,
+            Action::ResetUI,
         ];
         ACTIONS.iter()
     }
@@ -60,26 +66,26 @@ impl Action {
     pub fn keys(&self) -> &[Key] {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
-            Action::Tab => &[Key::Tab],
-            Action::ShiftTab => &[Key::ShiftTab],
-            Action::SetUiMode => &[Key::Char('1'), Key::Char('2'), Key::Char('3'),
-                                   Key::Char('4'), Key::Char('5'), Key::Char('6'),
-                                   Key::Char('7'), Key::Char('8'), Key::Char('9')
-                                   ],
+            Action::NextFocus => &[Key::Tab],
+            Action::PrvFocus => &[Key::ShiftTab],
             Action::ToggleConfig => &[Key::Char('c')],
             Action::Up => &[Key::Up],
             Action::Down => &[Key::Down],
             Action::Right => &[Key::Right],
             Action::Left => &[Key::Left],
             Action::TakeUserInput => &[Key::Char('i')],
-            Action::Escape => &[Key::Esc],
+            Action::GoToPreviousUIMode => &[Key::Esc],
             Action::Enter => &[Key::Enter],
             Action::Hide => &[Key::Char('h')],
             Action::SaveState => &[Key::Ctrl('s')],
             Action::NewBoard => &[Key::Char('b')],
             Action::NewCard => &[Key::Char('n')],
-            Action::Delete => &[Key::Char('d')],
-            Action::AltDelete => &[Key::Char('D')],
+            Action::DeleteCard => &[Key::Char('d')],
+            Action::DeleteBoard => &[Key::Char('D')],
+            Action::ChangeCardStatusToCompleted => &[Key::Char('1')],
+            Action::ChangeCardStatusToActive => &[Key::Char('2')],
+            Action::ChangeCardStatusToStale => &[Key::Char('3')],
+            Action::ResetUI => &[Key::Char('r')],
         }
     }
 
@@ -93,23 +99,26 @@ impl Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
             Action::Quit => "Quit",
-            Action::Tab => "Focus next",
-            Action::ShiftTab => "Focus previous",
-            Action::SetUiMode => "Set UI mode",
+            Action::NextFocus => "Focus next",
+            Action::PrvFocus => "Focus previous",
             Action::ToggleConfig => "Open config Menu",
             Action::Up => "Go up",
             Action::Down => "Go down",
             Action::Right => "Go right",
             Action::Left => "Go left",
             Action::TakeUserInput => "Enter input mode",
-            Action::Escape => "Go to previous mode",
+            Action::GoToPreviousUIMode => "Go to previous mode",
             Action::Enter => "Accept",
             Action::Hide => "Hide Focused element",
             Action::SaveState => "Save Kanban state",
             Action::NewBoard => "Create new board",
             Action::NewCard => "Create new card in current board",
-            Action::Delete => "Delete focused element",
-            Action::AltDelete => "Delete Board",
+            Action::DeleteCard => "Delete focused element",
+            Action::DeleteBoard => "Delete Board",
+            Action::ChangeCardStatusToCompleted => "Change card status to completed",
+            Action::ChangeCardStatusToActive => "Change card status to active",
+            Action::ChangeCardStatusToStale => "Change card status to stale",
+            Action::ResetUI => "Reset UI",
         };
         write!(f, "{}", str)
     }
@@ -180,14 +189,14 @@ mod tests {
 
     #[test]
     fn should_find_action_by_key() {
-        let actions: Actions = vec![Action::Quit, Action::Tab].into();
+        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
         let result = actions.find(Key::Ctrl('c'));
         assert_eq!(result, Some(&Action::Quit));
     }
 
     #[test]
     fn should_find_action_by_key_not_found() {
-        let actions: Actions = vec![Action::Quit, Action::Tab].into();
+        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
         let result = actions.find(Key::Alt('w'));
         assert_eq!(result, None);
     }
@@ -196,8 +205,8 @@ mod tests {
     fn should_create_actions_from_vec() {
         let _actions: Actions = vec![
             Action::Quit,
-            Action::Tab,
-            Action::ShiftTab,
+            Action::NextFocus,
+            Action::PrvFocus,
         ]
         .into();
     }
@@ -208,9 +217,9 @@ mod tests {
         let _actions: Actions = vec![
             Action::Quit,
             Action::Quit,
-            Action::Tab,
-            Action::Tab,
-            Action::Tab,
+            Action::NextFocus,
+            Action::NextFocus,
+            Action::NextFocus,
         ]
         .into();
     }

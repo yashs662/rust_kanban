@@ -33,6 +33,7 @@ use self::kanban::{
     CardPriority
 };
 use crate::app::actions::Action;
+use crate::app::kanban::CardStatus;
 use crate::constants::{
     SAVE_DIR_NAME,
     FIELD_NOT_SET,
@@ -70,7 +71,7 @@ pub struct App {
     ui_mode: UiMode,
     pub boards: Vec<Board>,
     current_user_input: String,
-    prev_ui_mode: UiMode,
+    prev_ui_mode: Option<UiMode>,
     pub config: AppConfig,
     config_item_being_edited: Option<usize>,
     pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
@@ -95,7 +96,7 @@ impl App {
             ui_mode,
             boards: boards,
             current_user_input: String::new(),
-            prev_ui_mode: UiMode::Zen,
+            prev_ui_mode: None,
             config: AppConfig::default(),
             config_item_being_edited: None,
             visible_boards_and_cards: LinkedHashMap::new(),
@@ -167,7 +168,7 @@ impl App {
                         }
                         AppReturn::Exit
                     }
-                    Action::Tab => {
+                    Action::NextFocus => {
                         let current_focus = self.focus.clone();
                         let next_focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
@@ -178,7 +179,7 @@ impl App {
                         }
                         AppReturn::Continue
                     }
-                    Action::ShiftTab => {
+                    Action::PrvFocus => {
                         let current_focus = self.focus.clone();
                         let next_focus = self.focus.prev(&UiMode::get_available_targets(&self.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
@@ -189,11 +190,8 @@ impl App {
                         }
                         AppReturn::Continue
                     }
-                    Action::SetUiMode => {
-                        let new_ui_mode = UiMode::from_number(key.to_digit() as u8);
-                        if new_ui_mode == UiMode::MainMenu {
-                            self.main_menu_next();
-                        }
+                    Action::ResetUI => {
+                        let new_ui_mode = UiMode::TitleBodyHelpLog;
                         let available_focus_targets = UiMode::get_available_targets(&new_ui_mode);
                         // check if focus is still available in the new ui_mode if not set it to the first available tab
                         if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
@@ -209,9 +207,9 @@ impl App {
                     }
                     Action::ToggleConfig => {
                         if self.ui_mode == UiMode::Config {
-                            self.ui_mode = self.prev_ui_mode.clone();
+                            self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                         } else {
-                            self.prev_ui_mode = self.ui_mode.clone();
+                            self.prev_ui_mode = Some(self.ui_mode.clone());
                             self.ui_mode = UiMode::Config;
                             let available_focus_targets = self.ui_mode.get_available_targets();
                             if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
@@ -289,34 +287,34 @@ impl App {
                         }
                         AppReturn::Continue
                     }
-                    Action::Escape => {
+                    Action::GoToPreviousUIMode => {
                         match self.ui_mode {
                             UiMode::Config => {
-                                if self.prev_ui_mode == UiMode::Config {
+                                if self.prev_ui_mode == Some(UiMode::Config) {
+                                    self.prev_ui_mode = None;
                                     self.ui_mode = UiMode::MainMenu;
                                 } else {
-                                    self.ui_mode = self.prev_ui_mode.clone();
+                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                    self.prev_ui_mode = Some(UiMode::Config);
                                 }
                                 AppReturn::Continue
                             }
                             UiMode::EditConfig => {
                                 self.ui_mode = UiMode::Config;
+                                self.prev_ui_mode = None;
                                 AppReturn::Continue
                             }
                             UiMode::MainMenu => {
                                 AppReturn::Exit
                             }
-                            UiMode::NewBoard => {
-                                self.ui_mode = self.prev_ui_mode.clone();
-                                AppReturn::Continue
-                            }
-                            UiMode::NewCard => {
-                                self.ui_mode = self.prev_ui_mode.clone();
-                                AppReturn::Continue
-                            }
                             _ => {
-                                self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                // check if previous ui mode is the same as the current ui mode
+                                if self.prev_ui_mode == Some(self.ui_mode.clone()) {
+                                    self.ui_mode = UiMode::MainMenu;
+                                    self.main_menu_next();
+                                } else {
+                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                }
                                 AppReturn::Continue
                             }
                         }
@@ -324,7 +322,7 @@ impl App {
                     Action::Enter => {
                         match self.ui_mode {
                             UiMode::Config => {
-                                self.prev_ui_mode = self.ui_mode.clone();
+                                self.prev_ui_mode = Some(self.ui_mode.clone());
                                 self.ui_mode = UiMode::EditConfig;
                                 self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
                                 AppReturn::Continue
@@ -361,22 +359,22 @@ impl App {
                                         AppReturn::Exit
                                     }
                                     MainMenuItem::Config => {
-                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.prev_ui_mode = Some(self.ui_mode.clone());
                                         self.ui_mode = UiMode::Config;
                                         AppReturn::Continue
                                     }
                                     MainMenuItem::View => {
-                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.prev_ui_mode = Some(self.ui_mode.clone());
                                         self.ui_mode = self.config.default_view.clone();
                                         AppReturn::Continue
                                     }
                                     MainMenuItem::Help => {
-                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.prev_ui_mode = Some(self.ui_mode.clone());
                                         self.ui_mode = UiMode::HelpMenu;
                                         AppReturn::Continue
                                     }
                                     MainMenuItem::LoadSave => {
-                                        self.prev_ui_mode = self.ui_mode.clone();
+                                        self.prev_ui_mode = Some(self.ui_mode.clone());
                                         self.ui_mode = UiMode::LoadSave;
                                         AppReturn::Continue
                                     }
@@ -397,12 +395,12 @@ impl App {
                                     if !new_board_name.is_empty() && !same_name_exists {
                                         let new_board = Board::new(new_board_name, new_board_description);
                                         self.boards.push(new_board);
-                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                                         self.state.new_board_form = vec![String::new(), String::new()];
                                     } else {
                                         warn!("New board name is empty or already exists");
                                     }
-                                    self.ui_mode = self.prev_ui_mode.clone();
+                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                                     if let Some(previous_focus) = &self.state.previous_focus {
                                         self.focus = previous_focus.clone();
                                     }
@@ -428,7 +426,7 @@ impl App {
                                         }
                                     } else {
                                         error!("Current board not found");
-                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                                         return AppReturn::Continue;
                                     }
                                     // check if due date is empty or is a valid date
@@ -446,7 +444,7 @@ impl App {
                                     };
                                     if due_date.is_none() {
                                         warn!("Invalid due date");
-                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                                         return AppReturn::Continue;
                                     }
                                     if !new_card_name.is_empty() && !same_name_exists {
@@ -457,10 +455,10 @@ impl App {
                                             current_board.cards.push(new_card);
                                         } else {
                                             error!("Current board not found");
-                                            self.ui_mode = self.prev_ui_mode.clone();
+                                            self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                                             return AppReturn::Continue;
                                         }
-                                        self.ui_mode = self.prev_ui_mode.clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                                     } else {
                                         warn!("New card name is empty or already exists");
                                     }
@@ -478,6 +476,17 @@ impl App {
                                 AppReturn::Continue
                             }
                             _ => {
+                                match self.focus {
+                                    Focus::Help => {
+                                        self.prev_ui_mode = Some(self.ui_mode.clone());
+                                        self.ui_mode = UiMode::HelpMenu;
+                                    },
+                                    Focus::Log => {
+                                        self.prev_ui_mode = Some(self.ui_mode.clone());
+                                        self.ui_mode = UiMode::LogsOnly;
+                                    },
+                                    _ => {}
+                                }
                                 AppReturn::Continue
                             }
                         }
@@ -594,7 +603,7 @@ impl App {
                         self.state.previous_focus = Some(self.focus.clone());
                         AppReturn::Continue
                     }
-                    Action::Delete => {
+                    Action::DeleteCard => {
                         match self.ui_mode {
                             UiMode::LoadSave => {
                                 self.dispatch(IoEvent::DeleteSave).await;
@@ -658,7 +667,7 @@ impl App {
                             }
                         }
                     }
-                    Action::AltDelete => {
+                    Action::DeleteBoard => {
                         match self.focus {
                             Focus::Body => {
                                 // delete the current board from self.boards
@@ -684,6 +693,51 @@ impl App {
                             },
                             _ => AppReturn::Continue
                         }
+                    }
+                    Action::ChangeCardStatusToCompleted => {
+                        // get the current card and change its status to complete
+                        if let Some(current_board) = self.state.current_board_id {
+                            // find index of current board id in self.boards
+                            let index = self.boards.iter().position(|board| board.id == current_board);
+                            if let Some(current_card) = self.state.current_card_id {
+                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                if let Some(card_index) = card_index {
+                                    self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Complete;
+                                    info!("Completed card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                }
+                            }
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::ChangeCardStatusToActive => {
+                        // get the current card and change its status to active
+                        if let Some(current_board) = self.state.current_board_id {
+                            // find index of current board id in self.boards
+                            let index = self.boards.iter().position(|board| board.id == current_board);
+                            if let Some(current_card) = self.state.current_card_id {
+                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                if let Some(card_index) = card_index {
+                                    self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Active;
+                                    info!("Activated card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                }
+                            }
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::ChangeCardStatusToStale => {
+                        // get the current card and change its status to stale
+                        if let Some(current_board) = self.state.current_board_id {
+                            // find index of current board id in self.boards
+                            let index = self.boards.iter().position(|board| board.id == current_board);
+                            if let Some(current_card) = self.state.current_card_id {
+                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                if let Some(card_index) = card_index {
+                                    self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Stale;
+                                    info!("Staled card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                }
+                            }
+                        }
+                        AppReturn::Continue
                     }
                 }
             } else {
@@ -827,7 +881,7 @@ impl App {
         &self.state.config_state
     }
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
-        self.prev_ui_mode = self.ui_mode.clone();
+        self.prev_ui_mode = Some(self.ui_mode.clone());
         self.ui_mode = ui_mode;
         let available_focus_targets = self.ui_mode.get_available_targets();
         if !available_focus_targets.contains(&self.focus.to_str().to_string()) {

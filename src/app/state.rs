@@ -3,6 +3,7 @@ use serde::{
     Serialize,
     Deserialize
 };
+use crate::inputs::key::Key;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum UiMode {
@@ -25,7 +26,56 @@ pub enum UiMode {
     LoadSave
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub enum AppStatus {
+    Init,
+    Initialized,
+    UserInput
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum Focus {
+    Title,
+    Body,
+    Help,
+    Log,
+    Config,
+    ConfigHelp,
+    MainMenu,
+    MainMenuHelp,
+    NewBoardName,
+    NewBoardDescription,
+    NewCardName,
+    NewCardDescription,
+    NewCardDueDate,
+    SubmitButton,
+    NoFocus
+}
+
+pub struct KeyBindings {
+    pub quit: Vec<Key>,
+    pub open_config_menu: Vec<Key>,
+    pub up: Vec<Key>,
+    pub down: Vec<Key>,
+    pub right: Vec<Key>,
+    pub left: Vec<Key>,
+    pub next_focus: Vec<Key>,
+    pub prev_focus: Vec<Key>,
+    pub take_user_input: Vec<Key>,
+    pub hide_ui_element: Vec<Key>,
+    pub save_state: Vec<Key>,
+    pub new_board: Vec<Key>,
+    pub new_card: Vec<Key>,
+    pub delete_board: Vec<Key>,
+    pub delete_card: Vec<Key>,
+    pub card_status_completed: Vec<Key>,
+}
+
 impl UiMode {
+    pub fn default() -> UiMode {
+        UiMode::Zen
+    }
+
     pub fn to_string(&self) -> String {
         match self {
             UiMode::Zen => "Zen".to_string(),
@@ -103,8 +153,8 @@ impl UiMode {
             UiMode::EditConfig => vec![],
             UiMode::MainMenu => vec![],
             UiMode::ViewCard => vec![],
-            UiMode::HelpMenu => vec![],
-            UiMode::LogsOnly => vec![],
+            UiMode::HelpMenu => vec!["Help".to_string(), "Log".to_string()],
+            UiMode::LogsOnly => vec!["Log".to_string()],
             UiMode::NewBoard => vec!["New Board Name".to_string(), "New Board Description".to_string(), "Submit Button".to_string()],
             UiMode::NewCard => vec!["New Card Name".to_string(), "New Card Description".to_string(), "New Card Due Date".to_string(), "Submit Button".to_string()],
             UiMode::LoadSave => vec![],
@@ -120,33 +170,11 @@ impl UiMode {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
-pub enum AppStatus {
-    Init,
-    Initialized,
-    UserInput
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub enum Focus {
-    Title,
-    Body,
-    Help,
-    Log,
-    Config,
-    ConfigHelp,
-    MainMenu,
-    MainMenuHelp,
-    NewBoardName,
-    NewBoardDescription,
-    NewCardName,
-    NewCardDescription,
-    NewCardDueDate,
-    SubmitButton,
-    NoFocus
-}
-
 impl AppStatus {
+    pub fn default() -> Self {
+        Self::Init
+    }
+
     pub fn initialized() -> Self {
         Self::Initialized
     }
@@ -156,13 +184,11 @@ impl AppStatus {
     }
 }
 
-impl Default for AppStatus {
-    fn default() -> Self {
-        Self::Init
-    }
-}
-
 impl Focus {
+    pub fn default() -> Self {
+        Self::NoFocus
+    }
+
     pub fn to_str(&self) -> &str {
         match self {
             Self::Title => "Title",
@@ -269,8 +295,25 @@ impl Focus {
     }
 }
 
-impl Default for Focus {
-    fn default() -> Self {
-        Self::NoFocus
+impl KeyBindings {
+    pub fn default() -> Self {
+        Self {
+            quit: vec![Key::Char('q'), Key::Ctrl('c')],
+            open_config_menu: vec![Key::Char('p')],
+            up: vec![Key::Up],
+            down: vec![Key::Down],
+            right: vec![Key::Right],
+            left: vec![Key::Left],
+            next_focus: vec![Key::Tab],
+            prev_focus: vec![Key::ShiftTab],
+            take_user_input: vec![Key::Char('i')],
+            hide_ui_element: vec![Key::Char('h')],
+            save_state: vec![Key::Ctrl('s')],
+            new_board: vec![Key::Char('b')],
+            new_card: vec![Key::Char('n')],
+            delete_board: vec![Key::ShiftD],
+            delete_card: vec![Key::Char('d')],
+            card_status_completed: vec![Key::Char('1')],
+        }
     }
 }

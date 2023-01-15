@@ -76,6 +76,7 @@ impl Default for Board {
 pub enum CardStatus {
     Active,
     Complete,
+    Stale
 }
 
 impl CardStatus {
@@ -83,6 +84,7 @@ impl CardStatus {
         match self {
             CardStatus::Active => "Active".to_string(),
             CardStatus::Complete => "Complete".to_string(),
+            CardStatus::Stale => "Stale".to_string(),
         }
     }
 }

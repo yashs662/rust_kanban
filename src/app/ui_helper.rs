@@ -53,10 +53,7 @@ use super::{
     App,
     MainMenu
 };
-use super::actions::{
-    Actions,
-    Action
-};
+use super::actions::Actions;
 use super::state::{
     Focus,
     AppStatus
@@ -405,38 +402,7 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
         NON_FOCUSED_ELEMENT_STYLE
     };
 
-    // make a new string with the format key - action, or key1, key2 - action if there are multiple keys and join all pairs with ;
-
-    let actions_iter = actions.actions().iter();
-    let mut help_spans = vec![];
-    for action in actions_iter {
-        // check if action is SetUiMode if so then keys should be changed to string <1..8>
-        let keys = action.keys();
-        let mut keys_span = if keys.len() > 1 {
-            let keys_str = keys
-                .iter()
-                .map(|k| k.to_string())
-                .collect::<Vec<String>>()
-                .join(", ");
-            Span::styled(keys_str, HELP_KEY_STYLE)
-        } else {
-            Span::styled(keys[0].to_string(), HELP_KEY_STYLE)
-        };
-        let action_span = Span::styled(action.to_string(), HELP_DESCRIPTION_STYLE);
-        keys_span = match action {
-            Action::SetUiMode => Span::styled("<1..8>", HELP_KEY_STYLE),
-            _ => keys_span,
-        };
-        help_spans.push(keys_span);
-        help_spans.push(Span::raw(" - "));
-        help_spans.push(action_span);
-        // if action is not last
-        if action != actions.actions().last().unwrap() {
-            help_spans.push(Span::raw(" ; "));
-        }
-    }
-    let help_span = Spans::from(help_spans);
-
+    let help_span = Spans::from(generate_help_spans(actions));
     Paragraph::new(help_span)
         .alignment(Alignment::Left)
         .block(
@@ -447,6 +413,34 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
                 .border_type(BorderType::Plain),
         )
         .wrap(tui::widgets::Wrap { trim: true })
+}
+
+fn generate_help_spans(actions: &Actions) -> Vec<Span<'static>> {
+    // make a new string with the format key - action, or key1, key2 - action if there are multiple keys and join all pairs with ;
+    let actions_iter = actions.actions().iter();
+    let mut help_spans = vec![];
+    for action in actions_iter {
+        let keys = action.keys();
+        let keys_span = if keys.len() > 1 {
+            let keys_str = keys
+                .iter()
+                .map(|k| k.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+            Span::styled(keys_str, HELP_KEY_STYLE)
+        } else {
+            Span::styled(keys[0].to_string(), HELP_KEY_STYLE)
+        };
+        let action_span = Span::styled(action.to_string(), HELP_DESCRIPTION_STYLE);
+        help_spans.push(keys_span);
+        help_spans.push(Span::raw(" - "));
+        help_spans.push(action_span);
+        // if action is not last
+        if action != actions.actions().last().unwrap() {
+            help_spans.push(Span::raw(" ; "));
+        }
+    }
+    help_spans
 }
 
 /// Draws help section for config mode
@@ -542,35 +536,7 @@ fn draw_main_menu_help<'a>(focus: &Focus, actions: &Actions) -> Paragraph<'a> {
         NON_FOCUSED_ELEMENT_STYLE
     };
 
-    let mut help_spans = vec![];
-    let actions_iter = actions.actions().iter();
-    for action in actions_iter {
-        // check if action is SetUiMode if so then keys should be changed to string <1..8>
-        let keys = action.keys();
-        let mut keys_span = if keys.len() > 1 {
-            let keys_str = keys
-                .iter()
-                .map(|k| k.to_string())
-                .collect::<Vec<String>>()
-                .join(", ");
-            Span::styled(keys_str, HELP_KEY_STYLE)
-        } else {
-            Span::styled(keys[0].to_string(), HELP_KEY_STYLE)
-        };
-        let action_span = Span::styled(action.to_string(), HELP_DESCRIPTION_STYLE);
-        keys_span = match action {
-            Action::SetUiMode => Span::styled("<1..8>", HELP_KEY_STYLE),
-            _ => keys_span,
-        };
-        help_spans.push(keys_span);
-        help_spans.push(Span::raw(" - "));
-        help_spans.push(action_span);
-        // if action is not last
-        if action != actions.actions().last().unwrap() {
-            help_spans.push(Span::raw(" ; "));
-        }
-    }
-    let help_span = Spans::from(help_spans);
+    let help_span = Spans::from(generate_help_spans(actions));
 
     Paragraph::new(help_span)
         .alignment(Alignment::Left)

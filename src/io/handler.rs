@@ -29,7 +29,7 @@ use chrono::NaiveDate;
 use eyre::{Result, anyhow};
 use log::{
     error,
-    info,
+    info, debug,
 };
 
 use super::IoEvent;
@@ -196,6 +196,10 @@ impl IoAsyncHandler {
         let all_boards = app.boards.clone();
         let current_board_id = app.state.current_board_id;
         // check if current_board_id is set, if not assign to the first board
+        // check if all_boards is empty, if so, return
+        if all_boards.is_empty() {
+            return Ok(());
+        }
         let current_board_id = if current_board_id.is_none() {
             all_boards[0].id
         } else {
@@ -276,6 +280,10 @@ impl IoAsyncHandler {
         let all_boards = app.boards.clone();
         let current_board_id = app.state.current_board_id;
         // check if current_board_id is set, if not assign to the first board
+        // check if all_boards is empty, if so, return
+        if all_boards.is_empty() {
+            return Ok(());
+        }
         let current_board_id = if current_board_id.is_none() {
             all_boards[0].id
         } else {
@@ -356,6 +364,10 @@ impl IoAsyncHandler {
         let current_visible_boards = app.visible_boards_and_cards.clone();
         let current_board_id = app.state.current_board_id;
         let current_card_id = app.state.current_card_id;
+        // check if app.board is empty, if so, return
+        if current_visible_boards.is_empty() {
+            return Ok(());
+        }
         let current_board_id = if current_board_id.is_none() {
             app.boards[0].id
         } else {
@@ -457,6 +469,10 @@ impl IoAsyncHandler {
         let current_visible_boards = app.visible_boards_and_cards.clone();
         let current_board_id = app.state.current_board_id;
         let current_card_id = app.state.current_card_id;
+        // check if app.board is empty, if so, return
+        if current_visible_boards.is_empty() {
+            return Ok(());
+        }
         let current_board_id = if current_board_id.is_none() {
             app.boards[0].id
         } else {
@@ -782,7 +798,8 @@ fn prepare_boards (app: &mut App) -> Vec<Board> {
                     data
                 },
                 Err(err) => {
-                    error!("Cannot get local data: {:?}", err);
+                    debug!("Cannot get local data: {:?}", err);
+                    error!("👎 Cannot get local data, Data might be corrupted or is not in the correct format");
                     vec![]
                 },
             }
