@@ -1065,13 +1065,14 @@ where
         // calculate number of blocks to render
         let blocks_to_render = (available_height * cards_scroll_percentage) as u16;
         // render blocks VERTICAL_SCROLL_BAR_SYMBOL
-        for i in 0..blocks_to_render {
-            let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
-                .style(PROGRESS_BAR_STYLE)
-                .block(Block::default().borders(Borders::NONE));
-            rect.render_widget(block, Rect::new(card_area_chunks[0].x + 1, card_area_chunks[0].y + i + 1, card_area_chunks[0].width, 1));
+        if all_board_cards.len() > 0 {
+            for i in 0..blocks_to_render {
+                let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
+                    .style(PROGRESS_BAR_STYLE)
+                    .block(Block::default().borders(Borders::NONE));
+                rect.render_widget(block, Rect::new(card_area_chunks[0].x + 1, card_area_chunks[0].y + i + 1, card_area_chunks[0].width, 1));
+            }
         }
-
         for (card_index, card_id) in board_cards.iter().enumerate() {
             if card_index >= NO_OF_CARDS_PER_BOARD.into() {
                 break;
