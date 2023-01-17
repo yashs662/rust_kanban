@@ -526,7 +526,7 @@ impl App {
                                     let due_date = if new_card_due_date.is_empty() {
                                         Some(FIELD_NOT_SET.to_string())
                                     } else {
-                                        match NaiveDate::parse_from_str(&new_card_due_date, "%Y-%m-%d") {
+                                        match NaiveDate::parse_from_str(&new_card_due_date, "%d/%m/%Y") {
                                             Ok(due_date) => Some(due_date.to_string()),
                                             Err(e) => {
                                                 debug!("Invalid due date: {}", e);

@@ -1226,8 +1226,8 @@ where
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Percentage(30),
-            Constraint::Percentage(40),
+            Constraint::Length(5),
+            Constraint::Min(8),
             Constraint::Length(3),
             Constraint::Length(3),
             ].as_ref())
@@ -1251,7 +1251,7 @@ where
                 .borders(Borders::ALL)
                 .style(name_style)
                 .border_type(BorderType::Plain)
-                .title("Board Name")
+                .title("Board Name (required)")
         );
     rect.render_widget(board_name, chunks[1]);
 
@@ -1347,8 +1347,8 @@ where
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Percentage(20),
-            Constraint::Percentage(40),
+            Constraint::Length(5),
+            Constraint::Min(8),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -1374,7 +1374,7 @@ where
                 .borders(Borders::ALL)
                 .style(name_style)
                 .border_type(BorderType::Plain)
-                .title("Card Name")
+                .title("Card Name (required)")
         );
     rect.render_widget(card_name, chunks[1]);
 
@@ -1396,7 +1396,7 @@ where
                 .borders(Borders::ALL)
                 .style(due_date_style)
                 .border_type(BorderType::Plain)
-                .title("Card Due Date")
+                .title("Card Due Date (DD/MM/YYYY)")
         );
     rect.render_widget(card_due_date, chunks[3]);
 
