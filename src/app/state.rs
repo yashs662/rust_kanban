@@ -168,7 +168,7 @@ impl UiMode {
             UiMode::EditSpecificKeybinding => vec![],
             UiMode::MainMenu => vec![],
             UiMode::ViewCard => vec![],
-            UiMode::HelpMenu => vec!["Help".to_string(), "Log".to_string()],
+            UiMode::HelpMenu => vec![],
             UiMode::LogsOnly => vec!["Log".to_string()],
             UiMode::NewBoard => vec!["New Board Name".to_string(), "New Board Description".to_string(), "Submit Button".to_string()],
             UiMode::NewCard => vec!["New Card Name".to_string(), "New Card Description".to_string(), "New Card Due Date".to_string(), "Submit Button".to_string()],
@@ -256,6 +256,7 @@ impl Focus {
     }
 
     pub fn prev(&self, available_tabs: &Vec<String>) -> Self {
+        let current_focus = self.clone();
         let current = self.to_str();
         let index = available_tabs.iter().position(|x| x == current);
         // check if index is None
@@ -263,6 +264,9 @@ impl Focus {
             Some(i) => i,
             None => 0,
         };
+        if available_tabs.is_empty() {
+            return current_focus;
+        }
         let prev_index = if index == 0 {
             available_tabs.len() - 1
         } else {

@@ -262,6 +262,8 @@ impl App {
                         else {
                             if self.focus == Focus::Body {
                                 self.dispatch(IoEvent::GoUp).await;
+                            } else if self.focus == Focus::Help {
+                                self.help_prev();
                             }
                         }
                         AppReturn::Continue
@@ -282,6 +284,8 @@ impl App {
                         else {
                             if self.focus == Focus::Body {
                                 self.dispatch(IoEvent::GoDown).await;
+                            } else if self.focus == Focus::Help {
+                                self.help_next();
                             }
                         }
                         AppReturn::Continue
@@ -573,6 +577,7 @@ impl App {
                                     self.focus = Focus::NoFocus;
                                     self.state.edit_keybindings_state.select(None);
                                     write_config(&self.config);
+                                    self.keybind_list_maker();
                                 }
                                 AppReturn::Continue
                             }
@@ -598,6 +603,7 @@ impl App {
                                         self.edit_keybindings_next()
                                     }
                                 }
+                                self.keybind_list_maker();
                                 AppReturn::Continue
                             }
                             _ => {
@@ -1074,6 +1080,79 @@ impl App {
         };
         self.state.edit_keybindings_state.select(Some(i));
     }
+    pub fn help_next(&mut self) {
+        // as the help menu is split into two use only half the length of the keybind store
+        let i = match self.state.help_state.selected() {
+            Some(i) => {
+                if !self.state.keybind_store.is_empty() {
+                    if i >= (self.state.keybind_store.len() / 2) - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+        self.state.help_state.select(Some(i));
+    }
+    pub fn help_prev(&mut self) {
+        let i = match self.state.help_state.selected() {
+            Some(i) => {
+                if !self.state.keybind_store.is_empty() {
+                    if i == 0 {
+                        (self.state.keybind_store.len() / 2) - 1
+                    } else {
+                        i - 1
+                    }
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+        self.state.help_state.select(Some(i));
+    }
+    pub fn keybind_list_maker(&mut self) {
+
+        let keybinds = &self.config.keybindings;
+        let default_actions = &self.actions;
+        let keybind_action_iter = keybinds.iter();
+        let mut keybind_action_list: Vec<Vec<String>> = Vec::new();
+    
+        for (action, keys) in keybind_action_iter {
+            let mut keybind_action = Vec::new();
+            let mut keybind_string = String::new();
+            for key in keys {
+                keybind_string.push_str(&key.to_string());
+                keybind_string.push_str(" ");
+            }
+            keybind_action.push(keybind_string);
+            let action_translated_string = KeyBindings::str_to_action(keybinds.clone(), action).unwrap_or_else(|| &Action::Quit).to_string();
+            keybind_action.push(action_translated_string);
+            keybind_action_list.push(keybind_action);
+        }
+    
+        let default_action_iter = default_actions.actions().iter();
+        // append to keybind_action_list if the keybind is not already in the list
+        for action in default_action_iter {
+            let str_action = action.to_string();
+            if !keybind_action_list.iter().any(|x| x[1] == str_action) {
+                let mut keybind_action = Vec::new();
+                let action_keys = action.keys()
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
+                keybind_action.push(action_keys);
+                keybind_action.push(str_action);
+                keybind_action_list.push(keybind_action);
+            }
+        }
+        self.state.keybind_store = keybind_action_list;
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1137,6 +1216,8 @@ pub struct AppState {
     pub load_save_state: ListState,
     pub edit_keybindings_state: TableState,
     pub edited_keybinding: Option<Vec<Key>>,
+    pub help_state: TableState,
+    pub keybind_store: Vec<Vec<String>>,
 }
 
 impl Default for AppState {
@@ -1153,6 +1234,8 @@ impl Default for AppState {
             load_save_state: ListState::default(),
             edit_keybindings_state: TableState::default(),
             edited_keybinding: None,
+            help_state: TableState::default(),
+            keybind_store: Vec::new(),
         }
     }
 }

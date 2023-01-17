@@ -85,6 +85,7 @@ impl IoAsyncHandler {
             error!("Cannot create save directory");
         }
         app.boards = prepare_boards(&mut app);
+        app.keybind_list_maker();
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");

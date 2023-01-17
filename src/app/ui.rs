@@ -46,22 +46,22 @@ where
             render_title_body(rect, &app);
         }
         UiMode::BodyHelp => {
-            render_body_help(rect, &app);
+            render_body_help(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::BodyLog => {
             render_body_log(rect, &app);
         }
         UiMode::TitleBodyHelp => {
-            render_title_body_help(rect, &app);
+            render_title_body_help(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::TitleBodyLog => {
             render_title_body_log(rect, &app);
         }
         UiMode::BodyHelpLog => {
-            render_body_help_log(rect, &app);
+            render_body_help_log(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::TitleBodyHelpLog => {
-            render_title_body_help_log(rect, &app);
+            render_title_body_help_log(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::Config => {
             render_config(rect, &app, &mut states.config_state, false);
@@ -78,10 +78,10 @@ where
             render_edit_specific_keybinding(rect, &app);
         }
         UiMode::MainMenu => {
-            render_main_menu(rect, &app, &mut states.main_menu_state);
+            render_main_menu(rect, &app, &mut states.main_menu_state, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::HelpMenu => {
-            render_help_menu(rect, &app.focus);
+            render_help_menu(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::LogsOnly => {
             render_logs_only(rect, &app.focus);

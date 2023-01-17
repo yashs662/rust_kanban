@@ -53,10 +53,9 @@ use super::{
     App,
     MainMenu
 };
-use super::actions::Actions;
 use super::state::{
     Focus,
-    AppStatus, KeyBindings
+    AppStatus,
 };
 use crate::io::data_handler::{
     get_config,
@@ -102,7 +101,7 @@ where
     render_body(rect, chunks[1], app);
 }
 
-pub fn render_body_help<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_body_help<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
 where
     B: Backend,
 {
@@ -117,12 +116,27 @@ where
         )
         .split(rect.size());
 
-    let actions = app.actions();
+    let help_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(1),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(chunks[1]);
     
     render_body(rect, chunks[0], app);
 
-    let help = draw_help(actions, &app.focus, &app.config.keybindings);
-    rect.render_widget(help, chunks[1]);
+    let help = draw_help(&app.focus, false, keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT);
+    rect.render_widget(help.0, chunks[1]);
+    rect.render_stateful_widget(help.1, help_chunks[0], help_state);
+    rect.render_widget(help_separator, help_chunks[1]);
+    rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 }
 
 pub fn render_body_log<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -146,7 +160,7 @@ where
     rect.render_widget(log, chunks[1]);
 }
 
-pub fn render_title_body_help<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_title_body_help<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
 where
     B: Backend,
 {
@@ -162,15 +176,30 @@ where
         )
         .split(rect.size());
 
-    let actions = app.actions();
+        let help_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(1),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(chunks[2]);
 
     let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app);
 
-    let help = draw_help(actions, &app.focus, &app.config.keybindings);
-    rect.render_widget(help, chunks[2]);
+    let help = draw_help(&app.focus, false, keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT);
+    rect.render_widget(help.0, chunks[2]);
+    rect.render_stateful_widget(help.1, help_chunks[0], help_state);
+    rect.render_widget(help_separator, help_chunks[1]);
+    rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 }
 
 pub fn render_title_body_log<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -198,7 +227,7 @@ where
     rect.render_widget(log, chunks[2]);
 }
 
-pub fn render_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
 where
     B: Backend,
 {
@@ -214,18 +243,33 @@ where
         )
         .split(rect.size());
 
-    let actions = app.actions();
+        let help_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(1),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(chunks[1]);
 
     render_body(rect, chunks[0], app);
 
-    let help = draw_help(actions, &app.focus, &app.config.keybindings);
-    rect.render_widget(help, chunks[1]);
+    let help = draw_help(&app.focus, false, keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT);
+    rect.render_widget(help.0, chunks[1]);
+    rect.render_stateful_widget(help.1, help_chunks[0], help_state);
+    rect.render_widget(help_separator, help_chunks[1]);
+    rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 
     let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[2]);
 }
 
-pub fn render_title_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_title_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
 where
     B: Backend,
 {
@@ -242,15 +286,30 @@ where
         )
         .split(rect.size());
 
-    let actions = app.actions();
+        let help_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(1),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(chunks[2]);
 
     let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app);
 
-    let help = draw_help(actions, &app.focus, &app.config.keybindings);
-    rect.render_widget(help, chunks[2]);
+    let help = draw_help(&app.focus, false, keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT);
+    rect.render_widget(help.0, chunks[2]);
+    rect.render_stateful_widget(help.1, help_chunks[0], help_state);
+    rect.render_widget(help_separator, help_chunks[1]);
+    rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 
     let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[3]);
@@ -536,7 +595,7 @@ where
     }
 }
 
-pub fn render_main_menu<'a,B>(rect: &mut Frame<B>, app: &App, main_menu_state: &mut ListState)
+pub fn render_main_menu<'a,B>(rect: &mut Frame<B>, app: &App, main_menu_state: &mut ListState, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
 where
     B: Backend,
 {
@@ -545,13 +604,26 @@ where
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(50),
-                Constraint::Length(4),
+                Constraint::Length(16),
+                Constraint::Min(8),
                 Constraint::Length(8)
             ]
             .as_ref(),
         )
         .split(rect.size());
+
+    let help_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(1),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(chunks[2]);
     
     let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
@@ -559,14 +631,18 @@ where
     let main_menu = draw_main_menu(&app.focus, MainMenu::all());
     rect.render_stateful_widget(main_menu, chunks[1], main_menu_state);
 
-    let main_menu_help = draw_help(app.actions(), &app.focus, &app.config.keybindings);
-    rect.render_widget(main_menu_help, chunks[2]);
+    let main_menu_help = draw_help(&app.focus, false, keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT);
+    rect.render_widget(main_menu_help.0, chunks[2]);
+    rect.render_stateful_widget(main_menu_help.1, help_chunks[0], help_state);
+    rect.render_widget(help_separator, help_chunks[1]);
+    rect.render_stateful_widget(main_menu_help.2, help_chunks[2], help_state);
 
     let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[3]);
 }
 
-pub fn render_help_menu<'a,B>(rect: &mut Frame<B>, focus: &Focus)
+pub fn render_help_menu<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
 where
     B: Backend,
 {
@@ -580,10 +656,28 @@ where
             .as_ref(),
         )
         .split(rect.size());
-    let help_menu = draw_help_menu(focus);
-    rect.render_widget(help_menu, chunks[0]);
 
-    let log = draw_logs(focus, true, false);
+    let help_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(1),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(chunks[0]);
+
+    let help_menu = draw_help(&app.focus, false, keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT);
+    rect.render_widget(help_menu.0, chunks[0]);
+    rect.render_stateful_widget(help_menu.1, help_chunks[0], help_state);
+    rect.render_widget(help_separator, help_chunks[1]);
+    rect.render_stateful_widget(help_menu.2, help_chunks[2], help_state);
+
+    let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[1]);
 }
 
@@ -605,66 +699,62 @@ where
 }
 
 /// Draws Help section for normal mode
-fn draw_help<'a>(actions: &Actions, focus: &Focus, keybinds: &KeyBindings) -> Paragraph<'a> {
-    let helpbox_style = if matches!(focus, Focus::Help) {
-        FOCUSED_ELEMENT_STYLE
+fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>>) -> (Block<'a>,Table<'a>,Table<'a>) {
+    
+    let default_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        if *focus == Focus::Help {
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            DEFAULT_STYLE
+        }
     };
 
-    let help_span = Spans::from(generate_help_spans(actions, keybinds));
-    Paragraph::new(help_span)
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .title("Help")
-                .borders(Borders::ALL)
-                .style(helpbox_style)
-                .border_type(BorderType::Plain),
-        )
-        .wrap(tui::widgets::Wrap { trim: true })
-}
+    let current_element_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        FOCUSED_ELEMENT_STYLE
+    };
 
-fn generate_help_spans(actions: &Actions, keybinds: &KeyBindings) -> Vec<Span<'static>> {
-    // make a new string with the format key - action, or key1, key2 - action if there are multiple keys and join all pairs with ;
-    let actions_iter = actions.actions().iter();
-    let action_list = &mut vec![];
-    for keybind_actions in keybinds.iter() {
-        let keybind = keybind_actions.0;
-        let actions = keybind_actions.1;
-        for action in actions {
-            action_list.push((keybind, action));
-        }
-    }
-    let mut help_spans = vec![];
-    for action in actions_iter {
-        // make sure action is not in action_list
-        // use the Display trait to get the action name
-        let str_action = action.to_string();
-        if action_list.iter().any(|a| a.0 == str_action) {
-            continue;
-        }
-        let keys = action.keys();
-        let keys_span = if keys.len() > 1 {
-            let keys_str = keys
-                .iter()
-                .map(|k| k.to_string())
-                .collect::<Vec<String>>()
-                .join(", ");
-            Span::styled(keys_str, HELP_KEY_STYLE)
-        } else {
-            Span::styled(keys[0].to_string(), HELP_KEY_STYLE)
-        };
-        let action_span = Span::styled(action.to_string(), HELP_DESCRIPTION_STYLE);
-        help_spans.push(keys_span);
-        help_spans.push(Span::raw(" - "));
-        help_spans.push(action_span);
-        // if action is not last
-        if action != actions.actions().last().unwrap() {
-            help_spans.push(Span::raw(" ; "));
-        }
-    }
-    help_spans
+    let rows = keybind_store.iter().map(|item| {
+        let height = item
+            .iter()
+            .map(|content| content.chars().filter(|c| *c == '\n').count())
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let cells = item.iter().map(|c| Cell::from(c.to_string()));
+        Row::new(cells).height(height as u16)
+    });
+
+    // split the rows into two tables
+    let left_rows = rows.clone().take(rows.clone().count() / 2);
+    let right_rows = rows.clone().skip(rows.clone().count() / 2);
+
+    let left_table = Table::new(left_rows)
+        .block(Block::default())
+        .highlight_style(current_element_style)
+        .highlight_symbol(">> ")
+        .widths(&[
+            Constraint::Percentage(30),
+            Constraint::Length(30),
+            Constraint::Min(10),
+        ]);
+
+    let right_table = Table::new(right_rows)
+        .block(Block::default())
+        .highlight_style(current_element_style)
+        .highlight_symbol(">> ")
+        .widths(&[
+            Constraint::Percentage(30),
+            Constraint::Length(30),
+            Constraint::Min(10),
+        ]);
+
+    let border_block = Block::default().borders(Borders::ALL).border_style(default_style).title("Help");
+
+    (border_block, left_table, right_table)
 }
 
 /// Draws help section for config mode
@@ -822,51 +912,6 @@ fn get_config_items() -> Vec<Vec<String>>
     let config = get_config();
     let config_list = config.to_list();
     return config_list;
-}
-
-/// Draws Help Menu
-fn draw_help_menu<'a>(focus: &Focus) -> Paragraph<'a> {
-    let helpbox_style = if matches!(focus, Focus::Help) {
-        FOCUSED_ELEMENT_STYLE
-    } else {
-        NON_FOCUSED_ELEMENT_STYLE
-    };
-
-    let general_help = "General help ; ";
-    // TODO: Add help text
-
-    let mut help_spans = vec![];
-    help_spans.push(Span::styled(general_help, DEFAULT_STYLE));
-    let keys_span = Span::styled("<Up>, <Down>", HELP_KEY_STYLE);
-    let action_span = Span::styled("Scroll up/down", HELP_DESCRIPTION_STYLE);
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-    help_spans.push(Span::raw(" ; "));
-    let keys_span = Span::styled("<Left>, <Right>", HELP_KEY_STYLE);
-    let action_span = Span::styled("Scroll left/right", HELP_DESCRIPTION_STYLE);
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-    help_spans.push(Span::raw(" ; "));
-    let keys_span = Span::styled("<Esc>", HELP_KEY_STYLE);
-    let action_span = Span::styled("Exit", HELP_DESCRIPTION_STYLE);
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-
-    let help_span = Spans::from(help_spans);
-
-    Paragraph::new(help_span)
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .title("Help")
-                .borders(Borders::ALL)
-                .style(helpbox_style)
-                .border_type(BorderType::Plain),
-        )
-        .wrap(tui::widgets::Wrap { trim: true })
 }
 
 /// Draws Kanban boards
