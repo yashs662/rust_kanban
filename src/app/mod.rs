@@ -854,7 +854,7 @@ impl App {
                                 let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
                                     self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Complete;
-                                    info!("Completed card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                    info!("Changed status to Completed for card {}", self.boards[index.unwrap()].cards[card_index].name);
                                 }
                             }
                         }
@@ -873,7 +873,7 @@ impl App {
                                 let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
                                     self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Active;
-                                    info!("Activated card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                    info!("Changed status to Active for card {}", self.boards[index.unwrap()].cards[card_index].name);
                                 }
                             }
                         }
@@ -892,7 +892,7 @@ impl App {
                                 let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
                                     self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Stale;
-                                    info!("Staled card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                    info!("Changed status to Stale for card {}", self.boards[index.unwrap()].cards[card_index].name);
                                 }
                             }
                         }

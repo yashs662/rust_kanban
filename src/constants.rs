@@ -17,9 +17,9 @@ pub const APP_TITLE: &str = "Rust 🦀 Kanban";
 pub const MIN_TERM_WIDTH: u16 = 110;
 pub const MIN_TERM_HEIGHT: u16 = 30;
 pub const LIST_SELECTED_SYMBOL: &str = ">> ";
+pub const VERTICAL_SCROLL_BAR_SYMBOL: &str = "█";
 
 // Style
-
 pub const DEFAULT_STYLE: Style = Style{
     fg: Some(Color::White),
     bg: Some(Color::Reset),
@@ -32,14 +32,26 @@ pub const LIST_SELECT_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
-pub const CARD_DATE_DUE_STYLE: Style = Style {
+pub const CARD_DUE_DATE_STYLE: Style = Style {
     fg: Some(Color::LightRed),
     bg: Some(Color::Black),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
-pub const CARD_STATUS_STYLE: Style = Style {
+pub const CARD_ACTIVE_STATUS_STYLE: Style = Style {
+    fg: Some(Color::LightCyan),
+    bg: Some(Color::Black),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const CARD_COMPLETED_STATUS_STYLE: Style = Style {
     fg: Some(Color::LightGreen),
+    bg: Some(Color::Black),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const CARD_STALE_STATUS_STYLE: Style = Style {
+    fg: Some(Color::DarkGray),
     bg: Some(Color::Black),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),

@@ -32,8 +32,8 @@ use crate::constants::{
     NO_OF_CARDS_PER_BOARD,
     LIST_SELECT_STYLE,
     LIST_SELECTED_SYMBOL,
-    CARD_DATE_DUE_STYLE,
-    CARD_STATUS_STYLE,
+    CARD_DUE_DATE_STYLE,
+    CARD_ACTIVE_STATUS_STYLE,
     FOCUSED_ELEMENT_STYLE,
     NON_FOCUSED_ELEMENT_STYLE,
     HELP_KEY_STYLE,
@@ -45,7 +45,11 @@ use crate::constants::{
     LOG_INFO_STYLE,
     DEFAULT_STYLE,
     PROGRESS_BAR_STYLE,
-    ERROR_TEXT_STYLE, INACTIVE_TEXT_STYLE,
+    ERROR_TEXT_STYLE,
+    INACTIVE_TEXT_STYLE,
+    VERTICAL_SCROLL_BAR_SYMBOL,
+    CARD_COMPLETED_STATUS_STYLE,
+    CARD_STALE_STATUS_STYLE
 };
 
 use super::{
@@ -1031,11 +1035,42 @@ where
             .border_type(BorderType::Plain);
         rect.render_widget(board_block, board_chunks[board_index]);
 
+        let card_area_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Length(1),
+                    Constraint::Percentage(99),
+                ]
+                .as_ref(),
+            ).split(board_chunks[board_index]);
+        
         let card_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .margin(1)
+            .margin(2)
             .constraints(card_constraints.as_ref())
-            .split(board_chunks[board_index]);
+            .split(card_area_chunks[1]);
+
+        // calculate the current card scroll percentage
+        // get the index of current card in board_cards
+        let all_board_cards = boards.iter().find(|&b| b.id == *board_id).unwrap().cards.clone();
+        let current_card_index = all_board_cards.iter().position(|c| c.id == app.state.current_card_id.unwrap_or(0));
+        let cards_scroll_percentage = (current_card_index.unwrap_or(0) + 1) as f64 / all_board_cards.len() as f64;
+        let cards_scroll_percentage = cards_scroll_percentage.clamp(0.0, 1.0);
+        let available_height = if card_area_chunks[0].height >= 2 {
+            (card_area_chunks[0].height - 2) as f64
+        } else {
+            0.0
+        };
+        // calculate number of blocks to render
+        let blocks_to_render = (available_height * cards_scroll_percentage) as u16;
+        // render blocks VERTICAL_SCROLL_BAR_SYMBOL
+        for i in 0..blocks_to_render {
+            let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
+                .style(PROGRESS_BAR_STYLE)
+                .block(Block::default().borders(Borders::NONE));
+            rect.render_widget(block, Rect::new(card_area_chunks[0].x + 1, card_area_chunks[0].y + i + 1, card_area_chunks[0].width, 1));
+        }
 
         for (card_index, card_id) in board_cards.iter().enumerate() {
             if card_index >= NO_OF_CARDS_PER_BOARD.into() {
@@ -1066,11 +1101,17 @@ where
             let card_due_date = card.unwrap().date_due.clone();
             if !card_due_date.is_empty() {
                 let card_due_date_styled = Text::styled(
-                    format!("Due: {}",card_due_date), CARD_DATE_DUE_STYLE);
+                    format!("Due: {}",card_due_date), CARD_DUE_DATE_STYLE);
                 card_description.extend(card_due_date_styled);
             }
             let card_status = format!("Status: {}",card.unwrap().card_status.clone().to_string());
-            let card_status = Text::styled(card_status, CARD_STATUS_STYLE);
+            let card_status = if card_status == "Status: Active" {
+                Text::styled(card_status, CARD_ACTIVE_STATUS_STYLE)
+            } else if card_status == "Status: Complete" {
+                Text::styled(card_status, CARD_COMPLETED_STATUS_STYLE)
+            } else {
+                Text::styled(card_status, CARD_STALE_STATUS_STYLE)
+            };
             card_description.extend(card_status);
 
             // if card id is same as current_card, highlight it
