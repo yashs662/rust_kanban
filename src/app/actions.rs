@@ -6,6 +6,8 @@ use std::fmt::{
 use std::slice::Iter;
 
 use crate::inputs::key::Key;
+use crate::io::data_handler::get_config;
+use super::state::KeyBindings;
 
 /// We define all available action
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -13,7 +15,7 @@ pub enum Action {
     Quit,
     NextFocus,
     PrvFocus,
-    ToggleConfig,
+    OpenConfigMenu,
     Up,
     Down,
     Right,
@@ -21,7 +23,7 @@ pub enum Action {
     TakeUserInput,
     GoToPreviousUIMode,
     Enter,
-    Hide,
+    HideUiElement,
     SaveState,
     NewBoard,
     NewCard,
@@ -40,7 +42,7 @@ impl Action {
             Action::Quit,
             Action::NextFocus,
             Action::PrvFocus,
-            Action::ToggleConfig,
+            Action::OpenConfigMenu,
             Action::Up,
             Action::Down,
             Action::Right,
@@ -48,7 +50,7 @@ impl Action {
             Action::TakeUserInput,
             Action::GoToPreviousUIMode,
             Action::Enter,
-            Action::Hide,
+            Action::HideUiElement,
             Action::SaveState,
             Action::NewBoard,
             Action::NewCard,
@@ -68,7 +70,7 @@ impl Action {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
             Action::NextFocus => &[Key::Tab],
             Action::PrvFocus => &[Key::ShiftTab],
-            Action::ToggleConfig => &[Key::Char('c')],
+            Action::OpenConfigMenu => &[Key::Char('c')],
             Action::Up => &[Key::Up],
             Action::Down => &[Key::Down],
             Action::Right => &[Key::Right],
@@ -76,7 +78,7 @@ impl Action {
             Action::TakeUserInput => &[Key::Char('i')],
             Action::GoToPreviousUIMode => &[Key::Esc],
             Action::Enter => &[Key::Enter],
-            Action::Hide => &[Key::Char('h')],
+            Action::HideUiElement => &[Key::Char('h')],
             Action::SaveState => &[Key::Ctrl('s')],
             Action::NewBoard => &[Key::Char('b')],
             Action::NewCard => &[Key::Char('n')],
@@ -101,7 +103,7 @@ impl Display for Action {
             Action::Quit => "Quit",
             Action::NextFocus => "Focus next",
             Action::PrvFocus => "Focus previous",
-            Action::ToggleConfig => "Open config Menu",
+            Action::OpenConfigMenu => "Open config Menu",
             Action::Up => "Go up",
             Action::Down => "Go down",
             Action::Right => "Go right",
@@ -109,7 +111,7 @@ impl Display for Action {
             Action::TakeUserInput => "Enter input mode",
             Action::GoToPreviousUIMode => "Go to previous mode",
             Action::Enter => "Accept",
-            Action::Hide => "Hide Focused element",
+            Action::HideUiElement => "Hide Focused element",
             Action::SaveState => "Save Kanban state",
             Action::NewBoard => "Create new board",
             Action::NewCard => "Create new card in current board",
@@ -131,9 +133,26 @@ pub struct Actions(Vec<Action>);
 impl Actions {
     /// Given a key, find the corresponding action
     pub fn find(&self, key: Key) -> Option<&Action> {
-        Action::iterator()
-            .filter(|action| self.0.contains(action))
-            .find(|action| action.keys().contains(&key))
+
+        let config = get_config();
+        let current_bindings = config.keybindings.clone();
+        let action_list = &mut Vec::new();
+        for (k, _v) in current_bindings.iter() {
+            action_list.push(KeyBindings::str_to_action(current_bindings.clone(), k.clone()));
+        }
+        let binding_action = KeyBindings::key_to_action(config.keybindings.clone(), key);
+        if binding_action.is_some() {
+            return binding_action;
+        } else {
+            let temp_action = Action::iterator()
+                .filter(|action| self.0.contains(action))
+                .find(|action| action.keys().contains(&key));
+            if temp_action.is_some() && !action_list.contains(&temp_action) {
+                return temp_action;
+            } else {
+                return None;
+            }
+        }
     }
 
     /// Get contextual actions.

@@ -11,6 +11,7 @@
 - [ ] Improve Help Messages
 - [ ] De-clutter Code
 ## Completed Features
+- [x] Custom Keybindings
 - [x] Implement the Kanban Boards ( the main UI basically )
 - [x] Auto Save on exit
 - [x] Save/Load Kanban state

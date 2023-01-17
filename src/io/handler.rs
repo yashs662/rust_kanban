@@ -785,7 +785,7 @@ fn prepare_save_dir() -> bool {
 
 fn prepare_boards (app: &mut App) -> Vec<Board> {
     let config = get_config();
-    if config.always_load_latest_save {
+    if config.always_load_last_save {
         let latest_save_file_info = get_latest_save_file();
         if latest_save_file_info.is_ok() {
             let latest_save_file_info = latest_save_file_info.unwrap();

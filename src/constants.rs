@@ -110,3 +110,9 @@ pub const ERROR_TEXT_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
+pub const INACTIVE_TEXT_STYLE: Style = Style {
+    fg: Some(Color::Rgb(40, 40, 40)),
+    bg: Some(Color::Black),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};

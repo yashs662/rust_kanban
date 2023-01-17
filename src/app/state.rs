@@ -5,6 +5,8 @@ use serde::{
 };
 use crate::inputs::key::Key;
 
+use super::actions::Action;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum UiMode {
     Zen,
@@ -17,6 +19,8 @@ pub enum UiMode {
     BodyHelpLog,
     Config,
     EditConfig,
+    EditKeybindings,
+    EditSpecificKeybinding,
     MainMenu,
     ViewCard,
     HelpMenu,
@@ -30,7 +34,8 @@ pub enum UiMode {
 pub enum AppStatus {
     Init,
     Initialized,
-    UserInput
+    UserInput,
+    KeyBindMode,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -52,6 +57,7 @@ pub enum Focus {
     NoFocus
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KeyBindings {
     pub quit: Vec<Key>,
     pub open_config_menu: Vec<Key>,
@@ -68,7 +74,10 @@ pub struct KeyBindings {
     pub new_card: Vec<Key>,
     pub delete_board: Vec<Key>,
     pub delete_card: Vec<Key>,
-    pub card_status_completed: Vec<Key>,
+    pub change_card_status_to_completed: Vec<Key>,
+    pub change_card_status_to_active: Vec<Key>,
+    pub change_card_status_to_stale: Vec<Key>,
+    pub reset_ui: Vec<Key>,
 }
 
 impl UiMode {
@@ -88,6 +97,8 @@ impl UiMode {
             UiMode::TitleBodyHelpLog => "Title, Body, Help and Log".to_string(),
             UiMode::Config => "Config".to_string(),
             UiMode::EditConfig => "Edit Config".to_string(),
+            UiMode::EditKeybindings => "Edit Keybindings".to_string(),
+            UiMode::EditSpecificKeybinding => "Edit Specific Keybinding".to_string(),
             UiMode::MainMenu => "Main Menu".to_string(),
             UiMode::ViewCard => "View Card".to_string(),
             UiMode::HelpMenu => "Help Menu".to_string(),
@@ -110,6 +121,8 @@ impl UiMode {
             "Title, Body, Help and Log" => Some(UiMode::TitleBodyHelpLog),
             "Config" => Some(UiMode::Config),
             "Edit Config" => Some(UiMode::EditConfig),
+            "Edit Keybindings" => Some(UiMode::EditKeybindings),
+            "Edit Specific Keybinding" => Some(UiMode::EditSpecificKeybinding),
             "Main Menu" => Some(UiMode::MainMenu),
             "View Card" => Some(UiMode::ViewCard),
             "Help Menu" => Some(UiMode::HelpMenu),
@@ -151,6 +164,8 @@ impl UiMode {
             UiMode::TitleBodyHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::Config => vec![],
             UiMode::EditConfig => vec![],
+            UiMode::EditKeybindings => vec!["Title".to_string(), "Submit Button".to_string()],
+            UiMode::EditSpecificKeybinding => vec![],
             UiMode::MainMenu => vec![],
             UiMode::ViewCard => vec![],
             UiMode::HelpMenu => vec!["Help".to_string(), "Log".to_string()],
@@ -298,22 +313,113 @@ impl Focus {
 impl KeyBindings {
     pub fn default() -> Self {
         Self {
-            quit: vec![Key::Char('q'), Key::Ctrl('c')],
-            open_config_menu: vec![Key::Char('p')],
+            quit: vec![Key::Ctrl('c'), Key::Char('q')],
+            next_focus: vec![Key::Tab],
+            prev_focus: vec![Key::ShiftTab],
+            open_config_menu: vec![Key::Char('c')],
             up: vec![Key::Up],
             down: vec![Key::Down],
             right: vec![Key::Right],
             left: vec![Key::Left],
-            next_focus: vec![Key::Tab],
-            prev_focus: vec![Key::ShiftTab],
             take_user_input: vec![Key::Char('i')],
             hide_ui_element: vec![Key::Char('h')],
             save_state: vec![Key::Ctrl('s')],
             new_board: vec![Key::Char('b')],
             new_card: vec![Key::Char('n')],
-            delete_board: vec![Key::ShiftD],
             delete_card: vec![Key::Char('d')],
-            card_status_completed: vec![Key::Char('1')],
+            delete_board: vec![Key::Char('D')],
+            change_card_status_to_completed: vec![Key::Char('1')],
+            change_card_status_to_active: vec![Key::Char('2')],
+            change_card_status_to_stale: vec![Key::Char('3')],
+            reset_ui: vec![Key::Char('r')],
         }
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Vec<Key>)> {
+        vec![
+            ("quit", &self.quit),
+            ("next_focus", &self.next_focus),
+            ("prev_focus", &self.prev_focus),
+            ("open_config_menu", &self.open_config_menu),
+            ("up", &self.up),
+            ("down", &self.down),
+            ("right", &self.right),
+            ("left", &self.left),
+            ("take_user_input", &self.take_user_input),
+            ("hide_ui_element", &self.hide_ui_element),
+            ("save_state", &self.save_state),
+            ("new_board", &self.new_board),
+            ("new_card", &self.new_card),
+            ("delete_card", &self.delete_card),
+            ("delete_board", &self.delete_board),
+            ("change_card_status_to_completed", &self.change_card_status_to_completed),
+            ("change_card_status_to_active", &self.change_card_status_to_active),
+            ("change_card_status_to_stale", &self.change_card_status_to_stale),
+            ("reset_ui", &self.reset_ui),
+        ]
+        .into_iter()
+    }
+
+    pub fn key_to_action(self, key: Key) -> Option<&'static Action> {
+        for (action, keys) in self.iter() {
+            if keys.contains(&key) {
+                match action {
+                    "quit" => return Some(&Action::Quit),
+                    "next_focus" => return Some(&Action::NextFocus),
+                    "prev_focus" => return Some(&Action::PrvFocus),
+                    "open_config_menu" => return Some(&Action::OpenConfigMenu),
+                    "up" => return Some(&Action::Up),
+                    "down" => return Some(&Action::Down),
+                    "right" => return Some(&Action::Right),
+                    "left" => return Some(&Action::Left),
+                    "take_user_input" => return Some(&Action::TakeUserInput),
+                    "hide_ui_element" => return Some(&Action::HideUiElement),
+                    "save_state" => return Some(&Action::SaveState),
+                    "new_board" => return Some(&Action::NewBoard),
+                    "new_card" => return Some(&Action::NewCard),
+                    "delete_card" => return Some(&Action::DeleteCard),
+                    "delete_board" => return Some(&Action::DeleteBoard),
+                    "change_card_status_to_completed" => {
+                        return Some(&Action::ChangeCardStatusToCompleted)
+                    }
+                    "change_card_status_to_active" => {
+                        return Some(&Action::ChangeCardStatusToActive)
+                    }
+                    "change_card_status_to_stale" => {
+                        return Some(&Action::ChangeCardStatusToStale)
+                    }
+                    "reset_ui" => return Some(&Action::ResetUI),
+                    _ => return None,
+                }
+            }
+        }
+        None
+    }
+
+    pub fn str_to_action(self, action: &str) -> Option<&'static Action> {
+        match action {
+            "quit" => Some(&Action::Quit),
+            "next_focus" => Some(&Action::NextFocus),
+            "prev_focus" => Some(&Action::PrvFocus),
+            "open_config_menu" => Some(&Action::OpenConfigMenu),
+            "up" => Some(&Action::Up),
+            "down" => Some(&Action::Down),
+            "right" => Some(&Action::Right),
+            "left" => Some(&Action::Left),
+            "take_user_input" => Some(&Action::TakeUserInput),
+            "hide_ui_element" => Some(&Action::HideUiElement),
+            "save_state" => Some(&Action::SaveState),
+            "new_board" => Some(&Action::NewBoard),
+            "new_card" => Some(&Action::NewCard),
+            "delete_card" => Some(&Action::DeleteCard),
+            "delete_board" => Some(&Action::DeleteBoard),
+            "change_card_status_to_completed" => Some(&Action::ChangeCardStatusToCompleted),
+            "change_card_status_to_active" => Some(&Action::ChangeCardStatusToActive),
+            "change_card_status_to_stale" => Some(&Action::ChangeCardStatusToStale),
+            "reset_ui" => Some(&Action::ResetUI),
+            _ => None,
+        }
+    }
+    
+
 }

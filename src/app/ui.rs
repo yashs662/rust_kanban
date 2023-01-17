@@ -16,6 +16,8 @@ use super::ui_helper::{
     render_title_body_help_log,
     render_config,
     render_edit_config,
+    render_edit_keybindings,
+    render_edit_specific_keybinding,
     render_main_menu,
     render_help_menu,
     render_logs_only,
@@ -62,10 +64,18 @@ where
             render_title_body_help_log(rect, &app);
         }
         UiMode::Config => {
-            render_config(rect, &app, &mut states.config_state);
+            render_config(rect, &app, &mut states.config_state, false);
         }
         UiMode::EditConfig => {
+            render_config(rect, &app, &mut states.config_state, true);
             render_edit_config(rect, &app);
+        }
+        UiMode::EditKeybindings => {
+            render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state, false);
+        }
+        UiMode::EditSpecificKeybinding => {
+            render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state, true);
+            render_edit_specific_keybinding(rect, &app);
         }
         UiMode::MainMenu => {
             render_main_menu(rect, &app, &mut states.main_menu_state);

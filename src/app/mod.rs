@@ -21,12 +21,15 @@ use serde::{
     Serialize, 
     Deserialize
 };
-use tui::widgets::ListState;
+use tui::widgets::{ListState, TableState};
 
 use self::actions::Actions;
-use self::state::AppStatus;
-use self::state::Focus;
-use self::state::UiMode;
+use self::state::{
+    AppStatus,
+    Focus,
+    UiMode,
+    KeyBindings,
+};
 use self::kanban::{
     Board,
     Card,
@@ -97,7 +100,7 @@ impl App {
             boards: boards,
             current_user_input: String::new(),
             prev_ui_mode: None,
-            config: AppConfig::default(),
+            config: get_config(),
             config_item_being_edited: None,
             visible_boards_and_cards: LinkedHashMap::new(),
         }
@@ -158,6 +161,23 @@ impl App {
                 info!("Exiting user input mode");
             }
             return AppReturn::Continue;
+        } else if self.state.status == AppStatus::KeyBindMode {
+            if key != Key::Enter && key != Key::Esc {
+                if self.state.edited_keybinding.is_some() {
+                    let keybinding = self.state.edited_keybinding.as_mut().unwrap();
+                    keybinding.push(key);
+                } else {
+                    self.state.edited_keybinding = Some(vec![key]);
+                }
+            } else if key == Key::Enter {
+                self.state.status = AppStatus::Initialized;
+                info!("Exiting user keybind input mode");
+            } else if key == Key::Esc {
+                self.state.status = AppStatus::Initialized;
+                self.state.edited_keybinding = None;
+                info!("Exiting user keybind input mode");
+            }
+            AppReturn::Continue
         } else {
             if let Some(action) = self.actions.find(key) {
                 match action {
@@ -205,12 +225,15 @@ impl App {
                         self.ui_mode = new_ui_mode;
                         AppReturn::Continue
                     }
-                    Action::ToggleConfig => {
+                    Action::OpenConfigMenu => {
                         if self.ui_mode == UiMode::Config {
                             self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                         } else {
                             self.prev_ui_mode = Some(self.ui_mode.clone());
                             self.ui_mode = UiMode::Config;
+                            if self.state.config_state.selected().is_none() {
+                                self.config_next()
+                            }
                             let available_focus_targets = self.ui_mode.get_available_targets();
                             if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
                                 // check if available focus targets is empty
@@ -233,6 +256,9 @@ impl App {
                         else if self.ui_mode == UiMode::LoadSave {
                             self.load_save_previous();
                         }
+                        else if self.ui_mode == UiMode::EditKeybindings {
+                            self.edit_keybindings_prev();
+                        }
                         else {
                             if self.focus == Focus::Body {
                                 self.dispatch(IoEvent::GoUp).await;
@@ -249,6 +275,9 @@ impl App {
                         }
                         else if self.ui_mode == UiMode::LoadSave {
                             self.load_save_next();
+                        }
+                        else if self.ui_mode == UiMode::EditKeybindings {
+                            self.edit_keybindings_next();
                         }
                         else {
                             if self.focus == Focus::Body {
@@ -283,6 +312,10 @@ impl App {
                                 self.state.status = AppStatus::UserInput;
                                 info!("Taking user input");
                             },
+                            UiMode::EditSpecificKeybinding => {
+                                self.state.status = AppStatus::KeyBindMode;
+                                info!("Taking user keybind input");
+                            },
                             _ => {}
                         }
                         AppReturn::Continue
@@ -293,6 +326,9 @@ impl App {
                                 if self.prev_ui_mode == Some(UiMode::Config) {
                                     self.prev_ui_mode = None;
                                     self.ui_mode = UiMode::MainMenu;
+                                    if self.state.main_menu_state.selected().is_none() {
+                                        self.main_menu_next();
+                                    }
                                 } else {
                                     self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
                                     self.prev_ui_mode = Some(UiMode::Config);
@@ -301,19 +337,34 @@ impl App {
                             }
                             UiMode::EditConfig => {
                                 self.ui_mode = UiMode::Config;
+                                if self.state.config_state.selected().is_none() {
+                                    self.config_next()
+                                }
                                 self.prev_ui_mode = None;
                                 AppReturn::Continue
                             }
                             UiMode::MainMenu => {
                                 AppReturn::Exit
                             }
+                            UiMode::EditSpecificKeybinding => {
+                                self.ui_mode = UiMode::EditKeybindings;
+                                if self.state.edit_keybindings_state.selected().is_none() {
+                                    self.edit_keybindings_next();
+                                }
+                                AppReturn::Continue
+                            }
                             _ => {
                                 // check if previous ui mode is the same as the current ui mode
                                 if self.prev_ui_mode == Some(self.ui_mode.clone()) {
                                     self.ui_mode = UiMode::MainMenu;
-                                    self.main_menu_next();
+                                    if self.state.main_menu_state.selected().is_none() {
+                                        self.main_menu_next();
+                                    }
                                 } else {
-                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::MainMenu).clone();
+                                    if self.state.main_menu_state.selected().is_none() {
+                                        self.main_menu_next();
+                                    }
                                 }
                                 AppReturn::Continue
                             }
@@ -323,16 +374,48 @@ impl App {
                         match self.ui_mode {
                             UiMode::Config => {
                                 self.prev_ui_mode = Some(self.ui_mode.clone());
-                                self.ui_mode = UiMode::EditConfig;
                                 self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
+                                // check if the config_item_being_edited index is in the AppConfig list and the value in the list is Edit Keybindings
+                                let app_config_list = &self.config.to_list();
+                                if self.config_item_being_edited.unwrap_or(0) < app_config_list.len() {
+                                    let default_config_item = String::from("");
+                                    let config_item = &app_config_list[self.config_item_being_edited.unwrap_or(0)].first().unwrap_or_else(|| &default_config_item);
+                                    if *config_item == "Edit Keybindings" {
+                                        self.ui_mode = UiMode::EditKeybindings;
+                                        if self.state.edit_keybindings_state.selected().is_none() {
+                                            self.edit_keybindings_next();
+                                        }
+                                    } else if *config_item == "save_on_exit" {
+                                        // if it is false make it true and vice versa
+                                        let save_on_exit = self.config.save_on_exit;
+                                        self.config.save_on_exit = !save_on_exit;
+                                        let config_string = format!("{}: {}", "save_on_exit", self.config.save_on_exit);
+                                        let app_config = AppConfig::edit_with_string(&config_string, self);
+                                        self.config = app_config.clone();
+                                        write_config(&app_config);
+                                    } else if *config_item == "always_load_last_save" {
+                                        // if it is false make it true and vice versa
+                                        let always_load_last_save = self.config.always_load_last_save;
+                                        self.config.always_load_last_save = !always_load_last_save;
+                                        let config_string = format!("{}: {}", "always_load_last_save", self.config.always_load_last_save);
+                                        let app_config = AppConfig::edit_with_string(&config_string, self);
+                                        self.config = app_config.clone();
+                                        write_config(&app_config);
+                                    } else {
+                                        self.ui_mode = UiMode::EditConfig;
+                                    }
+                                } else {
+                                    debug!("Config item being edited {} is not in the AppConfig list", self.config_item_being_edited.unwrap_or(0));
+                                }
                                 AppReturn::Continue
                             }
                             UiMode::EditConfig => {
                                 let config_item_index = self.state.config_state.selected().unwrap_or(0);
                                 let config_item_list = AppConfig::to_list(&self.config);
-                                let config_item = &config_item_list[config_item_index];
-                                // split the config item on : and get the first part
-                                let config_item_key = config_item.split(":").collect::<Vec<&str>>()[0];
+                                let config_item = config_item_list[config_item_index].clone();
+                                // key is the second item in the list
+                                let default_key = String::from("");
+                                let config_item_key = config_item.get(0).unwrap_or_else(|| &default_key);
                                 let new_value = self.current_user_input.clone();
                                 // if new value is not empty update the config
                                 if !new_value.is_empty() {
@@ -346,6 +429,9 @@ impl App {
                                     self.config_item_being_edited = None;
                                     self.current_user_input = String::new();
                                     self.ui_mode = UiMode::Config;
+                                    if self.state.config_state.selected().is_none() {
+                                        self.config_next();
+                                    }
                                 }
                                 self.state.config_state.select(Some(0));
                                 AppReturn::Continue
@@ -361,6 +447,9 @@ impl App {
                                     MainMenuItem::Config => {
                                         self.prev_ui_mode = Some(self.ui_mode.clone());
                                         self.ui_mode = UiMode::Config;
+                                        if self.state.config_state.selected().is_none() {
+                                            self.config_next();
+                                        }
                                         AppReturn::Continue
                                     }
                                     MainMenuItem::View => {
@@ -475,6 +564,42 @@ impl App {
                                 self.ui_mode = self.config.default_view.clone();
                                 AppReturn::Continue
                             }
+                            UiMode::EditKeybindings => {
+                                if self.state.edit_keybindings_state.selected().is_some() && self.focus != Focus::SubmitButton {
+                                    self.ui_mode = UiMode::EditSpecificKeybinding;
+                                } else if self.focus == Focus::SubmitButton {
+                                    self.config.keybindings = KeyBindings::default();
+                                    info!("Reset keybindings to default");
+                                    self.focus = Focus::NoFocus;
+                                    self.state.edit_keybindings_state.select(None);
+                                    write_config(&self.config);
+                                }
+                                AppReturn::Continue
+                            }
+                            UiMode::EditSpecificKeybinding => {
+                                if self.state.edited_keybinding.is_some() {
+                                    let selected = self.state.edit_keybindings_state.selected().unwrap();
+                                    if selected < self.config.keybindings.iter().count() {
+                                        self.config.edit_keybinding(selected, self.state.edited_keybinding.clone().unwrap_or_else(|| vec![]));
+                                    } else {
+                                        error!("Selected keybind with id {} not found", selected);
+                                        self.state.edited_keybinding = None;
+                                        self.state.edit_keybindings_state.select(None);
+                                    }
+                                    self.ui_mode = UiMode::EditKeybindings;
+                                    if self.state.edit_keybindings_state.selected().is_none() {
+                                        self.edit_keybindings_next()
+                                    }
+                                    self.state.edited_keybinding = None;
+                                    write_config(&self.config);
+                                } else {
+                                    self.ui_mode = UiMode::EditKeybindings;
+                                    if self.state.edit_keybindings_state.selected().is_none() {
+                                        self.edit_keybindings_next()
+                                    }
+                                }
+                                AppReturn::Continue
+                            }
                             _ => {
                                 match self.focus {
                                     Focus::Help => {
@@ -491,21 +616,25 @@ impl App {
                             }
                         }
                     }
-                    Action::Hide => {
+                    Action::HideUiElement => {
                         let current_focus = Focus::from_str(self.focus.to_str());
                         let current_ui_mode = self.ui_mode.clone();
                         // hide the current focus by switching to a view where it is not available
                         // for example if current uimode is Title and focus is on Title then switch to Zen
                         if current_ui_mode == UiMode::Zen {
                             self.ui_mode = UiMode::MainMenu;
-                            self.main_menu_next();
+                            if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                         } else if current_ui_mode == UiMode::TitleBody {
                             if current_focus == Focus::Title {
                                 self.ui_mode = UiMode::Zen;
                                 self.focus = Focus::Body;
                             } else {
                                 self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                             }
                         } else if current_ui_mode == UiMode::BodyHelp {
                             if current_focus == Focus::Help {
@@ -513,7 +642,9 @@ impl App {
                                 self.focus = Focus::Body;
                             } else {
                                 self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                             }
                         } else if current_ui_mode == UiMode::BodyLog {
                             if current_focus == Focus::Log {
@@ -521,7 +652,9 @@ impl App {
                                 self.focus = Focus::Body;
                             } else {
                                 self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                             }
                         } else if current_ui_mode == UiMode::TitleBodyHelp {
                             if current_focus == Focus::Title {
@@ -534,7 +667,9 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                             }
                         } else if current_ui_mode == UiMode::TitleBodyLog {
                             if current_focus == Focus::Title {
@@ -547,7 +682,9 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                             }
                         } else if current_ui_mode == UiMode::TitleBodyHelpLog {
                             if current_focus == Focus::Title {
@@ -564,7 +701,9 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                             }
                         } else if current_ui_mode == UiMode::BodyHelpLog {
                             if current_focus == Focus::Help {
@@ -577,7 +716,9 @@ impl App {
                             }
                             else {
                                 self.ui_mode = UiMode::MainMenu;
-                                self.main_menu_next();
+                                if self.state.main_menu_state.selected().is_none() {
+                                    self.main_menu_next();
+                                }
                             }
                         }
                         AppReturn::Continue
@@ -695,6 +836,10 @@ impl App {
                         }
                     }
                     Action::ChangeCardStatusToCompleted => {
+                        // check if focus is on body
+                        if self.focus != Focus::Body {
+                            return AppReturn::Continue;
+                        }
                         // get the current card and change its status to complete
                         if let Some(current_board) = self.state.current_board_id {
                             // find index of current board id in self.boards
@@ -710,6 +855,10 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::ChangeCardStatusToActive => {
+                        // check if focus is on body
+                        if self.focus != Focus::Body {
+                            return AppReturn::Continue;
+                        }
                         // get the current card and change its status to active
                         if let Some(current_board) = self.state.current_board_id {
                             // find index of current board id in self.boards
@@ -725,6 +874,10 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::ChangeCardStatusToStale => {
+                        // check if focus is on body
+                        if self.focus != Focus::Body {
+                            return AppReturn::Continue;
+                        }
                         // get the current card and change its status to stale
                         if let Some(current_board) = self.state.current_board_id {
                             // find index of current board id in self.boards
@@ -790,7 +943,7 @@ impl App {
     pub fn clear_current_user_input(&mut self) {
         self.current_user_input = String::new();
     }
-    pub fn set_config_state(&mut self, config_state: ListState) {
+    pub fn set_config_state(&mut self, config_state: TableState) {
         self.state.config_state = config_state;
     }
     pub fn config_next(&mut self) {
@@ -877,7 +1030,7 @@ impl App {
         };
         self.state.load_save_state.select(Some(i));
     }
-    pub fn config_state(&self) -> &ListState {
+    pub fn config_state(&self) -> &TableState {
         &self.state.config_state
     }
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
@@ -892,6 +1045,34 @@ impl App {
                 self.focus = Focus::from_str(available_focus_targets[0].as_str());
             }
         }
+    }
+    pub fn edit_keybindings_next(&mut self) {
+        let keybind_iterator = self.config.keybindings.iter();
+        let i = match self.state.edit_keybindings_state.selected() {
+            Some(i) => {
+                if i >= keybind_iterator.count() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_keybindings_state.select(Some(i));
+    }
+    pub fn edit_keybindings_prev(&mut self) {
+        let keybind_iterator = self.config.keybindings.iter();
+        let i = match self.state.edit_keybindings_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    keybind_iterator.count() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_keybindings_state.select(Some(i));
     }
 }
 
@@ -950,10 +1131,12 @@ pub struct AppState {
     pub current_card_id: Option<u128>,
     pub previous_focus: Option<Focus>,
     pub main_menu_state: ListState,
-    pub config_state: ListState,
+    pub config_state: TableState,
     pub new_board_form: Vec<String>,
     pub new_card_form: Vec<String>,
     pub load_save_state: ListState,
+    pub edit_keybindings_state: TableState,
+    pub edited_keybinding: Option<Vec<Key>>,
 }
 
 impl Default for AppState {
@@ -964,10 +1147,12 @@ impl Default for AppState {
             current_card_id: None,
             previous_focus: None,
             main_menu_state: ListState::default(),
-            config_state: ListState::default(),
+            config_state: TableState::default(),
             new_board_form: vec![String::new(), String::new()],
             new_card_form: vec![String::new(), String::new(), String::new()],
             load_save_state: ListState::default(),
+            edit_keybindings_state: TableState::default(),
+            edited_keybinding: None,
         }
     }
 }
@@ -976,8 +1161,9 @@ impl Default for AppState {
 pub struct AppConfig {
     pub save_directory: PathBuf,
     pub default_view: UiMode,
-    pub always_load_latest_save: bool,
+    pub always_load_last_save: bool,
     pub save_on_exit: bool,
+    pub keybindings: KeyBindings,
 }
 
 impl AppConfig {
@@ -987,17 +1173,19 @@ impl AppConfig {
         Self {
             save_directory: save_directory,
             default_view,
-            always_load_latest_save: true,
+            always_load_last_save: true,
             save_on_exit: true,
+            keybindings: KeyBindings::default(),
         }
     }
 
-    pub fn to_list(&self) -> Vec<String> {
+    pub fn to_list(&self) -> Vec<Vec<String>> {
         vec![
-            format!("save_directory: {}", self.save_directory.to_str().unwrap()),
-            format!("default_view: {}", self.default_view.to_string()),
-            format!("always_load_latest_save: {}", self.always_load_latest_save),
-            format!("save_on_exit: {}", self.save_on_exit),
+            vec![String::from("save_directory"), self.save_directory.to_str().unwrap().to_string()],
+            vec![String::from("default_view"), self.default_view.to_string()],
+            vec![String::from("always_load_last_save"), self.always_load_last_save.to_string()],
+            vec![String::from("save_on_exit"), self.save_on_exit.to_string()],
+            vec![String::from("Edit Keybindings")],
         ]
     }
 
@@ -1015,7 +1203,7 @@ impl AppConfig {
                     if new_path.exists() {
                         config.save_directory = new_path;
                     } else {
-                        warn!("Invalid path: {}", value);
+                        error!("Invalid path: {}", value);
                     }
                 }
                 "default_view" => {
@@ -1023,15 +1211,15 @@ impl AppConfig {
                     if new_ui_mode.is_some() {
                         config.default_view = new_ui_mode.unwrap();
                     } else {
-                        warn!("Invalid UiMode: {}", value);
+                        error!("Invalid UiMode: {}", value);
                         info!("Valid UiModes are: {:?}", UiMode::all());
                     }
                 }
-                "always_load_latest_save" => {
+                "always_load_last_save" => {
                     if value.to_lowercase() == "true" {
-                        config.always_load_latest_save = true;
+                        config.always_load_last_save = true;
                     } else if value.to_lowercase() == "false" {
-                        config.always_load_latest_save = false;
+                        config.always_load_last_save = false;
                     } else {
                         warn!("Invalid boolean: {}", value);
                     }
@@ -1054,6 +1242,65 @@ impl AppConfig {
         config
     }
 
+    pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) {
+        // make sure key is not empty, or already assigned
+        
+        let config = get_config();
+        let current_bindings = config.keybindings;
+
+        // make a list from the keybindings
+        let mut key_list = vec![];
+        for (k, v) in current_bindings.iter() {
+            key_list.push((k, v));
+        }
+        // check if index is valid
+        if key_index >= key_list.len() {
+            debug!("Invalid key index: {}", key_index);
+            error!("Unable to edit keybinding")
+        }   
+        let (key, _) = key_list[key_index];
+
+        // check if key is present in current bindings if not, return error
+        if !current_bindings.iter().any(|(k, _)| k == key) {
+            debug!("Invalid key: {}", key);
+            error!("Unable to edit keybinding");
+        }
+
+        for new_value in value.iter() {
+            for (k, v) in current_bindings.iter() {
+                if v.contains(new_value) && k != key {
+                    error!("Value {} is already assigned to {}", new_value, k);
+                    return;
+                }
+            }          
+        }
+
+        debug!("Editing keybinding: {} to {:?}", key, value);
+
+        match key {
+            "quit" => self.keybindings.quit = value,
+            "next_focus" => self.keybindings.next_focus = value,
+            "prev_focus" => self.keybindings.prev_focus = value,
+            "open_config_menu" => self.keybindings.open_config_menu = value,
+            "up" => self.keybindings.up = value,
+            "down" => self.keybindings.down = value,
+            "right" => self.keybindings.right = value,
+            "left" => self.keybindings.left = value,
+            "take_user_input" => self.keybindings.take_user_input = value,
+            "hide_ui_element" => self.keybindings.hide_ui_element = value,
+            "save_state" => self.keybindings.save_state = value,
+            "new_board" => self.keybindings.new_board = value,
+            "new_card" => self.keybindings.new_card = value,
+            "delete_card" => self.keybindings.delete_card = value,
+            "delete_board" => self.keybindings.delete_board = value,
+            "change_card_status_to_completed" => self.keybindings.change_card_status_to_completed = value,
+            "change_card_status_to_active" => self.keybindings.change_card_status_to_active = value,
+            "change_card_status_to_stale" => self.keybindings.change_card_status_to_stale = value,
+            "reset_ui" => self.keybindings.reset_ui = value,
+            _ => (),
+        }
+    }
+    
     pub fn len(&self) -> usize {
         self.to_list().len()
     }

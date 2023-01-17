@@ -20,7 +20,7 @@ use tui::widgets::{
     List,
     ListItem,
     ListState,
-    Gauge,
+    Gauge, Table, Cell, Row, TableState, Clear,
 };
 use crate::constants::{
     APP_TITLE,
@@ -45,7 +45,7 @@ use crate::constants::{
     LOG_INFO_STYLE,
     DEFAULT_STYLE,
     PROGRESS_BAR_STYLE,
-    ERROR_TEXT_STYLE,
+    ERROR_TEXT_STYLE, INACTIVE_TEXT_STYLE,
 };
 
 use super::{
@@ -56,7 +56,7 @@ use super::{
 use super::actions::Actions;
 use super::state::{
     Focus,
-    AppStatus
+    AppStatus, KeyBindings
 };
 use crate::io::data_handler::{
     get_config,
@@ -96,7 +96,7 @@ where
         )
         .split(rect.size());
 
-    let title = draw_title(&app.focus);
+    let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
     
     render_body(rect, chunks[1], app);
@@ -121,7 +121,7 @@ where
     
     render_body(rect, chunks[0], app);
 
-    let help = draw_help(actions, &app.focus);
+    let help = draw_help(actions, &app.focus, &app.config.keybindings);
     rect.render_widget(help, chunks[1]);
 }
 
@@ -142,7 +142,7 @@ where
 
     render_body(rect, chunks[0], app);
 
-    let log = draw_logs(&app.focus, true);
+    let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[1]);
 }
 
@@ -164,12 +164,12 @@ where
 
     let actions = app.actions();
 
-    let title = draw_title(&app.focus);
+    let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app);
 
-    let help = draw_help(actions, &app.focus);
+    let help = draw_help(actions, &app.focus, &app.config.keybindings);
     rect.render_widget(help, chunks[2]);
 }
 
@@ -189,12 +189,12 @@ where
         )
         .split(rect.size());
 
-    let title = draw_title(&app.focus);
+    let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app);
 
-    let log = draw_logs(&app.focus, true);
+    let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[2]);
 }
 
@@ -218,10 +218,10 @@ where
 
     render_body(rect, chunks[0], app);
 
-    let help = draw_help(actions, &app.focus);
+    let help = draw_help(actions, &app.focus, &app.config.keybindings);
     rect.render_widget(help, chunks[1]);
 
-    let log = draw_logs(&app.focus, true);
+    let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[2]);
 }
 
@@ -244,19 +244,19 @@ where
 
     let actions = app.actions();
 
-    let title = draw_title(&app.focus);
+    let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app);
 
-    let help = draw_help(actions, &app.focus);
+    let help = draw_help(actions, &app.focus, &app.config.keybindings);
     rect.render_widget(help, chunks[2]);
 
-    let log = draw_logs(&app.focus, true);
+    let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[3]);
 }
 
-pub fn render_config<'a,B>(rect: &mut Frame<B>, app: &App, config_state: &mut ListState)
+pub fn render_config<'a,B>(rect: &mut Frame<B>, app: &App, config_state: &mut TableState, popup_mode: bool)
 where
     B: Backend,
 {
@@ -264,28 +264,47 @@ where
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Percentage(70),
-                Constraint::Length(4),
+                Constraint::Length(3),
+                Constraint::Percentage(60),
+                Constraint::Length(3),
                 Constraint::Length(8),
             ]
             .as_ref(),
         )
         .split(rect.size());
-    let config = draw_config_list_selector(&app.focus);
-    rect.render_stateful_widget(config, chunks[0], config_state);
+    
+    let title = draw_title(&app.focus, popup_mode);
+    rect.render_widget(title, chunks[0]);
+    
+    let config = draw_config_list_selector(popup_mode);
+    rect.render_stateful_widget(config, chunks[1], config_state);
 
-    let config_help = draw_config_help(&app.focus);
-    rect.render_widget(config_help, chunks[1]);
+    let config_help = draw_config_help(&app.focus, popup_mode);
+    rect.render_widget(config_help, chunks[2]);
 
-    let log = draw_logs(&app.focus, true);
-    rect.render_widget(log, chunks[2]);
+    let log = draw_logs(&app.focus, true, popup_mode);
+    rect.render_widget(log, chunks[3]);
 }
 
 pub fn render_edit_config<'a,B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
+    
+    let edit_box_style = if app.state.status == AppStatus::UserInput {
+        FOCUSED_ELEMENT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
+    
     let area = centered_rect(70, 70, rect.size());
+    let clear_area = centered_rect(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .borders(Borders::ALL)
+        .border_style(FOCUSED_ELEMENT_STYLE)
+        .title("Config Editor");
+    rect.render_widget(Clear, clear_area);
+    rect.render_widget(clear_area_border, clear_area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -300,30 +319,221 @@ where
 
     let config_item_index = &app.config_item_being_edited.unwrap_or(0);
     let list_items = get_config_items();
-    let config_item_name = &list_items[*config_item_index];
-    let binding = String::from("");
-    let config_item_value = list_items.iter().find(|&x| x == config_item_name).unwrap_or(&binding);
-    let paragraph_text = format!("Current Value for {} \n\n{}",config_item_value,
+    let config_item_name = list_items[*config_item_index].first().unwrap();
+    let config_item_value = list_items.iter()
+        .find(|x| x.first().unwrap() == config_item_name).unwrap()
+        .get(1).unwrap();
+    let paragraph_text = format!("Current Value is {}\n\n{}",config_item_value,
         "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
     let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
     let config_item = Paragraph::new(paragraph_text)
-    .block(Block::default().borders(Borders::ALL).title(paragraph_title))
-    .wrap(tui::widgets::Wrap { trim: false });
+        .block(Block::default().borders(Borders::ALL).title(paragraph_title))
+        .wrap(tui::widgets::Wrap { trim: false });
     let edit_item = Paragraph::new(&*app.current_user_input)
-    .block(Block::default().borders(Borders::ALL).title("Edit"))
-    .wrap(tui::widgets::Wrap { trim: false });
+        .block(Block::default().borders(Borders::ALL).title("Edit").border_style(edit_box_style))
+        .wrap(tui::widgets::Wrap { trim: false });
 
-    let log = draw_logs(&app.focus, true);
+    let log = draw_logs(&app.focus, true, false);
     
-    rect.set_cursor(
-        // Put cursor past the end of the input text
-        chunks[1].x + app.current_user_input.len() as u16 + 1,
-        // Move one line down, from the border to the input line
-        chunks[1].y + 1,
-    );
+    if app.state.status == AppStatus::UserInput {
+        rect.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[1].x + app.current_user_input.len() as u16 + 1,
+            // Move one line down, from the border to the input line
+            chunks[1].y + 1,
+        );
+    }
     rect.render_widget(config_item, chunks[0]);
     rect.render_widget(edit_item, chunks[1]);
     rect.render_widget(log, chunks[2]);
+}
+
+pub fn render_edit_keybindings<'a,B>(rect: &mut Frame<B>, app: &App, edit_keybindings_state: &mut TableState, popup_mode: bool)
+where
+    B: Backend,
+{
+    let default_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
+    let reset_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        if matches!(app.focus, Focus::SubmitButton) {
+            ERROR_TEXT_STYLE
+        } else {
+            DEFAULT_STYLE
+        }
+    };
+    let current_element_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        FOCUSED_ELEMENT_STYLE
+    };
+
+    let title_bar = draw_title(&app.focus, popup_mode);
+
+    let mut table_items: Vec<Vec<String>> = Vec::new();
+    // app.config.keybindings
+    let keybindings = app.config.keybindings.clone();
+    for (key, value) in keybindings.iter() {
+        let mut row: Vec<String> = Vec::new();
+        row.push(key.to_string());
+        let mut row_value = String::new();
+        for v in value.iter() {
+            row_value.push_str(&v.to_string());
+            row_value.push_str(" ");
+        }
+        row.push(row_value);
+        table_items.push(row);
+    }
+
+    let rects = Layout::default()
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Percentage(65),
+            Constraint::Length(5),
+            Constraint::Length(3)
+            ].as_ref())
+        .split(rect.size());
+
+    let rows = table_items.iter().map(|item| {
+        let height = item
+            .iter()
+            .map(|content| content.chars().filter(|c| *c == '\n').count())
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let cells = item.iter().map(|c| Cell::from(c.to_string()));
+        Row::new(cells).height(height as u16)
+    });
+    let t = Table::new(rows)
+        .block(Block::default().borders(Borders::ALL).title("Edit Keybindings").style(default_style))
+        .highlight_style(current_element_style)
+        .highlight_symbol(">> ")
+        .widths(&[
+            Constraint::Percentage(50),
+            Constraint::Length(30),
+            Constraint::Min(10),
+        ]);
+
+    let edit_keybind_help_spans = Spans::from(vec![
+        Span::raw("Use "),
+        Span::styled("<Up>", current_element_style),
+        Span::raw(" and "),
+        Span::styled("<Down>", current_element_style),
+        Span::raw(" to select a keybinding, "),
+        Span::styled("<Enter>", current_element_style),
+        Span::raw(" to edit, "),
+        Span::styled("<Esc>", current_element_style),
+        Span::raw(" to cancel, To Reset Keybindings to Default, Press "),
+        Span::styled("<Next Focus>", current_element_style),
+        Span::raw(" to highlight Reset Button and Press "),
+        Span::styled("<Enter>", current_element_style),
+        Span::raw(" on the Reset Keybindings Button"),
+    ]);
+    
+    let edit_keybind_help = Paragraph::new(edit_keybind_help_spans)
+        .block(Block::default().borders(Borders::ALL).title("Help"))
+        .style(default_style)
+        .wrap(tui::widgets::Wrap { trim: false });
+        
+    let reset_button = Paragraph::new("Reset Keybindings to Default")
+        .block(Block::default().borders(Borders::ALL).title("Reset"))
+        .style(reset_style)
+        .alignment(Alignment::Center);
+        
+    rect.render_widget(title_bar, rects[0]);
+    rect.render_stateful_widget(t, rects[1], edit_keybindings_state);
+    rect.render_widget(edit_keybind_help, rects[2]);
+    rect.render_widget(reset_button, rects[3]);
+}
+
+pub fn render_edit_specific_keybinding<'a,B>(rect: &mut Frame<B>, app: &App)
+where
+    B: Backend,
+{
+    let edit_box_style = if app.state.status == AppStatus::KeyBindMode {
+        FOCUSED_ELEMENT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
+
+    let area = centered_rect(70, 70, rect.size());
+    let clear_area = centered_rect(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .borders(Borders::ALL)
+        .border_style(FOCUSED_ELEMENT_STYLE)
+        .title("Edit Keybindings");
+    rect.render_widget(Clear, clear_area);
+    rect.render_widget(clear_area_border, clear_area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(40),
+                Constraint::Percentage(40),
+                Constraint::Length(4),
+            ]
+            .as_ref(),
+        )
+        .split(area);
+
+    let key_id = app.state.edit_keybindings_state.selected().unwrap_or(0);
+    let current_bindings = app.config.keybindings.clone();
+    let mut key_list = vec![];
+    
+    for (k, v) in current_bindings.iter() {
+        key_list.push((k, v));
+    }
+
+    if key_id > key_list.len() {
+        return;
+    } else {
+        let key = key_list[key_id].0;
+        let value = key_list[key_id].1;
+        let mut key_value = String::new();
+        for v in value.iter() {
+            key_value.push_str(&v.to_string());
+            key_value.push_str(" ");
+        }
+        let paragraph_text = format!("Current Value for {} \n\n{}",key,
+            "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
+        let paragraph_title = Spans::from(vec![
+            Span::styled("  <-  ", FOCUSED_ELEMENT_STYLE),
+            Span::raw(key.to_uppercase()),
+            Span::styled("  ->  ", FOCUSED_ELEMENT_STYLE),
+            ]);
+        let config_item = Paragraph::new(paragraph_text)
+        .block(Block::default().borders(Borders::ALL).title(paragraph_title))
+        .wrap(tui::widgets::Wrap { trim: false });
+        let current_edited_keybinding = app.state.edited_keybinding.clone();
+        let mut current_edited_keybinding_string = String::new();
+        if current_edited_keybinding.is_some() {
+            for key in current_edited_keybinding.unwrap() {
+                current_edited_keybinding_string.push_str(&key.to_string());
+                current_edited_keybinding_string.push_str(" ");
+            }
+        }
+        let edit_item = Paragraph::new(current_edited_keybinding_string.clone())
+        .block(Block::default().borders(Borders::ALL).title("Edit").border_style(edit_box_style))
+        .wrap(tui::widgets::Wrap { trim: false });
+    
+        let log = draw_logs(&app.focus, true, false);
+        
+        if app.state.status == AppStatus::KeyBindMode {
+            rect.set_cursor(
+                // Put cursor past the end of the input text
+                chunks[1].x + current_edited_keybinding_string.len() as u16 + 1,
+                // Move one line down, from the border to the input line
+                chunks[1].y + 1,
+            );
+        }
+        rect.render_widget(config_item, chunks[0]);
+        rect.render_widget(edit_item, chunks[1]);
+        rect.render_widget(log, chunks[2]);
+    }
 }
 
 pub fn render_main_menu<'a,B>(rect: &mut Frame<B>, app: &App, main_menu_state: &mut ListState)
@@ -343,16 +553,16 @@ where
         )
         .split(rect.size());
     
-    let title = draw_title(&app.focus);
+    let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
     
     let main_menu = draw_main_menu(&app.focus, MainMenu::all());
     rect.render_stateful_widget(main_menu, chunks[1], main_menu_state);
 
-    let main_menu_help = draw_main_menu_help(&app.focus, app.actions());
+    let main_menu_help = draw_help(app.actions(), &app.focus, &app.config.keybindings);
     rect.render_widget(main_menu_help, chunks[2]);
 
-    let log = draw_logs(&app.focus, true);
+    let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[3]);
 }
 
@@ -373,7 +583,7 @@ where
     let help_menu = draw_help_menu(focus);
     rect.render_widget(help_menu, chunks[0]);
 
-    let log = draw_logs(focus, true);
+    let log = draw_logs(focus, true, false);
     rect.render_widget(log, chunks[1]);
 }
 
@@ -390,19 +600,19 @@ where
             .as_ref(),
         )
         .split(rect.size());
-    let log = draw_logs(focus, false);
+    let log = draw_logs(focus, false, false);
     rect.render_widget(log, chunks[0]);
 }
 
 /// Draws Help section for normal mode
-fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
+fn draw_help<'a>(actions: &Actions, focus: &Focus, keybinds: &KeyBindings) -> Paragraph<'a> {
     let helpbox_style = if matches!(focus, Focus::Help) {
         FOCUSED_ELEMENT_STYLE
     } else {
         NON_FOCUSED_ELEMENT_STYLE
     };
 
-    let help_span = Spans::from(generate_help_spans(actions));
+    let help_span = Spans::from(generate_help_spans(actions, keybinds));
     Paragraph::new(help_span)
         .alignment(Alignment::Left)
         .block(
@@ -415,11 +625,25 @@ fn draw_help<'a>(actions: &Actions, focus: &Focus) -> Paragraph<'a> {
         .wrap(tui::widgets::Wrap { trim: true })
 }
 
-fn generate_help_spans(actions: &Actions) -> Vec<Span<'static>> {
+fn generate_help_spans(actions: &Actions, keybinds: &KeyBindings) -> Vec<Span<'static>> {
     // make a new string with the format key - action, or key1, key2 - action if there are multiple keys and join all pairs with ;
     let actions_iter = actions.actions().iter();
+    let action_list = &mut vec![];
+    for keybind_actions in keybinds.iter() {
+        let keybind = keybind_actions.0;
+        let actions = keybind_actions.1;
+        for action in actions {
+            action_list.push((keybind, action));
+        }
+    }
     let mut help_spans = vec![];
     for action in actions_iter {
+        // make sure action is not in action_list
+        // use the Display trait to get the action name
+        let str_action = action.to_string();
+        if action_list.iter().any(|a| a.0 == str_action) {
+            continue;
+        }
         let keys = action.keys();
         let keys_span = if keys.len() > 1 {
             let keys_str = keys
@@ -444,27 +668,41 @@ fn generate_help_spans(actions: &Actions) -> Vec<Span<'static>> {
 }
 
 /// Draws help section for config mode
-fn draw_config_help(focus: &Focus) -> Paragraph {
-    let helpbox_style = if matches!(focus, Focus::ConfigHelp) {
-        FOCUSED_ELEMENT_STYLE
+fn draw_config_help(focus: &Focus, popup_mode: bool) -> Paragraph {
+    let helpbox_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        if matches!(focus, Focus::ConfigHelp) {
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            NON_FOCUSED_ELEMENT_STYLE
+        }
+    };
+    let key_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        HELP_KEY_STYLE
+    };
+    let description_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        HELP_DESCRIPTION_STYLE
     };
 
     let mut help_spans = vec![];
-    let keys_span = Span::styled("<Up>, <Down>", HELP_KEY_STYLE);
-    let action_span = Span::styled("Select config option", HELP_DESCRIPTION_STYLE);
+    let keys_span = Span::styled("<Up>, <Down>", key_style);
+    let action_span = Span::styled("Select config option", description_style);
     help_spans.push(keys_span);
     help_spans.push(Span::raw(" - "));
     help_spans.push(action_span);
     help_spans.push(Span::raw(" ; "));
-    let keys_span = Span::styled("<Enter>", HELP_KEY_STYLE);
-    let action_span = Span::styled("Edit config option", HELP_DESCRIPTION_STYLE);
+    let keys_span = Span::styled("<Enter>", key_style);
+    let action_span = Span::styled("Edit config option", description_style);
     help_spans.push(keys_span);
     help_spans.push(Span::raw(" - "));
     help_spans.push(action_span);
-    let keys_span = Span::styled("<Esc>", HELP_KEY_STYLE);
-    let action_span = Span::styled("Exit config mode", HELP_DESCRIPTION_STYLE);
+    let keys_span = Span::styled("<Esc>", key_style);
+    let action_span = Span::styled("Exit config mode", description_style);
     help_spans.push(Span::raw(" ; "));
     help_spans.push(keys_span);
     help_spans.push(Span::raw(" - "));
@@ -485,24 +723,39 @@ fn draw_config_help(focus: &Focus) -> Paragraph {
 }
 
 /// Draws logs
-fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool) -> TuiLoggerWidget<'a> {
+fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) -> TuiLoggerWidget<'a> {
     let logbox_style = if matches!(focus, Focus::Log) && enable_focus_highlight {
-        FOCUSED_ELEMENT_STYLE
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            NON_FOCUSED_ELEMENT_STYLE
+        };
+    if popup_mode {
+        TuiLoggerWidget::default()
+            .style_error(INACTIVE_TEXT_STYLE)
+            .style_debug(INACTIVE_TEXT_STYLE)
+            .style_warn(INACTIVE_TEXT_STYLE)
+            .style_trace(INACTIVE_TEXT_STYLE)
+            .style_info(INACTIVE_TEXT_STYLE)
+            .block(
+                Block::default()
+                    .title("Logs")
+                    .border_style(INACTIVE_TEXT_STYLE)
+                    .borders(Borders::ALL),
+            )
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
-    };
-    TuiLoggerWidget::default()
-        .style_error(LOG_ERROR_STYLE)
-        .style_debug(LOG_DEBUG_STYLE)
-        .style_warn(LOG_WARN_STYLE)
-        .style_trace(LOG_TRACE_STYLE)
-        .style_info(LOG_INFO_STYLE)
-        .block(
-            Block::default()
-                .title("Logs")
-                .border_style(logbox_style)
-                .borders(Borders::ALL),
-        )
+        TuiLoggerWidget::default()
+            .style_error(LOG_ERROR_STYLE)
+            .style_debug(LOG_DEBUG_STYLE)
+            .style_warn(LOG_WARN_STYLE)
+            .style_trace(LOG_TRACE_STYLE)
+            .style_info(LOG_INFO_STYLE)
+            .block(
+                Block::default()
+                    .title("Logs")
+                    .border_style(logbox_style)
+                    .borders(Borders::ALL),
+            )
+        }
 }
 
 /// Draws Main menu
@@ -528,59 +781,43 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
         .highlight_symbol(LIST_SELECTED_SYMBOL)
 }
 
-/// Draws Main menu help
-fn draw_main_menu_help<'a>(focus: &Focus, actions: &Actions) -> Paragraph<'a> {
-    let helpbox_style = if matches!(focus, Focus::MainMenuHelp) {
-        FOCUSED_ELEMENT_STYLE
-    } else {
-        NON_FOCUSED_ELEMENT_STYLE
-    };
-
-    let help_span = Spans::from(generate_help_spans(actions));
-
-    Paragraph::new(help_span)
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .title("Help")
-                .borders(Borders::ALL)
-                .style(helpbox_style)
-                .border_type(BorderType::Plain),
-        )
-        .wrap(tui::widgets::Wrap { trim: true })
-
-}
-
-/// Returns a list of ListItems for the config list selector
-fn get_config_list_items<'action>() -> Vec<ListItem<'action>>
-{
-    let config_list = get_config_items();
-    let mut config_spans = vec![];
-
-    for (_i, config) in config_list.iter().enumerate() {
-        config_spans.push(ListItem::new(Span::from(config.clone())));
-    }
-    return config_spans;
-}
-
 /// Draws config list selector
-fn draw_config_list_selector(focus: &Focus) -> List<'static> {
-    let config_style = if matches!(focus, Focus::Config) {
-        FOCUSED_ELEMENT_STYLE
+fn draw_config_list_selector(popup_mode: bool) -> Table<'static> {
+    let default_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
-    let list_items = get_config_list_items();
-    let config = List::new(list_items)
-    .block(Block::default().borders(Borders::ALL).title("Config"))
-    .highlight_style(LIST_SELECT_STYLE)
-    .highlight_symbol(LIST_SELECTED_SYMBOL)
-    .style(config_style);
-    return config;
+    let current_element_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        FOCUSED_ELEMENT_STYLE
+    };
+
+    let config_list = get_config_items();
+    let rows = config_list.iter().map(|item| {
+        let height = item
+            .iter()
+            .map(|content| content.chars().filter(|c| *c == '\n').count())
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let cells = item.iter().map(|c| Cell::from(c.to_string()));
+        Row::new(cells).height(height as u16)
+    });
+    Table::new(rows)
+        .block(Block::default().borders(Borders::ALL).title("Config Editor").style(default_style))
+        .highlight_style(current_element_style)
+        .highlight_symbol(">> ")
+        .widths(&[
+            Constraint::Percentage(50),
+            Constraint::Length(30),
+            Constraint::Min(10),
+        ])
 }
 
 /// returns a list of all config items as a vector of strings
-fn get_config_items() -> Vec<String>
+fn get_config_items() -> Vec<Vec<String>>
 {
     let config = get_config();
     let config_list = config.to_list();
@@ -862,7 +1099,7 @@ where
         .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
         .split(*size);
 
-    let title = draw_title(&Focus::default());
+    let title = draw_title(&Focus::default(), false);
     rect.render_widget(title, chunks[0]);
 
     let mut text = vec![Spans::from(Span::styled(msg, ERROR_TEXT_STYLE))];
@@ -874,12 +1111,16 @@ where
 }
 
 /// Draws the title bar
-pub fn draw_title<'a>(focus: &Focus) -> Paragraph<'a> {
+pub fn draw_title<'a>(focus: &Focus, popup_mode: bool) -> Paragraph<'a> {
     // check if focus is on title
-    let title_style = if matches!(focus, Focus::Title) {
-        FOCUSED_ELEMENT_STYLE
+    let title_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        if matches!(focus, Focus::Title) {
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            NON_FOCUSED_ELEMENT_STYLE
+        }
     };
     Paragraph::new(APP_TITLE)
         .alignment(Alignment::Center)
@@ -895,10 +1136,10 @@ pub fn draw_title<'a>(focus: &Focus) -> Paragraph<'a> {
 pub fn check_size(rect: &Rect) -> String {
     let mut msg = String::new();
     if rect.width < MIN_TERM_WIDTH {
-        msg.push_str(&format!("For optimal viewing experience, Terminal width should be >= {}, (current {})",MIN_TERM_WIDTH, rect.width));
+        msg.push_str(&format!("For optimal viewing experience, Terminal width should be >= {}, (current width {})",MIN_TERM_WIDTH, rect.width));
     }
     else if rect.height < MIN_TERM_HEIGHT {
-        msg.push_str(&format!("For optimal viewing experience, Terminal height should be >= {}, (current {})",MIN_TERM_HEIGHT, rect.height));
+        msg.push_str(&format!("For optimal viewing experience, Terminal height should be >= {}, (current height {})",MIN_TERM_HEIGHT, rect.height));
     }
     else {
         msg.push_str("Size OK");

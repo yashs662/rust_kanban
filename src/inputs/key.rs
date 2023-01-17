@@ -3,11 +3,15 @@ use std::fmt::{
     Display,
     Formatter
 };
+use serde::{
+    Serialize,
+    Deserialize
+};
 
 use crossterm::event;
 
 /// Represents an key.
-#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum Key {
     Enter,
     Tab,
@@ -43,7 +47,6 @@ pub enum Key {
     Ctrl(char),
     Alt(char),
     ShiftTab,
-    ShiftD,
     Unknown,
 }
 
@@ -90,7 +93,6 @@ impl Display for Key {
             Key::Char(c) => write!(f, "<{}>", c),
             Key::Tab => write!(f, "<Tab>"),
             Key::ShiftTab => write!(f, "<Shift+Tab>"),
-            Key::ShiftD => write!(f, "<Shift+D>"),
             _ => write!(f, "<{:?}>", self),
         }
     }
@@ -161,12 +163,6 @@ impl From<event::KeyEvent> for Key {
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::ShiftTab,
-
-            event::KeyEvent {
-                code: event::KeyCode::Char('d'),
-                modifiers: event::KeyModifiers::SHIFT,
-                ..
-            } => Key::ShiftD,
 
             event::KeyEvent {
                 code: event::KeyCode::Tab,
