@@ -1,13 +1,13 @@
 [package]
 name = "rust-kanban"
 version = "0.2.0"
-authors = ["igor <ilaborie@gmail.com>"]
+authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ilaborie/plop-tui"
+repository = "https://github.com/yashs662/rust_kanban"
 
 [dependencies]
-log = "0.4"
+log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 tui-logger = "0.8.1"
 tui = "0.19.0"
 crossterm = "0.25.0"
@@ -18,7 +18,6 @@ eyre = "0.6"
 home = "0.5.4"
 serde = { version = "1.0.147", features = ["derive"]}
 serde_json = "1.0.89"
-diesel = "2.0.2"
 clap = { version = "4.0.27", features = ["derive"] }
 savefile-derive = "0.11.0"
 savefile = "0.11.0"
