@@ -227,7 +227,12 @@ impl App {
                     }
                     Action::OpenConfigMenu => {
                         if self.ui_mode == UiMode::Config {
-                            self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                            // check if the prv ui mode is the same as the current ui mode
+                            if self.prev_ui_mode.is_some() && self.prev_ui_mode.as_ref().unwrap() == &self.ui_mode {
+                                self.ui_mode = self.config.default_view.clone();
+                            } else {
+                                self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                            }
                         } else {
                             self.prev_ui_mode = Some(self.ui_mode.clone());
                             self.ui_mode = UiMode::Config;
@@ -334,7 +339,7 @@ impl App {
                                         self.main_menu_next();
                                     }
                                 } else {
-                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     self.prev_ui_mode = Some(UiMode::Config);
                                 }
                                 AppReturn::Continue
@@ -493,12 +498,12 @@ impl App {
                                     if !new_board_name.is_empty() && !same_name_exists {
                                         let new_board = Board::new(new_board_name, new_board_description);
                                         self.boards.push(new_board);
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                         self.state.new_board_form = vec![String::new(), String::new()];
                                     } else {
                                         warn!("New board name is empty or already exists");
                                     }
-                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     if let Some(previous_focus) = &self.state.previous_focus {
                                         self.focus = previous_focus.clone();
                                     }
@@ -524,7 +529,7 @@ impl App {
                                         }
                                     } else {
                                         error!("Current board not found");
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                         return AppReturn::Continue;
                                     }
                                     // check if due date is empty or is a valid date
@@ -542,7 +547,7 @@ impl App {
                                     };
                                     if due_date.is_none() {
                                         warn!("Invalid due date");
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                         return AppReturn::Continue;
                                     }
                                     if !new_card_name.is_empty() && !same_name_exists {
@@ -553,10 +558,10 @@ impl App {
                                             current_board.cards.push(new_card);
                                         } else {
                                             error!("Current board not found");
-                                            self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                            self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                             return AppReturn::Continue;
                                         }
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::Zen).clone();
+                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     } else {
                                         warn!("New card name is empty or already exists");
                                     }

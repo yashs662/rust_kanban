@@ -35,15 +35,13 @@ use crate::constants::{
     CARD_DUE_DATE_STYLE,
     CARD_ACTIVE_STATUS_STYLE,
     FOCUSED_ELEMENT_STYLE,
-    NON_FOCUSED_ELEMENT_STYLE,
+    DEFAULT_STYLE,
     HELP_KEY_STYLE,
-    HELP_DESCRIPTION_STYLE,
     LOG_ERROR_STYLE,
     LOG_DEBUG_STYLE,
     LOG_WARN_STYLE,
     LOG_TRACE_STYLE,
     LOG_INFO_STYLE,
-    DEFAULT_STYLE,
     PROGRESS_BAR_STYLE,
     ERROR_TEXT_STYLE,
     INACTIVE_TEXT_STYLE,
@@ -774,7 +772,7 @@ fn draw_config_help(focus: &Focus, popup_mode: bool) -> Paragraph {
         if matches!(focus, Focus::ConfigHelp) {
             FOCUSED_ELEMENT_STYLE
         } else {
-            NON_FOCUSED_ELEMENT_STYLE
+            DEFAULT_STYLE
         }
     };
     let key_style = if popup_mode {
@@ -785,7 +783,7 @@ fn draw_config_help(focus: &Focus, popup_mode: bool) -> Paragraph {
     let description_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
-        HELP_DESCRIPTION_STYLE
+        DEFAULT_STYLE
     };
 
     let mut help_spans = vec![];
@@ -826,7 +824,7 @@ fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) 
     let logbox_style = if matches!(focus, Focus::Log) && enable_focus_highlight {
             FOCUSED_ELEMENT_STYLE
         } else {
-            NON_FOCUSED_ELEMENT_STYLE
+            DEFAULT_STYLE
         };
     if popup_mode {
         TuiLoggerWidget::default()
@@ -868,7 +866,7 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
     let menu_style = if matches!(focus, Focus::MainMenu) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
     let list_items = main_menu_items
         .iter()
@@ -1049,7 +1047,7 @@ where
         let board_style = if *board_id == *current_board && matches!(focus, Focus::Body) && app.state.current_card_id == None {
             FOCUSED_ELEMENT_STYLE
         } else {
-            NON_FOCUSED_ELEMENT_STYLE
+            DEFAULT_STYLE
         };
         
         let board_block = Block::default()
@@ -1164,7 +1162,7 @@ where
             let card_style = if app.state.current_card_id.unwrap_or(0) == *card_id && matches!(focus, Focus::Body) && *board_id == *current_board {
                 FOCUSED_ELEMENT_STYLE
             } else {
-                NON_FOCUSED_ELEMENT_STYLE
+                DEFAULT_STYLE
             };
 
             let card_paragraph = Paragraph::new(card_description)
@@ -1280,7 +1278,7 @@ pub fn draw_title<'a>(focus: &Focus, popup_mode: bool) -> Paragraph<'a> {
         if matches!(focus, Focus::Title) {
             FOCUSED_ELEMENT_STYLE
         } else {
-            NON_FOCUSED_ELEMENT_STYLE
+            DEFAULT_STYLE
         }
     };
     Paragraph::new(APP_TITLE)
@@ -1319,17 +1317,17 @@ where
     let name_style = if matches!(app.focus, Focus::NewBoardName) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
     let description_style = if matches!(app.focus, Focus::NewBoardDescription) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
     let submit_style = if matches!(app.focus, Focus::SubmitButton) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
 
     let chunks = Layout::default()
@@ -1390,22 +1388,22 @@ where
         .clone();
     
     let help_text = Spans::from(vec![
-        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", DEFAULT_STYLE),
         Span::styled(input_mode_key, HELP_KEY_STYLE),
-        Span::styled("to start typing", HELP_DESCRIPTION_STYLE),
+        Span::styled("to start typing", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
-        Span::styled(" to stop typing", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to stop typing", DEFAULT_STYLE),
         Span::raw("; "),
-        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", DEFAULT_STYLE),
         Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
-        Span::styled("to switch focus", HELP_DESCRIPTION_STYLE),
+        Span::styled("to switch focus", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
-        Span::styled(" to submit", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to submit", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
-        Span::styled(" to cancel", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to cancel", DEFAULT_STYLE),
     ]);
     let help_paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)
@@ -1451,22 +1449,22 @@ where
     let name_style = if matches!(app.focus, Focus::NewCardName) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
     let description_style = if matches!(app.focus, Focus::NewCardDescription) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
     let due_date_style = if matches!(app.focus, Focus::NewCardDueDate) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
     let submit_style = if matches!(app.focus, Focus::SubmitButton) {
         FOCUSED_ELEMENT_STYLE
     } else {
-        NON_FOCUSED_ELEMENT_STYLE
+        DEFAULT_STYLE
     };
 
     let chunks = Layout::default()
@@ -1540,22 +1538,22 @@ where
         .clone();
     
     let help_text = Spans::from(vec![
-        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", DEFAULT_STYLE),
         Span::styled(input_mode_key, HELP_KEY_STYLE),
-        Span::styled("to start typing", HELP_DESCRIPTION_STYLE),
+        Span::styled("to start typing", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
-        Span::styled(" to stop typing", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to stop typing", DEFAULT_STYLE),
         Span::raw("; "),
-        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", DEFAULT_STYLE),
         Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
-        Span::styled("to switch focus", HELP_DESCRIPTION_STYLE),
+        Span::styled("to switch focus", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
-        Span::styled(" to submit", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to submit", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
-        Span::styled(" to cancel", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to cancel", DEFAULT_STYLE),
     ]);
 
     let help_paragraph = Paragraph::new(help_text)
@@ -1663,20 +1661,20 @@ where
         .clone();
 
     let help_text = Spans::from(vec![
-        Span::styled("Use ", HELP_DESCRIPTION_STYLE),
+        Span::styled("Use ", DEFAULT_STYLE),
         Span::styled(up_key, HELP_KEY_STYLE),
-        Span::styled(" and ", HELP_DESCRIPTION_STYLE),
+        Span::styled(" and ", DEFAULT_STYLE),
         Span::styled(down_key, HELP_KEY_STYLE),
-        Span::styled("to navigate", HELP_DESCRIPTION_STYLE),
+        Span::styled("to navigate", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
-        Span::styled(" to Load the save file", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to Load the save file", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
-        Span::styled(" to cancel", HELP_DESCRIPTION_STYLE),
+        Span::styled(" to cancel", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled(delete_key, HELP_KEY_STYLE),
-        Span::styled("to delete a save file", HELP_DESCRIPTION_STYLE),
+        Span::styled("to delete a save file", DEFAULT_STYLE),
     ]);
     let help_paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)

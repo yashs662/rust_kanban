@@ -34,97 +34,85 @@ pub const LIST_SELECT_STYLE: Style = Style {
 };
 pub const CARD_DUE_DATE_STYLE: Style = Style {
     fg: Some(Color::LightRed),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const CARD_ACTIVE_STATUS_STYLE: Style = Style {
     fg: Some(Color::LightCyan),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const CARD_COMPLETED_STATUS_STYLE: Style = Style {
     fg: Some(Color::LightGreen),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const CARD_STALE_STATUS_STYLE: Style = Style {
     fg: Some(Color::DarkGray),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const FOCUSED_ELEMENT_STYLE: Style = Style {
     fg: Some(Color::LightCyan),
-    bg: Some(Color::Black),
-    add_modifier: Modifier::BOLD,
-    sub_modifier: Modifier::empty(),
-};
-pub const NON_FOCUSED_ELEMENT_STYLE: Style = Style {
-    fg: Some(Color::White),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const HELP_KEY_STYLE: Style = Style {
     fg: Some(Color::LightCyan),
-    bg: Some(Color::Black),
-    add_modifier: Modifier::BOLD,
-    sub_modifier: Modifier::empty(),
-};
-pub const HELP_DESCRIPTION_STYLE: Style = Style {
-    fg: Some(Color::White),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const LOG_ERROR_STYLE: Style = Style {
     fg: Some(Color::LightRed),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const LOG_DEBUG_STYLE: Style = Style {
     fg: Some(Color::LightGreen),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const LOG_WARN_STYLE: Style = Style {
     fg: Some(Color::LightYellow),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const LOG_TRACE_STYLE: Style = Style {
     fg: Some(Color::Gray),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const LOG_INFO_STYLE: Style = Style {
     fg: Some(Color::LightCyan),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const PROGRESS_BAR_STYLE: Style = Style {
     fg: Some(Color::LightGreen),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const ERROR_TEXT_STYLE: Style = Style {
     fg: Some(Color::LightRed),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
 pub const INACTIVE_TEXT_STYLE: Style = Style {
     fg: Some(Color::Rgb(40, 40, 40)),
-    bg: Some(Color::Black),
+    bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
