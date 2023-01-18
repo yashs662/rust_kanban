@@ -106,7 +106,7 @@ impl UiMode {
             UiMode::LogsOnly => "Logs Only".to_string(),
             UiMode::NewBoard => "New Board".to_string(),
             UiMode::NewCard => "New Card".to_string(),
-            UiMode::LoadSave => "Load Save".to_string(),
+            UiMode::LoadSave => "Load a Save".to_string(),
         }
     }
 
@@ -130,7 +130,7 @@ impl UiMode {
             "Logs Only" => Some(UiMode::LogsOnly),
             "New Board" => Some(UiMode::NewBoard),
             "New Card" => Some(UiMode::NewCard),
-            "Load Save" => Some(UiMode::LoadSave),
+            "Load a Save" => Some(UiMode::LoadSave),
             _ => None,
         }
     }

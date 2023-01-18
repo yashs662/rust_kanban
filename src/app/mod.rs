@@ -1180,7 +1180,7 @@ impl Display for MainMenuItem {
             MainMenuItem::View => write!(f, "View your Boards"),
             MainMenuItem::Config => write!(f, "Configure"),
             MainMenuItem::Help => write!(f, "Help"),
-            MainMenuItem::LoadSave => write!(f, "Load Save"),
+            MainMenuItem::LoadSave => write!(f, "Load a Save"),
             MainMenuItem::Quit => write!(f, "Quit"),
         }
     }

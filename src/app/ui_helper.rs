@@ -481,6 +481,15 @@ where
             Constraint::Min(10),
         ]);
 
+    let next_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus next")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let prev_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus previous")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
     let edit_keybind_help_spans = Spans::from(vec![
         Span::raw("Use "),
         Span::styled("<Up>", current_element_style),
@@ -491,8 +500,8 @@ where
         Span::raw(" to edit, "),
         Span::styled("<Esc>", current_element_style),
         Span::raw(" to cancel, To Reset Keybindings to Default, Press "),
-        Span::styled("<Next Focus>", current_element_style),
-        Span::raw(" to highlight Reset Button and Press "),
+        Span::styled([next_focus_key, prev_focus_key].join(" or "), current_element_style),
+        Span::raw("to highlight Reset Button and Press "),
         Span::styled("<Enter>", current_element_style),
         Span::raw(" on the Reset Keybindings Button"),
     ]);
@@ -563,11 +572,7 @@ where
         }
         let paragraph_text = format!("Current Value for {} \n\n{}",key,
             "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
-        let paragraph_title = Spans::from(vec![
-            Span::styled("  <-  ", FOCUSED_ELEMENT_STYLE),
-            Span::raw(key.to_uppercase()),
-            Span::styled("  ->  ", FOCUSED_ELEMENT_STYLE),
-            ]);
+        let paragraph_title = key.to_uppercase();
         let config_item = Paragraph::new(paragraph_text)
         .block(Block::default().borders(Borders::ALL).title(paragraph_title))
         .wrap(tui::widgets::Wrap { trim: false });
@@ -933,9 +938,16 @@ where
     let boards = &app.boards;
     let current_board = &app.state.current_board_id.unwrap_or(0);
 
+    let add_board_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Create new board")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
     // check if self.visible_boards_and_cards is empty
     if app.visible_boards_and_cards.is_empty() {
-        let empty_paragraph = Paragraph::new("No boards found, press <b> to add a board")
+        let empty_paragraph = Paragraph::new(
+            ["No boards found, press ".to_string(), add_board_key, " to add a new board".to_string()]
+            .concat())
             .alignment(Alignment::Center)
             .block(
                 Block::default()
@@ -1308,15 +1320,30 @@ where
         );
     rect.render_widget(board_description, chunks[2]);
 
+    let input_mode_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Enter input mode")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let next_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus next")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let prev_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus previous")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    
     let help_text = Spans::from(vec![
-        Span::styled("<i>", HELP_KEY_STYLE),
-        Span::styled(" to start typing", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled(input_mode_key, HELP_KEY_STYLE),
+        Span::styled("to start typing", HELP_DESCRIPTION_STYLE),
         Span::raw(" | "),
-        Span::styled("<esc>", HELP_KEY_STYLE),
+        Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to stop typing", HELP_DESCRIPTION_STYLE),
         Span::raw(" ; "),
-        Span::styled("<Tab>", HELP_KEY_STYLE),
-        Span::styled(" to switch focus", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
+        Span::styled("to switch focus", HELP_DESCRIPTION_STYLE),
         Span::raw(" ; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
         Span::styled(" to submit", HELP_DESCRIPTION_STYLE),
@@ -1442,15 +1469,30 @@ where
         );
     rect.render_widget(card_due_date, chunks[3]);
 
+    let input_mode_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Enter input mode")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let next_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus next")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let prev_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus previous")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    
     let help_text = Spans::from(vec![
-        Span::styled("<i>", HELP_KEY_STYLE),
-        Span::styled(" to start typing", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled(input_mode_key, HELP_KEY_STYLE),
+        Span::styled("to start typing", HELP_DESCRIPTION_STYLE),
         Span::raw(" | "),
-        Span::styled("<esc>", HELP_KEY_STYLE),
+        Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to stop typing", HELP_DESCRIPTION_STYLE),
         Span::raw(" ; "),
-        Span::styled("<Tab>", HELP_KEY_STYLE),
-        Span::styled(" to switch focus", HELP_DESCRIPTION_STYLE),
+        Span::styled("Press ", HELP_DESCRIPTION_STYLE),
+        Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
+        Span::styled("to switch focus", HELP_DESCRIPTION_STYLE),
         Span::raw(" ; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
         Span::styled(" to submit", HELP_DESCRIPTION_STYLE),
@@ -1502,7 +1544,7 @@ where
     }
 }
 
-pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState, delete_key: String)
+pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState, app: &App)
 where
     B: Backend,
 {
@@ -1548,18 +1590,33 @@ where
         rect.render_widget(no_saves_paragraph, chunks[1]);
     }
 
+    let delete_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Delete focused element")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let up_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
     let help_text = Spans::from(vec![
-        Span::styled("<Up>", HELP_KEY_STYLE),
+        Span::styled("Use ", HELP_DESCRIPTION_STYLE),
+        Span::styled(up_key, HELP_KEY_STYLE),
         Span::styled(" and ", HELP_DESCRIPTION_STYLE),
-        Span::styled("<Down>", HELP_KEY_STYLE),
-        Span::styled(" to navigate", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::styled(down_key, HELP_KEY_STYLE),
+        Span::styled("to navigate", HELP_DESCRIPTION_STYLE),
+        Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
-        Span::styled(" to submit", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::styled(" to Load the save file", HELP_DESCRIPTION_STYLE),
+        Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to cancel", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::raw("; "),
         Span::styled(delete_key, HELP_KEY_STYLE),
         Span::styled("to delete a save file", HELP_DESCRIPTION_STYLE),
     ]);
