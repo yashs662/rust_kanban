@@ -199,6 +199,7 @@ impl IoAsyncHandler {
         // check if current_board_id is set, if not assign to the first board
         // check if all_boards is empty, if so, return
         if all_boards.is_empty() {
+            error!("Cannot go right: no boards");
             return Ok(());
         }
         let current_board_id = if current_board_id.is_none() {
@@ -283,6 +284,7 @@ impl IoAsyncHandler {
         // check if current_board_id is set, if not assign to the first board
         // check if all_boards is empty, if so, return
         if all_boards.is_empty() {
+            error!("Cannot go left: no boards");
             return Ok(());
         }
         let current_board_id = if current_board_id.is_none() {

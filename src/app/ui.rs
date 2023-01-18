@@ -2,7 +2,7 @@ use tui::backend::Backend;
 use tui::Frame;
 
 use super::AppState;
-use super::state::UiMode;
+use super::state::{UiMode, AppStatus};
 use super::ui_helper::{
     check_size,
     draw_size_error,
@@ -24,6 +24,7 @@ use super::ui_helper::{
     render_new_board_form,
     render_load_save,
     render_new_card_form,
+    draw_loading_screen,
 };
 use crate::app::App;
 
@@ -35,6 +36,9 @@ where
     let msg = check_size(&rect.size());
     if &msg != "Size OK" {
         draw_size_error(rect, &rect.size(), msg);
+        return;
+    } else if *app.status() == AppStatus::Init {
+        draw_loading_screen(rect, &rect.size());
         return;
     }
 

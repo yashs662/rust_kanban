@@ -1215,6 +1215,28 @@ where
     rect.render_widget(body, chunks[1]);
 }
 
+pub fn draw_loading_screen<B>(rect: &mut Frame<B>, size: &Rect)
+where
+    B: Backend,
+{
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .split(*size);
+
+    let title = draw_title(&Focus::default(), false);
+    rect.render_widget(title, chunks[0]);
+
+    let text = vec![Spans::from(Span::styled(
+        "Loading...... \n\n 
+        `(*>﹏<*)′
+        \n\nPlease wait",FOCUSED_ELEMENT_STYLE))];
+    let body = Paragraph::new(text)
+    .block(Block::default().borders(Borders::ALL))
+    .alignment(Alignment::Center);
+    rect.render_widget(body, chunks[1]);
+}
+
 /// Draws the title bar
 pub fn draw_title<'a>(focus: &Focus, popup_mode: bool) -> Paragraph<'a> {
     // check if focus is on title
@@ -1282,7 +1304,7 @@ where
             Constraint::Length(3),
             Constraint::Length(5),
             Constraint::Min(8),
-            Constraint::Length(3),
+            Constraint::Length(4),
             Constraint::Length(3),
             ].as_ref())
         .split(rect.size());
@@ -1337,17 +1359,17 @@ where
         Span::styled("Press ", HELP_DESCRIPTION_STYLE),
         Span::styled(input_mode_key, HELP_KEY_STYLE),
         Span::styled("to start typing", HELP_DESCRIPTION_STYLE),
-        Span::raw(" | "),
+        Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to stop typing", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::raw("; "),
         Span::styled("Press ", HELP_DESCRIPTION_STYLE),
         Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
         Span::styled("to switch focus", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
         Span::styled(" to submit", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to cancel", HELP_DESCRIPTION_STYLE),
     ]);
@@ -1357,7 +1379,8 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Plain),
-        );
+        )
+        .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[3]);
 
     let submit_button = Paragraph::new("Submit")
@@ -1419,7 +1442,7 @@ where
             Constraint::Length(5),
             Constraint::Min(8),
             Constraint::Length(3),
-            Constraint::Length(3),
+            Constraint::Length(4),
             Constraint::Length(3),
             ].as_ref())
         .split(rect.size());
@@ -1486,17 +1509,17 @@ where
         Span::styled("Press ", HELP_DESCRIPTION_STYLE),
         Span::styled(input_mode_key, HELP_KEY_STYLE),
         Span::styled("to start typing", HELP_DESCRIPTION_STYLE),
-        Span::raw(" | "),
+        Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to stop typing", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::raw("; "),
         Span::styled("Press ", HELP_DESCRIPTION_STYLE),
         Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
         Span::styled("to switch focus", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
         Span::styled(" to submit", HELP_DESCRIPTION_STYLE),
-        Span::raw(" ; "),
+        Span::raw("; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to cancel", HELP_DESCRIPTION_STYLE),
     ]);
@@ -1507,7 +1530,8 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Plain),
-        );
+        )
+        .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[4]);
 
     let submit_button = Paragraph::new("Submit")
