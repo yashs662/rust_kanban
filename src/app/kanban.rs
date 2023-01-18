@@ -3,10 +3,7 @@ use serde::{
     Serialize,
     Deserialize
 };
-use chrono::{
-    DateTime,
-    Utc
-};
+use chrono::Utc;
 use uuid::Uuid;
 use crate::constants::FIELD_NOT_SET;
 
@@ -16,7 +13,6 @@ pub struct Board {
     pub name: String,
     pub description: String,
     pub cards: Vec<Card>,
-    pub action_history: Vec<String>,
 }
 
 impl Board {
@@ -26,37 +22,11 @@ impl Board {
             name,
             description,
             cards: Vec::new(),
-            action_history: Vec::new(),
         }
-    }
-
-    pub fn add_card(&mut self, card: Card) {
-        let card_name = card.name.clone();
-        self.cards.push(card);
-        self.action_history.push(format!("Added card {}", card_name));
-    }
-
-    pub fn remove_card(&mut self, card: Card) {
-        self.cards.retain(|c| c.id != card.id);
-        self.action_history.push(format!("Removed card {}", card.name));
     }
 
     pub fn get_card(&self, id: u128) -> Option<&Card> {
         self.cards.iter().find(|c| c.id == id)
-    }
-
-    pub fn rename_board(&mut self, name: String) {
-        let old_name = self.name.clone();
-        let new_name = name.clone();
-        self.name = name;
-        self.action_history.push(format!("Renamed board {} to {}", old_name, new_name));
-    }
-
-    pub fn change_description(&mut self, description: String) {
-        let old_description = self.description.clone();
-        let new_description = description.clone();
-        self.description = description;
-        self.action_history.push(format!("Changed description from {} to {}", old_description, new_description));
     }
 }
 
@@ -67,7 +37,6 @@ impl Default for Board {
             name: String::from("Default Board"),
             description: String::from("Default Board Description"),
             cards: vec![Card::default()],
-            action_history: Vec::new(),
         }
     }
 }
@@ -119,7 +88,6 @@ pub struct Card {
     pub card_status: CardStatus,
     pub tags: Vec<String>,
     pub comments: Vec<String>,
-    pub action_history: Vec<String>,
 }
 
 impl Card {
@@ -143,66 +111,7 @@ impl Card {
             card_status: CardStatus::Active,
             tags,
             comments,
-            action_history: Vec::new(),
         }
-    }
-
-    pub fn set_date_due(&mut self, date_due: DateTime<Utc>) {
-        self.date_due = date_due.to_string();
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Date Due set to {}", date_due));
-    }
-
-    pub fn set_date_completed(&mut self, date_completed: DateTime<Utc>) {
-        self.date_completed = date_completed.to_string();
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Date Completed set to {}", date_completed));
-    }
-
-    pub fn set_priority(&mut self, priority: CardPriority) {
-        self.priority = priority;
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Priority set to {}", self.priority.to_string()));
-    }
-
-    pub fn set_card_status(&mut self, card_status: CardStatus) {
-        let old_status = self.card_status.to_string();
-        let new_status = card_status.to_string();
-        self.card_status = card_status;
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Card Status changed from {} to {}", old_status, new_status));
-    }
-
-    pub fn add_tag(&mut self, tag: String) {
-        let new_tag = tag.clone();
-        self.tags.push(tag);
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Tag {} added", new_tag));
-    }
-
-    pub fn remove_tag(&mut self, tag: String) {
-        let index = self.tags.iter().position(|t| t == &tag).unwrap_or(0);
-        self.tags.remove(index);
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Tag {} removed", tag));
-    }
-
-    pub fn add_comment(&mut self, comment: String) {
-        let new_comment = comment.clone();
-        self.comments.push(comment);
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Comment {} added", new_comment));
-    }
-
-    pub fn remove_comment(&mut self, comment: String) {
-        let index = self.comments.iter().position(|c| c == &comment).unwrap_or(0);
-        self.comments.remove(index);
-        self.date_modified = Utc::now().to_string();
-        self.action_history.push(format!("Comment {} removed", comment));
-    }
-
-    pub fn clear_action_history(&mut self) {
-        self.action_history.clear();
     }
 }
 
@@ -220,7 +129,6 @@ impl Default for Card {
             card_status: CardStatus::Active,
             tags: Vec::new(),
             comments: Vec::new(),
-            action_history: Vec::new(),
         }
     }
 }

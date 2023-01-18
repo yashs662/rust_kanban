@@ -163,7 +163,6 @@ impl IoAsyncHandler {
     }
 
     async fn delete_save_file(&mut self) -> Result<()> {
-        info!("🚀 Deleting save file");
         // get app.state.load_save_state.selected() and delete the file
         let app = self.app.lock().await;
         let file_list = get_available_local_savefiles();
@@ -173,6 +172,7 @@ impl IoAsyncHandler {
             return Ok(());
         }
         let file_name = file_list[selected].clone();
+        info!("🚀 Deleting save file: {}", file_name);
         let config = get_config();
         let path = config.save_directory.join(file_name);
         // check if the file exists

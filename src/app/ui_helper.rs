@@ -1502,7 +1502,7 @@ where
     }
 }
 
-pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState)
+pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState, delete_key: String)
 where
     B: Backend,
 {
@@ -1559,6 +1559,9 @@ where
         Span::raw(" ; "),
         Span::styled("<Esc>", HELP_KEY_STYLE),
         Span::styled(" to cancel", HELP_DESCRIPTION_STYLE),
+        Span::raw(" ; "),
+        Span::styled(delete_key, HELP_KEY_STYLE),
+        Span::styled("to delete a save file", HELP_DESCRIPTION_STYLE),
     ]);
     let help_paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)

@@ -96,7 +96,11 @@ where
             render_new_card_form(rect, app)
         }
         UiMode::LoadSave => {
-            render_load_save(rect, &mut states.load_save_state);
+            let delete_key = app.state.keybind_store.iter()
+                .find(|x| x[1] == "Delete focused element")
+                .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+                .clone();
+            render_load_save(rect, &mut states.load_save_state, delete_key);
         }
     }
 }
