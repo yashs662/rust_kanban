@@ -961,16 +961,28 @@ where
     }
     
     // make a list of constraints depending on NO_OF_BOARDS_PER_PAGE constant
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(99),
-                Constraint::Length(1),
-            ]
-            .as_ref(),
-        )
-        .split(area);
+    let chunks = if app.config.disable_scrollbars {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage(100),
+                    ]
+                    .as_ref(),
+                )
+                .split(area)
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Percentage(99),
+                        Constraint::Length(1),
+                    ]
+                    .as_ref(),
+                )
+                .split(area)
+        };
     let mut constraints = vec![];
     // check if length of boards is more than NO_OF_BOARDS_PER_PAGE
     if boards.len() > NO_OF_BOARDS_PER_PAGE.into() {
@@ -1047,44 +1059,65 @@ where
             .border_type(BorderType::Plain);
         rect.render_widget(board_block, board_chunks[board_index]);
 
-        let card_area_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(
-                [
-                    Constraint::Length(1),
-                    Constraint::Percentage(99),
-                ]
-                .as_ref(),
-            ).split(board_chunks[board_index]);
-        
-        let card_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(1)
-            .constraints(card_constraints.as_ref())
-            .split(card_area_chunks[1]);
-
-        // calculate the current card scroll percentage
-        // get the index of current card in board_cards
-        let all_board_cards = boards.iter().find(|&b| b.id == *board_id).unwrap().cards.clone();
-        let current_card_index = all_board_cards.iter().position(|c| c.id == app.state.current_card_id.unwrap_or(0));
-        let cards_scroll_percentage = (current_card_index.unwrap_or(0) + 1) as f64 / all_board_cards.len() as f64;
-        let cards_scroll_percentage = cards_scroll_percentage.clamp(0.0, 1.0);
-        let available_height = if card_area_chunks[0].height >= 2 {
-            (card_area_chunks[0].height - 2) as f64
+        let card_area_chunks = if app.config.disable_scrollbars {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(
+                    [
+                        Constraint::Percentage(100),
+                    ]
+                    .as_ref(),
+                ).split(board_chunks[board_index])
         } else {
-            0.0
-        };
-        // calculate number of blocks to render
-        let blocks_to_render = (available_height * cards_scroll_percentage) as u16;
-        // render blocks VERTICAL_SCROLL_BAR_SYMBOL
-        if all_board_cards.len() > 0 {
-            for i in 0..blocks_to_render {
-                let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
-                    .style(PROGRESS_BAR_STYLE)
-                    .block(Block::default().borders(Borders::NONE));
-                rect.render_widget(block, Rect::new(card_area_chunks[0].x, card_area_chunks[0].y + i + 1, card_area_chunks[0].width, 1));
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(
+                    [
+                        Constraint::Length(1),
+                        Constraint::Percentage(99),
+                    ]
+                    .as_ref(),
+                ).split(board_chunks[board_index])
+            };
+        
+        let card_chunks = if app.config.disable_scrollbars {
+                Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(1)
+                    .constraints(card_constraints.as_ref())
+                    .split(card_area_chunks[0])
+            } else {
+                Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(1)
+                    .constraints(card_constraints.as_ref())
+                    .split(card_area_chunks[1])
+            };
+
+        if !app.config.disable_scrollbars {
+            // calculate the current card scroll percentage
+            // get the index of current card in board_cards
+            let all_board_cards = boards.iter().find(|&b| b.id == *board_id).unwrap().cards.clone();
+            let current_card_index = all_board_cards.iter().position(|c| c.id == app.state.current_card_id.unwrap_or(0));
+            let cards_scroll_percentage = (current_card_index.unwrap_or(0) + 1) as f64 / all_board_cards.len() as f64;
+            let cards_scroll_percentage = cards_scroll_percentage.clamp(0.0, 1.0);
+            let available_height = if card_area_chunks[0].height >= 2 {
+                (card_area_chunks[0].height - 2) as f64
+            } else {
+                0.0
+            };
+            // calculate number of blocks to render
+            let blocks_to_render = (available_height * cards_scroll_percentage) as u16;
+            // render blocks VERTICAL_SCROLL_BAR_SYMBOL
+            if all_board_cards.len() > 0 {
+                for i in 0..blocks_to_render {
+                    let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
+                        .style(PROGRESS_BAR_STYLE)
+                        .block(Block::default().borders(Borders::NONE));
+                    rect.render_widget(block, Rect::new(card_area_chunks[0].x, card_area_chunks[0].y + i + 1, card_area_chunks[0].width, 1));
+                }
             }
-        }
+        };
         for (card_index, card_id) in board_cards.iter().enumerate() {
             if card_index >= NO_OF_CARDS_PER_BOARD.into() {
                 break;
@@ -1150,21 +1183,22 @@ where
         }
     }
 
-    // draw line_gauge in chunks[1]
-    // get the index of the current board in boards and set percentage
-    let current_board_id = app.state.current_board_id.unwrap_or(0);
-    // get the index of the board with the id
-    let current_board_index = boards
-        .iter()
-        .position(|board| board.id == current_board_id)
-        .unwrap_or(0) + 1;
-    let percentage = (current_board_index as f64 / boards.len() as f64) * 100.0;
-    let line_gauge = Gauge::default()
-        .block(Block::default())
-        .gauge_style(PROGRESS_BAR_STYLE)
-        .percent(percentage as u16);
-    rect.render_widget(line_gauge, chunks[1]);
-    
+    if !app.config.disable_scrollbars {
+        // draw line_gauge in chunks[1]
+        // get the index of the current board in boards and set percentage
+        let current_board_id = app.state.current_board_id.unwrap_or(0);
+        // get the index of the board with the id
+        let current_board_index = boards
+            .iter()
+            .position(|board| board.id == current_board_id)
+            .unwrap_or(0) + 1;
+        let percentage = (current_board_index as f64 / boards.len() as f64) * 100.0;
+        let line_gauge = Gauge::default()
+            .block(Block::default())
+            .gauge_style(PROGRESS_BAR_STYLE)
+            .percent(percentage as u16);
+        rect.render_widget(line_gauge, chunks[1]);
+    }
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`

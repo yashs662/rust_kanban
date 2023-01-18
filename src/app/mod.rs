@@ -390,7 +390,6 @@ impl App {
                                             self.edit_keybindings_next();
                                         }
                                     } else if *config_item == "Auto Save on Exit" {
-                                        // if it is false make it true and vice versa
                                         let save_on_exit = self.config.save_on_exit;
                                         self.config.save_on_exit = !save_on_exit;
                                         let config_string = format!("{}: {}", "Auto Save on Exit", self.config.save_on_exit);
@@ -398,10 +397,16 @@ impl App {
                                         self.config = app_config.clone();
                                         write_config(&app_config);
                                     } else if *config_item == "Auto Load Last Save" {
-                                        // if it is false make it true and vice versa
                                         let always_load_last_save = self.config.always_load_last_save;
                                         self.config.always_load_last_save = !always_load_last_save;
                                         let config_string = format!("{}: {}", "Auto Load Last Save", self.config.always_load_last_save);
+                                        let app_config = AppConfig::edit_with_string(&config_string, self);
+                                        self.config = app_config.clone();
+                                        write_config(&app_config);
+                                    } else if *config_item == "Disable Scrollbars" {
+                                        let disable_scrollbars = self.config.disable_scrollbars;
+                                        self.config.disable_scrollbars = !disable_scrollbars;
+                                        let config_string = format!("{}: {}", "Disable Scrollbars", self.config.disable_scrollbars);
                                         let app_config = AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
                                         write_config(&app_config);
@@ -1256,6 +1261,7 @@ pub struct AppConfig {
     pub default_view: UiMode,
     pub always_load_last_save: bool,
     pub save_on_exit: bool,
+    pub disable_scrollbars: bool,
     pub keybindings: KeyBindings,
 }
 
@@ -1268,6 +1274,7 @@ impl AppConfig {
             default_view,
             always_load_last_save: true,
             save_on_exit: true,
+            disable_scrollbars: false,
             keybindings: KeyBindings::default(),
         }
     }
@@ -1278,6 +1285,7 @@ impl AppConfig {
             vec![String::from("Default View"), self.default_view.to_string()],
             vec![String::from("Auto Load Last Save"), self.always_load_last_save.to_string()],
             vec![String::from("Auto Save on Exit"), self.save_on_exit.to_string()],
+            vec![String::from("Disable Scrollbars"), self.disable_scrollbars.to_string()],
             vec![String::from("Edit Keybindings")],
         ]
     }
@@ -1322,6 +1330,15 @@ impl AppConfig {
                         config.save_on_exit = true;
                     } else if value.to_lowercase() == "false" {
                         config.save_on_exit = false;
+                    } else {
+                        warn!("Invalid boolean: {}", value);
+                    }
+                }
+                "Disable Scrollbars" => {
+                    if value.to_lowercase() == "true" {
+                        config.disable_scrollbars = true;
+                    } else if value.to_lowercase() == "false" {
+                        config.disable_scrollbars = false;
                     } else {
                         warn!("Invalid boolean: {}", value);
                     }
