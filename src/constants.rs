@@ -18,6 +18,7 @@ pub const MIN_TERM_WIDTH: u16 = 110;
 pub const MIN_TERM_HEIGHT: u16 = 30;
 pub const LIST_SELECTED_SYMBOL: &str = ">> ";
 pub const VERTICAL_SCROLL_BAR_SYMBOL: &str = "█";
+pub const DEFAULT_CARD_WARNING_DUE_DATE_DAYS: u16 = 3;
 
 // Style
 pub const DEFAULT_STYLE: Style = Style{
@@ -32,7 +33,19 @@ pub const LIST_SELECT_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
-pub const CARD_DUE_DATE_STYLE: Style = Style {
+pub const CARD_DUE_DATE_DEFAULT_STYLE: Style = Style {
+    fg: Some(Color::LightGreen),
+    bg: Some(Color::Reset),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const CARD_DUE_DATE_WARNING_STYLE: Style = Style {
+    fg: Some(Color::LightYellow),
+    bg: Some(Color::Reset),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const CARD_DUE_DATE_CRITICAL_STYLE: Style = Style {
     fg: Some(Color::LightRed),
     bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,

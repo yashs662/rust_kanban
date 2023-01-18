@@ -55,7 +55,8 @@ pub enum Focus {
     NewCardDescription,
     NewCardDueDate,
     SubmitButton,
-    NoFocus
+    NoFocus,
+    ExtraFocus, // Used in cases where defining a new focus is not necessary
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -166,7 +167,7 @@ impl UiMode {
             UiMode::TitleBodyLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
             UiMode::BodyHelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::TitleBodyHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
-            UiMode::Config => vec![],
+            UiMode::Config => vec!["Body".to_string(), "Submit Button".to_string(), "Extra Focus".to_string()],
             UiMode::EditConfig => vec![],
             UiMode::EditKeybindings => vec!["Title".to_string(), "Submit Button".to_string()],
             UiMode::EditSpecificKeybinding => vec![],
@@ -226,6 +227,7 @@ impl Focus {
             Self::NewCardDueDate => "New Card Due Date",
             Self::SubmitButton => "Submit Button",
             Self::NoFocus => "No Focus",
+            Self::ExtraFocus => "Extra Focus",
         }
     }
     pub fn next(&self, available_tabs: &Vec<String>) -> Self {
@@ -256,6 +258,7 @@ impl Focus {
             "New Card Description" => Self::NewCardDescription,
             "New Card Due Date" => Self::NewCardDueDate,
             "Submit Button" => Self::SubmitButton,
+            "Extra Focus" => Self::ExtraFocus,
             _ => Self::NoFocus,
         }
     }
@@ -293,6 +296,7 @@ impl Focus {
             "New Card Description" => Self::NewCardDescription,
             "New Card Due Date" => Self::NewCardDueDate,
             "Submit Button" => Self::SubmitButton,
+            "Extra Focus" => Self::ExtraFocus,
             _ => Self::NoFocus,
         }
     }
@@ -314,6 +318,7 @@ impl Focus {
             "New Card Description" => Self::NewCardDescription,
             "New Card Due Date" => Self::NewCardDueDate,
             "Submit Button" => Self::SubmitButton,
+            "Extra Focus" => Self::ExtraFocus,
             _ => Self::NoFocus
         }
     }

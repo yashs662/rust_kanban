@@ -39,7 +39,7 @@ use crate::app::actions::Action;
 use crate::app::kanban::CardStatus;
 use crate::constants::{
     SAVE_DIR_NAME,
-    FIELD_NOT_SET,
+    FIELD_NOT_SET, DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{
@@ -253,7 +253,9 @@ impl App {
                     }
                     Action::Up => {
                         if self.ui_mode == UiMode::Config {
-                            self.config_previous();
+                            if self.focus == Focus::Body {
+                                self.config_previous();
+                            }
                         } else if self.ui_mode == UiMode::MainMenu {
                             self.main_menu_previous();
                         } else if self.ui_mode == UiMode::LoadSave {
@@ -273,7 +275,9 @@ impl App {
                     }
                     Action::Down => {
                         if self.ui_mode == UiMode::Config {
-                            self.config_next();
+                            if self.focus == Focus::Body {
+                                self.config_next();
+                            }
                         } else if self.ui_mode == UiMode::MainMenu {
                             self.main_menu_next();
                         } else if self.ui_mode == UiMode::LoadSave {
@@ -378,6 +382,25 @@ impl App {
                     Action::Enter => {
                         match self.ui_mode {
                             UiMode::Config => {
+                                if self.focus == Focus::SubmitButton {
+                                    self.config = AppConfig::default();
+                                    info!("Reset Config and Keybinds to default");
+                                    self.focus = Focus::NoFocus;
+                                    self.state.config_state.select(None);
+                                    write_config(&self.config);
+                                    self.keybind_list_maker();
+                                    return AppReturn::Continue;
+                                } else if self.focus == Focus::ExtraFocus {
+                                    // make a copy of the keybinds and reset only config and then write the config
+                                    let keybinds = self.config.keybindings.clone();
+                                    self.config = AppConfig::default();
+                                    self.config.keybindings = keybinds;
+                                    info!("Reset Config to default");
+                                    self.focus = Focus::NoFocus;
+                                    self.state.config_state.select(None);
+                                    write_config(&self.config);
+                                    return AppReturn::Continue;
+                                }
                                 self.prev_ui_mode = Some(self.ui_mode.clone());
                                 self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
                                 // check if the config_item_being_edited index is in the AppConfig list and the value in the list is Edit Keybindings
@@ -561,7 +584,12 @@ impl App {
                                         Some(FIELD_NOT_SET.to_string())
                                     } else {
                                         match NaiveDate::parse_from_str(&new_card_due_date, "%d/%m/%Y") {
-                                            Ok(due_date) => Some(due_date.to_string()),
+                                            Ok(due_date) => {
+                                                let new_due = due_date.to_string().replace("-", "/");
+                                                // the date is in the format YYYY/MM/DD change it to DD/MM/YYYY
+                                                let new_due = format!("{}/{}/{}", &new_due[8..10], &new_due[5..7], &new_due[0..4]);
+                                                Some(new_due)
+                                            },
                                             Err(e) => {
                                                 debug!("Invalid due date: {}", e);
                                                 debug!("Due date: {}", new_card_due_date);
@@ -1319,6 +1347,7 @@ pub struct AppConfig {
     pub always_load_last_save: bool,
     pub save_on_exit: bool,
     pub disable_scrollbars: bool,
+    pub warning_delta: u16,
     pub keybindings: KeyBindings,
 }
 
@@ -1332,6 +1361,7 @@ impl AppConfig {
             always_load_last_save: true,
             save_on_exit: true,
             disable_scrollbars: false,
+            warning_delta: DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
             keybindings: KeyBindings::default(),
         }
     }
@@ -1343,6 +1373,7 @@ impl AppConfig {
             vec![String::from("Auto Load Last Save"), self.always_load_last_save.to_string()],
             vec![String::from("Auto Save on Exit"), self.save_on_exit.to_string()],
             vec![String::from("Disable Scrollbars"), self.disable_scrollbars.to_string()],
+            vec![String::from("Number of Days to Warn Before Due Date"), self.warning_delta.to_string()],
             vec![String::from("Edit Keybindings")],
         ]
     }
@@ -1398,6 +1429,14 @@ impl AppConfig {
                         config.disable_scrollbars = false;
                     } else {
                         warn!("Invalid boolean: {}", value);
+                    }
+                }
+                "Number of Days to Warn Before Due Date" => {
+                    let new_delta = value.parse::<u16>();
+                    if new_delta.is_ok() {
+                        config.warning_delta = new_delta.unwrap();
+                    } else {
+                        error!("Invalid number: {}", value);
                     }
                 }
                 _ => {

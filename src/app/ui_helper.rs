@@ -1,3 +1,4 @@
+use chrono::{NaiveDate, Local};
 use tui::backend::Backend;
 use tui::Frame;
 use tui_logger::TuiLoggerWidget;
@@ -32,7 +33,9 @@ use crate::constants::{
     NO_OF_CARDS_PER_BOARD,
     LIST_SELECT_STYLE,
     LIST_SELECTED_SYMBOL,
-    CARD_DUE_DATE_STYLE,
+    CARD_DUE_DATE_DEFAULT_STYLE,
+    CARD_DUE_DATE_WARNING_STYLE,
+    CARD_DUE_DATE_CRITICAL_STYLE,
     CARD_ACTIVE_STATUS_STYLE,
     FOCUSED_ELEMENT_STYLE,
     DEFAULT_STYLE,
@@ -47,7 +50,7 @@ use crate::constants::{
     INACTIVE_TEXT_STYLE,
     VERTICAL_SCROLL_BAR_SYMBOL,
     CARD_COMPLETED_STATUS_STYLE,
-    CARD_STALE_STATUS_STYLE
+    CARD_STALE_STATUS_STYLE,
 };
 
 use super::{
@@ -327,9 +330,11 @@ where
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(60),
+                Constraint::Min(8),
                 Constraint::Length(3),
-                Constraint::Length(8),
+                Constraint::Length(3),
+                Constraint::Length(5),
+                Constraint::Length(5),
             ]
             .as_ref(),
         )
@@ -338,57 +343,103 @@ where
     let title = draw_title(&app.focus, popup_mode);
     rect.render_widget(title, chunks[0]);
     
-    let config = draw_config_table_selector(popup_mode);
-    rect.render_stateful_widget(config, chunks[1], config_state);
+    let config_table = draw_config_table_selector(&app.focus, popup_mode);
+    rect.render_stateful_widget(config_table, chunks[1], config_state);
 
-    let config_help = draw_config_help(&app.focus, popup_mode);
-    rect.render_widget(config_help, chunks[2]);
+    let reset_both_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        if matches!(app.focus, Focus::SubmitButton) {
+            ERROR_TEXT_STYLE
+        } else {
+            DEFAULT_STYLE
+        }
+    };
+    let reset_config_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        if matches!(app.focus, Focus::ExtraFocus) {
+            ERROR_TEXT_STYLE
+        } else {
+            DEFAULT_STYLE
+        }
+    };
+
+    let reset_both_button = Paragraph::new("Reset Config and Keybinds to Default")
+        .block(Block::default().borders(Borders::ALL).title("Reset"))
+        .style(reset_both_style)
+        .alignment(Alignment::Center);
+    rect.render_widget(reset_both_button, chunks[2]);
+
+    let reset_config_button = Paragraph::new("Reset Only Config to Default")
+        .block(Block::default().borders(Borders::ALL).title("Reset"))
+        .style(reset_config_style)
+        .alignment(Alignment::Center);
+    rect.render_widget(reset_config_button, chunks[3]);
+
+    let config_help = draw_config_help(&app.focus, popup_mode, app);
+    rect.render_widget(config_help, chunks[4]);
 
     let log = draw_logs(&app.focus, true, popup_mode);
-    rect.render_widget(log, chunks[3]);
+    rect.render_widget(log, chunks[5]);
 }
 
-pub fn render_edit_default_homescreen<'a,B>(rect: &mut Frame<B>, app: &App, default_view_selector_state: &mut ListState)
-where
-    B: Backend,
+/// Draws config list selector
+fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static> {
+    let default_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        if *focus == Focus::Body {
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            DEFAULT_STYLE
+        }
+    };
+
+    let config_text_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
+
+    let current_element_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        if *focus == Focus::Body {
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            DEFAULT_STYLE
+        }
+    };
+
+    let config_list = get_config_items();
+    let rows = config_list.iter().map(|item| {
+        let height = item
+            .iter()
+            .map(|content| content.chars().filter(|c| *c == '\n').count())
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let cells = item.iter().map(|c| Cell::from(c.to_string()));
+        Row::new(cells).height(height as u16)
+    });
+    Table::new(rows)
+        .block(Block::default().borders(Borders::ALL).title("Config Editor").border_style(default_style).style(config_text_style))
+        .highlight_style(current_element_style)
+        .highlight_symbol(">> ")
+        .widths(&[
+            Constraint::Percentage(50),
+            Constraint::Length(30),
+            Constraint::Min(10),
+        ])
+}
+
+/// returns a list of all config items as a vector of strings
+fn get_config_items() -> Vec<Vec<String>>
 {
-    let area = centered_rect(70, 70, rect.size());
-    let clear_area = centered_rect(80, 80, rect.size());
-    let clear_area_border = Block::default()
-        .borders(Borders::ALL)
-        .border_style(FOCUSED_ELEMENT_STYLE)
-        .title("Default HomeScreen Editor");
-    rect.render_widget(Clear, clear_area);
-    rect.render_widget(clear_area_border, clear_area);
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Min(8),
-                Constraint::Length(5),
-            ].as_ref(),
-        ).split(area);
-    
-    let list_items = UiMode::all();
-    let list_items: Vec<ListItem> = list_items
-        .iter()
-        .map(|s| ListItem::new(s.to_string()))
-        .collect();
-
-    let default_view_list = List::new(list_items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(DEFAULT_STYLE)
-                .border_type(BorderType::Plain),
-        )
-        .highlight_style(LIST_SELECT_STYLE)
-        .highlight_symbol(LIST_SELECTED_SYMBOL);
-    
-    rect.render_stateful_widget(default_view_list, chunks[0], default_view_selector_state);
-
-    let config_help = draw_config_help(&app.focus, false);
-    rect.render_widget(config_help, chunks[1]);
+    let config = get_config();
+    let config_list = config.to_list();
+    return config_list;
 }
 
 pub fn render_edit_config<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -453,6 +504,83 @@ where
     rect.render_widget(log, chunks[2]);
 }
 
+pub fn render_edit_default_homescreen<'a,B>(rect: &mut Frame<B>, app: &App, default_view_selector_state: &mut ListState)
+where
+    B: Backend,
+{
+    let area = centered_rect(70, 70, rect.size());
+    let clear_area = centered_rect(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .borders(Borders::ALL)
+        .border_style(FOCUSED_ELEMENT_STYLE)
+        .title("Default HomeScreen Editor");
+    rect.render_widget(Clear, clear_area);
+    rect.render_widget(clear_area_border, clear_area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(8),
+                Constraint::Length(5),
+            ].as_ref(),
+        ).split(area);
+    
+    let list_items = UiMode::all();
+    let list_items: Vec<ListItem> = list_items
+        .iter()
+        .map(|s| ListItem::new(s.to_string()))
+        .collect();
+
+    let default_view_list = List::new(list_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(DEFAULT_STYLE)
+                .border_type(BorderType::Plain),
+        )
+        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+
+    let up_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let help_text = Spans::from(vec![
+        Span::styled("Use ", DEFAULT_STYLE),
+        Span::styled(up_key, HELP_KEY_STYLE),
+        Span::styled(" and ", DEFAULT_STYLE),
+        Span::styled(down_key, HELP_KEY_STYLE),
+        Span::styled("to navigate", DEFAULT_STYLE),
+        Span::raw("; "),
+        Span::raw("Press "),
+        Span::styled("<Enter>", HELP_KEY_STYLE),
+        Span::raw(" To select a Default View; Press "),
+        Span::styled("<Esc>", HELP_KEY_STYLE),
+        Span::raw(" to cancel"),
+    ]);
+
+    let help_span = Spans::from(help_text);
+    let config_help = Paragraph::new(help_span)
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .style(DEFAULT_STYLE)
+                .border_type(BorderType::Plain),
+        )
+        .alignment(Alignment::Center)
+        .wrap(tui::widgets::Wrap { trim: true });
+
+    rect.render_stateful_widget(default_view_list, chunks[0], default_view_selector_state);
+    rect.render_widget(config_help, chunks[1]);
+}
+
 pub fn render_edit_keybindings<'a,B>(rect: &mut Frame<B>, app: &App, edit_keybindings_state: &mut TableState, popup_mode: bool)
 where
     B: Backend,
@@ -497,7 +625,7 @@ where
     let rects = Layout::default()
         .constraints([
             Constraint::Length(3),
-            Constraint::Percentage(65),
+            Constraint::Min(8),
             Constraint::Length(5),
             Constraint::Length(3)
             ].as_ref())
@@ -531,12 +659,20 @@ where
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
+    let up_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
 
     let edit_keybind_help_spans = Spans::from(vec![
-        Span::raw("Use "),
-        Span::styled("<Up>", current_element_style),
-        Span::raw(" and "),
-        Span::styled("<Down>", current_element_style),
+        Span::styled("Use ", DEFAULT_STYLE),
+        Span::styled(up_key, HELP_KEY_STYLE),
+        Span::styled(" and ", DEFAULT_STYLE),
+        Span::styled(down_key, HELP_KEY_STYLE),
         Span::raw(" to select a keybinding, "),
         Span::styled("<Enter>", current_element_style),
         Span::raw(" to edit, "),
@@ -551,6 +687,7 @@ where
     let edit_keybind_help = Paragraph::new(edit_keybind_help_spans)
         .block(Block::default().borders(Borders::ALL).title("Help"))
         .style(default_style)
+        .alignment(Alignment::Center)
         .wrap(tui::widgets::Wrap { trim: false });
         
     let reset_button = Paragraph::new("Reset Keybindings to Default")
@@ -809,7 +946,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
 }
 
 /// Draws help section for config mode
-fn draw_config_help(focus: &Focus, popup_mode: bool) -> Paragraph {
+fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Paragraph<'a> {
     let helpbox_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
@@ -819,37 +956,48 @@ fn draw_config_help(focus: &Focus, popup_mode: bool) -> Paragraph {
             DEFAULT_STYLE
         }
     };
-    let key_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
-    } else {
-        HELP_KEY_STYLE
-    };
-    let description_style = if popup_mode {
+    let text_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
         DEFAULT_STYLE
     };
 
-    let mut help_spans = vec![];
-    let keys_span = Span::styled("<Up>, <Down>", key_style);
-    let action_span = Span::styled("Select config option", description_style);
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-    help_spans.push(Span::raw(" ; "));
-    let keys_span = Span::styled("<Enter>", key_style);
-    let action_span = Span::styled("Edit config option", description_style);
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
-    let keys_span = Span::styled("<Esc>", key_style);
-    let action_span = Span::styled("Exit config mode", description_style);
-    help_spans.push(Span::raw(" ; "));
-    help_spans.push(keys_span);
-    help_spans.push(Span::raw(" - "));
-    help_spans.push(action_span);
+    let up_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let next_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus next")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let prev_focus_key = app.state.keybind_store.iter()
+        .find(|x| x[1] == "Focus previous")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
 
-    let help_span = Spans::from(help_spans);
+    let help_text = Spans::from(vec![
+        Span::styled("Use ", text_style),
+        Span::styled(up_key, HELP_KEY_STYLE),
+        Span::styled(" and ", text_style),
+        Span::styled(down_key, HELP_KEY_STYLE),
+        Span::styled("to navigate", text_style),
+        Span::raw("; "),
+        Span::raw("To edit a value, press "),
+        Span::styled("<Enter>", HELP_KEY_STYLE),
+        Span::raw("; Press "),
+        Span::styled("<Esc>", HELP_KEY_STYLE),
+        Span::raw(" to cancel, To Reset Keybindings to Default, Press "),
+        Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
+        Span::raw("to highlight Reset Button and Press "),
+        Span::styled("<Enter>", HELP_KEY_STYLE),
+        Span::raw(" on the Reset Keybindings Button"),
+    ]);
+
+    let help_span = Spans::from(help_text);
 
     Paragraph::new(help_span)
         .alignment(Alignment::Left)
@@ -927,49 +1075,6 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
         )
         .highlight_style(LIST_SELECT_STYLE)
         .highlight_symbol(LIST_SELECTED_SYMBOL)
-}
-
-/// Draws config list selector
-fn draw_config_table_selector(popup_mode: bool) -> Table<'static> {
-    let default_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
-    } else {
-        DEFAULT_STYLE
-    };
-    let current_element_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
-    } else {
-        FOCUSED_ELEMENT_STYLE
-    };
-
-    let config_list = get_config_items();
-    let rows = config_list.iter().map(|item| {
-        let height = item
-            .iter()
-            .map(|content| content.chars().filter(|c| *c == '\n').count())
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let cells = item.iter().map(|c| Cell::from(c.to_string()));
-        Row::new(cells).height(height as u16)
-    });
-    Table::new(rows)
-        .block(Block::default().borders(Borders::ALL).title("Config Editor").style(default_style))
-        .highlight_style(current_element_style)
-        .highlight_symbol(">> ")
-        .widths(&[
-            Constraint::Percentage(50),
-            Constraint::Length(30),
-            Constraint::Min(10),
-        ])
-}
-
-/// returns a list of all config items as a vector of strings
-fn get_config_items() -> Vec<Vec<String>>
-{
-    let config = get_config();
-    let config_list = config.to_list();
-    return config_list;
 }
 
 /// Draws Kanban boards
@@ -1189,8 +1294,22 @@ where
             let mut card_description = Text::from(card.unwrap().description.clone());
             let card_due_date = card.unwrap().date_due.clone();
             if !card_due_date.is_empty() {
-                let card_due_date_styled = Text::styled(
-                    format!("Due: {}",card_due_date), CARD_DUE_DATE_STYLE);
+                let parsed_due_date = NaiveDate::parse_from_str(&card_due_date, "%d/%m/%Y");
+                // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
+                let card_due_date_styled = if parsed_due_date.is_ok() {
+                    let parsed_due_date = parsed_due_date.unwrap();
+                    let today = Local::now().naive_local().date();
+                    let days_left = parsed_due_date.signed_duration_since(today).num_days();
+                    if days_left <= app.config.warning_delta.into() && days_left >= 0 {
+                        Text::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_WARNING_STYLE)
+                    } else if days_left < 0 {
+                        Text::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_CRITICAL_STYLE)
+                    } else {
+                        Text::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_DEFAULT_STYLE)
+                    }
+                } else {
+                    Text::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_DEFAULT_STYLE)
+                };
                 card_description.extend(card_due_date_styled);
             }
             let card_status = format!("Status: {}",card.unwrap().card_status.clone().to_string());
