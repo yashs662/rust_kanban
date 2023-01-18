@@ -33,12 +33,13 @@ pub enum Action {
     ChangeCardStatusToActive,
     ChangeCardStatusToStale,
     ResetUI,
+    GoToMainMenu,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 21] = [
+        static ACTIONS: [Action; 22] = [
             Action::Quit,
             Action::NextFocus,
             Action::PrvFocus,
@@ -60,6 +61,7 @@ impl Action {
             Action::ChangeCardStatusToActive,
             Action::ChangeCardStatusToStale,
             Action::ResetUI,
+            Action::GoToMainMenu,
         ];
         ACTIONS.iter()
     }
@@ -88,6 +90,7 @@ impl Action {
             Action::ChangeCardStatusToActive => &[Key::Char('2')],
             Action::ChangeCardStatusToStale => &[Key::Char('3')],
             Action::ResetUI => &[Key::Char('r')],
+            Action::GoToMainMenu => &[Key::Char('m')],
         }
     }
 
@@ -121,6 +124,7 @@ impl Display for Action {
             Action::ChangeCardStatusToActive => "Change card status to active",
             Action::ChangeCardStatusToStale => "Change card status to stale",
             Action::ResetUI => "Reset UI",
+            Action::GoToMainMenu => "Go to main menu",
         };
         write!(f, "{}", str)
     }

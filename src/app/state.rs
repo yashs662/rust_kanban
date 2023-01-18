@@ -78,6 +78,7 @@ pub struct KeyBindings {
     pub change_card_status_to_active: Vec<Key>,
     pub change_card_status_to_stale: Vec<Key>,
     pub reset_ui: Vec<Key>,
+    pub go_to_main_menu: Vec<Key>,
 }
 
 impl UiMode {
@@ -166,7 +167,7 @@ impl UiMode {
             UiMode::EditConfig => vec![],
             UiMode::EditKeybindings => vec!["Title".to_string(), "Submit Button".to_string()],
             UiMode::EditSpecificKeybinding => vec![],
-            UiMode::MainMenu => vec![],
+            UiMode::MainMenu => vec!["Main Menu".to_string(), "Help".to_string(), "Log".to_string()],
             UiMode::ViewCard => vec![],
             UiMode::HelpMenu => vec![],
             UiMode::LogsOnly => vec!["Log".to_string()],
@@ -336,6 +337,7 @@ impl KeyBindings {
             change_card_status_to_active: vec![Key::Char('2')],
             change_card_status_to_stale: vec![Key::Char('3')],
             reset_ui: vec![Key::Char('r')],
+            go_to_main_menu: vec![Key::Char('m')],
         }
     }
 
@@ -360,6 +362,7 @@ impl KeyBindings {
             ("change_card_status_to_active", &self.change_card_status_to_active),
             ("change_card_status_to_stale", &self.change_card_status_to_stale),
             ("reset_ui", &self.reset_ui),
+            ("go_to_main_menu", &self.go_to_main_menu),
         ]
         .into_iter()
     }
@@ -393,6 +396,7 @@ impl KeyBindings {
                         return Some(&Action::ChangeCardStatusToStale)
                     }
                     "reset_ui" => return Some(&Action::ResetUI),
+                    "go_to_main_menu" => return Some(&Action::GoToMainMenu),
                     _ => return None,
                 }
             }
@@ -421,6 +425,7 @@ impl KeyBindings {
             "change_card_status_to_active" => Some(&Action::ChangeCardStatusToActive),
             "change_card_status_to_stale" => Some(&Action::ChangeCardStatusToStale),
             "reset_ui" => Some(&Action::ResetUI),
+            "go_to_main_menu" => Some(&Action::GoToMainMenu),
             _ => None,
         }
     }

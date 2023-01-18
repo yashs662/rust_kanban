@@ -339,7 +339,7 @@ where
     let title = draw_title(&app.focus, popup_mode);
     rect.render_widget(title, chunks[0]);
     
-    let config = draw_config_list_selector(popup_mode);
+    let config = draw_config_table_selector(popup_mode);
     rect.render_stateful_widget(config, chunks[1], config_state);
 
     let config_help = draw_config_help(&app.focus, popup_mode);
@@ -874,7 +874,7 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
             Block::default()
                 .title("Main menu")
                 .borders(Borders::ALL)
-                .style(menu_style)
+                .border_style(menu_style)
                 .border_type(BorderType::Plain),
         )
         .highlight_style(LIST_SELECT_STYLE)
@@ -882,7 +882,7 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
 }
 
 /// Draws config list selector
-fn draw_config_list_selector(popup_mode: bool) -> Table<'static> {
+fn draw_config_table_selector(popup_mode: bool) -> Table<'static> {
     let default_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {

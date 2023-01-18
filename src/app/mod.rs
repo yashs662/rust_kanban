@@ -389,19 +389,19 @@ impl App {
                                         if self.state.edit_keybindings_state.selected().is_none() {
                                             self.edit_keybindings_next();
                                         }
-                                    } else if *config_item == "save_on_exit" {
+                                    } else if *config_item == "Auto Save on Exit" {
                                         // if it is false make it true and vice versa
                                         let save_on_exit = self.config.save_on_exit;
                                         self.config.save_on_exit = !save_on_exit;
-                                        let config_string = format!("{}: {}", "save_on_exit", self.config.save_on_exit);
+                                        let config_string = format!("{}: {}", "Auto Save on Exit", self.config.save_on_exit);
                                         let app_config = AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
                                         write_config(&app_config);
-                                    } else if *config_item == "always_load_last_save" {
+                                    } else if *config_item == "Auto Load Last Save" {
                                         // if it is false make it true and vice versa
                                         let always_load_last_save = self.config.always_load_last_save;
                                         self.config.always_load_last_save = !always_load_last_save;
-                                        let config_string = format!("{}: {}", "always_load_last_save", self.config.always_load_last_save);
+                                        let config_string = format!("{}: {}", "Auto Load Last Save", self.config.always_load_last_save);
                                         let app_config = AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
                                         write_config(&app_config);
@@ -898,6 +898,16 @@ impl App {
                         }
                         AppReturn::Continue
                     }
+                    Action::GoToMainMenu => {
+                        self.state.current_board_id = None;
+                        self.state.current_card_id = None;
+                        self.focus = Focus::MainMenu;
+                        self.ui_mode = UiMode::MainMenu;
+                        if self.state.main_menu_state.selected().is_none() {
+                            self.state.main_menu_state.select(Some(0));
+                        }
+                        AppReturn::Continue
+                    }
                 }
             } else {
                 warn!("No action accociated to {}", key);
@@ -1264,10 +1274,10 @@ impl AppConfig {
 
     pub fn to_list(&self) -> Vec<Vec<String>> {
         vec![
-            vec![String::from("save_directory"), self.save_directory.to_str().unwrap().to_string()],
-            vec![String::from("default_view"), self.default_view.to_string()],
-            vec![String::from("always_load_last_save"), self.always_load_last_save.to_string()],
-            vec![String::from("save_on_exit"), self.save_on_exit.to_string()],
+            vec![String::from("Save Directory"), self.save_directory.to_str().unwrap().to_string()],
+            vec![String::from("Default View"), self.default_view.to_string()],
+            vec![String::from("Auto Load Last Save"), self.always_load_last_save.to_string()],
+            vec![String::from("Auto Save on Exit"), self.save_on_exit.to_string()],
             vec![String::from("Edit Keybindings")],
         ]
     }
@@ -1280,7 +1290,7 @@ impl AppConfig {
             let key = parts.next().unwrap_or("").trim();
             let value = parts.next().unwrap_or("").trim();
             match key {
-                "save_directory" => {
+                "Save Directory" => {
                     let new_path = PathBuf::from(value);
                     // check if the new path is valid
                     if new_path.exists() {
@@ -1289,7 +1299,7 @@ impl AppConfig {
                         error!("Invalid path: {}", value);
                     }
                 }
-                "default_view" => {
+                "Default View" => {
                     let new_ui_mode = UiMode::from_string(value);
                     if new_ui_mode.is_some() {
                         config.default_view = new_ui_mode.unwrap();
@@ -1298,7 +1308,7 @@ impl AppConfig {
                         info!("Valid UiModes are: {:?}", UiMode::all());
                     }
                 }
-                "always_load_last_save" => {
+                "Auto Load Last Save" => {
                     if value.to_lowercase() == "true" {
                         config.always_load_last_save = true;
                     } else if value.to_lowercase() == "false" {
@@ -1307,7 +1317,7 @@ impl AppConfig {
                         warn!("Invalid boolean: {}", value);
                     }
                 }
-                "save_on_exit" => {
+                "Auto Save on Exit" => {
                     if value.to_lowercase() == "true" {
                         config.save_on_exit = true;
                     } else if value.to_lowercase() == "false" {
