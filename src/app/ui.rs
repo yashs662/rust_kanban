@@ -25,6 +25,7 @@ use super::ui_helper::{
     render_load_save,
     render_new_card_form,
     draw_loading_screen,
+    render_edit_default_homescreen,
 };
 use crate::app::App;
 
@@ -73,6 +74,10 @@ where
         UiMode::EditConfig => {
             render_config(rect, &app, &mut states.config_state, true);
             render_edit_config(rect, &app);
+        }
+        UiMode::SelectDefaultView => {
+            render_config(rect, &app, &mut states.config_state, true);
+            render_edit_default_homescreen(rect, app, &mut states.default_view_state);
         }
         UiMode::EditKeybindings => {
             render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state, false);

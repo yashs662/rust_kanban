@@ -254,17 +254,15 @@ impl App {
                     Action::Up => {
                         if self.ui_mode == UiMode::Config {
                             self.config_previous();
-                        }
-                        else if self.ui_mode == UiMode::MainMenu {
+                        } else if self.ui_mode == UiMode::MainMenu {
                             self.main_menu_previous();
-                        }
-                        else if self.ui_mode == UiMode::LoadSave {
+                        } else if self.ui_mode == UiMode::LoadSave {
                             self.load_save_previous();
-                        }
-                        else if self.ui_mode == UiMode::EditKeybindings {
+                        } else if self.ui_mode == UiMode::EditKeybindings {
                             self.edit_keybindings_prev();
-                        }
-                        else {
+                        } else if self.ui_mode == UiMode::SelectDefaultView {
+                            self.select_default_view_prev();
+                        } else {
                             if self.focus == Focus::Body {
                                 self.dispatch(IoEvent::GoUp).await;
                             } else if self.focus == Focus::Help {
@@ -276,17 +274,15 @@ impl App {
                     Action::Down => {
                         if self.ui_mode == UiMode::Config {
                             self.config_next();
-                        }
-                        else if self.ui_mode == UiMode::MainMenu {
+                        } else if self.ui_mode == UiMode::MainMenu {
                             self.main_menu_next();
-                        }
-                        else if self.ui_mode == UiMode::LoadSave {
+                        } else if self.ui_mode == UiMode::LoadSave {
                             self.load_save_next();
-                        }
-                        else if self.ui_mode == UiMode::EditKeybindings {
+                        } else if self.ui_mode == UiMode::EditKeybindings {
                             self.edit_keybindings_next();
-                        }
-                        else {
+                        } else if self.ui_mode == UiMode::SelectDefaultView {
+                            self.select_default_view_next();
+                        } else {
                             if self.focus == Focus::Body {
                                 self.dispatch(IoEvent::GoDown).await;
                             } else if self.focus == Focus::Help {
@@ -394,6 +390,11 @@ impl App {
                                         if self.state.edit_keybindings_state.selected().is_none() {
                                             self.edit_keybindings_next();
                                         }
+                                    } else if *config_item == "Select Default View" {
+                                        self.ui_mode = UiMode::SelectDefaultView;
+                                        if self.state.default_view_state.selected().is_none() {
+                                            self.select_default_view_next();
+                                        }
                                     } else if *config_item == "Auto Save on Exit" {
                                         let save_on_exit = self.config.save_on_exit;
                                         self.config.save_on_exit = !save_on_exit;
@@ -448,6 +449,29 @@ impl App {
                                     }
                                 }
                                 self.state.config_state.select(Some(0));
+                                AppReturn::Continue
+                            }
+                            UiMode::SelectDefaultView => {
+                                let all_ui_modes = UiMode::all();
+                                let current_selected_mode = self.state.default_view_state.selected().unwrap_or(0);
+                                if current_selected_mode < all_ui_modes.len() {
+                                    let selected_mode = &all_ui_modes[current_selected_mode];
+                                    self.config.default_view = UiMode::from_string(&selected_mode).unwrap_or(UiMode::MainMenu);
+                                    self.prev_ui_mode = Some(self.config.default_view.clone());
+                                    let config_string = format!("{}: {}", "Select Default View", selected_mode);
+                                    let app_config = AppConfig::edit_with_string(&config_string, self);
+                                    self.config = app_config.clone();
+                                    write_config(&app_config);
+
+                                    // reset everything
+                                    self.state.default_view_state.select(Some(0));
+                                    self.ui_mode = UiMode::Config;
+                                    if self.state.config_state.selected().is_none() {
+                                        self.config_next();
+                                    }
+                                } else {
+                                    debug!("Selected mode {} is not in the list of all UI modes", current_selected_mode);
+                                }
                                 AppReturn::Continue
                             }
                             UiMode::MainMenu => {
@@ -1135,6 +1159,32 @@ impl App {
         };
         self.state.help_state.select(Some(i));
     }
+    pub fn select_default_view_next(&mut self) {
+        let i = match self.state.default_view_state.selected() {
+            Some(i) => {
+                if i >= UiMode::all().len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.default_view_state.select(Some(i));
+    }
+    pub fn select_default_view_prev(&mut self) {
+        let i = match self.state.default_view_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    UiMode::all().len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.default_view_state.select(Some(i));
+    }
     pub fn keybind_list_maker(&mut self) {
 
         let keybinds = &self.config.keybindings;
@@ -1238,6 +1288,7 @@ pub struct AppState {
     pub edited_keybinding: Option<Vec<Key>>,
     pub help_state: TableState,
     pub keybind_store: Vec<Vec<String>>,
+    pub default_view_state: ListState,
 }
 
 impl Default for AppState {
@@ -1256,6 +1307,7 @@ impl Default for AppState {
             edited_keybinding: None,
             help_state: TableState::default(),
             keybind_store: Vec::new(),
+            default_view_state: ListState::default(),
         }
     }
 }
@@ -1287,7 +1339,7 @@ impl AppConfig {
     pub fn to_list(&self) -> Vec<Vec<String>> {
         vec![
             vec![String::from("Save Directory"), self.save_directory.to_str().unwrap().to_string()],
-            vec![String::from("Default View"), self.default_view.to_string()],
+            vec![String::from("Select Default View"), self.default_view.to_string()],
             vec![String::from("Auto Load Last Save"), self.always_load_last_save.to_string()],
             vec![String::from("Auto Save on Exit"), self.save_on_exit.to_string()],
             vec![String::from("Disable Scrollbars"), self.disable_scrollbars.to_string()],
@@ -1312,7 +1364,7 @@ impl AppConfig {
                         error!("Invalid path: {}", value);
                     }
                 }
-                "Default View" => {
+                "Select Default View" => {
                     let new_ui_mode = UiMode::from_string(value);
                     if new_ui_mode.is_some() {
                         config.default_view = new_ui_mode.unwrap();

@@ -87,6 +87,7 @@ impl IoAsyncHandler {
         app.boards = prepare_boards(&mut app);
         app.keybind_list_maker();
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
         Ok(())

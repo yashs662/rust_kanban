@@ -58,6 +58,7 @@ use super::{
 use super::state::{
     Focus,
     AppStatus,
+    UiMode,
 };
 use crate::io::data_handler::{
     get_config,
@@ -345,6 +346,49 @@ where
 
     let log = draw_logs(&app.focus, true, popup_mode);
     rect.render_widget(log, chunks[3]);
+}
+
+pub fn render_edit_default_homescreen<'a,B>(rect: &mut Frame<B>, app: &App, default_view_selector_state: &mut ListState)
+where
+    B: Backend,
+{
+    let area = centered_rect(70, 70, rect.size());
+    let clear_area = centered_rect(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .borders(Borders::ALL)
+        .border_style(FOCUSED_ELEMENT_STYLE)
+        .title("Default HomeScreen Editor");
+    rect.render_widget(Clear, clear_area);
+    rect.render_widget(clear_area_border, clear_area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(8),
+                Constraint::Length(5),
+            ].as_ref(),
+        ).split(area);
+    
+    let list_items = UiMode::all();
+    let list_items: Vec<ListItem> = list_items
+        .iter()
+        .map(|s| ListItem::new(s.to_string()))
+        .collect();
+
+    let default_view_list = List::new(list_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(DEFAULT_STYLE)
+                .border_type(BorderType::Plain),
+        )
+        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    
+    rect.render_stateful_widget(default_view_list, chunks[0], default_view_selector_state);
+
+    let config_help = draw_config_help(&app.focus, false);
+    rect.render_widget(config_help, chunks[1]);
 }
 
 pub fn render_edit_config<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -816,6 +860,7 @@ fn draw_config_help(focus: &Focus, popup_mode: bool) -> Paragraph {
                 .style(helpbox_style)
                 .border_type(BorderType::Plain),
         )
+        .alignment(Alignment::Center)
         .wrap(tui::widgets::Wrap { trim: true })
 }
 

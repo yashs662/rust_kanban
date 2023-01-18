@@ -27,7 +27,8 @@ pub enum UiMode {
     LogsOnly,
     NewBoard,
     NewCard,
-    LoadSave
+    LoadSave,
+    SelectDefaultView
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -107,6 +108,7 @@ impl UiMode {
             UiMode::NewBoard => "New Board".to_string(),
             UiMode::NewCard => "New Card".to_string(),
             UiMode::LoadSave => "Load a Save".to_string(),
+            UiMode::SelectDefaultView => "Select Default View".to_string(),
         }
     }
 
@@ -131,6 +133,7 @@ impl UiMode {
             "New Board" => Some(UiMode::NewBoard),
             "New Card" => Some(UiMode::NewCard),
             "Load a Save" => Some(UiMode::LoadSave),
+            "Select Default View" => Some(UiMode::SelectDefaultView),
             _ => None,
         }
     }
@@ -174,13 +177,14 @@ impl UiMode {
             UiMode::NewBoard => vec!["New Board Name".to_string(), "New Board Description".to_string(), "Submit Button".to_string()],
             UiMode::NewCard => vec!["New Card Name".to_string(), "New Card Description".to_string(), "New Card Due Date".to_string(), "Submit Button".to_string()],
             UiMode::LoadSave => vec![],
+            UiMode::SelectDefaultView => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
         }
     }
 
-    pub fn all() -> String {
-        let mut s = String::new();
+    pub fn all() -> Vec<String> {
+        let mut s = vec![];
         for i in 1..10 {
-            s.push_str(&format!("{}: {} ||| ", i, UiMode::from_number(i).to_string()));
+            s.push(UiMode::from_number(i).to_string());
         }
         s
     }
