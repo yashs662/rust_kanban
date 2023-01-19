@@ -244,7 +244,15 @@ impl App {
                                 _ => {}
                             }
                         }
-                        _ => {}
+                        _ => {
+                            if self.state.current_cursor_position.is_none() {
+                                self.state.current_cursor_position = Some(self.state.current_user_input.len());
+                            } else if self.state.current_cursor_position.unwrap() > 0 {
+                                self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() - 1);
+                            } else {
+                                self.state.current_cursor_position = Some(0);
+                            }
+                        }
                     };
                     current_key = "".to_string();
                 } else if current_key == "<Right>" {
@@ -304,7 +312,15 @@ impl App {
                                 _ => {}
                             }
                         }
-                        _ => {}
+                        _ => {
+                            if self.state.current_cursor_position.is_none() {
+                                self.state.current_cursor_position = Some(self.state.current_user_input.len());
+                            } else if self.state.current_cursor_position.unwrap() < self.state.current_user_input.len() {
+                                self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() + 1);
+                            } else {
+                                self.state.current_cursor_position = Some(self.state.current_user_input.len());
+                            }
+                        }
                     };
                     current_key = "".to_string();
                 } else if current_key == "<Home>" {
@@ -334,7 +350,9 @@ impl App {
                                 _ => {}
                             }
                         }
-                        _ => {}
+                        _ => {
+                            self.state.current_cursor_position = Some(0);
+                        }
                     };
                     current_key = "".to_string();
                 } else if current_key == "<End>" {
@@ -364,17 +382,17 @@ impl App {
                                 _ => {}
                             }
                         }
-                        _ => {}
+                        _ => {
+                            self.state.current_cursor_position = Some(self.state.current_user_input.len());
+                        }
                     };
                     current_key = "".to_string();
                 } else if current_key.starts_with("<") && current_key.ends_with(">") {
                     current_key = current_key[1..current_key.len() - 1].to_string();
                 }
-
                 if current_key == "" {
                     return AppReturn::Continue;
                 }
-
                 if self.focus == Focus::NewBoardName {
                     let cursor_position = self.state.current_cursor_position.unwrap_or(0);
                     self.state.new_board_form[0].insert(cursor_position, current_key.chars().next().unwrap());
@@ -399,6 +417,20 @@ impl App {
                     let current_cursor_position = self.state.current_cursor_position.unwrap_or(0);
                     self.state.current_user_input.insert(current_cursor_position, current_key.chars().next().unwrap());
                     self.state.current_cursor_position = Some(current_cursor_position + 1);
+                }
+            } else if key == Key::Esc {
+                if self.focus == Focus::NewBoardName {
+                    self.state.new_board_form[0] = "".to_string();
+                } else if self.focus == Focus::NewBoardDescription {
+                    self.state.new_board_form[1] = "".to_string();
+                } else if self.focus == Focus::NewCardName {
+                    self.state.new_card_form[0] = "".to_string();
+                } else if self.focus == Focus::NewCardDescription {
+                    self.state.new_card_form[1] = "".to_string();
+                } else if self.focus == Focus::NewCardDueDate {
+                    self.state.new_card_form[2] = "".to_string();
+                } else {
+                    self.state.current_user_input = "".to_string();
                 }
             } else {
                 self.state.status = AppStatus::Initialized;
@@ -595,6 +627,8 @@ impl App {
                                     self.config_next()
                                 }
                                 self.prev_ui_mode = None;
+                                self.state.current_user_input = String::new();
+                                self.state.current_cursor_position = None;
                                 AppReturn::Continue
                             }
                             UiMode::MainMenu => {
