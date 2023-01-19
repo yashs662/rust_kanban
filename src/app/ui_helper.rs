@@ -484,10 +484,10 @@ where
     let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
     let config_item = Paragraph::new(paragraph_text)
         .block(Block::default().borders(Borders::ALL).title(paragraph_title))
-        .wrap(tui::widgets::Wrap { trim: false });
+        .wrap(tui::widgets::Wrap { trim: true });
     let edit_item = Paragraph::new(&*app.state.current_user_input)
         .block(Block::default().borders(Borders::ALL).title("Edit").border_style(edit_box_style))
-        .wrap(tui::widgets::Wrap { trim: false });
+        .wrap(tui::widgets::Wrap { trim: true });
 
     let log = draw_logs(&app.focus, true, false);
     
@@ -692,7 +692,7 @@ where
         .block(Block::default().borders(Borders::ALL).title("Help"))
         .style(default_style)
         .alignment(Alignment::Center)
-        .wrap(tui::widgets::Wrap { trim: false });
+        .wrap(tui::widgets::Wrap { trim: true });
         
     let reset_button = Paragraph::new("Reset Keybindings to Default")
         .block(Block::default().borders(Borders::ALL).title("Reset"))
@@ -758,7 +758,7 @@ where
         let paragraph_title = key.to_uppercase();
         let config_item = Paragraph::new(paragraph_text)
         .block(Block::default().borders(Borders::ALL).title(paragraph_title))
-        .wrap(tui::widgets::Wrap { trim: false });
+        .wrap(tui::widgets::Wrap { trim: true });
         let current_edited_keybinding = app.state.edited_keybinding.clone();
         let mut current_edited_keybinding_string = String::new();
         if current_edited_keybinding.is_some() {
@@ -769,7 +769,7 @@ where
         }
         let edit_item = Paragraph::new(current_edited_keybinding_string.clone())
         .block(Block::default().borders(Borders::ALL).title("Edit").border_style(edit_box_style))
-        .wrap(tui::widgets::Wrap { trim: false });
+        .wrap(tui::widgets::Wrap { trim: true });
     
         let log = draw_logs(&app.focus, true, false);
         
@@ -1346,7 +1346,7 @@ where
                         .border_style(card_style)
                         .border_type(BorderType::Plain),
                 )
-                .wrap(tui::widgets::Wrap { trim: false });
+                .wrap(tui::widgets::Wrap { trim: true });
 
             rect.render_widget(card_paragraph, card_chunks[card_index]);
 

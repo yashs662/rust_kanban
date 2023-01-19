@@ -432,6 +432,9 @@ impl App {
                 } else {
                     self.state.current_user_input = "".to_string();
                 }
+                self.state.status = AppStatus::Initialized;
+                self.state.current_cursor_position = None;
+                info!("Exiting user input mode");
             } else {
                 self.state.status = AppStatus::Initialized;
                 self.state.current_cursor_position = None;
