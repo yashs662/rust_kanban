@@ -47,6 +47,10 @@ pub enum Key {
     Ctrl(char),
     Alt(char),
     ShiftTab,
+    ShiftUp,
+    ShiftDown,
+    ShiftLeft,
+    ShiftRight,
     Unknown,
 }
 
@@ -93,6 +97,10 @@ impl Display for Key {
             Key::Char(c) => write!(f, "<{}>", c),
             Key::Tab => write!(f, "<Tab>"),
             Key::ShiftTab => write!(f, "<Shift+Tab>"),
+            Key::ShiftUp => write!(f, "<Shift+Up>"),
+            Key::ShiftDown => write!(f, "<Shift+Down>"),
+            Key::ShiftLeft => write!(f, "<Shift+Left>"),
+            Key::ShiftRight => write!(f, "<Shift+Right>"),
             _ => write!(f, "<{:?}>", self),
         }
     }
@@ -111,16 +119,36 @@ impl From<event::KeyEvent> for Key {
             } => Key::Backspace,
             event::KeyEvent {
                 code: event::KeyCode::Left,
+                modifiers: event::KeyModifiers::SHIFT,
+                ..
+            } => Key::ShiftLeft,
+            event::KeyEvent {
+                code: event::KeyCode::Left,
                 ..
             } => Key::Left,
+            event::KeyEvent {
+                code: event::KeyCode::Right,
+                modifiers: event::KeyModifiers::SHIFT,
+                ..
+            } => Key::ShiftRight,
             event::KeyEvent {
                 code: event::KeyCode::Right,
                 ..
             } => Key::Right,
             event::KeyEvent {
                 code: event::KeyCode::Up,
+                modifiers: event::KeyModifiers::SHIFT,
+                ..
+            } => Key::ShiftUp,
+            event::KeyEvent {
+                code: event::KeyCode::Up,
                 ..
             } => Key::Up,
+            event::KeyEvent {
+                code: event::KeyCode::Down,
+                modifiers: event::KeyModifiers::SHIFT,
+                ..
+            } => Key::ShiftDown,
             event::KeyEvent {
                 code: event::KeyCode::Down,
                 ..

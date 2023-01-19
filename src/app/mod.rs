@@ -826,9 +826,9 @@ impl App {
                                     }
                                     if !new_board_name.is_empty() && !same_name_exists {
                                         let new_board = Board::new(new_board_name, new_board_description);
-                                        self.boards.push(new_board);
+                                        self.boards.push(new_board.clone());
+                                        self.state.current_board_id = Some(new_board.id);
                                         self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
-                                        self.state.new_board_form = vec![String::new(), String::new()];
                                     } else {
                                         warn!("New board name is empty or already exists");
                                     }
@@ -892,7 +892,8 @@ impl App {
                                             CardPriority::Low, vec![], vec![]);
                                         let current_board = self.boards.iter_mut().find(|board| board.id == current_board_id);
                                         if let Some(current_board) = current_board {
-                                            current_board.cards.push(new_card);
+                                            current_board.cards.push(new_card.clone());
+                                            self.state.current_card_id = Some(new_card.id);
                                         } else {
                                             error!("Current board not found");
                                             self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
@@ -1252,6 +1253,122 @@ impl App {
                         self.ui_mode = UiMode::MainMenu;
                         if self.state.main_menu_state.selected().is_none() {
                             self.state.main_menu_state.select(Some(0));
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::MoveCardUp => {
+                        match self.focus {
+                            Focus::Body => {
+                                if self.state.current_card_id.is_none() {
+                                    return AppReturn::Continue;
+                                } else {
+                                    if let Some(current_board) = self.state.current_board_id {
+                                        let index = self.boards.iter().position(|board| board.id == current_board);
+                                        if let Some(current_card) = self.state.current_card_id {
+                                            let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                            if let Some(card_index) = card_index {
+                                                if card_index > 0 {
+                                                    self.boards[index.unwrap()].cards.swap(card_index, card_index - 1);
+                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                    // check if current card is visible if not set it to the first visible card
+                                                    if !self.visible_boards_and_cards[&current_board].contains(&self.state.current_card_id.unwrap()) {
+                                                        self.state.current_card_id = Some(self.visible_boards_and_cards[&current_board][0]);
+                                                    }
+                                                    info!("Moved card {} up", self.boards[index.unwrap()].cards[card_index].name);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {}
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::MoveCardDown => {
+                        match self.focus {
+                            Focus::Body => {
+                                if self.state.current_card_id.is_none() {
+                                    return AppReturn::Continue;
+                                } else {
+                                    if let Some(current_board) = self.state.current_board_id {
+                                        let board_index = self.boards.iter().position(|board| board.id == current_board);
+                                        if let Some(current_card) = self.state.current_card_id {
+                                            let card_index = self.boards[board_index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                            if let Some(card_index) = card_index {
+                                                if card_index < self.boards[board_index.unwrap()].cards.len() - 1 {
+                                                    self.boards[board_index.unwrap()].cards.swap(card_index, card_index + 1);
+                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                    // check if current card is visible if not set it to the last visible card
+                                                    if !self.visible_boards_and_cards[&current_board].contains(&self.state.current_card_id.unwrap()) {
+                                                        self.state.current_card_id = Some(self.visible_boards_and_cards[&current_board][self.visible_boards_and_cards[&current_board].len() - 1]);
+                                                    }
+                                                    info!("Moved card {} down", self.boards[board_index.unwrap()].cards[card_index].name);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {}
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::MoveCardRight => {
+                        match self.focus {
+                            Focus::Body => {
+                                if self.state.current_card_id.is_none() {
+                                    return AppReturn::Continue;
+                                } else {
+                                    if let Some(current_board) = self.state.current_board_id {
+                                        let board_index = self.boards.iter().position(|board| board.id == current_board);
+                                        // check if board is the last board
+                                        if board_index.unwrap() < self.boards.len() - 1 {
+                                            if let Some(current_card) = self.state.current_card_id {
+                                                let card_index = self.boards[board_index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                                if let Some(card_index) = card_index {
+                                                    let card = self.boards[board_index.unwrap()].cards.remove(card_index);
+                                                    let card_name = card.name.clone();
+                                                    self.boards[board_index.unwrap() + 1].cards.push(card);
+                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                    self.state.current_board_id = Some(self.boards[board_index.unwrap() + 1].id);
+                                                    info!("Moved card {} right", card_name);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {}
+                        }
+                        AppReturn::Continue
+                    }
+                    Action::MoveCardLeft => {
+                        match self.focus {
+                            Focus::Body => {
+                                if self.state.current_card_id.is_none() {
+                                    return AppReturn::Continue;
+                                } else {
+                                    if let Some(current_board) = self.state.current_board_id {
+                                        let board_index = self.boards.iter().position(|board| board.id == current_board);
+                                        // check if board is the first board
+                                        if board_index.unwrap() > 0 {
+                                            if let Some(current_card) = self.state.current_card_id {
+                                                let card_index = self.boards[board_index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                                if let Some(card_index) = card_index {
+                                                    let card = self.boards[board_index.unwrap()].cards.remove(card_index);
+                                                    let card_name = card.name.clone();
+                                                    self.boards[board_index.unwrap() - 1].cards.push(card);
+                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                    self.state.current_board_id = Some(self.boards[board_index.unwrap() - 1].id);
+                                                    info!("Moved card {} left", card_name);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {}
                         }
                         AppReturn::Continue
                     }

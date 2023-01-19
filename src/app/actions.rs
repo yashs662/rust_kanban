@@ -20,6 +20,10 @@ pub enum Action {
     Down,
     Right,
     Left,
+    MoveCardUp,
+    MoveCardDown,
+    MoveCardRight,
+    MoveCardLeft,
     TakeUserInput,
     GoToPreviousUIMode,
     Enter,
@@ -39,7 +43,7 @@ pub enum Action {
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 22] = [
+        static ACTIONS: [Action; 26] = [
             Action::Quit,
             Action::NextFocus,
             Action::PrvFocus,
@@ -48,6 +52,10 @@ impl Action {
             Action::Down,
             Action::Right,
             Action::Left,
+            Action::MoveCardUp,
+            Action::MoveCardDown,
+            Action::MoveCardRight,
+            Action::MoveCardLeft,
             Action::TakeUserInput,
             Action::GoToPreviousUIMode,
             Action::Enter,
@@ -77,6 +85,10 @@ impl Action {
             Action::Down => &[Key::Down],
             Action::Right => &[Key::Right],
             Action::Left => &[Key::Left],
+            Action::MoveCardUp => &[Key::ShiftUp],
+            Action::MoveCardDown => &[Key::ShiftDown],
+            Action::MoveCardRight => &[Key::ShiftRight],
+            Action::MoveCardLeft => &[Key::ShiftLeft],
             Action::TakeUserInput => &[Key::Char('i')],
             Action::GoToPreviousUIMode => &[Key::Esc],
             Action::Enter => &[Key::Enter],
@@ -111,6 +123,10 @@ impl Display for Action {
             Action::Down => "Go down",
             Action::Right => "Go right",
             Action::Left => "Go left",
+            Action::MoveCardUp => "Move card up",
+            Action::MoveCardDown => "Move card down",
+            Action::MoveCardRight => "Move card right",
+            Action::MoveCardLeft => "Move card left",
             Action::TakeUserInput => "Enter input mode",
             Action::GoToPreviousUIMode => "Go to previous mode",
             Action::Enter => "Accept",
