@@ -473,7 +473,7 @@ impl App {
                     Action::OpenConfigMenu => {
                         if self.ui_mode == UiMode::Config {
                             // check if the prv ui mode is the same as the current ui mode
-                            if self.prev_ui_mode.is_some() && self.prev_ui_mode.as_ref().unwrap() == &self.ui_mode {
+                            if self.prev_ui_mode.is_some() && self.prev_ui_mode.as_ref().unwrap() == &UiMode::Config {
                                 self.ui_mode = self.config.default_view.clone();
                             } else {
                                 self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
@@ -646,7 +646,6 @@ impl App {
                                     write_config(&self.config);
                                     return AppReturn::Continue;
                                 }
-                                self.prev_ui_mode = Some(self.ui_mode.clone());
                                 self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
                                 // check if the config_item_being_edited index is in the AppConfig list and the value in the list is Edit Keybindings
                                 let app_config_list = &self.config.to_list();
@@ -685,6 +684,7 @@ impl App {
                                         self.config = app_config.clone();
                                         write_config(&app_config);
                                     } else {
+                                        self.prev_ui_mode = Some(self.ui_mode.clone());
                                         self.ui_mode = UiMode::EditConfig;
                                     }
                                 } else {
