@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Local};
+use chrono::{Local, NaiveDateTime};
 use tui::backend::Backend;
 use tui::Frame;
 use tui_logger::TuiLoggerWidget;
@@ -485,19 +485,23 @@ where
     let config_item = Paragraph::new(paragraph_text)
         .block(Block::default().borders(Borders::ALL).title(paragraph_title))
         .wrap(tui::widgets::Wrap { trim: false });
-    let edit_item = Paragraph::new(&*app.current_user_input)
+    let edit_item = Paragraph::new(&*app.state.current_user_input)
         .block(Block::default().borders(Borders::ALL).title("Edit").border_style(edit_box_style))
         .wrap(tui::widgets::Wrap { trim: false });
 
     let log = draw_logs(&app.focus, true, false);
     
     if app.state.status == AppStatus::UserInput {
-        rect.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[1].x + app.current_user_input.len() as u16 + 1,
-            // Move one line down, from the border to the input line
-            chunks[1].y + 1,
-        );
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            app.state.current_user_input.len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[1].width - 2);
+        let y_offset = current_cursor_position / (chunks[1].width - 2);
+        let x_cursor_position = chunks[1].x + x_offset + 1;
+        let y_cursor_position = chunks[1].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
     }
     rect.render_widget(config_item, chunks[0]);
     rect.render_widget(edit_item, chunks[1]);
@@ -770,12 +774,16 @@ where
         let log = draw_logs(&app.focus, true, false);
         
         if app.state.status == AppStatus::KeyBindMode {
-            rect.set_cursor(
-                // Put cursor past the end of the input text
-                chunks[1].x + current_edited_keybinding_string.len() as u16 + 1,
-                // Move one line down, from the border to the input line
-                chunks[1].y + 1,
-            );
+            let current_cursor_position = if app.state.current_cursor_position.is_some() {
+                app.state.current_cursor_position.unwrap() as u16
+            } else {
+                current_edited_keybinding_string.len() as u16
+            };
+            let x_offset = current_cursor_position % (chunks[1].width - 2);
+            let y_offset = current_cursor_position / (chunks[1].width - 2);
+            let x_cursor_position = chunks[1].x + x_offset + 1;
+            let y_cursor_position = chunks[1].y + y_offset + 1;
+            rect.set_cursor(x_cursor_position, y_cursor_position);
         }
         rect.render_widget(config_item, chunks[0]);
         rect.render_widget(edit_item, chunks[1]);
@@ -1294,11 +1302,11 @@ where
             let mut card_description = Text::from(card.unwrap().description.clone());
             let card_due_date = card.unwrap().date_due.clone();
             if !card_due_date.is_empty() {
-                let parsed_due_date = NaiveDate::parse_from_str(&card_due_date, "%d/%m/%Y");
+                let parsed_due_date = NaiveDateTime::parse_from_str(&card_due_date, "%d/%m/%Y-%H:%M:%S");
                 // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
                 let card_due_date_styled = if parsed_due_date.is_ok() {
                     let parsed_due_date = parsed_due_date.unwrap();
-                    let today = Local::now().naive_local().date();
+                    let today = Local::now().naive_local();
                     let days_left = parsed_due_date.signed_duration_since(today).num_days();
                     if days_left <= app.config.warning_delta.into() && days_left >= 0 {
                         Text::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_WARNING_STYLE)
@@ -1335,7 +1343,7 @@ where
                     Block::default()
                         .title(&*card_title)
                         .borders(Borders::ALL)
-                        .style(card_style)
+                        .border_style(card_style)
                         .border_type(BorderType::Plain),
                 )
                 .wrap(tui::widgets::Wrap { trim: false });
@@ -1524,7 +1532,8 @@ where
                 .style(name_style)
                 .border_type(BorderType::Plain)
                 .title("Board Name (required)")
-        );
+        )
+        .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(board_name, chunks[1]);
 
     let board_description = Paragraph::new(board_description_field)
@@ -1535,7 +1544,8 @@ where
                 .style(description_style)
                 .border_type(BorderType::Plain)
                 .title("Board Description")
-        );
+        )
+        .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(board_description, chunks[2]);
 
     let input_mode_key = app.state.keybind_store.iter()
@@ -1590,19 +1600,27 @@ where
     rect.render_widget(submit_button, chunks[4]);
 
     if app.focus == Focus::NewBoardName && app.state.status == AppStatus::UserInput{
-        rect.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[1].x + app.state.new_board_form[0].len() as u16 + 1,
-            // Move one line down, from the border to the input line
-            chunks[1].y + 1,
-        );
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            app.state.new_board_form[0].len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[1].width - 2);
+        let y_offset = current_cursor_position / (chunks[1].width - 2);
+        let x_cursor_position = chunks[1].x + x_offset + 1;
+        let y_cursor_position = chunks[1].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
     } else if app.focus == Focus::NewBoardDescription && app.state.status == AppStatus::UserInput{
-        rect.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[2].x + app.state.new_board_form[1].len() as u16 + 1,
-            // Move one line down, from the border to the input line
-            chunks[2].y + 1,
-        );
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            app.state.new_board_form[1].len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[2].width - 2);
+        let y_offset = current_cursor_position / (chunks[2].width - 2);
+        let x_cursor_position = chunks[2].x + x_offset + 1;
+        let y_cursor_position = chunks[2].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
     }
 }
 
@@ -1663,7 +1681,8 @@ where
                 .style(name_style)
                 .border_type(BorderType::Plain)
                 .title("Card Name (required)")
-        );
+        )
+        .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(card_name, chunks[1]);
 
     let card_description = Paragraph::new(card_description_field)
@@ -1674,7 +1693,8 @@ where
                 .style(description_style)
                 .border_type(BorderType::Plain)
                 .title("Card Description")
-        );
+        )
+        .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(card_description, chunks[2]);
 
     let card_due_date = Paragraph::new(card_due_date_field)
@@ -1741,26 +1761,38 @@ where
     rect.render_widget(submit_button, chunks[5]);
 
     if app.focus == Focus::NewCardName && app.state.status == AppStatus::UserInput{
-        rect.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[1].x + app.state.new_card_form[0].len() as u16 + 1,
-            // Move one line down, from the border to the input line
-            chunks[1].y + 1,
-        );
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            app.state.new_card_form[0].len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[1].width - 2);
+        let y_offset = current_cursor_position / (chunks[1].width - 2);
+        let x_cursor_position = chunks[1].x + x_offset + 1;
+        let y_cursor_position = chunks[1].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
     } else if app.focus == Focus::NewCardDescription && app.state.status == AppStatus::UserInput{
-        rect.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[2].x + app.state.new_card_form[1].len() as u16 + 1,
-            // Move one line down, from the border to the input line
-            chunks[2].y + 1,
-        );
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            app.state.new_card_form[1].len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[2].width - 2);
+        let y_offset = current_cursor_position / (chunks[2].width - 2);
+        let x_cursor_position = chunks[2].x + x_offset + 1;
+        let y_cursor_position = chunks[2].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
     } else if app.focus == Focus::NewCardDueDate && app.state.status == AppStatus::UserInput{
-        rect.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[3].x + app.state.new_card_form[2].len() as u16 + 1,
-            // Move one line down, from the border to the input line
-            chunks[3].y + 1,
-        );
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            app.state.new_card_form[2].len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[3].width - 2);
+        let y_offset = current_cursor_position / (chunks[3].width - 2);
+        let x_cursor_position = chunks[3].x + x_offset + 1;
+        let y_cursor_position = chunks[3].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
     }
 }
 
