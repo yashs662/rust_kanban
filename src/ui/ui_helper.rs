@@ -21,7 +21,7 @@ use tui::widgets::{
     List,
     ListItem,
     ListState,
-    Gauge, Table, Cell, Row, TableState, Clear,
+    Gauge, Table, Cell, Row, TableState, Clear, Wrap,
 };
 use crate::constants::{
     APP_TITLE,
@@ -50,15 +50,15 @@ use crate::constants::{
     INACTIVE_TEXT_STYLE,
     VERTICAL_SCROLL_BAR_SYMBOL,
     CARD_COMPLETED_STATUS_STYLE,
-    CARD_STALE_STATUS_STYLE,
+    CARD_STALE_STATUS_STYLE, MAX_TOASTS_TO_DISPLAY, TOAST_PADDING, SCREEN_TO_TOAST_WIDTH_RATIO,
 };
 
-use super::{
+use crate::app::{
     MainMenuItem,
     App,
     MainMenu
 };
-use super::state::{
+use crate::app::state::{
     Focus,
     AppStatus,
     UiMode,
@@ -67,6 +67,8 @@ use crate::io::data_handler::{
     get_config,
     get_available_local_savefiles
 };
+
+use super::widgets::{ToastWidget, ToastType};
 
 /// Draws main screen with kanban boards
 pub fn render_zen_mode<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -1880,4 +1882,46 @@ where
                 .border_type(BorderType::Plain),
         );
     rect.render_widget(help_paragraph, chunks[2]);
+}
+
+pub fn render_toast<B>(rect: &mut Frame<B>, app: &App)
+where
+    B: Backend,
+{
+    // get the latest MAX_TOASTS_TO_DISPLAY number of toasts from app.state.toast_list
+    let toast_list = app.state.toast_list.iter().rev().take(MAX_TOASTS_TO_DISPLAY).rev().collect::<Vec<&ToastWidget>>();
+    if toast_list.len() == 0 {
+        return;
+    }
+
+    // loop through the toasts and draw them
+    for (i, toast) in toast_list.iter().enumerate() {
+        let toast_style = match toast.toast_type {
+            ToastType::Error => LOG_ERROR_STYLE,
+            ToastType::Info => LOG_INFO_STYLE,
+            ToastType::Warning => LOG_WARN_STYLE,
+        };
+        let toast_title = match toast.toast_type {
+            ToastType::Error => "Error",
+            ToastType::Info => "Info",
+            ToastType::Warning => "Warning",
+        };
+        let x_offset = rect.size().width - (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO);
+        let mut toast_height = 2; // atleast one line of message + 1 line for the border
+        let lines  = textwrap::wrap(&toast.message, (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) as usize);
+        toast_height += lines.len() as u16;
+        let y_offset = rect.size().height - (toast_height * (i as u16 + 1));
+        let toast_block = Block::default()
+            .title(toast_title)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Plain)
+            .border_style(toast_style);
+        let toast_paragraph = Paragraph::new(toast.message.clone())
+            .block(toast_block)
+            .alignment(Alignment::Left)
+            .wrap(Wrap { trim: true });
+        rect.render_widget(Clear, Rect::new(x_offset - TOAST_PADDING , y_offset - TOAST_PADDING,
+            (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) + TOAST_PADDING, toast_height + TOAST_PADDING));
+        rect.render_widget(toast_paragraph, Rect::new(x_offset, y_offset, rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
+    }
 }

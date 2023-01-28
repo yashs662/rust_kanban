@@ -51,12 +51,11 @@ use crate::io::{
     IoEvent,
     data_handler
 };
+use crate::ui::widgets::ToastWidget;
 
 pub mod actions;
 pub mod state;
-pub mod ui;
 pub mod kanban;
-pub mod ui_helper;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AppReturn {
@@ -70,12 +69,12 @@ pub struct App {
     actions: Actions,
     is_loading: bool,
     pub state: AppState,
-    focus: Focus,
-    ui_mode: UiMode,
+    pub focus: Focus,
+    pub ui_mode: UiMode,
     pub boards: Vec<Board>,
     prev_ui_mode: Option<UiMode>,
     pub config: AppConfig,
-    config_item_being_edited: Option<usize>,
+    pub config_item_being_edited: Option<usize>,
     pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
 }
 
@@ -1720,7 +1719,8 @@ pub struct AppState {
     pub help_state: TableState,
     pub keybind_store: Vec<Vec<String>>,
     pub default_view_state: ListState,
-    pub current_cursor_position: Option<usize>
+    pub current_cursor_position: Option<usize>,
+    pub toast_list: Vec<ToastWidget>
 }
 
 impl Default for AppState {
@@ -1741,7 +1741,8 @@ impl Default for AppState {
             help_state: TableState::default(),
             keybind_store: Vec::new(),
             default_view_state: ListState::default(),
-            current_cursor_position: None
+            current_cursor_position: None,
+            toast_list: Vec::new(),
         }
     }
 }

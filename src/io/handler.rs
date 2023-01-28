@@ -74,7 +74,6 @@ impl IoAsyncHandler {
         app.loaded();
     }
 
-    /// We use dummy implementation here, just wait 1s
     async fn do_initialize(&mut self) -> Result<()> {
         info!("🚀 Initialize the application");
         let mut app = self.app.lock().await;

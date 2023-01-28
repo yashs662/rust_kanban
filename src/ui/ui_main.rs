@@ -1,9 +1,11 @@
 use tui::backend::Backend;
 use tui::Frame;
 
-use super::AppState;
-use super::state::{UiMode, AppStatus};
-use super::ui_helper::{
+use super::super::app::AppState;
+use super::super::app::state::{UiMode, AppStatus};
+use super::ui_helper::{self, render_toast};
+
+use ui_helper::{
     check_size,
     draw_size_error,
     render_zen_mode,
@@ -108,4 +110,7 @@ where
             render_load_save(rect, &mut states.load_save_state, app);
         }
     }
+
+    render_toast(rect, &app);
+
 }

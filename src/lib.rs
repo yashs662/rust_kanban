@@ -12,13 +12,13 @@ use inputs::InputEvent;
 use io::IoEvent;
 use tui::backend::CrosstermBackend;
 use tui::Terminal;
-
-use crate::app::ui;
+use ui::ui_main;
 
 pub mod app;
 pub mod inputs;
 pub mod io;
 pub mod constants;
+pub mod ui;
 
 pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     // Configure Crossterm backend for tui
@@ -44,7 +44,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
         let mut app = app.lock().await;
         let mut states = app.state.clone();
         // Render
-        terminal.draw(|rect| ui::draw(rect, &mut app, &mut states))?;
+        terminal.draw(|rect| ui_main::draw(rect, &mut app, &mut states))?;
 
         // Handle inputs
         let result = match events.next().await {
