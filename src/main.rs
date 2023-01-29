@@ -2,9 +2,9 @@ use std::sync::Arc;
 use clap::Parser;
 
 use eyre::Result;
-use log::LevelFilter;
+use log::{LevelFilter, info};
 use rust_kanban::{
-    app::App,
+    app::{App, get_term_bg_color},
     io::{
         handler::IoAsyncHandler,
         IoEvent
@@ -51,9 +51,11 @@ async fn main() -> Result<()> {
         let mut widget_manager = rust_kanban::ui::widgets::WidgetManager::new(app_widget_manager);
         loop {
             widget_manager.update().await;
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     });
+
+    let term_bg = get_term_bg_color();
+    info!("Term background color: {:?}", term_bg);
 
     // check if we need to reset config
     if args.reset.is_some() {

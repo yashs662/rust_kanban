@@ -1,12 +1,14 @@
 use linked_hash_map::LinkedHashMap;
 use savefile::{load_file, save_file};
 use std::path::Path;
+use std::time::Duration;
 use std::{
     sync::Arc,
     path::PathBuf
 };
 use crate::app::kanban::Board;
 use crate::app::state::UiMode;
+use crate::ui::widgets::{ToastWidget, ToastType};
 use std::env;
 use crate::constants::{
     CONFIG_DIR_NAME,
@@ -88,6 +90,9 @@ impl IoAsyncHandler {
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
+        app.state.toast_list.push(ToastWidget::new(String::from("Application initialized"), Duration::from_secs(5), ToastType::Info));
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        app.state.toast_list.push(ToastWidget::new(String::from("Hello"), Duration::from_secs(5), ToastType::Info));
         Ok(())
     }
 

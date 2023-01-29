@@ -1,7 +1,7 @@
 use std::{time::Duration, sync::Arc};
 use tokio::time::Instant;
 
-use crate::app::App;
+use crate::{app::App, constants::TOAST_FADE_TIME};
 
 #[derive(Clone, Debug)]
 pub struct ToastWidget {
@@ -9,6 +9,7 @@ pub struct ToastWidget {
     pub duration: Duration,
     pub start_time: Instant,
     pub toast_type: ToastType,
+    pub toast_color: (u8, u8, u8),
 }
 
 #[derive(Clone, Debug)]
@@ -28,7 +29,8 @@ impl ToastWidget {
             message,
             duration,
             start_time: Instant::now(),
-            toast_type,
+            toast_type: toast_type.clone(),
+            toast_color: toast_type.as_color(),
         }
     }
 }
@@ -41,6 +43,13 @@ impl ToastType {
             Self::Info => "Info",
         }
     }
+    pub fn as_color(&self) -> (u8, u8, u8) {
+        match self {
+            Self::Error => (255, 0, 0),
+            Self::Warning => (255, 255, 0),
+            Self::Info => (0, 255, 255),
+        }
+    }
 }
 
 impl WidgetManager {
@@ -50,8 +59,29 @@ impl WidgetManager {
 
     pub async fn update(&mut self) {
         let mut app = self.app.lock().await;
+        let term_background_color = app.state.term_background_color;
         let toast_list = &mut app.state.toast_list;
         // remove all inactive toasts
-        toast_list.retain(|toast| toast.start_time.elapsed() < toast.duration);
+        for i in (0..toast_list.len()).rev() {
+            // based on the toast_type lerp between the toast_type color and 0,0,0 within the TOAST_FADE_TIME which is in milliseconds
+            if toast_list[i].start_time.elapsed() < toast_list[i].duration -  Duration::from_millis(TOAST_FADE_TIME) {
+                toast_list[i].toast_color = toast_list[i].toast_type.as_color();
+            } else {
+                // lerp from toast_type color to term_background_color
+                let t = (toast_list[i].start_time.elapsed() - (toast_list[i].duration - Duration::from_millis(TOAST_FADE_TIME))).as_millis() as f32 / TOAST_FADE_TIME as f32;
+                toast_list[i].toast_color = lerp_between(toast_list[i].toast_type.as_color(), term_background_color, t);
+            }
+            if toast_list[i].start_time.elapsed() > toast_list[i].duration {
+                toast_list.remove(i);
+            }
+        }
     }
+}
+
+// make a function to lerp between rgb values of two colors
+pub fn lerp_between(a: (u8, u8, u8), b: (u8, u8, u8), t: f32) -> (u8, u8, u8) {
+    let r = (a.0 as f32 * (1.0 - t) + b.0 as f32 * t) as u8;
+    let g = (a.1 as f32 * (1.0 - t) + b.1 as f32 * t) as u8;
+    let b = (a.2 as f32 * (1.0 - t) + b.2 as f32 * t) as u8;
+    (r, g, b)
 }

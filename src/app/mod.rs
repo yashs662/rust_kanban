@@ -39,7 +39,7 @@ use crate::app::actions::Action;
 use crate::app::kanban::CardStatus;
 use crate::constants::{
     SAVE_DIR_NAME,
-    FIELD_NOT_SET, DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
+    FIELD_NOT_SET, DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE,
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{
@@ -1720,7 +1720,8 @@ pub struct AppState {
     pub keybind_store: Vec<Vec<String>>,
     pub default_view_state: ListState,
     pub current_cursor_position: Option<usize>,
-    pub toast_list: Vec<ToastWidget>
+    pub toast_list: Vec<ToastWidget>,
+    pub term_background_color: (u8, u8, u8),
 }
 
 impl Default for AppState {
@@ -1743,6 +1744,7 @@ impl Default for AppState {
             default_view_state: ListState::default(),
             current_cursor_position: None,
             toast_list: Vec::new(),
+            term_background_color: get_term_bg_color()
         }
     }
 }
@@ -1756,6 +1758,7 @@ pub struct AppConfig {
     pub disable_scrollbars: bool,
     pub warning_delta: u16,
     pub keybindings: KeyBindings,
+    pub tickrate: u64,
 }
 
 impl AppConfig {
@@ -1770,6 +1773,7 @@ impl AppConfig {
             disable_scrollbars: false,
             warning_delta: DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
             keybindings: KeyBindings::default(),
+            tickrate: DEFAULT_TICKRATE,
         }
     }
 
@@ -1781,6 +1785,7 @@ impl AppConfig {
             vec![String::from("Auto Save on Exit"), self.save_on_exit.to_string()],
             vec![String::from("Disable Scrollbars"), self.disable_scrollbars.to_string()],
             vec![String::from("Number of Days to Warn Before Due Date"), self.warning_delta.to_string()],
+            vec![String::from("Tickrate"), self.tickrate.to_string()],
             vec![String::from("Edit Keybindings")],
         ]
     }
@@ -1842,6 +1847,25 @@ impl AppConfig {
                     let new_delta = value.parse::<u16>();
                     if new_delta.is_ok() {
                         config.warning_delta = new_delta.unwrap();
+                    } else {
+                        error!("Invalid number: {}", value);
+                    }
+                }
+                "Tickrate" => {
+                    let new_tickrate = value.parse::<u64>();
+                    if new_tickrate.is_ok() {
+                        let new_tickrate = new_tickrate.unwrap();
+                        // make sure tickrate is not too low or too high
+                        if new_tickrate < 50 {
+                            error!("Tickrate must be greater than 50ms, to avoid overloading the CPU");
+                        } else if new_tickrate > 1000 {
+                            error!("Tickrate must be less than 1000ms");
+                        } else {
+                            config.tickrate = new_tickrate;
+                            info!("Tickrate set to {}ms", new_tickrate);
+                            info!("Restart the program to apply changes");
+                            info!("If experiencing slow input, or stuttering, try adjusting the tickrate")
+                        }
                     } else {
                         error!("Invalid number: {}", value);
                     }
@@ -1916,5 +1940,21 @@ impl AppConfig {
     
     pub fn len(&self) -> usize {
         self.to_list().len()
+    }
+}
+
+pub fn get_term_bg_color() -> (u8, u8, u8) {
+    info!("Getting terminal background color");
+    let backround_color_rgb = terminal_light::background_color()
+        .map(|c| c.rgb());
+    match backround_color_rgb {
+        Ok(rgb) => {
+            info!("Terminal background color: {:?}", rgb);
+            (rgb.r, rgb.g, rgb.b)
+        }
+        Err(e) => {
+            error!("Unable to get terminal background color: {}", e);
+            (0, 0, 0)
+        }
     }
 }

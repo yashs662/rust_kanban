@@ -1,6 +1,7 @@
 use chrono::{Local, NaiveDateTime};
 use tui::backend::Backend;
 use tui::Frame;
+use tui::style::Style;
 use tui_logger::TuiLoggerWidget;
 use tui::layout::{
     Alignment,
@@ -50,7 +51,9 @@ use crate::constants::{
     INACTIVE_TEXT_STYLE,
     VERTICAL_SCROLL_BAR_SYMBOL,
     CARD_COMPLETED_STATUS_STYLE,
-    CARD_STALE_STATUS_STYLE, MAX_TOASTS_TO_DISPLAY, TOAST_PADDING, SCREEN_TO_TOAST_WIDTH_RATIO,
+    CARD_STALE_STATUS_STYLE,
+    MAX_TOASTS_TO_DISPLAY,
+    SCREEN_TO_TOAST_WIDTH_RATIO,
 };
 
 use crate::app::{
@@ -936,8 +939,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
         .highlight_symbol(">> ")
         .widths(&[
             Constraint::Percentage(30),
-            Constraint::Length(30),
-            Constraint::Min(10),
+            Constraint::Percentage(70),
         ]);
 
     let right_table = Table::new(right_rows)
@@ -946,8 +948,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
         .highlight_symbol(">> ")
         .widths(&[
             Constraint::Percentage(30),
-            Constraint::Length(30),
-            Constraint::Min(10),
+            Constraint::Percentage(70),
         ]);
 
     let border_block = Block::default().borders(Borders::ALL).border_style(default_style).title("Help");
@@ -1706,7 +1707,7 @@ where
                 .borders(Borders::ALL)
                 .style(due_date_style)
                 .border_type(BorderType::Plain)
-                .title("Card Due Date (DD/MM/YYYY)")
+                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS)")
         );
     rect.render_widget(card_due_date, chunks[3]);
 
@@ -1896,11 +1897,10 @@ where
 
     // loop through the toasts and draw them
     for (i, toast) in toast_list.iter().enumerate() {
-        let toast_style = match toast.toast_type {
-            ToastType::Error => LOG_ERROR_STYLE,
-            ToastType::Info => LOG_INFO_STYLE,
-            ToastType::Warning => LOG_WARN_STYLE,
-        };
+        let toast_style = Style::default()
+            .fg(tui::style::Color::Rgb(
+                toast.toast_color.0, toast.toast_color.1, toast.toast_color.2
+            ));
         let toast_title = match toast.toast_type {
             ToastType::Error => "Error",
             ToastType::Info => "Info",
@@ -1910,7 +1910,7 @@ where
         let mut toast_height = 2; // atleast one line of message + 1 line for the border
         let lines  = textwrap::wrap(&toast.message, (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) as usize);
         toast_height += lines.len() as u16;
-        let y_offset = rect.size().height - (toast_height * (i as u16 + 1));
+        let y_offset = toast_height * (i as u16);
         let toast_block = Block::default()
             .title(toast_title)
             .borders(Borders::ALL)
@@ -1919,9 +1919,10 @@ where
         let toast_paragraph = Paragraph::new(toast.message.clone())
             .block(toast_block)
             .alignment(Alignment::Left)
-            .wrap(Wrap { trim: true });
-        rect.render_widget(Clear, Rect::new(x_offset - TOAST_PADDING , y_offset - TOAST_PADDING,
-            (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) + TOAST_PADDING, toast_height + TOAST_PADDING));
+            .wrap(Wrap { trim: true })
+            .style(toast_style);
+        rect.render_widget(Clear, Rect::new(x_offset , y_offset,
+            rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
         rect.render_widget(toast_paragraph, Rect::new(x_offset, y_offset, rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
     }
 }
