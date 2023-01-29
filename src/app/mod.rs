@@ -1944,17 +1944,6 @@ impl AppConfig {
 }
 
 pub fn get_term_bg_color() -> (u8, u8, u8) {
-    info!("Getting terminal background color");
-    let backround_color_rgb = terminal_light::background_color()
-        .map(|c| c.rgb());
-    match backround_color_rgb {
-        Ok(rgb) => {
-            info!("Terminal background color: {:?}", rgb);
-            (rgb.r, rgb.g, rgb.b)
-        }
-        Err(e) => {
-            error!("Unable to get terminal background color: {}", e);
-            (0, 0, 0)
-        }
-    }
+    // TODO: make this work on windows and unix
+    (0, 0, 0)
 }
