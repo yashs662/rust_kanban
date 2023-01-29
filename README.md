@@ -5,7 +5,7 @@
 ## Contribution
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
 ## TODO
-- [ ] Toast Message Implementation -- (Inspired by [noice.nvim](https://github.com/folke/noice.nvim))
+- [ ] Toast Message Implementation -- (Inspired by [nvim-notify](https://github.com/rcarriga/nvim-notify))
 - [ ] Implement Card View and Board View
 - [ ] Implement previews for loading a save
 - [ ] Implement Cloud saves (Google drive maybe? as i am not going to host a server)
