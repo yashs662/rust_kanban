@@ -755,7 +755,13 @@ impl IoAsyncHandler {
 
 pub(crate) fn get_config_dir() -> PathBuf {
     let mut config_dir = home::home_dir().unwrap();
-    config_dir.push(".config");
+    // check if windows or unix
+    if cfg!(windows) {
+        config_dir.push("AppData");
+        config_dir.push("Roaming");
+    } else {
+        config_dir.push(".config");
+    }
     config_dir.push(CONFIG_DIR_NAME);
     config_dir
 }
@@ -766,7 +772,7 @@ pub(crate) fn get_save_dir() -> PathBuf {
     save_dir
 }
 
-fn prepare_config_dir() -> bool {
+pub fn prepare_config_dir() -> bool {
     let config_dir = get_config_dir();
     if !config_dir.exists() {
         std::fs::create_dir_all(&config_dir).unwrap();

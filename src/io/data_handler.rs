@@ -20,7 +20,7 @@ use crate::{
     constants::{
         SAVE_DIR_NAME,
         SAVE_FILE_NAME
-    }
+    }, io::handler::prepare_config_dir
 };
 use super::handler::get_config_dir;
 use crate::constants::CONFIG_FILE_NAME;
@@ -48,6 +48,7 @@ pub fn get_config() -> AppConfig {
 
 pub fn write_config(config: &AppConfig) {
     let config_str = serde_json::to_string(&config).unwrap();
+    prepare_config_dir();
     fs::write(get_config_dir().join(CONFIG_FILE_NAME), config_str).unwrap();
     info!("👍 Config Updated Successfully");
 }
