@@ -90,9 +90,9 @@ impl IoAsyncHandler {
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
-        app.state.toast_list.push(ToastWidget::new(String::from("Application initialized"), Duration::from_secs(5), ToastType::Info));
+        app.state.toasts.push(ToastWidget::new(String::from("Application initialized"), Duration::from_secs(5), ToastType::Info));
         tokio::time::sleep(Duration::from_secs(2)).await;
-        app.state.toast_list.push(ToastWidget::new(String::from("Hello"), Duration::from_secs(5), ToastType::Info));
+        app.state.toasts.push(ToastWidget::new(String::from("Hello"), Duration::from_secs(5), ToastType::Info));
         Ok(())
     }
 

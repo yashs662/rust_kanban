@@ -1720,7 +1720,7 @@ pub struct AppState {
     pub keybind_store: Vec<Vec<String>>,
     pub default_view_state: ListState,
     pub current_cursor_position: Option<usize>,
-    pub toast_list: Vec<ToastWidget>,
+    pub toasts: Vec<ToastWidget>,
     pub term_background_color: (u8, u8, u8),
 }
 
@@ -1743,7 +1743,7 @@ impl Default for AppState {
             keybind_store: Vec::new(),
             default_view_state: ListState::default(),
             current_cursor_position: None,
-            toast_list: Vec::new(),
+            toasts: Vec::new(),
             term_background_color: get_term_bg_color()
         }
     }

@@ -60,19 +60,19 @@ impl WidgetManager {
     pub async fn update(&mut self) {
         let mut app = self.app.lock().await;
         let term_background_color = app.state.term_background_color;
-        let toast_list = &mut app.state.toast_list;
+        let toasts = &mut app.state.toasts;
         // remove all inactive toasts
-        for i in (0..toast_list.len()).rev() {
+        for i in (0..toasts.len()).rev() {
             // based on the toast_type lerp between the toast_type color and 0,0,0 within the TOAST_FADE_TIME which is in milliseconds
-            if toast_list[i].start_time.elapsed() < toast_list[i].duration -  Duration::from_millis(TOAST_FADE_TIME) {
-                toast_list[i].toast_color = toast_list[i].toast_type.as_color();
+            if toasts[i].start_time.elapsed() < toasts[i].duration -  Duration::from_millis(TOAST_FADE_TIME) {
+                toasts[i].toast_color = toasts[i].toast_type.as_color();
             } else {
                 // lerp from toast_type color to term_background_color
-                let t = (toast_list[i].start_time.elapsed() - (toast_list[i].duration - Duration::from_millis(TOAST_FADE_TIME))).as_millis() as f32 / TOAST_FADE_TIME as f32;
-                toast_list[i].toast_color = lerp_between(toast_list[i].toast_type.as_color(), term_background_color, t);
+                let t = (toasts[i].start_time.elapsed() - (toasts[i].duration - Duration::from_millis(TOAST_FADE_TIME))).as_millis() as f32 / TOAST_FADE_TIME as f32;
+                toasts[i].toast_color = lerp_between(toasts[i].toast_type.as_color(), term_background_color, t);
             }
-            if toast_list[i].start_time.elapsed() > toast_list[i].duration {
-                toast_list.remove(i);
+            if toasts[i].start_time.elapsed() > toasts[i].duration {
+                toasts.remove(i);
             }
         }
     }

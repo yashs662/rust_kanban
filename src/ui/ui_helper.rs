@@ -1889,14 +1889,14 @@ pub fn render_toast<B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
-    // get the latest MAX_TOASTS_TO_DISPLAY number of toasts from app.state.toast_list
-    let toast_list = app.state.toast_list.iter().rev().take(MAX_TOASTS_TO_DISPLAY).rev().collect::<Vec<&ToastWidget>>();
-    if toast_list.len() == 0 {
+    // get the latest MAX_TOASTS_TO_DISPLAY number of toasts from app.state.toasts
+    let toasts = app.state.toasts.iter().rev().take(MAX_TOASTS_TO_DISPLAY).rev().collect::<Vec<&ToastWidget>>();
+    if toasts.len() == 0 {
         return;
     }
 
     // loop through the toasts and draw them
-    for (i, toast) in toast_list.iter().enumerate() {
+    for (i, toast) in toasts.iter().enumerate() {
         let toast_style = Style::default()
             .fg(tui::style::Color::Rgb(
                 toast.toast_color.0, toast.toast_color.1, toast.toast_color.2
