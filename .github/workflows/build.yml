@@ -21,12 +21,13 @@ jobs:
     - name: Get version from cargo.toml
       run: |
             #!/bin/bash
-            export version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)
+            # set an environment variable for "grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1"
+            echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
 
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "${{$version}}"
+        automatic_release_tag: ${{ env.version }}
         prerelease: true
         title: "Development Build"
         files: |
