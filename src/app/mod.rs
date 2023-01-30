@@ -10,7 +10,7 @@ use std::fmt::{
 };
 use std::path::PathBuf;
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, NaiveDate};
 use log::{
     debug,
     info,
@@ -183,7 +183,17 @@ impl App {
                                 _ => {}
                             }
                         }
-                        _ => {}
+                        _ => {
+                            if self.state.current_cursor_position.is_some() {
+                                let current_cursor_position = self.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    self.state.current_user_input.remove(current_cursor_position - 1);
+                                    self.state.current_cursor_position = Some(current_cursor_position - 1);
+                                }
+                            } else {
+                                self.state.current_user_input.pop();
+                            }
+                        }
                     };
                     current_key = "".to_string();
                 } else if current_key == "<Left>" {
@@ -874,10 +884,25 @@ impl App {
                                                 debug!("New due date: {}", new_due);
                                                 Some(new_due)
                                             },
-                                            Err(e) => {
-                                                debug!("Invalid due date: {}", e);
-                                                debug!("Due date: {}", new_card_due_date);
-                                                None
+                                            Err(_) => {
+                                                // cehck if the user has not put the time if not put the default time
+                                                match NaiveDate::parse_from_str(&new_card_due_date, "%d/%m/%Y") {
+                                                    Ok(due_date) => {
+                                                        debug!("Due date: {}", due_date);
+                                                        let new_due = due_date.to_string();
+                                                        // the date is in the format 2023-01-20 14:10:00 convert it to 20/01/2023-14:10:00
+                                                        let new_due = new_due.replace("-", "/");
+                                                        let new_due = new_due.replace(" ", "-");
+                                                        let new_due = format!("{}-{}", new_due, "12:00:00");
+                                                        debug!("New due date: {}", new_due);
+                                                        Some(new_due)
+                                                    },
+                                                    Err(e) => {
+                                                        debug!("Invalid due date: {}", e);
+                                                        debug!("Due date: {}", new_card_due_date);
+                                                        None
+                                                    }
+                                                }
                                             }
                                         }
                                     };
