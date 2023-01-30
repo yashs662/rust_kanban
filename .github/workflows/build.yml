@@ -17,11 +17,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build
-      run: cargo build --verbose
+      run: cargo build -r
+    - name: Get version from cargo.toml
+      run: |
+            #!/bin/bash
+            version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)
+
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "${{ matrix.os }}"
+        automatic_release_tag: $version
         prerelease: true
         title: "Development Build"
         files: |
