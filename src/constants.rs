@@ -23,6 +23,7 @@ pub const MAX_TOASTS_TO_DISPLAY: usize = 3;
 pub const SCREEN_TO_TOAST_WIDTH_RATIO: u16 = 3;
 pub const TOAST_FADE_TIME: u64 = 400;
 pub const DEFAULT_TICKRATE: u64 = 100;
+pub const WINDOWS_WAIT_TIME_MS: u128 = 75;    // To solve the issue of double input on windows
 
 // Style
 pub const DEFAULT_STYLE: Style = Style{

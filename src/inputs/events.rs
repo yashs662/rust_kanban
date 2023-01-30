@@ -3,9 +3,11 @@ use std::sync::atomic::{
     Ordering
 };
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use log::error;
+use log::{error, debug};
+
+use crate::constants::WINDOWS_WAIT_TIME_MS;
 
 use super::key::Key;
 use super::InputEvent;
@@ -18,6 +20,8 @@ pub struct Events {
     _tx: tokio::sync::mpsc::Sender<InputEvent>,
     // To stop the loop
     stop_capture: Arc<AtomicBool>,
+    last_input_event: Option<InputEvent>,
+    last_input_event_time: Option<Instant>,
 }
 
 impl Events {
@@ -52,12 +56,32 @@ impl Events {
             rx,
             _tx: tx,
             stop_capture,
+            last_input_event: None,
+            last_input_event_time: None,
         }
     }
 
     /// Attempts to read an event.
     pub async fn next(&mut self) -> InputEvent {
-        self.rx.recv().await.unwrap_or(InputEvent::Tick)
+        let new_event = self.rx.recv().await.unwrap_or(InputEvent::Tick);
+        // check if the last input is the same as new input within 1 ms
+        if let InputEvent::Input(key) = new_event {
+            if let Some(last_input_event) = self.last_input_event.clone() {
+                if let InputEvent::Input(last_key) = last_input_event {
+                    if key == last_key {
+                        if let Some(last_input_event_time) = self.last_input_event_time {
+                            if last_input_event_time.elapsed().as_millis() < WINDOWS_WAIT_TIME_MS {
+                                debug!("Same key event within {:?} ms, ignore it. {:?}", WINDOWS_WAIT_TIME_MS, key);
+                                return InputEvent::Tick;
+                            }
+                        }
+                    }
+                }
+            }
+            self.last_input_event = Some(InputEvent::Input(key));
+            self.last_input_event_time = Some(Instant::now());
+        }
+        new_event
     }
 
     /// Close
