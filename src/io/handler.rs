@@ -1,14 +1,12 @@
 use linked_hash_map::LinkedHashMap;
 use savefile::{load_file, save_file};
 use std::path::Path;
-use std::time::Duration;
 use std::{
     sync::Arc,
     path::PathBuf
 };
 use crate::app::kanban::Board;
 use crate::app::state::UiMode;
-use crate::ui::widgets::{ToastWidget, ToastType};
 use std::env;
 use crate::constants::{
     CONFIG_DIR_NAME,
@@ -54,7 +52,6 @@ impl IoAsyncHandler {
     pub async fn handle_io_event(&mut self, io_event: IoEvent) {
         let result = match io_event {
             IoEvent::Initialize => self.do_initialize().await,
-            IoEvent::GetLocalData => self.get_local_save().await,
             IoEvent::GetCloudData => self.get_cloud_save().await,
             IoEvent::Reset => self.reset_config().await,
             IoEvent::SaveLocalData => self.save_local_data().await,
@@ -69,7 +66,8 @@ impl IoAsyncHandler {
         };
 
         if let Err(err) = result {
-            error!("Oops, something wrong happen: {:?}", err);
+            error!("Oops, something wrong happened 😢: {:?}", err);
+            self.app.lock().await.send_error_toast("Oops, something wrong happened 😢", None);
         }
 
         let mut app = self.app.lock().await;
@@ -79,28 +77,21 @@ impl IoAsyncHandler {
     async fn do_initialize(&mut self) -> Result<()> {
         info!("🚀 Initialize the application");
         let mut app = self.app.lock().await;
-        if !prepare_config_dir() {
+        let prepare_config_dir_status = prepare_config_dir();
+        if prepare_config_dir_status.is_err() {
             error!("Cannot create config directory");
+            app.send_error_toast("Cannot create config directory", None);
         }
         if !prepare_save_dir() {
             error!("Cannot create save directory");
+            app.send_error_toast("Cannot create save directory", None);
         }
         app.boards = prepare_boards(&mut app);
         app.keybind_list_maker();
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
-        app.state.toasts.push(ToastWidget::new(String::from("Application initialized"), Duration::from_secs(5), ToastType::Info));
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        app.state.toasts.push(ToastWidget::new(String::from("Hello"), Duration::from_secs(5), ToastType::Info));
-        Ok(())
-    }
-
-    async fn get_local_save(&mut self) -> Result<()> {
-        info!("🚀 Getting local save");
-        let mut app = self.app.lock().await;
-        app.set_boards(vec![]);
-        info!("👍 Local save loaded");
+        app.send_info_toast("Application initialized", None);
         Ok(())
     }
 
@@ -109,6 +100,7 @@ impl IoAsyncHandler {
         let mut app = self.app.lock().await;
         app.set_boards(vec![]);
         info!("👍 Cloud save loaded");
+        app.send_info_toast("👍 Cloud save loaded", None);
         Ok(())
     }
 
@@ -121,12 +113,18 @@ impl IoAsyncHandler {
 
     async fn save_local_data(&mut self) -> Result<()> {
         info!("🚀 Saving local data");
-        let app = self.app.lock().await;
+        let mut app = self.app.lock().await;
         let board_data = &app.boards;
         let status = save_kanban_state_locally(board_data.to_vec());
         match status {
-            Ok(_) => info!("👍 Local data saved"),
-            Err(err) => error!("Cannot save local data: {:?}", err),
+            Ok(_) => {
+                info!("👍 Local data saved");
+                app.send_info_toast("👍 Local data saved", None);
+            },
+            Err(err) => {
+                debug!("Cannot save local data: {:?}", err);
+                app.send_error_toast("Cannot save local data", None);
+            }
         }
         Ok(())
     }
@@ -135,21 +133,31 @@ impl IoAsyncHandler {
         let mut app = self.app.lock().await;
         let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
         let local_files = get_available_local_savefiles();
+        let local_files = if local_files.is_none() {
+            error!("Could not get local save files");
+            self.app.lock().await.send_error_toast("Could not get local save files", None);
+            vec![]
+        } else {
+            local_files.unwrap()
+        };
         // check if the file exists
         if save_file_index >= local_files.len() {
             error!("Cannot load save file: No such file");
+            self.app.lock().await.send_error_toast("Cannot load save file: No such file", None);
             return Ok(());
         }
         let save_file_name = local_files[save_file_index].clone();
         let version = save_file_name.split("_v").collect::<Vec<&str>>();
         if version.len() < 2 {
             error!("Cannot load save file: invalid file name");
+            self.app.lock().await.send_error_toast("Cannot load save file: invalid file name", None);
             return Ok(());
         }
         // convert to u32
         let version = version[1].parse::<u32>();
         if version.is_err() {
             error!("Cannot load save file: invalid file name");
+            self.app.lock().await.send_error_toast("Cannot load save file: invalid file name", None);
             return Ok(());
         }
         info!("🚀 Loading save file: {}", save_file_name);
@@ -159,10 +167,15 @@ impl IoAsyncHandler {
             Ok(boards) => {
                 app.set_boards(boards);
                 info!("👍 Save file {:?} loaded", save_file_name);
+                app.send_info_toast(&format!("👍 Save file {:?} loaded", save_file_name), None);
             }
-            Err(err) => error!("Cannot load save file: {:?}", err),
+            Err(err) => {
+                debug!("Cannot load save file: {:?}", err);
+                app.send_error_toast("Cannot load save file", None);
+            }
         }
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+        app.ui_mode = app.config.default_view.clone();
         Ok(())
     }
 
@@ -170,26 +183,43 @@ impl IoAsyncHandler {
         // get app.state.load_save_state.selected() and delete the file
         let app = self.app.lock().await;
         let file_list = get_available_local_savefiles();
+        let file_list = if file_list.is_none() {
+            error!("Cannot delete save file: no save files found");
+            self.app.lock().await.send_error_toast("Cannot delete save file: no save files found", None);
+            return Ok(());
+        } else {
+            file_list.unwrap()
+        };
         let selected = app.state.load_save_state.selected().unwrap_or(0);
         if selected >= file_list.len() {
-            error!("Cannot delete save file: index out of range");
+            debug!("Cannot delete save file: index out of range");
+            self.app.lock().await.send_error_toast("Cannot delete save file: Something went wrong", None);
             return Ok(());
         }
         let file_name = file_list[selected].clone();
         info!("🚀 Deleting save file: {}", file_name);
-        let config = get_config();
+        let get_config_status = get_config();
+        let config = if get_config_status.is_err() {
+            debug!("Error getting config: {}", get_config_status.unwrap_err());
+            AppConfig::default()
+        } else {
+            get_config_status.unwrap()
+        };
         let path = config.save_directory.join(file_name);
         // check if the file exists
         if !Path::new(&path).exists() {
             error!("Cannot delete save file: file not found");
+            self.app.lock().await.send_error_toast("Cannot delete save file: file not found", None);
             return Ok(());
         } else {
             // delete the file
             if let Err(err) = std::fs::remove_file(&path) {
-                error!("Cannot delete save file: {:?}", err);
+                debug!("Cannot delete save file: {:?}", err);
+                self.app.lock().await.send_error_toast("Cannot delete save file: Something went wrong", None);
                 return Ok(());
             } else {
                 info!("👍 Save file deleted");
+                self.app.lock().await.send_info_toast("👍 Save file deleted", None);
             }
         }
         Ok(())
@@ -203,7 +233,8 @@ impl IoAsyncHandler {
         // check if current_board_id is set, if not assign to the first board
         // check if all_boards is empty, if so, return
         if all_boards.is_empty() {
-            error!("Cannot go right: no boards");
+            error!("Cannot go right: no boards found");
+            self.app.lock().await.send_error_toast("Cannot go right: no boards found", None);
             return Ok(());
         }
         let current_board_id = if current_board_id.is_none() {
@@ -216,7 +247,8 @@ impl IoAsyncHandler {
             .iter()
             .position(|(board_id, _)| *board_id == current_board_id);
         if current_board_index.is_none() {
-            error!("Cannot go right: current board not found");
+            debug!("Cannot go right: current board not found");
+            self.app.lock().await.send_error_toast("Cannot go right: Something went wrong", None);
             return Ok(());
         }
         let current_board_index = current_board_index.unwrap();
@@ -226,7 +258,8 @@ impl IoAsyncHandler {
                 .iter()
                 .position(|board| board.id == current_board_id);
             if current_board_index_in_all_boards.is_none() {
-                error!("Cannot go right: current board not found");
+                debug!("Cannot go right: current board not found");
+                self.app.lock().await.send_error_toast("Cannot go right: Something went wrong", None);
                 return Ok(());
             }
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
@@ -289,6 +322,7 @@ impl IoAsyncHandler {
         // check if all_boards is empty, if so, return
         if all_boards.is_empty() {
             error!("Cannot go left: no boards");
+            self.app.lock().await.send_error_toast("Cannot go left: no boards", None);
             return Ok(());
         }
         let current_board_id = if current_board_id.is_none() {
@@ -301,7 +335,8 @@ impl IoAsyncHandler {
             .iter()
             .position(|(board_id, _)| *board_id == current_board_id);
         if current_board_index.is_none() {
-            error!("Cannot go left: current board not found");
+            debug!("Cannot go left: current board not found");
+            self.app.lock().await.send_error_toast("Cannot go left: Something went wrong", None);
             return Ok(());
         }
         let current_board_index = current_board_index.unwrap();
@@ -311,7 +346,8 @@ impl IoAsyncHandler {
                 .iter()
                 .position(|board| board.id == current_board_id);
             if current_board_index_in_all_boards.is_none() {
-                error!("Cannot go left: current board not found");
+                debug!("Cannot go left: current board not found");
+                self.app.lock().await.send_error_toast("Cannot go left: Something went wrong", None);
                 return Ok(());
             }
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
@@ -384,12 +420,14 @@ impl IoAsyncHandler {
             // get the first card of the current board
             let current_board = app.boards.iter().find(|board| board.id == current_board_id);
             if current_board.is_none() {
-                error!("Cannot go up: current board not found");
+                debug!("Cannot go up: current board not found");
+                self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
                 return Ok(());
             }
             let current_board = current_board.unwrap();
             if current_board.cards.is_empty() {
                 error!("Cannot go up: current board has no cards");
+                self.app.lock().await.send_error_toast("Cannot go up: current board has no cards", None);
                 return Ok(());
             }
             current_board.cards[0].id
@@ -404,7 +442,8 @@ impl IoAsyncHandler {
             .iter()
             .position(|card_id| *card_id == current_card_id);
         if current_card_index.is_none() {
-            error!("Cannot go up: current card not found");
+            debug!("Cannot go up: current card not found");
+            self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
             return Ok(());
         }
         let current_card_index = current_card_index.unwrap();
@@ -418,7 +457,8 @@ impl IoAsyncHandler {
                 .iter()
                 .position(|card| card.id == current_card_id);
             if current_card_index_in_all_cards.is_none() {
-                error!("Cannot go up: current card not found");
+                debug!("Cannot go up: current card not found");
+                self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
                 return Ok(());
             }
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
@@ -461,7 +501,8 @@ impl IoAsyncHandler {
                 .clone();
             // check if previous_card_id is 0
             if previous_card_id == 0 {
-                error!("Cannot go up: previous card not found");
+                debug!("Cannot go up: previous card not found");
+                self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
                 return Ok(());
             } else {
                 app.state.current_card_id = Some(previous_card_id);
@@ -489,12 +530,14 @@ impl IoAsyncHandler {
             // get the first card of the current board
             let current_board = app.boards.iter().find(|board| board.id == current_board_id);
             if current_board.is_none() {
-                error!("Cannot go down: current board not found");
+                debug!("Cannot go down: current board not found");
+                self.app.lock().await.send_error_toast("Cannot go down: Something went wrong", None);
                 return Ok(());
             }
             let current_board = current_board.unwrap();
             if current_board.cards.is_empty() {
                 error!("Cannot go down: current board has no cards");
+                self.app.lock().await.send_error_toast("Cannot go down: Current board has no cards", None);
                 return Ok(());
             }
             current_board.cards[0].id
@@ -509,7 +552,8 @@ impl IoAsyncHandler {
             .iter()
             .position(|card_id| *card_id == current_card_id);
         if current_card_index.is_none() {
-            error!("Cannot go down: current card not found");
+            debug!("Cannot go down: current card not found");
+            self.app.lock().await.send_error_toast("Cannot go down: Something went wrong", None);
             return Ok(());
         }
         let current_card_index = current_card_index.unwrap();
@@ -523,7 +567,8 @@ impl IoAsyncHandler {
                 .iter()
                 .position(|card| card.id == current_card_id);
             if current_card_index_in_all_cards.is_none() {
-                error!("Cannot go down: current card not found");
+                debug!("Cannot go down: current card not found");
+                self.app.lock().await.send_error_toast("Cannot go down: Something went wrong", None);
                 return Ok(());
             }
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
@@ -679,7 +724,13 @@ impl IoAsyncHandler {
     async fn auto_save(&mut self) -> Result<()> {
         let app = self.app.lock().await;
         let latest_save_file_info = get_latest_save_file();
-        let config = get_config();
+        let get_config_status = get_config();
+        let config = if get_config_status.is_err() {
+            debug!("Error getting config: {}", get_config_status.unwrap_err());
+            AppConfig::default()
+        } else {
+            get_config_status.unwrap()
+        };
         if latest_save_file_info.is_ok() {
             let latest_save_file_info = latest_save_file_info.unwrap();
             let default_board = Board::new(String::from("Board not found"), String::from("Board not found"));
@@ -753,8 +804,12 @@ impl IoAsyncHandler {
 
 }
 
-pub(crate) fn get_config_dir() -> PathBuf {
-    let mut config_dir = home::home_dir().unwrap();
+pub(crate) fn get_config_dir() -> Result<PathBuf, String> {
+    let home_dir = home::home_dir();
+    if home_dir.is_none() {
+        return Err(String::from("Error getting home directory"));
+    }
+    let mut config_dir = home_dir.unwrap().join(CONFIG_DIR_NAME);
     // check if windows or unix
     if cfg!(windows) {
         config_dir.push("AppData");
@@ -763,7 +818,7 @@ pub(crate) fn get_config_dir() -> PathBuf {
         config_dir.push(".config");
     }
     config_dir.push(CONFIG_DIR_NAME);
-    config_dir
+    Ok(config_dir)
 }
 
 pub(crate) fn get_save_dir() -> PathBuf {
@@ -772,20 +827,35 @@ pub(crate) fn get_save_dir() -> PathBuf {
     save_dir
 }
 
-pub fn prepare_config_dir() -> bool {
+pub fn prepare_config_dir() -> Result<(), String> {
     let config_dir = get_config_dir();
+    if config_dir.is_err() {
+        return Err(String::from("Error getting config directory"));
+    }
+    let config_dir = config_dir.unwrap();
     if !config_dir.exists() {
-        std::fs::create_dir_all(&config_dir).unwrap();
+        let dir_creation_status = std::fs::create_dir_all(&config_dir);
+        if dir_creation_status.is_err() {
+            return Err(String::from("Error creating config directory"));
+        }
     }
     // make config file if it doesn't exist and write default config to it
     let mut config_file = config_dir.clone();
     config_file.push(CONFIG_FILE_NAME);
     if !config_file.exists() {
         let default_config = AppConfig::default();
-        let config_json = serde_json::to_string_pretty(&default_config).unwrap();
-        std::fs::write(&config_file, config_json).unwrap();
+        let config_json = serde_json::to_string_pretty(&default_config);
+        if config_json.is_err() {
+            return Err(String::from("Error creating config file"));
+        } else {
+            let config_json = config_json.unwrap();
+            let file_creation_status = std::fs::write(&config_file, config_json);
+            if file_creation_status.is_err() {
+                return Err(String::from("Error creating config file"));
+            }
+        }
     }
-    true
+    Ok(())
 }
 
 fn prepare_save_dir() -> bool {
@@ -797,7 +867,13 @@ fn prepare_save_dir() -> bool {
 }
 
 fn prepare_boards (app: &mut App) -> Vec<Board> {
-    let config = get_config();
+    let get_config_status = get_config();
+    let config = if get_config_status.is_err() {
+        debug!("Error getting config: {}", get_config_status.unwrap_err());
+        AppConfig::default()
+    } else {
+        get_config_status.unwrap()
+    };
     if config.always_load_last_save {
         let latest_save_file_info = get_latest_save_file();
         if latest_save_file_info.is_ok() {
@@ -813,6 +889,7 @@ fn prepare_boards (app: &mut App) -> Vec<Board> {
                 Err(err) => {
                     debug!("Cannot get local data: {:?}", err);
                     error!("👎 Cannot get local data, Data might be corrupted or is not in the correct format");
+                    app.send_error_toast("👎 Cannot get local data, Data might be corrupted or is not in the correct format", None);
                     vec![]
                 },
             }
@@ -828,6 +905,11 @@ fn prepare_boards (app: &mut App) -> Vec<Board> {
 // return save file name and the latest verison
 fn get_latest_save_file() -> Result<(String, u32)> {
     let local_save_files = get_available_local_savefiles();
+    let local_save_files = if local_save_files.is_none() {
+        return Err(anyhow!("No local save files found"));
+    } else {
+        local_save_files.unwrap()
+    };
     let fall_back_version = "1".to_string();
     // if local_save_files is empty, return empty vec
     if local_save_files.is_empty() {

@@ -5,6 +5,9 @@ use std::fmt::{
 };
 use std::slice::Iter;
 
+use log::debug;
+
+use crate::app::AppConfig;
 use crate::inputs::key::Key;
 use crate::io::data_handler::get_config;
 use super::state::KeyBindings;
@@ -153,8 +156,13 @@ pub struct Actions(Vec<Action>);
 impl Actions {
     /// Given a key, find the corresponding action
     pub fn find(&self, key: Key) -> Option<&Action> {
-
-        let config = get_config();
+        let get_config_status = get_config();
+        let config = if get_config_status.is_err() {
+            debug!("Error getting config: {}", get_config_status.unwrap_err());
+            AppConfig::default()
+        } else {
+            get_config_status.unwrap()
+        };
         let current_bindings = config.keybindings.clone();
         let action_list = &mut Vec::new();
         for (k, _v) in current_bindings.iter() {

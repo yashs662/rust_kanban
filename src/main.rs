@@ -2,9 +2,9 @@ use std::sync::Arc;
 use clap::Parser;
 
 use eyre::Result;
-use log::{LevelFilter, info};
+use log::LevelFilter;
 use rust_kanban::{
-    app::{App, get_term_bg_color},
+    app::App,
     io::{
         handler::IoAsyncHandler,
         IoEvent
@@ -54,8 +54,8 @@ async fn main() -> Result<()> {
         }
     });
 
-    let term_bg = get_term_bg_color();
-    info!("Term background color: {:?}", term_bg);
+    // TODO: get term bg color
+    // let term_bg = get_term_bg_color();
 
     // check if we need to reset config
     if args.reset.is_some() {

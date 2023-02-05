@@ -20,9 +20,10 @@ pub const LIST_SELECTED_SYMBOL: &str = ">> ";
 pub const VERTICAL_SCROLL_BAR_SYMBOL: &str = "█";
 pub const DEFAULT_CARD_WARNING_DUE_DATE_DAYS: u16 = 3;
 pub const MAX_TOASTS_TO_DISPLAY: usize = 3;
-pub const SCREEN_TO_TOAST_WIDTH_RATIO: u16 = 3;
+pub const SCREEN_TO_TOAST_WIDTH_RATIO: u16 = 3;  // 1/3rd of the screen width
 pub const TOAST_FADE_TIME: u64 = 400;
 pub const DEFAULT_TICKRATE: u64 = 50;
+pub const DEFAULT_TOAST_DURATION: u64 = 5;
 pub const WINDOWS_WAIT_TIME_MS: u128 = 75;    // To solve the issue of double input on windows
 
 // Style

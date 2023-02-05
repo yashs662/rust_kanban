@@ -1,4 +1,5 @@
 use chrono::{Local, NaiveDateTime};
+use log::debug;
 use tui::backend::Backend;
 use tui::Frame;
 use tui::style::Style;
@@ -59,7 +60,7 @@ use crate::constants::{
 use crate::app::{
     MainMenuItem,
     App,
-    MainMenu
+    MainMenu, AppConfig
 };
 use crate::app::state::{
     Focus,
@@ -442,7 +443,13 @@ fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static>
 /// returns a list of all config items as a vector of strings
 fn get_config_items() -> Vec<Vec<String>>
 {
-    let config = get_config();
+    let get_config_status = get_config();
+    let config = if get_config_status.is_err() {
+        debug!("Error getting config: {}", get_config_status.unwrap_err());
+        AppConfig::default()
+    } else {
+        get_config_status.unwrap()
+    };
     let config_list = config.to_list();
     return config_list;
 }
@@ -1822,6 +1829,11 @@ where
     rect.render_widget(title_paragraph, chunks[0]);
 
     let item_list = get_available_local_savefiles();
+    let item_list = if item_list.is_none() {
+        Vec::new()
+    } else {
+        item_list.unwrap()
+    };
     if item_list.len() > 0 {
         // make a list from the Vec<string> of savefiles
         let items: Vec<ListItem> = item_list

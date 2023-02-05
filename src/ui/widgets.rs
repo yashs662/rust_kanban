@@ -78,10 +78,10 @@ impl WidgetManager {
     }
 }
 
-// make a function to lerp between rgb values of two colors
-pub fn lerp_between(a: (u8, u8, u8), b: (u8, u8, u8), t: f32) -> (u8, u8, u8) {
-    let r = (a.0 as f32 * (1.0 - t) + b.0 as f32 * t) as u8;
-    let g = (a.1 as f32 * (1.0 - t) + b.1 as f32 * t) as u8;
-    let b = (a.2 as f32 * (1.0 - t) + b.2 as f32 * t) as u8;
+/// function to lerp between rgb values of two colors
+pub fn lerp_between(color_a: (u8, u8, u8), color_b: (u8, u8, u8), time_in_ms: f32) -> (u8, u8, u8) {
+    let r = (color_a.0 as f32 * (1.0 - time_in_ms) + color_b.0 as f32 * time_in_ms) as u8;
+    let g = (color_a.1 as f32 * (1.0 - time_in_ms) + color_b.1 as f32 * time_in_ms) as u8;
+    let b = (color_a.2 as f32 * (1.0 - time_in_ms) + color_b.2 as f32 * time_in_ms) as u8;
     (r, g, b)
 }

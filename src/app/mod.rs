@@ -1,4 +1,5 @@
 use linked_hash_map::LinkedHashMap;
+use std::time::Duration;
 use std::{
     env,
     vec
@@ -39,7 +40,7 @@ use crate::app::actions::Action;
 use crate::app::kanban::CardStatus;
 use crate::constants::{
     SAVE_DIR_NAME,
-    FIELD_NOT_SET, DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE,
+    FIELD_NOT_SET, DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{
@@ -51,7 +52,7 @@ use crate::io::{
     IoEvent,
     data_handler
 };
-use crate::ui::widgets::ToastWidget;
+use crate::ui::widgets::{ToastWidget, ToastType};
 
 pub mod actions;
 pub mod state;
@@ -86,7 +87,13 @@ impl App {
         let focus = Focus::NoFocus;
         let ui_mode = data_handler::get_default_ui_mode();
         let boards = vec![];
-
+        let get_config_status = get_config();
+        let config = if get_config_status.is_err() {
+            debug!("Error getting config: {}", get_config_status.unwrap_err());
+            AppConfig::default()
+        } else {
+            get_config_status.unwrap()
+        };
 
         Self {
             io_tx,
@@ -97,7 +104,7 @@ impl App {
             ui_mode,
             boards: boards,
             prev_ui_mode: None,
-            config: get_config(),
+            config: config,
             config_item_being_edited: None,
             visible_boards_and_cards: LinkedHashMap::new(),
         }
@@ -471,7 +478,13 @@ impl App {
             if let Some(action) = self.actions.find(key) {
                 match action {
                     Action::Quit => {
-                        let config = get_config();
+                        let get_config_status = get_config();
+                        let config = if get_config_status.is_err() {
+                            debug!("Error getting config: {}", get_config_status.unwrap_err());
+                            AppConfig::default()
+                        } else {
+                            get_config_status.unwrap()
+                        };
                         if config.save_on_exit {
                             self.dispatch(IoEvent::AutoSave).await;
                         }
@@ -675,10 +688,16 @@ impl App {
                             UiMode::Config => {
                                 if self.focus == Focus::SubmitButton {
                                     self.config = AppConfig::default();
-                                    info!("Reset Config and Keybinds to default");
                                     self.focus = Focus::NoFocus;
                                     self.state.config_state.select(None);
-                                    write_config(&self.config);
+                                    let write_config_status = write_config(&self.config);
+                                    if write_config_status.is_err() {
+                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
+                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                    } else {
+                                        warn!("Reset Config and Keybinds to default");
+                                        self.send_warning_toast("Reset Config and Keybinds to default", None);
+                                    }
                                     self.keybind_list_maker();
                                     return AppReturn::Continue;
                                 } else if self.focus == Focus::ExtraFocus {
@@ -686,10 +705,16 @@ impl App {
                                     let keybinds = self.config.keybindings.clone();
                                     self.config = AppConfig::default();
                                     self.config.keybindings = keybinds;
-                                    info!("Reset Config to default");
                                     self.focus = Focus::NoFocus;
                                     self.state.config_state.select(None);
-                                    write_config(&self.config);
+                                    let write_config_status = write_config(&self.config);
+                                    if write_config_status.is_err() {
+                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
+                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                    } else {
+                                        warn!("Reset Config to default");
+                                        self.send_warning_toast("Reset Config to default", None);
+                                    }
                                     return AppReturn::Continue;
                                 }
                                 self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
@@ -714,21 +739,33 @@ impl App {
                                         let config_string = format!("{}: {}", "Auto Save on Exit", self.config.save_on_exit);
                                         let app_config = AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
-                                        write_config(&app_config);
+                                        let write_config_status = write_config(&app_config);
+                                        if write_config_status.is_err() {
+                                            error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
+                                            self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        }
                                     } else if *config_item == "Auto Load Last Save" {
                                         let always_load_last_save = self.config.always_load_last_save;
                                         self.config.always_load_last_save = !always_load_last_save;
                                         let config_string = format!("{}: {}", "Auto Load Last Save", self.config.always_load_last_save);
                                         let app_config = AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
-                                        write_config(&app_config);
+                                        let write_config_status = write_config(&app_config);
+                                        if write_config_status.is_err() {
+                                            error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
+                                            self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        }
                                     } else if *config_item == "Disable Scrollbars" {
                                         let disable_scrollbars = self.config.disable_scrollbars;
                                         self.config.disable_scrollbars = !disable_scrollbars;
                                         let config_string = format!("{}: {}", "Disable Scrollbars", self.config.disable_scrollbars);
                                         let app_config = AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
-                                        write_config(&app_config);
+                                        let write_config_status = write_config(&app_config);
+                                        if write_config_status.is_err() {
+                                            error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
+                                            self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        }
                                     } else {
                                         self.prev_ui_mode = Some(self.ui_mode.clone());
                                         self.ui_mode = UiMode::EditConfig;
@@ -751,7 +788,11 @@ impl App {
                                     let config_string = format!("{}: {}", config_item_key, new_value);
                                     let app_config = AppConfig::edit_with_string(&config_string, self);
                                     self.config = app_config.clone();
-                                    write_config(&app_config);
+                                    let write_config_status = write_config(&app_config);
+                                    if write_config_status.is_err() {
+                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
+                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                    }
 
                                     // reset everything
                                     self.state.config_state.select(Some(0));
@@ -775,7 +816,11 @@ impl App {
                                     let config_string = format!("{}: {}", "Select Default View", selected_mode);
                                     let app_config = AppConfig::edit_with_string(&config_string, self);
                                     self.config = app_config.clone();
-                                    write_config(&app_config);
+                                    let write_config_status = write_config(&app_config);
+                                    if write_config_status.is_err() {
+                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
+                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                    }
 
                                     // reset everything
                                     self.state.default_view_state.select(Some(0));
@@ -867,6 +912,7 @@ impl App {
                                         }
                                     } else {
                                         error!("Current board not found");
+                                        self.send_error_toast("Current board not found", None);
                                         self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                         return AppReturn::Continue;
                                     }
@@ -920,6 +966,7 @@ impl App {
                                             self.state.current_card_id = Some(new_card.id);
                                         } else {
                                             error!("Current board not found");
+                                            self.send_error_toast("Current board not found", None);
                                             self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                             return AppReturn::Continue;
                                         }
@@ -937,7 +984,6 @@ impl App {
                             }
                             UiMode::LoadSave => {
                                 self.dispatch(IoEvent::LoadSave).await;
-                                self.ui_mode = self.config.default_view.clone();
                                 AppReturn::Continue
                             }
                             UiMode::EditKeybindings => {
@@ -945,10 +991,15 @@ impl App {
                                     self.ui_mode = UiMode::EditSpecificKeybinding;
                                 } else if self.focus == Focus::SubmitButton {
                                     self.config.keybindings = KeyBindings::default();
-                                    info!("Reset keybindings to default");
+                                    warn!("Reset keybindings to default");
+                                    self.send_warning_toast("Reset keybindings to default", None);
                                     self.focus = Focus::NoFocus;
                                     self.state.edit_keybindings_state.select(None);
-                                    write_config(&self.config);
+                                    let write_config_status = write_config(&self.config);
+                                    if write_config_status.is_err() {
+                                        error!("Error writing config: {}", write_config_status.clone().unwrap_err());
+                                        self.send_error_toast(&write_config_status.unwrap_err(), None);
+                                    }
                                     self.keybind_list_maker();
                                 }
                                 AppReturn::Continue
@@ -957,9 +1008,13 @@ impl App {
                                 if self.state.edited_keybinding.is_some() {
                                     let selected = self.state.edit_keybindings_state.selected().unwrap();
                                     if selected < self.config.keybindings.iter().count() {
-                                        self.config.edit_keybinding(selected, self.state.edited_keybinding.clone().unwrap_or_else(|| vec![]));
+                                        let result = self.config.edit_keybinding(selected, self.state.edited_keybinding.clone().unwrap_or_else(|| vec![]));
+                                        if result.is_err() {
+                                            self.send_error_toast(&result.unwrap_err(), None);
+                                        }
                                     } else {
                                         error!("Selected keybind with id {} not found", selected);
+                                        self.send_error_toast("Selected keybind not found", None);
                                         self.state.edited_keybinding = None;
                                         self.state.edit_keybindings_state.select(None);
                                     }
@@ -968,7 +1023,11 @@ impl App {
                                         self.edit_keybindings_next()
                                     }
                                     self.state.edited_keybinding = None;
-                                    write_config(&self.config);
+                                    let write_config_status = write_config(&self.config);
+                                    if write_config_status.is_err() {
+                                        error!("Error writing config: {}", write_config_status.clone().unwrap_err());
+                                        self.send_error_toast(&write_config_status.unwrap_err(), None);
+                                    }
                                 } else {
                                     self.ui_mode = UiMode::EditKeybindings;
                                     if self.state.edit_keybindings_state.selected().is_none() {
@@ -1148,7 +1207,8 @@ impl App {
                                                     } else {
                                                         self.state.current_card_id = None;
                                                     }
-                                                    info!("Deleted card {}", card_name);
+                                                    warn!("Deleted card {}", card_name);
+                                                    self.send_warning_toast(&format!("Deleted card {}", card_name), None);
                                                     // remove card_id from self.visible_boards_and_cards if it is there, where visible_boards_and_cards is a LinkedHashMap of board_id to a vector of card_ids
                                                     if let Some(visible_cards) = self.visible_boards_and_cards.get_mut(&current_board) {
                                                         if let Some(card_index) = visible_cards.iter().position(|card_id| *card_id == current_card) {
@@ -1172,7 +1232,8 @@ impl App {
                                                     } else {
                                                         self.state.current_board_id = None;
                                                     }
-                                                    info!("Deleted board {}", board_name);
+                                                    warn!("Deleted board {}", board_name);
+                                                    self.send_warning_toast(&format!("Deleted board {}", board_name), None);
                                                     // remove board_id from self.visible_boards_and_cards if it is there
                                                     self.visible_boards_and_cards.remove(&current_board);
                                                     self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
@@ -1205,7 +1266,8 @@ impl App {
                                             self.state.current_board_id = None;
                                         }
                                         self.visible_boards_and_cards.remove(&current_board);
-                                        info!("Deleted board: {}", board_name);
+                                        warn!("Deleted board: {}", board_name);
+                                        self.send_warning_toast(&format!("Deleted board: {}", board_name), None);
                                     }
                                 }
                                 AppReturn::Continue
@@ -1246,6 +1308,7 @@ impl App {
                                 if let Some(card_index) = card_index {
                                     self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Active;
                                     info!("Changed status to Active for card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                    self.send_info_toast(&format!("Changed status to Active for card {}", self.boards[index.unwrap()].cards[card_index].name), None);
                                 }
                             }
                         }
@@ -1265,6 +1328,7 @@ impl App {
                                 if let Some(card_index) = card_index {
                                     self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Stale;
                                     info!("Changed status to Stale for card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                    self.send_info_toast(&format!("Changed status to Stale for card {}", self.boards[index.unwrap()].cards[card_index].name), None);
                                 }
                             }
                         }
@@ -1299,6 +1363,7 @@ impl App {
                                                         self.state.current_card_id = Some(self.visible_boards_and_cards[&current_board][0]);
                                                     }
                                                     info!("Moved card {} up", self.boards[index.unwrap()].cards[card_index].name);
+                                                    self.send_info_toast(&format!("Moved card {} up", self.boards[index.unwrap()].cards[card_index].name), None);
                                                 }
                                             }
                                         }
@@ -1328,6 +1393,7 @@ impl App {
                                                         self.state.current_card_id = Some(self.visible_boards_and_cards[&current_board][self.visible_boards_and_cards[&current_board].len() - 1]);
                                                     }
                                                     info!("Moved card {} down", self.boards[board_index.unwrap()].cards[card_index].name);
+                                                    self.send_info_toast(&format!("Moved card {} down", self.boards[board_index.unwrap()].cards[card_index].name), None);
                                                 }
                                             }
                                         }
@@ -1357,6 +1423,7 @@ impl App {
                                                     self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
                                                     self.state.current_board_id = Some(self.boards[board_index.unwrap() + 1].id);
                                                     info!("Moved card {} right", card_name);
+                                                    self.send_info_toast(&format!("Moved card {} right", card_name), None);
                                                 }
                                             }
                                         }
@@ -1386,6 +1453,7 @@ impl App {
                                                     self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
                                                     self.state.current_board_id = Some(self.boards[board_index.unwrap() - 1].id);
                                                     info!("Moved card {} left", card_name);
+                                                    self.send_info_toast(&format!("Moved card {} left", card_name), None);
                                                 }
                                             }
                                         }
@@ -1409,7 +1477,9 @@ impl App {
         self.is_loading = true;
         if let Err(e) = self.io_tx.send(action).await {
             self.is_loading = false;
-            error!("Error from dispatch {}", e);
+            debug!("Error from dispatch {}", e);
+            error!("Error in handling request please, restart the app");
+            self.send_error_toast("Error in handling request please, restart the app",None);
         };
     }
     pub fn actions(&self) -> &Actions {
@@ -1505,7 +1575,12 @@ impl App {
     pub fn load_save_next(&mut self) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                let local_save_files_len = get_available_local_savefiles().len();
+                let local_save_files_len = get_available_local_savefiles();
+                let local_save_files_len = if local_save_files_len.is_none() {
+                    0
+                } else {
+                    local_save_files_len.unwrap().len()
+                };
                 if local_save_files_len == 0 {
                     0
                 } else if i >= local_save_files_len - 1 {
@@ -1521,7 +1596,12 @@ impl App {
     pub fn load_save_previous(&mut self) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                let local_save_files_len = get_available_local_savefiles().len();
+                let local_save_files_len = get_available_local_savefiles();
+                let local_save_files_len = if local_save_files_len.is_none() {
+                    0
+                } else {
+                    local_save_files_len.unwrap().len()
+                };
                 if local_save_files_len == 0 {
                     0
                 } else if i == 0 {
@@ -1677,6 +1757,30 @@ impl App {
         }
         self.state.keybind_store = keybind_action_list;
     }
+
+    pub fn send_info_toast(&mut self, message: &str, duration: Option<Duration>) {
+        if let Some(duration) = duration {
+            self.state.toasts.push(ToastWidget::new(message.to_string(), duration, ToastType::Info));
+        } else {
+            self.state.toasts.push(ToastWidget::new(message.to_string(), Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Info));
+        }
+    }
+
+    pub fn send_error_toast(&mut self, message: &str, duration: Option<Duration>) {
+        if let Some(duration) = duration {
+            self.state.toasts.push(ToastWidget::new(message.to_string(), duration, ToastType::Error));
+        } else {
+            self.state.toasts.push(ToastWidget::new(message.to_string(), Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Error));
+        }
+    }
+
+    pub fn send_warning_toast(&mut self, message: &str, duration: Option<Duration>) {
+        if let Some(duration) = duration {
+            self.state.toasts.push(ToastWidget::new(message.to_string(), duration, ToastType::Warning));
+        } else {
+            self.state.toasts.push(ToastWidget::new(message.to_string(), Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning));
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1815,7 +1919,7 @@ impl AppConfig {
         ]
     }
 
-    pub fn edit_with_string(change_str: &str, app: &App) -> Self {
+    pub fn edit_with_string(change_str: &str, app: &mut App) -> Self {
         let mut config = app.config.clone();
         let mut lines = change_str.lines();
         while let Some(line) = lines.next() {
@@ -1830,6 +1934,8 @@ impl AppConfig {
                         config.save_directory = new_path;
                     } else {
                         error!("Invalid path: {}", value);
+                        app.send_error_toast(&format!("Invalid path: {}", value),None);
+                        app.send_info_toast("Check if the path exists",None);
                     }
                 }
                 "Select Default View" => {
@@ -1838,6 +1944,7 @@ impl AppConfig {
                         config.default_view = new_ui_mode.unwrap();
                     } else {
                         error!("Invalid UiMode: {}", value);
+                        app.send_error_toast(&format!("Invalid UiMode: {}", value),None);
                         info!("Valid UiModes are: {:?}", UiMode::all());
                     }
                 }
@@ -1847,7 +1954,8 @@ impl AppConfig {
                     } else if value.to_lowercase() == "false" {
                         config.always_load_last_save = false;
                     } else {
-                        warn!("Invalid boolean: {}", value);
+                        error!("Invalid boolean: {}", value);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value),None);
                     }
                 }
                 "Auto Save on Exit" => {
@@ -1856,7 +1964,8 @@ impl AppConfig {
                     } else if value.to_lowercase() == "false" {
                         config.save_on_exit = false;
                     } else {
-                        warn!("Invalid boolean: {}", value);
+                        error!("Invalid boolean: {}", value);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value),None);
                     }
                 }
                 "Disable Scrollbars" => {
@@ -1865,7 +1974,8 @@ impl AppConfig {
                     } else if value.to_lowercase() == "false" {
                         config.disable_scrollbars = false;
                     } else {
-                        warn!("Invalid boolean: {}", value);
+                        error!("Invalid boolean: {}", value);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value),None);
                     }
                 }
                 "Number of Days to Warn Before Due Date" => {
@@ -1874,6 +1984,7 @@ impl AppConfig {
                         config.warning_delta = new_delta.unwrap();
                     } else {
                         error!("Invalid number: {}", value);
+                        app.send_error_toast(&format!("Expected number of days (integer), got: {}", value),None);
                     }
                 }
                 "Tickrate" => {
@@ -1883,20 +1994,25 @@ impl AppConfig {
                         // make sure tickrate is not too low or too high
                         if new_tickrate < 50 {
                             error!("Tickrate must be greater than 50ms, to avoid overloading the CPU");
+                            app.send_error_toast("Tickrate must be greater than 50ms, to avoid overloading the CPU",None);
                         } else if new_tickrate > 1000 {
                             error!("Tickrate must be less than 1000ms");
+                            app.send_error_toast("Tickrate must be less than 1000ms",None);
                         } else {
                             config.tickrate = new_tickrate;
                             info!("Tickrate set to {}ms", new_tickrate);
                             info!("Restart the program to apply changes");
-                            info!("If experiencing slow input, or stuttering, try adjusting the tickrate")
+                            info!("If experiencing slow input, or stuttering, try adjusting the tickrate");
+                            app.send_info_toast(&format!("Tickrate set to {}ms", new_tickrate),None);
                         }
                     } else {
                         error!("Invalid number: {}", value);
+                        app.send_error_toast(&format!("Expected number of milliseconds (integer), got: {}", value),None);
                     }
                 }
                 _ => {
-                    error!("Invalid key: {}", key);
+                    debug!("Invalid key: {}", key);
+                    app.send_error_toast("Something went wrong 😢 ",None);
                     return config;
                 }
             }
@@ -1904,10 +2020,16 @@ impl AppConfig {
         config
     }
 
-    pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) {
+    pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) -> Result<(), String> {
         // make sure key is not empty, or already assigned
         
-        let config = get_config();
+        let get_config_status = get_config();
+        let config = if get_config_status.is_err() {
+            debug!("Error getting config: {}", get_config_status.unwrap_err());
+            AppConfig::default()
+        } else {
+            get_config_status.unwrap()
+        };
         let current_bindings = config.keybindings;
 
         // make a list from the keybindings
@@ -1918,7 +2040,8 @@ impl AppConfig {
         // check if index is valid
         if key_index >= key_list.len() {
             debug!("Invalid key index: {}", key_index);
-            error!("Unable to edit keybinding")
+            error!("Unable to edit keybinding");
+            return Err("Unable to edit keybinding 😢 ".to_string());
         }   
         let (key, _) = key_list[key_index];
 
@@ -1926,13 +2049,14 @@ impl AppConfig {
         if !current_bindings.iter().any(|(k, _)| k == key) {
             debug!("Invalid key: {}", key);
             error!("Unable to edit keybinding");
+            return Err("Unable to edit keybinding 😢 ".to_string());
         }
 
         for new_value in value.iter() {
             for (k, v) in current_bindings.iter() {
                 if v.contains(new_value) && k != key {
                     error!("Value {} is already assigned to {}", new_value, k);
-                    return;
+                    return Err(format!("Value {} is already assigned to {}", new_value, k));
                 }
             }          
         }
@@ -1959,8 +2083,13 @@ impl AppConfig {
             "change_card_status_to_active" => self.keybindings.change_card_status_to_active = value,
             "change_card_status_to_stale" => self.keybindings.change_card_status_to_stale = value,
             "reset_ui" => self.keybindings.reset_ui = value,
-            _ => (),
+            _ => {
+                debug!("Invalid key: {}", key);
+                error!("Unable to edit keybinding");
+                return Err("Something went wrong 😢 ".to_string());
+            }
         }
+        Ok(())
     }
     
     pub fn len(&self) -> usize {
