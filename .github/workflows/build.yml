@@ -8,7 +8,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  conditional_step:
+  build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -26,21 +26,18 @@ jobs:
 
         # Set the output named "version_updated"
         Write-Host "::set-output name=version_updated::$HasDiff"
-  
-  build:
-    if: steps.check_file_changed.outputs.version_updated == 'true'
-    runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v3
     - name: Build
+      if: steps.check_file_changed.outputs.version_updated == 'true'
       run: cargo build -r
     - name: Get version from cargo.toml
+      if: steps.check_file_changed.outputs.version_updated == 'true'
       run: |
-            #!/bin/bash
-            echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
+        #!/bin/bash
+        echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
 
     - uses: "marvinpinto/action-automatic-releases@latest"
+      if: steps.check_file_changed.outputs.version_updated == 'true'
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         automatic_release_tag: "v${{ env.version }}" 
