@@ -18,7 +18,7 @@ jobs:
       id: check_file_changed
       run: |
         #!/bin/bash
-        echo "version_updated=$(git diff --name-only HEAD~1 | grep -c 'Cargo.toml')" >> $GITHUB_OUTPUTS
+        echo "version_updated=$(git diff --name-only HEAD~1 | grep -c 'Cargo.toml')" >> $GITHUB_OUTPUT
 
     - name: Build
       if: steps.check_file_changed.outputs.version_updated == 'true'
