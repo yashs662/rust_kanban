@@ -27,22 +27,18 @@ jobs:
         # Set the output named "version_updated"
         Write-Host name=version_updated::$HasDiff >> $GITHUB_OUTPUT
 
-    - shell: pwsh
-      name: Build
-      if: steps.check_file_changed.outputs.version_updated == 'True'
+    - name: Build
+      if: steps.check_file_changed.outputs.version_updated
       run: cargo build -r
 
-    - shell: pwsh
-      name: Get version from cargo.toml
-      if: steps.check_file_changed.outputs.version_updated == 'True'
+    - name: Get version from cargo.toml
+      if: steps.check_file_changed.outputs.version_updated
       run: |
         #!/bin/bash
         echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
 
-    - shell: pwsh
-      name: Create release
-      if: steps.check_file_changed.outputs.version_updated == 'True'
-      uses: "marvinpinto/action-automatic-releases@latest"
+    - uses: "marvinpinto/action-automatic-releases@latest"
+      if: steps.check_file_changed.outputs.version_updated
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         automatic_release_tag: "v${{ env.version }}" 
