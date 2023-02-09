@@ -25,7 +25,7 @@ jobs:
         $HasDiff = $SourceDiff.Length -gt 0
 
         # Set the output named "version_updated"
-        Write-Host "::set-output name=version_updated::$HasDiff"
+        Write-Host name=version_updated::$HasDiff >> $GITHUB_OUTPUT
 
     - name: Build
       if: steps.check_file_changed.outputs.version_updated == 'true'
