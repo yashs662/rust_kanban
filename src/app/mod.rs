@@ -528,71 +528,90 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::OpenConfigMenu => {
-                        if self.ui_mode == UiMode::Config {
-                            // check if the prv ui mode is the same as the current ui mode
-                            if self.prev_ui_mode.is_some() && self.prev_ui_mode.as_ref().unwrap() == &UiMode::Config {
-                                self.ui_mode = self.config.default_view.clone();
-                            } else {
-                                self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
-                            }
-                        } else {
-                            self.prev_ui_mode = Some(self.ui_mode.clone());
-                            self.ui_mode = UiMode::Config;
-                            if self.state.config_state.selected().is_none() {
-                                self.config_next()
-                            }
-                            let available_focus_targets = self.ui_mode.get_available_targets();
-                            if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
-                                // check if available focus targets is empty
-                                if available_focus_targets.is_empty() {
-                                    self.focus = Focus::NoFocus;
+                        match self.ui_mode {
+                            UiMode::Config => {
+                                // check if the prv ui mode is the same as the current ui mode
+                                if self.prev_ui_mode.is_some() && self.prev_ui_mode.as_ref().unwrap() == &UiMode::Config {
+                                    self.ui_mode = self.config.default_view.clone();
                                 } else {
-                                    self.focus = Focus::from_str(available_focus_targets[0].as_str());
+                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                }
+                            },
+                            _ => {
+                                self.prev_ui_mode = Some(self.ui_mode.clone());
+                                self.ui_mode = UiMode::Config;
+                                if self.state.config_state.selected().is_none() {
+                                    self.config_next()
+                                }
+                                let available_focus_targets = self.ui_mode.get_available_targets();
+                                if !available_focus_targets.contains(&self.focus.to_str().to_string()) {
+                                    // check if available focus targets is empty
+                                    if available_focus_targets.is_empty() {
+                                        self.focus = Focus::NoFocus;
+                                    } else {
+                                        self.focus = Focus::from_str(available_focus_targets[0].as_str());
+                                    }
                                 }
                             }
                         }
                         AppReturn::Continue
                     }
                     Action::Up => {
-                        if self.ui_mode == UiMode::Config {
-                            if self.focus == Focus::Body {
-                                self.config_previous();
+                        match self.ui_mode {
+                            UiMode::Config => {
+                                if self.focus == Focus::Body {
+                                    self.config_previous();
+                                }
                             }
-                        } else if self.ui_mode == UiMode::MainMenu {
-                            self.main_menu_previous();
-                        } else if self.ui_mode == UiMode::LoadSave {
-                            self.load_save_previous();
-                        } else if self.ui_mode == UiMode::EditKeybindings {
-                            self.edit_keybindings_prev();
-                        } else if self.ui_mode == UiMode::SelectDefaultView {
-                            self.select_default_view_prev();
-                        } else {
-                            if self.focus == Focus::Body {
-                                self.dispatch(IoEvent::GoUp).await;
-                            } else if self.focus == Focus::Help {
-                                self.help_prev();
+                            UiMode::MainMenu => {
+                                self.main_menu_previous();
+                            }
+                            UiMode::LoadSave => {
+                                self.load_save_previous();
+                                self.dispatch(IoEvent::LoadPreview).await;
+                            }
+                            UiMode::EditKeybindings => {
+                                self.edit_keybindings_prev();
+                            }
+                            UiMode::SelectDefaultView => {
+                                self.select_default_view_prev();
+                            }
+                            _ => {
+                                if self.focus == Focus::Body {
+                                    self.dispatch(IoEvent::GoUp).await;
+                                } else if self.focus == Focus::Help {
+                                    self.help_prev();
+                                }
                             }
                         }
                         AppReturn::Continue
                     }
                     Action::Down => {
-                        if self.ui_mode == UiMode::Config {
-                            if self.focus == Focus::Body {
-                                self.config_next();
-                            }
-                        } else if self.ui_mode == UiMode::MainMenu {
-                            self.main_menu_next();
-                        } else if self.ui_mode == UiMode::LoadSave {
-                            self.load_save_next();
-                        } else if self.ui_mode == UiMode::EditKeybindings {
-                            self.edit_keybindings_next();
-                        } else if self.ui_mode == UiMode::SelectDefaultView {
-                            self.select_default_view_next();
-                        } else {
-                            if self.focus == Focus::Body {
-                                self.dispatch(IoEvent::GoDown).await;
-                            } else if self.focus == Focus::Help {
-                                self.help_next();
+                        match self.ui_mode {
+                            UiMode::Config => {
+                                if self.focus == Focus::Body {
+                                    self.config_next();
+                                }
+                            },
+                            UiMode::MainMenu => {
+                                self.main_menu_next();
+                            },
+                            UiMode::SelectDefaultView => {
+                                self.select_default_view_next();
+                            },
+                            UiMode::LoadSave => {
+                                self.load_save_next();
+                                self.dispatch(IoEvent::LoadPreview).await;
+                            },
+                            UiMode::EditKeybindings => {
+                                self.edit_keybindings_next();
+                            },
+                            _ => {
+                                if self.focus == Focus::Body {
+                                    self.dispatch(IoEvent::GoDown).await;
+                                } else if self.focus == Focus::Help {
+                                    self.help_next();
+                                }
                             }
                         }
                         AppReturn::Continue
@@ -667,6 +686,9 @@ impl App {
                                 AppReturn::Continue
                             }
                             _ => {
+                                if self.ui_mode == UiMode::LoadSave {
+                                    self.state.load_save_state = ListState::default();
+                                }
                                 // check if previous ui mode is the same as the current ui mode
                                 if self.prev_ui_mode == Some(self.ui_mode.clone()) {
                                     self.ui_mode = UiMode::MainMenu;
@@ -1293,6 +1315,7 @@ impl App {
                                 if let Some(card_index) = card_index {
                                     self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Complete;
                                     info!("Changed status to Completed for card {}", self.boards[index.unwrap()].cards[card_index].name);
+                                    self.send_info_toast(&format!("Changed status to Completed for card {}", self.boards[index.unwrap()].cards[card_index].name), None);
                                 }
                             }
                         }
@@ -1856,6 +1879,8 @@ pub struct AppState {
     pub current_cursor_position: Option<usize>,
     pub toasts: Vec<ToastWidget>,
     pub term_background_color: (u8, u8, u8),
+    pub preview_boards_and_cards: Option<Vec<Board>>,
+    pub preview_visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
 }
 
 impl Default for AppState {
@@ -1878,7 +1903,9 @@ impl Default for AppState {
             default_view_state: ListState::default(),
             current_cursor_position: None,
             toasts: Vec::new(),
-            term_background_color: get_term_bg_color()
+            term_background_color: get_term_bg_color(),
+            preview_boards_and_cards: None,
+            preview_visible_boards_and_cards: LinkedHashMap::new(),
         }
     }
 }

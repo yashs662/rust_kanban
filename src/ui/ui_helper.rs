@@ -90,7 +90,7 @@ where
         )
         .split(rect.size());
 
-    render_body(rect, chunks[0], app,);
+    render_body(rect, chunks[0], app, false);
 }
 
 pub fn render_title_body<'a,B>(rect: &mut Frame<B>, app: &App)
@@ -111,7 +111,7 @@ where
     let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
     
-    render_body(rect, chunks[1], app);
+    render_body(rect, chunks[1], app, false);
 }
 
 pub fn render_body_help<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
@@ -142,7 +142,7 @@ where
         .margin(1)
         .split(chunks[1]);
     
-    render_body(rect, chunks[0], app);
+    render_body(rect, chunks[0], app, false);
 
     let help = draw_help(&app.focus, false, keybind_store);
     let help_separator = Block::default().borders(Borders::LEFT);
@@ -167,7 +167,7 @@ where
         )
         .split(rect.size());
 
-    render_body(rect, chunks[0], app);
+    render_body(rect, chunks[0], app, false);
 
     let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[1]);
@@ -205,7 +205,7 @@ where
     let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
-    render_body(rect, chunks[1], app);
+    render_body(rect, chunks[1], app, false);
 
     let help = draw_help(&app.focus, false, keybind_store);
     let help_separator = Block::default().borders(Borders::LEFT);
@@ -234,7 +234,7 @@ where
     let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
-    render_body(rect, chunks[1], app);
+    render_body(rect, chunks[1], app, false);
 
     let log = draw_logs(&app.focus, true, false);
     rect.render_widget(log, chunks[2]);
@@ -269,7 +269,7 @@ where
         .margin(1)
         .split(chunks[1]);
 
-    render_body(rect, chunks[0], app);
+    render_body(rect, chunks[0], app, false);
 
     let help = draw_help(&app.focus, false, keybind_store);
     let help_separator = Block::default().borders(Borders::LEFT);
@@ -315,7 +315,7 @@ where
     let title = draw_title(&app.focus, false);
     rect.render_widget(title, chunks[0]);
 
-    render_body(rect, chunks[1], app);
+    render_body(rect, chunks[1], app, false);
 
     let help = draw_help(&app.focus, false, keybind_store);
     let help_separator = Block::default().borders(Borders::LEFT);
@@ -1097,12 +1097,21 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
 }
 
 /// Draws Kanban boards
-pub fn render_body<'a,B>(rect: &mut Frame<B>, area: Rect, app: &App)
+pub fn render_body<'a,B>(rect: &mut Frame<B>, area: Rect, app: &App, preview_mode: bool)
 where
     B: Backend,
 {
+    let fallback_boards = vec![];
     let focus = &app.focus;
-    let boards = &app.boards;
+    let boards = if preview_mode {
+        if app.state.preview_boards_and_cards.is_some() {
+            &app.state.preview_boards_and_cards.as_ref().unwrap()
+        } else {
+            &fallback_boards
+        }
+    } else {
+        &app.boards
+    };
     let current_board = &app.state.current_board_id.unwrap_or(0);
 
     let add_board_key = app.state.keybind_store.iter()
@@ -1110,21 +1119,36 @@ where
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    // check if self.visible_boards_and_cards is empty
-    if app.visible_boards_and_cards.is_empty() {
-        let empty_paragraph = Paragraph::new(
-            ["No boards found, press ".to_string(), add_board_key, " to add a new board".to_string()]
-            .concat())
-            .alignment(Alignment::Center)
-            .block(
-                Block::default()
-                    .title("Boards")
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Plain),
-            )
-            .wrap(tui::widgets::Wrap { trim: true });
-        rect.render_widget(empty_paragraph, area);
-        return;
+    // check if any boards are present
+    if preview_mode {
+        if app.state.preview_boards_and_cards.is_none() || app.state.preview_boards_and_cards.as_ref().unwrap().is_empty() {
+            let empty_paragraph = Paragraph::new("No boards found".to_string())
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .title("Boards")
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Plain)
+                )
+                .style(ERROR_TEXT_STYLE);
+            rect.render_widget(empty_paragraph, area);
+            return;
+        }
+    } else {
+        if app.visible_boards_and_cards.is_empty() {
+            let empty_paragraph = Paragraph::new(
+                ["No boards found, press ".to_string(), add_board_key, " to add a new board".to_string()]
+                .concat())
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .title("Boards")
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Plain),
+                );
+            rect.render_widget(empty_paragraph, area);
+            return;
+        }
     }
     
     // make a list of constraints depending on NO_OF_BOARDS_PER_PAGE constant
@@ -1166,7 +1190,11 @@ where
         .constraints(constraints.as_ref())
         .split(chunks[0]);
     // visible_boards_and_cards: Vec<LinkedHashMap<String, Vec<String>>>
-    let visible_boards_and_cards = app.visible_boards_and_cards.clone();
+    let visible_boards_and_cards = if preview_mode{
+        app.state.preview_visible_boards_and_cards.clone()
+    } else {
+        app.visible_boards_and_cards.clone()
+    };
     for (board_index, board_and_card_tuple) in visible_boards_and_cards.iter().enumerate() {
         // render board with title in board chunks alongside with cards in card chunks of the board
         // break if board_index is more than NO_OF_BOARDS_PER_PAGE
@@ -1175,7 +1203,11 @@ where
         }
         let board_id = board_and_card_tuple.0;
         // find index of board with board_id in boards
-        let board = app.boards.iter().find(|&b| b.id == *board_id);
+        let board = if preview_mode {
+            app.state.preview_boards_and_cards.as_ref().unwrap().iter().find(|&b| b.id == *board_id)
+        } else {
+            app.boards.iter().find(|&b| b.id == *board_id)
+        };
         // check if board is found if not continue
         if board.is_none() {
             continue;
@@ -1945,14 +1977,29 @@ where
     rect.render_widget(help_paragraph, chunks[2]);
 
     // preview pane
-    let preview_paragraph = Paragraph::new("Preview")
-        .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Plain),
-        );
-    rect.render_widget(preview_paragraph, main_chunks[1]);
+    if app.state.load_save_state.selected().is_none() {
+        let preview_paragraph = Paragraph::new("Select a save file to preview")
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Plain),
+            );
+        rect.render_widget(preview_paragraph, main_chunks[1]);
+    } else {
+        if app.state.preview_boards_and_cards.is_none() {
+            let preview_paragraph = Paragraph::new("Loading preview...")
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Plain),
+                );
+            rect.render_widget(preview_paragraph, main_chunks[1]);
+        } else {
+            render_body(rect, main_chunks[1], app, true)
+        }
+    }
 }
 
 pub fn render_toast<B>(rect: &mut Frame<B>, app: &App)

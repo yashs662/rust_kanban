@@ -63,6 +63,7 @@ impl IoAsyncHandler {
             IoEvent::GoDown => self.go_down().await,
             IoEvent::RefreshVisibleBoardsandCards => self.refresh_visible_boards_and_cards().await,
             IoEvent::AutoSave => self.auto_save().await,
+            IoEvent::LoadPreview => self.load_preview().await,
         };
 
         if let Err(err) = result {
@@ -800,6 +801,81 @@ impl IoAsyncHandler {
                 Err(e) => Err(anyhow!("Error saving file: {}", e)),
             }
         }
+    }
+
+    async fn load_preview(&mut self) -> Result<()> {
+        let mut app = self.app.lock().await;
+        if app.state.load_save_state.selected().is_none() {
+            return Ok(());
+        }
+        app.state.preview_boards_and_cards = None;
+
+        let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
+        let local_files = get_available_local_savefiles();
+        let local_files = if local_files.is_none() {
+            error!("Could not get local save files");
+            self.app.lock().await.send_error_toast("Could not get local save files", None);
+            vec![]
+        } else {
+            local_files.unwrap()
+        };
+        // check if the file exists
+        if save_file_index >= local_files.len() {
+            error!("Cannot load preview: No such file");
+            self.app.lock().await.send_error_toast("Cannot load preview: No such file", None);
+            return Ok(());
+        }
+        let save_file_name = local_files[save_file_index].clone();
+        let version = save_file_name.split("_v").collect::<Vec<&str>>();
+        if version.len() < 2 {
+            error!("Cannot load preview: invalid file name");
+            self.app.lock().await.send_error_toast("Cannot load preview: invalid file name", None);
+            return Ok(());
+        }
+        // convert to u32
+        let version = version[1].parse::<u32>();
+        if version.is_err() {
+            error!("Cannot load preview: invalid file name");
+            self.app.lock().await.send_error_toast("Cannot load preview: invalid file name", None);
+            return Ok(());
+        }
+        let version = version.unwrap();
+        let board_data = get_local_kanban_state(save_file_name.clone(), version);
+        match board_data {
+            Ok(boards) => {
+                app.state.preview_boards_and_cards = Some(boards);
+                
+                let mut counter = 0;
+                // get self.boards and make Vec<LinkedHashMap<u128, Vec<u128>>> of visible boards and cards
+                let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
+                for board in app.state.preview_boards_and_cards.as_ref().unwrap().iter() {
+                    if counter == NO_OF_BOARDS_PER_PAGE {
+                        break;
+                    }
+                    let mut visible_cards: Vec<u128> = Vec::new();
+                    if board.cards.len() > NO_OF_CARDS_PER_BOARD.into() {
+                        for card in board.cards.iter().take(NO_OF_CARDS_PER_BOARD.into()) {
+                            visible_cards.push(card.id);
+                        }
+                    } else {
+                        for card in &board.cards {
+                            visible_cards.push(card.id);
+                        }
+                    }
+
+                    let mut visible_board: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
+                    visible_board.insert(board.id, visible_cards);
+                    visible_boards_and_cards.extend(visible_board);
+                    counter += 1;
+                }
+                app.state.preview_visible_boards_and_cards = visible_boards_and_cards;
+            },
+            Err(e) => {
+                error!("Error loading preview: {}", e);
+                self.app.lock().await.send_error_toast("Error loading preview", None);
+            }
+        }
+        Ok(())
     }
 
 }

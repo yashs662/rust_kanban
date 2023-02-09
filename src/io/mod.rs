@@ -14,5 +14,6 @@ pub enum IoEvent {
     GoUp,
     GoDown,
     RefreshVisibleBoardsandCards,
-    AutoSave
+    AutoSave,
+    LoadPreview
 }

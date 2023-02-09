@@ -7,8 +7,27 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  conditional_step:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 2
+    - shell: pwsh
+      id: check_file_changed
+      run: |
+        # Diff HEAD with the previous commit
+        $diff = git diff --name-only HEAD^ HEAD
 
+        # Check if the file Cargo.toml is changed
+        $SourceDiff = $diff | Where-Object { $_ -match "Cargo.toml" }
+        $HasDiff = $SourceDiff.Length -gt 0
+
+        # Set the output named "version_updated"
+        Write-Host "::set-output name=version_updated::$HasDiff"
+  
+  build:
+    if: steps.check_file_changed.outputs.version_updated == 'true'
     runs-on: ubuntu-latest
 
     steps:
