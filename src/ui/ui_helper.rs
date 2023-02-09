@@ -25,6 +25,7 @@ use tui::widgets::{
     ListState,
     Gauge, Table, Cell, Row, TableState, Clear, Wrap,
 };
+use crate::calculate_cursor_position;
 use crate::constants::{
     APP_TITLE,
     MIN_TERM_WIDTH,
@@ -54,7 +55,7 @@ use crate::constants::{
     CARD_COMPLETED_STATUS_STYLE,
     CARD_STALE_STATUS_STYLE,
     MAX_TOASTS_TO_DISPLAY,
-    SCREEN_TO_TOAST_WIDTH_RATIO,
+    SCREEN_TO_TOAST_WIDTH_RATIO, FIELD_NOT_SET,
 };
 
 use crate::app::{
@@ -1309,7 +1310,11 @@ where
                 card_title
             };
 
-            let mut card_description = Text::from(card.unwrap().description.clone());
+            let mut card_description = if card.unwrap().description == FIELD_NOT_SET {
+                Text::from("Description: Not Set")
+            } else {
+                Text::from(card.unwrap().description.clone())
+            };
             let card_due_date = card.unwrap().date_due.clone();
             if !card_due_date.is_empty() {
                 let parsed_due_date = NaiveDateTime::parse_from_str(&card_due_date, "%d/%m/%Y-%H:%M:%S");
@@ -1451,10 +1456,13 @@ where
     let title = draw_title(&Focus::default(), false);
     rect.render_widget(title, chunks[0]);
 
-    let text = vec![Spans::from(Span::styled(
-        "Loading...... \n\n 
-        `(*>﹏<*)′
-        \n\nPlease wait",FOCUSED_ELEMENT_STYLE))];
+    let text = Spans::from(
+        vec![
+            Span::styled("Loading......",FOCUSED_ELEMENT_STYLE),
+            Span::styled("`(*>﹏<*)′",FOCUSED_ELEMENT_STYLE),
+            Span::styled("Please wait",FOCUSED_ELEMENT_STYLE)
+            ],
+        );
     let body = Paragraph::new(text)
     .block(Block::default().borders(Borders::ALL))
     .alignment(Alignment::Center);
@@ -1542,8 +1550,21 @@ where
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let board_name_field = app.state.new_board_form[0].clone();
-    let board_description_field = app.state.new_board_form[1].clone();
+    let wrapped_title_text = textwrap::wrap(
+        &app.state.new_board_form[0],
+        (chunks[1].width - 2) as usize
+        );
+    let board_name_field = wrapped_title_text.iter()
+        .map(|x| Spans::from(Span::raw(&**x)))
+        .collect::<Vec<Spans>>();
+    let wrapped_description_text = textwrap::wrap(
+        &app.state.new_board_form[1],
+        (chunks[2].width - 2) as usize
+        );
+    let board_description_field = wrapped_description_text.iter()
+        .map(|x| Spans::from(Span::raw(&**x)))
+        .collect::<Vec<Spans>>();
+    
     let board_name = Paragraph::new(board_name_field)
         .alignment(Alignment::Left)
         .block(
@@ -1552,8 +1573,7 @@ where
                 .style(name_style)
                 .border_type(BorderType::Plain)
                 .title("Board Name (required)")
-        )
-        .wrap(tui::widgets::Wrap { trim: true });
+        );
     rect.render_widget(board_name, chunks[1]);
 
     let board_description = Paragraph::new(board_description_field)
@@ -1564,8 +1584,7 @@ where
                 .style(description_style)
                 .border_type(BorderType::Plain)
                 .title("Board Description")
-        )
-        .wrap(tui::widgets::Wrap { trim: true });
+        );
     rect.render_widget(board_description, chunks[2]);
 
     let input_mode_key = app.state.keybind_store.iter()
@@ -1620,27 +1639,25 @@ where
     rect.render_widget(submit_button, chunks[4]);
 
     if app.focus == Focus::NewBoardName && app.state.status == AppStatus::UserInput{
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
+        if app.state.current_cursor_position.is_some() {
+            let (x_pos, y_pos) = calculate_cursor_position(
+                wrapped_title_text,
+                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_board_form[0].len()),
+                chunks[1]);
+            rect.set_cursor(x_pos, y_pos);
         } else {
-            app.state.new_board_form[0].len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[1].width - 2);
-        let y_offset = current_cursor_position / (chunks[1].width - 2);
-        let x_cursor_position = chunks[1].x + x_offset + 1;
-        let y_cursor_position = chunks[1].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
+            rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
+        }
     } else if app.focus == Focus::NewBoardDescription && app.state.status == AppStatus::UserInput{
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
+        if app.state.current_cursor_position.is_some() {
+            let (x_pos, y_pos) = calculate_cursor_position(
+                wrapped_description_text,
+                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_board_form[1].len()),
+                chunks[2]);
+            rect.set_cursor(x_pos, y_pos);
         } else {
-            app.state.new_board_form[1].len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[2].width - 2);
-        let y_offset = current_cursor_position / (chunks[2].width - 2);
-        let x_cursor_position = chunks[2].x + x_offset + 1;
-        let y_cursor_position = chunks[2].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
+            rect.set_cursor(chunks[2].x + 1, chunks[2].y + 1);
+        }
     }
 }
 
@@ -1690,9 +1707,27 @@ where
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let card_name_field = app.state.new_card_form[0].clone();
-    let card_description_field = app.state.new_card_form[1].clone();
-    let card_due_date_field = app.state.new_card_form[2].clone();
+    let wrapped_card_name_text = textwrap::wrap(
+        &app.state.new_card_form[0],
+        (chunks[1].width - 2) as usize
+        );
+    let card_name_field = wrapped_card_name_text.iter()
+        .map(|x| Spans::from(Span::raw(&**x)))
+        .collect::<Vec<Spans>>();
+    let wrapped_card_description_text = textwrap::wrap(
+        &app.state.new_card_form[1],
+        (chunks[2].width - 2) as usize
+        );
+    let card_description_field = wrapped_card_description_text.iter()
+        .map(|x| Spans::from(Span::raw(&**x)))
+        .collect::<Vec<Spans>>();
+    let wrapped_card_due_date_text = textwrap::wrap(
+        &app.state.new_card_form[2],
+        (chunks[3].width - 2) as usize
+        );
+    let card_due_date_field = wrapped_card_due_date_text.iter()
+        .map(|x| Spans::from(Span::raw(&**x)))
+        .collect::<Vec<Spans>>();
     let card_name = Paragraph::new(card_name_field)
         .alignment(Alignment::Left)
         .block(
@@ -1701,8 +1736,7 @@ where
                 .style(name_style)
                 .border_type(BorderType::Plain)
                 .title("Card Name (required)")
-        )
-        .wrap(tui::widgets::Wrap { trim: true });
+        );
     rect.render_widget(card_name, chunks[1]);
 
     let card_description = Paragraph::new(card_description_field)
@@ -1713,8 +1747,7 @@ where
                 .style(description_style)
                 .border_type(BorderType::Plain)
                 .title("Card Description")
-        )
-        .wrap(tui::widgets::Wrap { trim: true });
+        );
     rect.render_widget(card_description, chunks[2]);
 
     let card_due_date = Paragraph::new(card_due_date_field)
@@ -1724,7 +1757,7 @@ where
                 .borders(Borders::ALL)
                 .style(due_date_style)
                 .border_type(BorderType::Plain)
-                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS)")
+                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)")
         );
     rect.render_widget(card_due_date, chunks[3]);
 
@@ -1781,38 +1814,35 @@ where
     rect.render_widget(submit_button, chunks[5]);
 
     if app.focus == Focus::NewCardName && app.state.status == AppStatus::UserInput{
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
+        if app.state.current_cursor_position.is_some() {
+            let (x_pos, y_pos) = calculate_cursor_position(
+                wrapped_card_name_text,
+                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_card_form[0].len()),
+                chunks[1]);
+            rect.set_cursor(x_pos, y_pos);
         } else {
-            app.state.new_card_form[0].len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[1].width - 2);
-        let y_offset = current_cursor_position / (chunks[1].width - 2);
-        let x_cursor_position = chunks[1].x + x_offset + 1;
-        let y_cursor_position = chunks[1].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
+            rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
+        }
     } else if app.focus == Focus::NewCardDescription && app.state.status == AppStatus::UserInput{
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
+        if app.state.current_cursor_position.is_some() {
+            let (x_pos, y_pos) = calculate_cursor_position(
+                wrapped_card_description_text,
+                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_card_form[1].len()),
+                chunks[2]);
+            rect.set_cursor(x_pos, y_pos);
         } else {
-            app.state.new_card_form[1].len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[2].width - 2);
-        let y_offset = current_cursor_position / (chunks[2].width - 2);
-        let x_cursor_position = chunks[2].x + x_offset + 1;
-        let y_cursor_position = chunks[2].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
+            rect.set_cursor(chunks[2].x + 1, chunks[2].y + 1);
+        }
     } else if app.focus == Focus::NewCardDueDate && app.state.status == AppStatus::UserInput{
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
+        if app.state.current_cursor_position.is_some() {
+            let (x_pos, y_pos) = calculate_cursor_position(
+                wrapped_card_due_date_text,
+                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_card_form[2].len()),
+                chunks[3]);
+            rect.set_cursor(x_pos, y_pos);
         } else {
-            app.state.new_card_form[2].len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[3].width - 2);
-        let y_offset = current_cursor_position / (chunks[3].width - 2);
-        let x_cursor_position = chunks[3].x + x_offset + 1;
-        let y_cursor_position = chunks[3].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
+            rect.set_cursor(chunks[3].x + 1, chunks[3].y + 1);
+        }
     }
 }
 
@@ -1820,6 +1850,13 @@ pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState,
 where
     B: Backend,
 {
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(30),
+            Constraint::Percentage(70),
+            ].as_ref())
+        .split(rect.size());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -1827,7 +1864,7 @@ where
             Constraint::Percentage(70),
             Constraint::Length(3),
             ].as_ref())
-        .split(rect.size());
+        .split(main_chunks[0]);
 
     let title_paragraph = Paragraph::new("Load a Save")
         .alignment(Alignment::Center)
@@ -1903,8 +1940,19 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Plain),
-        );
+        )
+        .wrap(Wrap { trim: false });
     rect.render_widget(help_paragraph, chunks[2]);
+
+    // preview pane
+    let preview_paragraph = Paragraph::new("Preview")
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Plain),
+        );
+    rect.render_widget(preview_paragraph, main_chunks[1]);
 }
 
 pub fn render_toast<B>(rect: &mut Frame<B>, app: &App)
@@ -1954,11 +2002,19 @@ where
     }
 
     // display a total count of toasts on the top right corner
+    let text_offset = 15;
     let toast_count = app.state.toasts.len();
-    let toast_count_text = format!("{} Message(s)", toast_count);
+    let toast_count_text = format!(" {} Message(s)", toast_count);
     let toast_count_paragraph = Paragraph::new(toast_count_text)
         .alignment(Alignment::Right)
-        .block(Block::default());
-    rect.render_widget(toast_count_paragraph, Rect::new(rect.size().width - 13, 0, 13, 1));
+        .block(
+            Block::default()
+                .borders(Borders::LEFT)
+                .border_type(BorderType::Plain)
+        )
+        .style(DEFAULT_STYLE);
+    let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
+    rect.render_widget(Clear, message_area);
+    rect.render_widget(toast_count_paragraph, message_area);
 
 }

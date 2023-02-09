@@ -513,7 +513,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::ResetUI => {
-                        let new_ui_mode = UiMode::TitleBodyHelpLog;
+                        let new_ui_mode = self.config.default_view.clone();
                         let available_focus_targets = UiMode::get_available_targets(&new_ui_mode);
                         // check if focus is still available in the new ui_mode if not set it to the first available tab
                         if !available_focus_targets.contains(&self.focus.to_str().to_string()) {

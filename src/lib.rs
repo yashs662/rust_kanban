@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::stdout;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,6 +13,7 @@ use inputs::InputEvent;
 use io::IoEvent;
 use tui::backend::CrosstermBackend;
 use tui::Terminal;
+use tui::layout::Rect;
 use ui::ui_main;
 
 pub mod app;
@@ -68,3 +70,26 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
 
     Ok(())
 }
+
+/// Takes wrapped text and the current cursor position (1D) and the avaiable space to return the x and y position of the cursor (2D)
+fn calculate_cursor_position(text: Vec<Cow<str>>, current_cursor_position: usize, view_box: Rect) -> (u16, u16) {
+    let wrapped_text_iter = text.iter();
+    let mut cursor_pos = current_cursor_position;
+
+    for (i, line) in wrapped_text_iter.enumerate() {
+        if cursor_pos <= line.len() || i == text.len() - 1 {
+            let x_pos = view_box.x + 1 + cursor_pos as u16;
+            let y_pos = view_box.y + 1 + i as u16;
+            // if x_pos is > i subtract i
+            let x_pos = if x_pos > i as u16 {
+                x_pos - i as u16
+            } else {
+                x_pos
+            };
+            return (x_pos, y_pos);
+        }
+        cursor_pos -= line.len();
+    }
+    (view_box.x + 1, view_box.y + 1)
+}
+
