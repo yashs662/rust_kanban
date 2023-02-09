@@ -14,31 +14,24 @@ jobs:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 2
-    - shell: pwsh
+    - name: check if file changed
       id: check_file_changed
       run: |
-        # Diff HEAD with the previous commit
-        $diff = git diff --name-only HEAD^ HEAD
-
-        # Check if the file Cargo.toml is changed
-        $SourceDiff = $diff | Where-Object { $_ -match "Cargo.toml" }
-        $HasDiff = $SourceDiff.Length -gt 0
-
-        # Set the output named "version_updated"
-        Write-Host name=version_updated::$HasDiff >> $GITHUB_OUTPUT
+        #!/bin/bash
+        echo "version_updated=$(git diff --name-only HEAD~1 | grep -c 'Cargo.toml')" >> $GITHUB_OUTPUTS
 
     - name: Build
-      if: steps.check_file_changed.outputs.version_updated
+      if: steps.check_file_changed.outputs.version_updated == 'true'
       run: cargo build -r
 
     - name: Get version from cargo.toml
-      if: steps.check_file_changed.outputs.version_updated
+      if: steps.check_file_changed.outputs.version_updated == 'true'
       run: |
         #!/bin/bash
         echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
 
     - uses: "marvinpinto/action-automatic-releases@latest"
-      if: steps.check_file_changed.outputs.version_updated
+      if: steps.check_file_changed.outputs.version_updated == 'true'
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         automatic_release_tag: "v${{ env.version }}" 
