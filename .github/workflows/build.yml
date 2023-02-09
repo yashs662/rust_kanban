@@ -1,8 +1,7 @@
 name: Linux build
+
 on:
-  push:
-    branches:
-      - 'main'
+  workflow_dispatch
 
 env:
   CARGO_TERM_COLOR: always
@@ -10,28 +9,17 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v2
-      with:
-        fetch-depth: 2
-    - name: check if file changed
-      id: check_file_changed
-      run: |
-        #!/bin/bash
-        echo "version_updated=$(git diff --name-only HEAD~1 | grep -c 'Cargo.toml')" >> $GITHUB_OUTPUT
-
+    - uses: actions/checkout@v3
     - name: Build
-      if: steps.check_file_changed.outputs.version_updated == 'true'
       run: cargo build -r
-
     - name: Get version from cargo.toml
-      if: steps.check_file_changed.outputs.version_updated == 'true'
       run: |
-        #!/bin/bash
-        echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
+            #!/bin/bash
+            echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
 
     - uses: "marvinpinto/action-automatic-releases@latest"
-      if: steps.check_file_changed.outputs.version_updated == 'true'
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         automatic_release_tag: "v${{ env.version }}" 
