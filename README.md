@@ -5,13 +5,13 @@
 ## Contribution
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
 ## TODO
-- [ ] Toast Message Implementation -- (Inspired by [nvim-notify](https://github.com/rcarriga/nvim-notify))
-- [ ] Implement Card View and Board View
 - [ ] Implement previews for loading a save
+- [ ] Implement Card View and Board View
 - [ ] Implement Cloud saves (Google drive maybe? as i am not going to host a server)
-- [ ] Improve Help Messages
 - [ ] De-clutter Code
 ## Completed Features
+- [x] Toast Message Implementation -- (Inspired by [nvim-notify](https://github.com/rcarriga/nvim-notify))
+- [x] Improve Help Messages
 - [x] Custom Keybindings
 - [x] Implement the Kanban Boards ( the main UI basically )
 - [x] Auto Save on exit
