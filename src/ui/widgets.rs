@@ -1,7 +1,7 @@
 use std::{time::Duration, sync::Arc};
 use tokio::time::Instant;
 
-use crate::{app::App, constants::TOAST_FADE_TIME};
+use crate::{app::App, constants::{TOAST_FADE_OUT_TIME, TOAST_FADE_IN_TIME}};
 
 #[derive(Clone, Debug)]
 pub struct ToastWidget {
@@ -64,11 +64,16 @@ impl WidgetManager {
         // remove all inactive toasts
         for i in (0..toasts.len()).rev() {
             // based on the toast_type lerp between the toast_type color and 0,0,0 within the TOAST_FADE_TIME which is in milliseconds
-            if toasts[i].start_time.elapsed() < toasts[i].duration -  Duration::from_millis(TOAST_FADE_TIME) {
+            if toasts[i].start_time.elapsed() < Duration::from_millis(TOAST_FADE_IN_TIME) {
+                // make the toast fade in use fade in time lerp from 0,0,0 to toast_type color
+                let t = toasts[i].start_time.elapsed().as_millis() as f32 / TOAST_FADE_IN_TIME as f32;
+                toasts[i].toast_color = lerp_between(term_background_color, toasts[i].toast_type.as_color(), t);
+            } else if toasts[i].start_time.elapsed() < toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME) {
+                // make the toast stay at the toast_type color
                 toasts[i].toast_color = toasts[i].toast_type.as_color();
             } else {
-                // lerp from toast_type color to term_background_color
-                let t = (toasts[i].start_time.elapsed() - (toasts[i].duration - Duration::from_millis(TOAST_FADE_TIME))).as_millis() as f32 / TOAST_FADE_TIME as f32;
+                // make the toast fade out use fade out time lerp from toast_type color to 0,0,0
+                let t = (toasts[i].start_time.elapsed() - (toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME))).as_millis() as f32 / TOAST_FADE_OUT_TIME as f32;
                 toasts[i].toast_color = lerp_between(toasts[i].toast_type.as_color(), term_background_color, t);
             }
             if toasts[i].start_time.elapsed() > toasts[i].duration {

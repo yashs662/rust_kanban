@@ -884,6 +884,7 @@ fn prepare_boards (app: &mut App) -> Vec<Board> {
             match local_data {
                 Ok(data) => {
                     info!("👍 Local data loaded from {:?}", latest_save_file);
+                    app.send_info_toast(&format!("👍 Local data loaded from {:?}", latest_save_file), None);
                     data
                 },
                 Err(err) => {

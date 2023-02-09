@@ -1372,7 +1372,17 @@ where
             .iter()
             .position(|board| board.id == current_board_id)
             .unwrap_or(0) + 1;
-        let percentage = (current_board_index as f64 / boards.len() as f64) * 100.0;
+        let percentage = {
+            // make sure percentage is not nan and is between 0 and 100
+            let temp_percent = (current_board_index as f64 / boards.len() as f64) * 100.0;
+            if temp_percent.is_nan() {
+                0
+            } else if temp_percent > 100.0 {
+                100
+            } else {
+                temp_percent as u16
+            }
+        };
         let line_gauge = Gauge::default()
             .block(Block::default())
             .gauge_style(PROGRESS_BAR_STYLE)
@@ -1902,7 +1912,12 @@ where
     B: Backend,
 {
     // get the latest MAX_TOASTS_TO_DISPLAY number of toasts from app.state.toasts
-    let toasts = app.state.toasts.iter().rev().take(MAX_TOASTS_TO_DISPLAY).rev().collect::<Vec<&ToastWidget>>();
+    let toasts = app.state.toasts.iter()
+        .rev()
+        .take(MAX_TOASTS_TO_DISPLAY)
+        .rev()
+        .collect::<Vec<&ToastWidget>>();
+  
     if toasts.len() == 0 {
         return;
     }
@@ -1922,7 +1937,7 @@ where
         let mut toast_height = 2; // atleast one line of message + 1 line for the border
         let lines  = textwrap::wrap(&toast.message, (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) as usize);
         toast_height += lines.len() as u16;
-        let y_offset = toast_height * (i as u16);
+        let y_offset = toast_height * (i as u16) + 1;
         let toast_block = Block::default()
             .title(toast_title)
             .borders(Borders::ALL)
@@ -1937,4 +1952,13 @@ where
             rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
         rect.render_widget(toast_paragraph, Rect::new(x_offset, y_offset, rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
     }
+
+    // display a total count of toasts on the top right corner
+    let toast_count = app.state.toasts.len();
+    let toast_count_text = format!("{} Message(s)", toast_count);
+    let toast_count_paragraph = Paragraph::new(toast_count_text)
+        .alignment(Alignment::Right)
+        .block(Block::default());
+    rect.render_widget(toast_count_paragraph, Rect::new(rect.size().width - 13, 0, 13, 1));
+
 }

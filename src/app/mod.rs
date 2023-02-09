@@ -885,6 +885,7 @@ impl App {
                                         self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     } else {
                                         warn!("New board name is empty or already exists");
+                                        self.send_warning_toast("New board name is empty or already exists", None);
                                     }
                                     self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     if let Some(previous_focus) = &self.state.previous_focus {
@@ -954,6 +955,7 @@ impl App {
                                     };
                                     if due_date.is_none() {
                                         warn!("Invalid due date");
+                                        self.send_warning_toast("Invalid due date", None);
                                         self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                         return AppReturn::Continue;
                                     }
@@ -973,6 +975,7 @@ impl App {
                                         self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     } else {
                                         warn!("New card name is empty or already exists");
+                                        self.send_warning_toast("New card name is empty or already exists", None);
                                     }
 
                                     if let Some(previous_focus) = &self.state.previous_focus {
@@ -1174,6 +1177,7 @@ impl App {
                         // check if current board is not empty
                         if self.state.current_board_id.is_none() {
                             warn!("No board available to add card to");
+                            self.send_warning_toast("No board available to add card to",None);
                             return AppReturn::Continue;
                         }
                         self.state.new_card_form = vec![String::new(), String::new(), String::new()];
@@ -1467,6 +1471,7 @@ impl App {
                 }
             } else {
                 warn!("No action accociated to {}", key);
+                self.send_warning_toast(&format!("No action accociated to {}", key), None);
                 AppReturn::Continue
             }
         }
