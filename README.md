@@ -28,5 +28,8 @@
 - [x] Input Handling
 - [x] Logging
   
+## Known Issues
+- [ ] When a card is moved below the last card in a column, the view is not refreshed and the card is not visible
+
 ## Screenshots
 ![rust_kanban](https://user-images.githubusercontent.com/66156000/206888828-5f9678e6-eaf1-4389-9e85-c65797e2f204.png)
