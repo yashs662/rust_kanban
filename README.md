@@ -5,10 +5,15 @@
 ## Contribution
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
 ## TODO
-- [ ] Implement Card View and Board View
+- [ ] Implement Card View and Board View (Expanded view of cards and boards)
 - [ ] Add ability to export data to JSON / Switch to JSON for file saving (maybe? need to test speed of JSON vs savefile binary)
 - [ ] Implement Cloud saves (Google drive maybe? as i am not going to host a server)
-- [ ] De-clutter Code
+- [ ] Implement a way to add custom colors (Theme support)
+- [ ] Implement a way to add custom keybindings from config file (maybe club this with the theme support)
+- [ ] Implement a Command Palette (like in vscode (Ctrl + Shift + P)) as a way to interact with the app instead of using keybindings (maybe use meilisearch for this?)
+- [ ] Implement animations for UI elements
+- [ ] Implement a way to interact with the kanban board using the mouse (scrolling, dragging, etc)
+- [ ] Implement a way to sync with other services like notion
 ## Completed Features
 - [x] Implement previews for loading a save
 - [x] Toast Message Implementation -- (Inspired by [nvim-notify](https://github.com/rcarriga/nvim-notify))

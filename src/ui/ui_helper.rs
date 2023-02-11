@@ -328,10 +328,11 @@ where
     rect.render_widget(log, chunks[3]);
 }
 
-pub fn render_config<'a,B>(rect: &mut Frame<B>, app: &App, config_state: &mut TableState, popup_mode: bool)
+pub fn render_config<'a,B>(rect: &mut Frame<B>, app: &App, config_state: &mut TableState)
 where
     B: Backend,
 {
+    let popup_mode = app.state.popup_mode;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -598,10 +599,11 @@ where
     rect.render_widget(config_help, chunks[1]);
 }
 
-pub fn render_edit_keybindings<'a,B>(rect: &mut Frame<B>, app: &App, edit_keybindings_state: &mut TableState, popup_mode: bool)
+pub fn render_edit_keybindings<'a,B>(rect: &mut Frame<B>, app: &App, edit_keybindings_state: &mut TableState)
 where
     B: Backend,
 {
+    let popup_mode = app.state.popup_mode;
     let default_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
@@ -913,7 +915,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
     let default_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
-        if *focus == Focus::Help {
+        if *focus == Focus::Help || *focus == Focus::MainMenuHelp {
             FOCUSED_ELEMENT_STYLE
         } else {
             DEFAULT_STYLE

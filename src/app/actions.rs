@@ -82,7 +82,7 @@ impl Action {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
             Action::NextFocus => &[Key::Tab],
-            Action::PrvFocus => &[Key::ShiftTab],
+            Action::PrvFocus => &[Key::BackTab],
             Action::OpenConfigMenu => &[Key::Char('c')],
             Action::Up => &[Key::Up],
             Action::Down => &[Key::Down],

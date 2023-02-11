@@ -71,21 +71,21 @@ where
             render_title_body_help_log(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::Config => {
-            render_config(rect, &app, &mut states.config_state, false);
+            render_config(rect, &app, &mut states.config_state);
         }
         UiMode::EditConfig => {
-            render_config(rect, &app, &mut states.config_state, true);
+            render_config(rect, &app, &mut states.config_state);
             render_edit_config(rect, &app);
         }
         UiMode::SelectDefaultView => {
-            render_config(rect, &app, &mut states.config_state, true);
+            render_config(rect, &app, &mut states.config_state);
             render_edit_default_homescreen(rect, app, &mut states.default_view_state);
         }
         UiMode::EditKeybindings => {
-            render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state, false);
+            render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state);
         }
         UiMode::EditSpecificKeybinding => {
-            render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state, true);
+            render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state);
             render_edit_specific_keybinding(rect, &app);
         }
         UiMode::MainMenu => {

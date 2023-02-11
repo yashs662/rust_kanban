@@ -46,7 +46,7 @@ pub enum Key {
     Char(char),
     Ctrl(char),
     Alt(char),
-    ShiftTab,
+    BackTab,
     ShiftUp,
     ShiftDown,
     ShiftLeft,
@@ -96,7 +96,7 @@ impl Display for Key {
             Key::Ctrl(c) => write!(f, "<Ctrl+{}>", c),
             Key::Char(c) => write!(f, "<{}>", c),
             Key::Tab => write!(f, "<Tab>"),
-            Key::ShiftTab => write!(f, "<Shift+Tab>"),
+            Key::BackTab => write!(f, "<Shift+Tab>"),
             Key::ShiftUp => write!(f, "<Shift+Up>"),
             Key::ShiftDown => write!(f, "<Shift+Down>"),
             Key::ShiftLeft => write!(f, "<Shift+Left>"),
@@ -190,7 +190,7 @@ impl From<event::KeyEvent> for Key {
                 code: event::KeyCode::BackTab,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
-            } => Key::ShiftTab,
+            } => Key::BackTab,
 
             event::KeyEvent {
                 code: event::KeyCode::Tab,

@@ -39,7 +39,7 @@ pub enum AppStatus {
     KeyBindMode,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum Focus {
     Title,
     Body,
@@ -157,28 +157,28 @@ impl UiMode {
         }
     }
 
-    pub fn get_available_targets(&self) -> Vec<String> {
+    pub fn get_available_targets(&self) -> Vec<Focus> {
         match self {
-            UiMode::Zen => vec!["Body".to_string()],
-            UiMode::TitleBody => vec!["Title".to_string(), "Body".to_string()],
-            UiMode::BodyHelp => vec!["Body".to_string(), "Help".to_string()],
-            UiMode::BodyLog => vec!["Body".to_string(), "Log".to_string()],
-            UiMode::TitleBodyHelp => vec!["Title".to_string(), "Body".to_string(), "Help".to_string()],
-            UiMode::TitleBodyLog => vec!["Title".to_string(), "Body".to_string(), "Log".to_string()],
-            UiMode::BodyHelpLog => vec!["Body".to_string(), "Help".to_string(), "Log".to_string()],
-            UiMode::TitleBodyHelpLog => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
-            UiMode::Config => vec!["Body".to_string(), "Submit Button".to_string(), "Extra Focus".to_string()],
-            UiMode::EditConfig => vec![],
-            UiMode::EditKeybindings => vec!["Title".to_string(), "Submit Button".to_string()],
-            UiMode::EditSpecificKeybinding => vec![],
-            UiMode::MainMenu => vec!["Main Menu".to_string(), "Help".to_string(), "Log".to_string()],
-            UiMode::ViewCard => vec![],
-            UiMode::HelpMenu => vec![],
-            UiMode::LogsOnly => vec!["Log".to_string()],
-            UiMode::NewBoard => vec!["New Board Name".to_string(), "New Board Description".to_string(), "Submit Button".to_string()],
-            UiMode::NewCard => vec!["New Card Name".to_string(), "New Card Description".to_string(), "New Card Due Date".to_string(), "Submit Button".to_string()],
-            UiMode::LoadSave => vec![],
-            UiMode::SelectDefaultView => vec!["Title".to_string(), "Body".to_string(), "Help".to_string(), "Log".to_string()],
+            UiMode::Zen => vec![Focus::Body],
+            UiMode::TitleBody => vec![Focus::Title, Focus::Body],
+            UiMode::BodyHelp => vec![Focus::Body, Focus::Help],
+            UiMode::BodyLog => vec![Focus::Body, Focus::Log],
+            UiMode::TitleBodyHelp => vec![Focus::Title, Focus::Body, Focus::Help],
+            UiMode::TitleBodyLog => vec![Focus::Title, Focus::Body, Focus::Log],
+            UiMode::BodyHelpLog => vec![Focus::Body, Focus::Help, Focus::Log],
+            UiMode::TitleBodyHelpLog => vec![Focus::Title, Focus::Body, Focus::Help, Focus::Log],
+            UiMode::Config => vec![Focus::Body, Focus::SubmitButton, Focus::ExtraFocus],
+            UiMode::EditConfig => vec![Focus::NoFocus],
+            UiMode::EditKeybindings => vec![Focus::Title, Focus::SubmitButton],
+            UiMode::EditSpecificKeybinding => vec![Focus::NoFocus],
+            UiMode::MainMenu => vec![Focus::MainMenu, Focus::MainMenuHelp, Focus::Log],
+            UiMode::ViewCard => vec![Focus::NoFocus],
+            UiMode::HelpMenu => vec![Focus::Help, Focus::Log],
+            UiMode::LogsOnly => vec![Focus::Log],
+            UiMode::NewBoard => vec![Focus::NewBoardName, Focus::NewBoardDescription, Focus::SubmitButton],
+            UiMode::NewCard => vec![Focus::NewCardName, Focus::NewCardDescription, Focus::NewCardDueDate, Focus::SubmitButton],
+            UiMode::LoadSave => vec![Focus::Body],
+            UiMode::SelectDefaultView => vec![Focus::NoFocus],
         }
     }
 
@@ -188,6 +188,19 @@ impl UiMode {
             s.push(UiMode::from_number(i).to_string());
         }
         s
+    }
+
+    pub fn view_modes() -> Vec<UiMode> {
+        vec![
+            UiMode::Zen,
+            UiMode::TitleBody,
+            UiMode::BodyHelp,
+            UiMode::BodyLog,
+            UiMode::TitleBodyHelp,
+            UiMode::TitleBodyLog,
+            UiMode::BodyHelpLog,
+            UiMode::TitleBodyHelpLog
+        ]
     }
 }
 
@@ -230,9 +243,8 @@ impl Focus {
             Self::ExtraFocus => "Extra Focus",
         }
     }
-    pub fn next(&self, available_tabs: &Vec<String>) -> Self {
-        let current = self.to_str();
-        let index = available_tabs.iter().position(|x| x == current);
+    pub fn next(&self, available_tabs: &Vec<Focus>) -> Self {
+        let index = available_tabs.iter().position(|x| x == self);
         // check if index is None
         let index = match index {
             Some(i) => i,
@@ -242,31 +254,12 @@ impl Focus {
             return Self::NoFocus;
         }
         let next_index = (index + 1) % available_tabs.len();
-        match available_tabs[next_index].as_str() {
-            "Title" => Self::Title,
-            "Body" => Self::Body,
-            "Help" => Self::Help,
-            "Log" => Self::Log,
-            "Config" => Self::Config,
-            "Config Help" => Self::ConfigHelp,
-            "Main Menu" => Self::MainMenu,
-            "Main Menu Help" => Self::MainMenuHelp,
-            "No Focus" => Self::NoFocus,
-            "New Board Name" => Self::NewBoardName,
-            "New Board Description" => Self::NewBoardDescription,
-            "New Card Name" => Self::NewCardName,
-            "New Card Description" => Self::NewCardDescription,
-            "New Card Due Date" => Self::NewCardDueDate,
-            "Submit Button" => Self::SubmitButton,
-            "Extra Focus" => Self::ExtraFocus,
-            _ => Self::NoFocus,
-        }
+        available_tabs[next_index]
     }
 
-    pub fn prev(&self, available_tabs: &Vec<String>) -> Self {
+    pub fn prev(&self, available_tabs: &Vec<Focus>) -> Self {
         let current_focus = self.clone();
-        let current = self.to_str();
-        let index = available_tabs.iter().position(|x| x == current);
+        let index = available_tabs.iter().position(|x| x == self);
         // check if index is None
         let index = match index {
             Some(i) => i,
@@ -280,25 +273,7 @@ impl Focus {
         } else {
             index - 1
         };
-        match available_tabs[prev_index].as_str() {
-            "Title" => Self::Title,
-            "Body" => Self::Body,
-            "Help" => Self::Help,
-            "Log" => Self::Log,
-            "Config" => Self::Config,
-            "Config Help" => Self::ConfigHelp,
-            "Main Menu" => Self::MainMenu,
-            "Main Menu Help" => Self::MainMenuHelp,
-            "No Focus" => Self::NoFocus,
-            "New Board Name" => Self::NewBoardName,
-            "New Board Description" => Self::NewBoardDescription,
-            "New Card Name" => Self::NewCardName,
-            "New Card Description" => Self::NewCardDescription,
-            "New Card Due Date" => Self::NewCardDueDate,
-            "Submit Button" => Self::SubmitButton,
-            "Extra Focus" => Self::ExtraFocus,
-            _ => Self::NoFocus,
-        }
+        available_tabs[prev_index]
     }
 
     pub fn from_str(s: &str) -> Self {
@@ -329,7 +304,7 @@ impl KeyBindings {
         Self {
             quit: vec![Key::Ctrl('c'), Key::Char('q')],
             next_focus: vec![Key::Tab],
-            prev_focus: vec![Key::ShiftTab],
+            prev_focus: vec![Key::BackTab],
             open_config_menu: vec![Key::Char('c')],
             up: vec![Key::Up],
             down: vec![Key::Down],
