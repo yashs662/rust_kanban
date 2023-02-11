@@ -23,11 +23,12 @@ jobs:
     
     - name: Get version from cargo.toml
       run: |
-        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          echo "version=$(Get-Content Cargo.toml | Select-String -Pattern 'version = \"(.*)\"' -AllMatches | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Groups | Select-Object -ExpandProperty Value -First 1)" >> $GITHUB_ENV
-        else
-          echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
-        fi
+        if (${env:RUNNER_OS} -eq "Windows") {
+          $version = (Select-String "version =.*" -Path ".\Cargo.toml" -SimpleMatch).Line -replace 'version = "|"'
+        } else {
+          $version = (grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)
+        }
+        echo "version=$version" >> $GITHUB_ENV
 
     - name: Upload release artifact
       uses: actions/upload-artifact@v2
