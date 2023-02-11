@@ -31,9 +31,9 @@ async fn main() -> Result<()> {
     let (sync_io_tx, mut sync_io_rx) = tokio::sync::mpsc::channel::<IoEvent>(100);
 
     // We need to share the App between thread
-    let app = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
-    let app_widget_manager = Arc::clone(&app);
-    let app_ui = Arc::clone(&app);
+    let main_app_instance = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
+    let app_widget_manager_instance = Arc::clone(&main_app_instance);
+    let app_ui_instance = Arc::clone(&main_app_instance);
 
     // Configure log
     tui_logger::init_logger(LevelFilter::Debug).unwrap();
@@ -41,14 +41,14 @@ async fn main() -> Result<()> {
 
     // Handle IO in a specifc thread
     tokio::spawn(async move {
-        let mut handler = IoAsyncHandler::new(app);
+        let mut handler = IoAsyncHandler::new(main_app_instance);
         while let Some(io_event) = sync_io_rx.recv().await {
             handler.handle_io_event(io_event).await;
         }
     });
 
     tokio::spawn(async move {
-        let mut widget_manager = rust_kanban::ui::widgets::WidgetManager::new(app_widget_manager);
+        let mut widget_manager = rust_kanban::ui::widgets::WidgetManager::new(app_widget_manager_instance);
         loop {
             widget_manager.update().await;
         }
@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
         sync_io_tx.send(IoEvent::Reset).await.unwrap();
     }
 
-    start_ui(&app_ui).await?;
+    start_ui(&app_ui_instance).await?;
 
     Ok(())
 }

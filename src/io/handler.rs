@@ -176,7 +176,7 @@ impl IoAsyncHandler {
             }
         }
         app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
-        app.ui_mode = app.config.default_view.clone();
+        app.state.ui_mode = app.config.default_view.clone();
         Ok(())
     }
 

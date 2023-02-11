@@ -17,19 +17,17 @@ pub enum Key {
     Tab,
     Backspace,
     Esc,
-
+    Space,
     Left,
     Right,
     Up,
     Down,
-
     Ins,
     Delete,
     Home,
     End,
     PageUp,
     PageDown,
-
     F0,
     F1,
     F2,
@@ -55,10 +53,6 @@ pub enum Key {
 }
 
 impl Key {
-    /// If exit
-    pub fn is_exit(&self) -> bool {
-        matches!(self, Key::Ctrl('c') | Key::Char('q') | Key::Esc)
-    }
     pub fn from_f(n: u8) -> Key {
         match n {
             0 => Key::F0,
@@ -185,19 +179,15 @@ impl From<event::KeyEvent> for Key {
                 code: event::KeyCode::Enter,
                 ..
             } => Key::Enter,
-
             event::KeyEvent {
                 code: event::KeyCode::BackTab,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::BackTab,
-
             event::KeyEvent {
                 code: event::KeyCode::Tab,
                 ..
             } => Key::Tab,
-
-            // First check for char + modifier
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
                 modifiers: event::KeyModifiers::ALT,
@@ -208,12 +198,10 @@ impl From<event::KeyEvent> for Key {
                 modifiers: event::KeyModifiers::CONTROL,
                 ..
             } => Key::Ctrl(c),
-
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
                 ..
             } => Key::Char(c),
-
             _ => Key::Unknown,
         }
     }

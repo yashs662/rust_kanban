@@ -28,6 +28,7 @@ use ui_helper::{
     render_new_card_form,
     draw_loading_screen,
     render_edit_default_homescreen,
+    render_view_card,
 };
 use crate::app::App;
 
@@ -45,7 +46,7 @@ where
         return;
     }
 
-    match &app.ui_mode {
+    match &app.state.ui_mode {
         UiMode::Zen => {
             render_zen_mode(rect, &app);
         }
@@ -97,9 +98,6 @@ where
         UiMode::LogsOnly => {
             render_logs_only(rect, &app.focus);
         }
-        UiMode::ViewCard => {
-            todo!("ViewCard");
-        }
         UiMode::NewBoard => {
             render_new_board_form(rect, &app);
         }
@@ -111,6 +109,7 @@ where
         }
     }
 
+    render_view_card(rect, &app);
     render_toast(rect, &app);
 
 }

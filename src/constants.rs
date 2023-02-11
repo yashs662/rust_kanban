@@ -136,3 +136,21 @@ pub const INACTIVE_TEXT_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
+pub const CARD_PRIORITY_LOW_STYLE: Style = Style {
+    fg: Some(Color::LightGreen),
+    bg: Some(Color::Reset),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const CARD_PRIORITY_MEDIUM_STYLE: Style = Style {
+    fg: Some(Color::LightYellow),
+    bg: Some(Color::Reset),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
+pub const CARD_PRIORITY_HIGH_STYLE: Style = Style {
+    fg: Some(Color::LightRed),
+    bg: Some(Color::Reset),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};

@@ -71,7 +71,6 @@ pub struct App {
     is_loading: bool,
     pub state: AppState,
     pub focus: Focus,
-    pub ui_mode: UiMode,
     pub boards: Vec<Board>,
     prev_ui_mode: Option<UiMode>,
     pub config: AppConfig,
@@ -85,7 +84,6 @@ impl App {
         let is_loading = false;
         let state = AppState::default();
         let focus = Focus::NoFocus;
-        let ui_mode = data_handler::get_default_ui_mode();
         let boards = vec![];
         let get_config_status = get_config();
         let config = if get_config_status.is_err() {
@@ -101,7 +99,6 @@ impl App {
             is_loading,
             state,
             focus,
-            ui_mode,
             boards: boards,
             prev_ui_mode: None,
             config: config,
@@ -114,17 +111,18 @@ impl App {
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
         // check if we are in a user input mode
         if self.state.status == AppStatus::UserInput {
+            debug!("{}", key);
             // append to current user input if key is not enter else change state to Initialized
             if key != Key::Enter && key != Key::Esc {
                 let mut current_key = key.to_string();
-                if current_key == "<Space>" {
+                if key == Key::Char(' ') {
                     current_key = " ".to_string();
-                } else if current_key == "<ShiftEnter>" {
-                    current_key = "".to_string();
-                } else if current_key == "<Tab>" {
-                    current_key = "".to_string();
-                } else if current_key == "<Backspace>" {
-                    match self.ui_mode {
+                } else if key == Key::Ctrl('n') {
+                    current_key = "\n".to_string();
+                } else if key == Key::Tab {
+                    current_key = "  ".to_string();
+                } else if key == Key::Backspace {
+                    match self.state.ui_mode {
                         UiMode::NewBoard => {
                             match self.focus {
                                 Focus::NewBoardName => {
@@ -203,8 +201,8 @@ impl App {
                         }
                     };
                     current_key = "".to_string();
-                } else if current_key == "<Left>" {
-                    match self.ui_mode {
+                } else if key == Key::Left {
+                    match self.state.ui_mode {
                         UiMode::NewBoard => {
                             match self.focus {
                                 Focus::NewBoardName => {
@@ -271,8 +269,8 @@ impl App {
                         }
                     };
                     current_key = "".to_string();
-                } else if current_key == "<Right>" {
-                    match self.ui_mode {
+                } else if key == Key::Right {
+                    match self.state.ui_mode {
                         UiMode::NewBoard => {
                             match self.focus {
                                 Focus::NewBoardName => {
@@ -339,8 +337,8 @@ impl App {
                         }
                     };
                     current_key = "".to_string();
-                } else if current_key == "<Home>" {
-                    match self.ui_mode {
+                } else if key == Key::Home {
+                    match self.state.ui_mode {
                         UiMode::NewBoard => {
                             match self.focus {
                                 Focus::NewBoardName => {
@@ -371,8 +369,8 @@ impl App {
                         }
                     };
                     current_key = "".to_string();
-                } else if current_key == "<End>" {
-                    match self.ui_mode {
+                } else if key == Key::End {
+                    match self.state.ui_mode {
                         UiMode::NewBoard => {
                             match self.focus {
                                 Focus::NewBoardName => {
@@ -477,11 +475,11 @@ impl App {
         } else {
             if let Some(action) = self.actions.find(key) {
                 // check if the current focus is in the available focus list for the current ui mode if not assign it to the first
-                if UiMode::get_available_targets(&self.ui_mode)
+                if UiMode::get_available_targets(&self.state.ui_mode)
                     .iter()
                     .find(|x| *x == &self.focus)
                     .is_none() {
-                        self.focus = UiMode::get_available_targets(&self.ui_mode)[0];
+                        self.focus = UiMode::get_available_targets(&self.state.ui_mode)[0];
                 }
                 match action {
                     Action::Quit => {
@@ -499,7 +497,7 @@ impl App {
                     }
                     Action::NextFocus => {
                         let current_focus = self.focus.clone();
-                        let next_focus = self.focus.next(&UiMode::get_available_targets(&self.ui_mode));
+                        let next_focus = self.focus.next(&UiMode::get_available_targets(&self.state.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
                         if next_focus == current_focus || next_focus == Focus::NoFocus {
                             self.focus = current_focus;
@@ -510,7 +508,7 @@ impl App {
                     }
                     Action::PrvFocus => {
                         let current_focus = self.focus.clone();
-                        let next_focus = self.focus.prev(&UiMode::get_available_targets(&self.ui_mode));
+                        let next_focus = self.focus.prev(&UiMode::get_available_targets(&self.state.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
                         if next_focus == current_focus || next_focus == Focus::NoFocus {
                             self.focus = current_focus;
@@ -531,26 +529,26 @@ impl App {
                                 self.focus = available_focus_targets[0];
                             }
                         }
-                        self.ui_mode = new_ui_mode;
+                        self.state.ui_mode = new_ui_mode;
                         AppReturn::Continue
                     }
                     Action::OpenConfigMenu => {
-                        match self.ui_mode {
+                        match self.state.ui_mode {
                             UiMode::Config => {
                                 // check if the prv ui mode is the same as the current ui mode
                                 if self.prev_ui_mode.is_some() && self.prev_ui_mode.as_ref().unwrap() == &UiMode::Config {
-                                    self.ui_mode = self.config.default_view.clone();
+                                    self.state.ui_mode = self.config.default_view.clone();
                                 } else {
-                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                    self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                 }
                             },
                             _ => {
-                                self.prev_ui_mode = Some(self.ui_mode.clone());
-                                self.ui_mode = UiMode::Config;
+                                self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                self.state.ui_mode = UiMode::Config;
                                 if self.state.config_state.selected().is_none() {
                                     self.config_next()
                                 }
-                                let available_focus_targets = self.ui_mode.get_available_targets();
+                                let available_focus_targets = self.state.ui_mode.get_available_targets();
                                 if !available_focus_targets.contains(&self.focus) {
                                     // check if available focus targets is empty
                                     if available_focus_targets.is_empty() {
@@ -567,7 +565,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::Up => {
-                        match self.ui_mode {
+                        match self.state.ui_mode {
                             UiMode::Config => {
                                 if self.focus == Focus::Body {
                                     self.config_previous();
@@ -611,7 +609,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::Down => {
-                        match self.ui_mode {
+                        match self.state.ui_mode {
                             UiMode::Config => {
                                 if self.focus == Focus::Body {
                                     self.config_next();
@@ -667,7 +665,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::TakeUserInput => {
-                        match self.ui_mode {
+                        match self.state.ui_mode {
                             UiMode::NewBoard | UiMode::EditConfig | UiMode::NewCard => {
                                 self.state.status = AppStatus::UserInput;
                                 info!("Taking user input");
@@ -683,20 +681,23 @@ impl App {
                     Action::GoToPreviousUIMode => {
                         if self.state.popup_mode {
                             self.state.popup_mode = false;
+                            if UiMode::view_modes().contains(&self.state.ui_mode) {
+                                return AppReturn::Continue;
+                            }
                         }
-                        match self.ui_mode {
+                        match self.state.ui_mode {
                             UiMode::Config => {
                                 if self.prev_ui_mode == Some(UiMode::Config) {
                                     self.prev_ui_mode = None;
-                                    self.ui_mode = self.config.default_view.clone();
+                                    self.state.ui_mode = self.config.default_view.clone();
                                 } else {
-                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                    self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     self.prev_ui_mode = Some(UiMode::Config);
                                 }
                                 AppReturn::Continue
                             }
                             UiMode::EditConfig => {
-                                self.ui_mode = UiMode::Config;
+                                self.state.ui_mode = UiMode::Config;
                                 if self.state.config_state.selected().is_none() {
                                     self.config_next()
                                 }
@@ -712,7 +713,7 @@ impl App {
                                 AppReturn::Exit
                             }
                             UiMode::EditSpecificKeybinding => {
-                                self.ui_mode = UiMode::EditKeybindings;
+                                self.state.ui_mode = UiMode::EditKeybindings;
                                 if self.state.edit_keybindings_state.selected().is_none() {
                                     self.edit_keybindings_next();
                                 }
@@ -722,17 +723,17 @@ impl App {
                                 AppReturn::Continue
                             }
                             _ => {
-                                if self.ui_mode == UiMode::LoadSave {
+                                if self.state.ui_mode == UiMode::LoadSave {
                                     self.state.load_save_state = ListState::default();
                                 }
                                 // check if previous ui mode is the same as the current ui mode
-                                if self.prev_ui_mode == Some(self.ui_mode.clone()) {
-                                    self.ui_mode = UiMode::MainMenu;
+                                if self.prev_ui_mode == Some(self.state.ui_mode.clone()) {
+                                    self.state.ui_mode = UiMode::MainMenu;
                                     if self.state.main_menu_state.selected().is_none() {
                                         self.main_menu_next();
                                     }
                                 } else {
-                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::MainMenu).clone();
+                                    self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::MainMenu).clone();
                                     if self.state.main_menu_state.selected().is_none() {
                                         self.main_menu_next();
                                     }
@@ -742,7 +743,7 @@ impl App {
                         }
                     }
                     Action::Enter => {
-                        match self.ui_mode {
+                        match self.state.ui_mode {
                             UiMode::Config => {
                                 if self.focus == Focus::SubmitButton {
                                     self.config = AppConfig::default();
@@ -782,12 +783,12 @@ impl App {
                                     let default_config_item = String::from("");
                                     let config_item = &app_config_list[self.config_item_being_edited.unwrap_or(0)].first().unwrap_or_else(|| &default_config_item);
                                     if *config_item == "Edit Keybindings" {
-                                        self.ui_mode = UiMode::EditKeybindings;
+                                        self.state.ui_mode = UiMode::EditKeybindings;
                                         if self.state.edit_keybindings_state.selected().is_none() {
                                             self.edit_keybindings_next();
                                         }
                                     } else if *config_item == "Select Default View" {
-                                        self.ui_mode = UiMode::SelectDefaultView;
+                                        self.state.ui_mode = UiMode::SelectDefaultView;
                                         if self.state.default_view_state.selected().is_none() {
                                             self.select_default_view_next();
                                         }
@@ -828,8 +829,8 @@ impl App {
                                             self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
                                         }
                                     } else {
-                                        self.prev_ui_mode = Some(self.ui_mode.clone());
-                                        self.ui_mode = UiMode::EditConfig;
+                                        self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                        self.state.ui_mode = UiMode::EditConfig;
                                         if !self.state.popup_mode {
                                             self.state.popup_mode = true;
                                         }
@@ -862,7 +863,7 @@ impl App {
                                     self.state.config_state.select(Some(0));
                                     self.config_item_being_edited = None;
                                     self.state.current_user_input = String::new();
-                                    self.ui_mode = UiMode::Config;
+                                    self.state.ui_mode = UiMode::Config;
                                     if self.state.config_state.selected().is_none() {
                                         self.config_next();
                                     }
@@ -891,7 +892,7 @@ impl App {
 
                                     // reset everything
                                     self.state.default_view_state.select(Some(0));
-                                    self.ui_mode = UiMode::Config;
+                                    self.state.ui_mode = UiMode::Config;
                                     if self.state.config_state.selected().is_none() {
                                         self.config_next();
                                     }
@@ -914,36 +915,36 @@ impl App {
                                                 AppReturn::Exit
                                             }
                                             MainMenuItem::Config => {
-                                                self.prev_ui_mode = Some(self.ui_mode.clone());
-                                                self.ui_mode = UiMode::Config;
+                                                self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                                self.state.ui_mode = UiMode::Config;
                                                 if self.state.config_state.selected().is_none() {
                                                     self.config_next();
                                                 }
                                                 AppReturn::Continue
                                             }
                                             MainMenuItem::View => {
-                                                self.prev_ui_mode = Some(self.ui_mode.clone());
-                                                self.ui_mode = self.config.default_view.clone();
+                                                self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                                self.state.ui_mode = self.config.default_view.clone();
                                                 AppReturn::Continue
                                             }
                                             MainMenuItem::Help => {
-                                                self.prev_ui_mode = Some(self.ui_mode.clone());
-                                                self.ui_mode = UiMode::HelpMenu;
+                                                self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                                self.state.ui_mode = UiMode::HelpMenu;
                                                 AppReturn::Continue
                                             }
                                             MainMenuItem::LoadSave => {
-                                                self.prev_ui_mode = Some(self.ui_mode.clone());
-                                                self.ui_mode = UiMode::LoadSave;
+                                                self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                                self.state.ui_mode = UiMode::LoadSave;
                                                 AppReturn::Continue
                                             }
                                         }
                                     },
                                     Focus::MainMenuHelp => {
-                                        self.ui_mode = UiMode::HelpMenu;
+                                        self.state.ui_mode = UiMode::HelpMenu;
                                         AppReturn::Continue
                                     },
                                     Focus::Log => {
-                                        self.ui_mode = UiMode::LogsOnly;
+                                        self.state.ui_mode = UiMode::LogsOnly;
                                         AppReturn::Continue
                                     },
                                     _ => {
@@ -967,12 +968,12 @@ impl App {
                                         let new_board = Board::new(new_board_name, new_board_description);
                                         self.boards.push(new_board.clone());
                                         self.state.current_board_id = Some(new_board.id);
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     } else {
                                         warn!("New board name is empty or already exists");
                                         self.send_warning_toast("New board name is empty or already exists", None);
                                     }
-                                    self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                    self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     if let Some(previous_focus) = &self.state.previous_focus {
                                         self.focus = previous_focus.clone();
                                     }
@@ -999,7 +1000,7 @@ impl App {
                                     } else {
                                         error!("Current board not found");
                                         self.send_error_toast("Current board not found", None);
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                         return AppReturn::Continue;
                                     }
                                     // check if due date is empty or is a valid date
@@ -1041,7 +1042,7 @@ impl App {
                                     if due_date.is_none() {
                                         warn!("Invalid due date");
                                         self.send_warning_toast("Invalid due date", None);
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                         return AppReturn::Continue;
                                     }
                                     if !new_card_name.is_empty() && !same_name_exists {
@@ -1054,10 +1055,10 @@ impl App {
                                         } else {
                                             error!("Current board not found");
                                             self.send_error_toast("Current board not found", None);
-                                            self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                            self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                             return AppReturn::Continue;
                                         }
-                                        self.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
                                     } else {
                                         warn!("New card name is empty or already exists");
                                         self.send_warning_toast("New card name is empty or already exists", None);
@@ -1076,7 +1077,7 @@ impl App {
                             }
                             UiMode::EditKeybindings => {
                                 if self.state.edit_keybindings_state.selected().is_some() && self.focus != Focus::SubmitButton {
-                                    self.ui_mode = UiMode::EditSpecificKeybinding;
+                                    self.state.ui_mode = UiMode::EditSpecificKeybinding;
                                     if !self.state.popup_mode {
                                         self.state.popup_mode = true;
                                     }
@@ -1109,7 +1110,7 @@ impl App {
                                         self.state.edited_keybinding = None;
                                         self.state.edit_keybindings_state.select(None);
                                     }
-                                    self.ui_mode = UiMode::EditKeybindings;
+                                    self.state.ui_mode = UiMode::EditKeybindings;
                                     if self.state.edit_keybindings_state.selected().is_none() {
                                         self.edit_keybindings_next()
                                     }
@@ -1120,7 +1121,7 @@ impl App {
                                         self.send_error_toast(&write_config_status.unwrap_err(), None);
                                     }
                                 } else {
-                                    self.ui_mode = UiMode::EditKeybindings;
+                                    self.state.ui_mode = UiMode::EditKeybindings;
                                     if self.state.edit_keybindings_state.selected().is_none() {
                                         self.edit_keybindings_next()
                                     }
@@ -1134,16 +1135,16 @@ impl App {
                             _ => {
                                 match self.focus {
                                     Focus::Help => {
-                                        self.prev_ui_mode = Some(self.ui_mode.clone());
-                                        self.ui_mode = UiMode::HelpMenu;
+                                        self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                        self.state.ui_mode = UiMode::HelpMenu;
                                     },
                                     Focus::Log => {
-                                        self.prev_ui_mode = Some(self.ui_mode.clone());
-                                        self.ui_mode = UiMode::LogsOnly;
+                                        self.prev_ui_mode = Some(self.state.ui_mode.clone());
+                                        self.state.ui_mode = UiMode::LogsOnly;
                                     },
                                     _ => {}
                                 }
-                                if UiMode::view_modes().contains(&self.ui_mode) {
+                                if UiMode::view_modes().contains(&self.state.ui_mode) && self.focus == Focus::Body{
                                     // check if there is a current card
                                     if let Some(current_card_id) = self.state.current_card_id {
                                         if let Some(current_board_id) = self.state.current_board_id {
@@ -1152,7 +1153,6 @@ impl App {
                                             if let Some(current_board) = current_board {
                                                 let current_card = current_board.cards.iter().find(|card| card.id == current_card_id);
                                                 if let Some(_) = current_card {
-                                                    self.ui_mode = UiMode::ViewCard;
                                                     if !self.state.popup_mode {
                                                         self.state.popup_mode = true;
                                                     }
@@ -1176,104 +1176,104 @@ impl App {
                     }
                     Action::HideUiElement => {
                         let current_focus = Focus::from_str(self.focus.to_str());
-                        let current_ui_mode = self.ui_mode.clone();
+                        let current_ui_mode = self.state.ui_mode.clone();
                         // hide the current focus by switching to a view where it is not available
                         // for example if current uimode is Title and focus is on Title then switch to Zen
                         if current_ui_mode == UiMode::Zen {
-                            self.ui_mode = UiMode::MainMenu;
+                            self.state.ui_mode = UiMode::MainMenu;
                             if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
                         } else if current_ui_mode == UiMode::TitleBody {
                             if current_focus == Focus::Title {
-                                self.ui_mode = UiMode::Zen;
+                                self.state.ui_mode = UiMode::Zen;
                                 self.focus = Focus::Body;
                             } else {
-                                self.ui_mode = UiMode::MainMenu;
+                                self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
                             }
                         } else if current_ui_mode == UiMode::BodyHelp {
                             if current_focus == Focus::Help {
-                                self.ui_mode = UiMode::Zen;
+                                self.state.ui_mode = UiMode::Zen;
                                 self.focus = Focus::Body;
                             } else {
-                                self.ui_mode = UiMode::MainMenu;
+                                self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
                             }
                         } else if current_ui_mode == UiMode::BodyLog {
                             if current_focus == Focus::Log {
-                                self.ui_mode = UiMode::Zen;
+                                self.state.ui_mode = UiMode::Zen;
                                 self.focus = Focus::Body;
                             } else {
-                                self.ui_mode = UiMode::MainMenu;
+                                self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
                             }
                         } else if current_ui_mode == UiMode::TitleBodyHelp {
                             if current_focus == Focus::Title {
-                                self.ui_mode = UiMode::BodyHelp;
+                                self.state.ui_mode = UiMode::BodyHelp;
                                 self.focus = Focus::Body;
                             }
                             else if current_focus == Focus::Help {
-                                self.ui_mode = UiMode::TitleBody;
+                                self.state.ui_mode = UiMode::TitleBody;
                                 self.focus = Focus::Title;
                             }
                             else {
-                                self.ui_mode = UiMode::MainMenu;
+                                self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
                             }
                         } else if current_ui_mode == UiMode::TitleBodyLog {
                             if current_focus == Focus::Title {
-                                self.ui_mode = UiMode::BodyLog;
+                                self.state.ui_mode = UiMode::BodyLog;
                                 self.focus = Focus::Body;
                             }
                             else if current_focus == Focus::Log {
-                                self.ui_mode = UiMode::TitleBody;
+                                self.state.ui_mode = UiMode::TitleBody;
                                 self.focus = Focus::Title;
                             }
                             else {
-                                self.ui_mode = UiMode::MainMenu;
+                                self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
                             }
                         } else if current_ui_mode == UiMode::TitleBodyHelpLog {
                             if current_focus == Focus::Title {
-                                self.ui_mode = UiMode::BodyHelpLog;
+                                self.state.ui_mode = UiMode::BodyHelpLog;
                                 self.focus = Focus::Body;
                             }
                             else if current_focus == Focus::Help {
-                                self.ui_mode = UiMode::TitleBodyLog;
+                                self.state.ui_mode = UiMode::TitleBodyLog;
                                 self.focus = Focus::Title;
                             }
                             else if current_focus == Focus::Log {
-                                self.ui_mode = UiMode::TitleBodyHelp;
+                                self.state.ui_mode = UiMode::TitleBodyHelp;
                                 self.focus = Focus::Title;
                             }
                             else {
-                                self.ui_mode = UiMode::MainMenu;
+                                self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
                             }
                         } else if current_ui_mode == UiMode::BodyHelpLog {
                             if current_focus == Focus::Help {
-                                self.ui_mode = UiMode::BodyLog;
+                                self.state.ui_mode = UiMode::BodyLog;
                                 self.focus = Focus::Body;
                             }
                             else if current_focus == Focus::Log {
-                                self.ui_mode = UiMode::BodyHelp;
+                                self.state.ui_mode = UiMode::BodyHelp;
                                 self.focus = Focus::Body;
                             }
                             else {
-                                self.ui_mode = UiMode::MainMenu;
+                                self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
                                 }
@@ -1287,7 +1287,7 @@ impl App {
                     }
                     Action::NewBoard => {
                         // check if current ui_mode is in UiMode::view_modes()
-                        if UiMode::view_modes().contains(&self.ui_mode) {
+                        if UiMode::view_modes().contains(&self.state.ui_mode) {
                             self.state.new_board_form = vec![String::new(), String::new()];
                             self.set_ui_mode(UiMode::NewBoard);
                             self.state.previous_focus = Some(self.focus.clone());
@@ -1295,7 +1295,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::NewCard => {
-                        if UiMode::view_modes().contains(&self.ui_mode) {
+                        if UiMode::view_modes().contains(&self.state.ui_mode) {
                             // check if current board is not empty
                             if self.state.current_board_id.is_none() {
                                 warn!("No board available to add card to");
@@ -1309,13 +1309,13 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::DeleteCard => {
-                        match self.ui_mode {
+                        match self.state.ui_mode {
                             UiMode::LoadSave => {
                                 self.dispatch(IoEvent::DeleteSave).await;
                                 AppReturn::Continue
                             }
                             _ => {
-                                if !UiMode::view_modes().contains(&self.ui_mode) {
+                                if !UiMode::view_modes().contains(&self.state.ui_mode) {
                                     return AppReturn::Continue;
                                 }
                                 match self.focus {
@@ -1378,7 +1378,7 @@ impl App {
                         }
                     }
                     Action::DeleteBoard => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         match self.focus {
@@ -1409,7 +1409,7 @@ impl App {
                         }
                     }
                     Action::ChangeCardStatusToCompleted => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         // check if focus is on body
@@ -1432,7 +1432,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::ChangeCardStatusToActive => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         // check if focus is on body
@@ -1455,7 +1455,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::ChangeCardStatusToStale => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         // check if focus is on body
@@ -1481,14 +1481,14 @@ impl App {
                         self.state.current_board_id = None;
                         self.state.current_card_id = None;
                         self.focus = Focus::MainMenu;
-                        self.ui_mode = UiMode::MainMenu;
+                        self.state.ui_mode = UiMode::MainMenu;
                         if self.state.main_menu_state.selected().is_none() {
                             self.state.main_menu_state.select(Some(0));
                         }
                         AppReturn::Continue
                     }
                     Action::MoveCardUp => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         match self.focus {
@@ -1521,7 +1521,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::MoveCardDown => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         match self.focus {
@@ -1554,7 +1554,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::MoveCardRight => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         match self.focus {
@@ -1587,7 +1587,7 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::MoveCardLeft => {
-                        if !UiMode::view_modes().contains(&self.ui_mode) {
+                        if !UiMode::view_modes().contains(&self.state.ui_mode) {
                             return AppReturn::Continue;
                         }
                         match self.focus {
@@ -1651,7 +1651,7 @@ impl App {
         // Update contextual actions
         self.actions = Action::all()
         .into();
-        if self.ui_mode == UiMode::MainMenu {
+        if self.state.ui_mode == UiMode::MainMenu {
             self.main_menu_next();
         } else if self.focus == Focus::NoFocus {
             self.focus = Focus::Body;
@@ -1774,9 +1774,9 @@ impl App {
         &self.state.config_state
     }
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
-        self.prev_ui_mode = Some(self.ui_mode.clone());
-        self.ui_mode = ui_mode;
-        let available_focus_targets = self.ui_mode.get_available_targets();
+        self.prev_ui_mode = Some(self.state.ui_mode.clone());
+        self.state.ui_mode = ui_mode;
+        let available_focus_targets = self.state.ui_mode.get_available_targets();
         if !available_focus_targets.contains(&self.focus) {
             // check if available focus targets is empty
             if available_focus_targets.is_empty() {
@@ -2010,6 +2010,7 @@ pub struct AppState {
     pub preview_boards_and_cards: Option<Vec<Board>>,
     pub preview_visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
     pub popup_mode: bool,
+    pub ui_mode: UiMode,
 }
 
 impl Default for AppState {
@@ -2036,6 +2037,7 @@ impl Default for AppState {
             preview_boards_and_cards: None,
             preview_visible_boards_and_cards: LinkedHashMap::new(),
             popup_mode: false,
+            ui_mode: data_handler::get_default_ui_mode(),
         }
     }
 }

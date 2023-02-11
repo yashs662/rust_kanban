@@ -41,7 +41,7 @@ impl Default for Board {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Savefile)]
+#[derive(Debug, Clone, Serialize, Deserialize, Savefile, PartialEq)]
 pub enum CardStatus {
     Active,
     Complete,
@@ -58,7 +58,7 @@ impl CardStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Savefile)]
+#[derive(Debug, Clone, Serialize, Deserialize, Savefile, PartialEq)]
 pub enum CardPriority {
     Low,
     Medium,
@@ -66,7 +66,7 @@ pub enum CardPriority {
 }
 
 impl CardPriority {
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             CardPriority::Low => "Low".to_string(),
             CardPriority::Medium => "Medium".to_string(),
