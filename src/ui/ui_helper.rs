@@ -31,10 +31,8 @@ use crate::constants::{
     APP_TITLE,
     MIN_TERM_WIDTH,
     MIN_TERM_HEIGHT,
-    NO_OF_BOARDS_PER_PAGE,
     DEFAULT_BOARD_TITLE_LENGTH,
     DEFAULT_CARD_TITLE_LENGTH,
-    NO_OF_CARDS_PER_BOARD,
     LIST_SELECT_STYLE,
     LIST_SELECTED_SYMBOL,
     CARD_DUE_DATE_DEFAULT_STYLE,
@@ -555,7 +553,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(DEFAULT_STYLE)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
         .highlight_style(LIST_SELECT_STYLE)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
@@ -591,7 +589,7 @@ where
                 .title("Help")
                 .borders(Borders::ALL)
                 .style(DEFAULT_STYLE)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
         .wrap(tui::widgets::Wrap { trim: true });
@@ -964,7 +962,11 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
         ])
         .style(default_style);
 
-    let border_block = Block::default().borders(Borders::ALL).border_style(default_style).title("Help");
+    let border_block = Block::default()
+        .title("Help")
+        .borders(Borders::ALL)
+        .border_style(default_style)
+        .border_type(BorderType::Rounded);
 
     (border_block, left_table, right_table)
 }
@@ -1030,7 +1032,7 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
                 .title("Help")
                 .borders(Borders::ALL)
                 .style(helpbox_style)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
         .wrap(tui::widgets::Wrap { trim: true })
@@ -1057,7 +1059,8 @@ fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) 
                 Block::default()
                     .title("Logs")
                     .border_style(INACTIVE_TEXT_STYLE)
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
             )
     } else {
         TuiLoggerWidget::default()
@@ -1073,7 +1076,8 @@ fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) 
                 Block::default()
                     .title("Logs")
                     .border_style(logbox_style)
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
             )
         }
 }
@@ -1095,7 +1099,7 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
                 .title("Main menu")
                 .borders(Borders::ALL)
                 .border_style(menu_style)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
         .highlight_style(LIST_SELECT_STYLE)
         .highlight_symbol(LIST_SELECTED_SYMBOL)
@@ -1148,7 +1152,7 @@ where
                     Block::default()
                         .title("Boards")
                         .borders(Borders::ALL)
-                        .border_type(BorderType::Plain)
+                        .border_type(BorderType::Rounded)
                 )
                 .style(error_text_style);
             rect.render_widget(empty_paragraph, area);
@@ -1164,7 +1168,7 @@ where
                     Block::default()
                         .title("Boards")
                         .borders(Borders::ALL)
-                        .border_type(BorderType::Plain),
+                        .border_type(BorderType::Rounded),
                 )
                 .style(default_style);
             rect.render_widget(empty_paragraph, area);
@@ -1197,9 +1201,9 @@ where
         };
     let mut constraints = vec![];
     // check if length of boards is more than NO_OF_BOARDS_PER_PAGE
-    if boards.len() > NO_OF_BOARDS_PER_PAGE.into() {
-        for _i in 0..NO_OF_BOARDS_PER_PAGE {
-            constraints.push(Constraint::Percentage(100 / NO_OF_BOARDS_PER_PAGE as u16));
+    if boards.len() > app.config.no_of_boards_to_show.into() {
+        for _i in 0..app.config.no_of_boards_to_show {
+            constraints.push(Constraint::Percentage(100 / app.config.no_of_boards_to_show as u16));
         }
     } else {
         for _i in 0..boards.len() {
@@ -1219,7 +1223,7 @@ where
     for (board_index, board_and_card_tuple) in visible_boards_and_cards.iter().enumerate() {
         // render board with title in board chunks alongside with cards in card chunks of the board
         // break if board_index is more than NO_OF_BOARDS_PER_PAGE
-        if board_index >= NO_OF_BOARDS_PER_PAGE.into() {
+        if board_index >= app.config.no_of_boards_to_show.into() {
             break;
         }
         let board_id = board_and_card_tuple.0;
@@ -1251,9 +1255,9 @@ where
 
         // check if length of cards is more than NO_OF_CARDS_PER_BOARD constant
         let mut card_constraints = vec![];
-        if board_cards.len() > NO_OF_CARDS_PER_BOARD.into() {
-            for _i in 0..NO_OF_CARDS_PER_BOARD {
-                card_constraints.push(Constraint::Percentage(90 / NO_OF_CARDS_PER_BOARD as u16));
+        if board_cards.len() > app.config.no_of_cards_to_show.into() {
+            for _i in 0..app.config.no_of_cards_to_show {
+                card_constraints.push(Constraint::Percentage(90 / app.config.no_of_cards_to_show as u16));
             }
         } else {
             for _i in 0..board_cards.len() {
@@ -1280,7 +1284,7 @@ where
             .title(&*board_title)
             .borders(Borders::ALL)
             .style(board_style)
-            .border_type(BorderType::Plain);
+            .border_type(BorderType::Rounded);
         rect.render_widget(board_block, board_chunks[board_index]);
 
         let card_area_chunks = if app.config.disable_scrollbars {
@@ -1343,19 +1347,19 @@ where
             }
         };
         for (card_index, card_id) in board_cards.iter().enumerate() {
+            if card_index >= app.config.no_of_cards_to_show.into() {
+                break;
+            }
             let inner_card_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(
                     [
-                        Constraint::Min(1),
+                        Constraint::Min(0),
                         Constraint::Length(3),
                     ]
                     .as_ref(),
                 ).margin(1)
                 .split(card_chunks[card_index]);
-            if card_index >= NO_OF_CARDS_PER_BOARD.into() {
-                break;
-            }
             // unwrap card if panic skip it and log it
             let mut card = board.get_card(*card_id);
             // check if card is None, if so skip it and log it
@@ -1427,7 +1431,7 @@ where
                 .title(&*card_title)
                 .borders(Borders::ALL)
                 .border_style(card_style)
-                .border_type(BorderType::Plain);
+                .border_type(BorderType::Rounded);
             rect.render_widget(card_block, card_chunks[card_index]);
             let card_paragraph = Paragraph::new(card_description)
                 .alignment(Alignment::Left)
@@ -1561,7 +1565,7 @@ pub fn draw_title<'a>(focus: &Focus, popup_mode: bool) -> Paragraph<'a> {
             Block::default()
                 .borders(Borders::ALL)
                 .style(title_style)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
 }
 
@@ -1620,7 +1624,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
@@ -1645,7 +1649,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .style(name_style)
-                .border_type(BorderType::Plain)
+                .border_type(BorderType::Rounded)
                 .title("Board Name (required)")
         );
     rect.render_widget(board_name, chunks[1]);
@@ -1656,7 +1660,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .style(description_style)
-                .border_type(BorderType::Plain)
+                .border_type(BorderType::Rounded)
                 .title("Board Description")
         );
     rect.render_widget(board_description, chunks[2]);
@@ -1697,7 +1701,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
         .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[3]);
@@ -1708,7 +1712,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .style(submit_style)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         );
     rect.render_widget(submit_button, chunks[4]);
 
@@ -1777,7 +1781,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
@@ -1808,7 +1812,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .style(name_style)
-                .border_type(BorderType::Plain)
+                .border_type(BorderType::Rounded)
                 .title("Card Name (required)")
         );
     rect.render_widget(card_name, chunks[1]);
@@ -1819,7 +1823,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .style(description_style)
-                .border_type(BorderType::Plain)
+                .border_type(BorderType::Rounded)
                 .title("Card Description")
         );
     rect.render_widget(card_description, chunks[2]);
@@ -1830,7 +1834,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .style(due_date_style)
-                .border_type(BorderType::Plain)
+                .border_type(BorderType::Rounded)
                 .title("Card Due Date (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)")
         );
     rect.render_widget(card_due_date, chunks[3]);
@@ -1872,7 +1876,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
         .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[4]);
@@ -1883,7 +1887,7 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .style(submit_style)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         );
     rect.render_widget(submit_button, chunks[5]);
 
@@ -1945,7 +1949,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
@@ -1972,7 +1976,7 @@ where
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(BorderType::Plain),
+                    .border_type(BorderType::Rounded),
             )
             .style(LOG_ERROR_STYLE);
         rect.render_widget(no_saves_paragraph, chunks[1]);
@@ -2013,7 +2017,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Plain),
+                .border_type(BorderType::Rounded),
         )
         .wrap(Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[2]);
@@ -2025,7 +2029,7 @@ where
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(BorderType::Plain),
+                    .border_type(BorderType::Rounded),
             );
         rect.render_widget(preview_paragraph, main_chunks[1]);
     } else {
@@ -2035,7 +2039,7 @@ where
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .border_type(BorderType::Plain),
+                        .border_type(BorderType::Rounded),
                 );
             rect.render_widget(preview_paragraph, main_chunks[1]);
         } else {
@@ -2078,7 +2082,7 @@ where
         let toast_block = Block::default()
             .title(toast_title)
             .borders(Borders::ALL)
-            .border_type(BorderType::Plain)
+            .border_type(BorderType::Rounded)
             .border_style(toast_style);
         let toast_paragraph = Paragraph::new(toast.message.clone())
             .block(toast_block)
@@ -2099,7 +2103,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::LEFT)
-                .border_type(BorderType::Plain)
+                .border_type(BorderType::Rounded)
         )
         .style(DEFAULT_STYLE);
     let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
@@ -2144,7 +2148,7 @@ where
             let main_block = Block::default()
                 .title(format!("{} >> Board({})", card_name, board_name))
                 .borders(Borders::ALL)
-                .border_type(BorderType::Plain);
+                .border_type(BorderType::Rounded);
             rect.render_widget(main_block, popup_area);
 
             let description_paragraph = Paragraph::new(card_description)
@@ -2152,7 +2156,7 @@ where
                     Block::default()
                         .title("Description")
                         .borders(Borders::ALL)
-                        .border_type(BorderType::Plain),
+                        .border_type(BorderType::Rounded),
                 )
                 .wrap(Wrap { trim: false });
             rect.render_widget(description_paragraph, card_chunks[0]);
@@ -2211,7 +2215,7 @@ where
                 .block(Block::default()
                     .title("Card Info")
                     .borders(Borders::ALL)
-                    .border_type(BorderType::Plain)
+                    .border_type(BorderType::Rounded)
                 )
                 .alignment(Alignment::Left)
                 .wrap(Wrap { trim: true });

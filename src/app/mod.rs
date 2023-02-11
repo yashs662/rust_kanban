@@ -40,7 +40,16 @@ use crate::app::actions::Action;
 use crate::app::kanban::CardStatus;
 use crate::constants::{
     SAVE_DIR_NAME,
-    FIELD_NOT_SET, DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
+    FIELD_NOT_SET,
+    DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
+    DEFAULT_TICKRATE,
+    DEFAULT_TOAST_DURATION,
+    NO_OF_CARDS_PER_BOARD,
+    MIN_NO_CARDS_PER_BOARD,
+    MAX_NO_CARDS_PER_BOARD,
+    NO_OF_BOARDS_PER_PAGE,
+    MIN_NO_BOARDS_PER_PAGE,
+    MAX_NO_BOARDS_PER_PAGE,
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{
@@ -48,6 +57,7 @@ use crate::io::data_handler::{
     get_available_local_savefiles,
     get_config
 };
+use crate::io::handler::refresh_visible_boards_and_cards;
 use crate::io::{
     IoEvent,
     data_handler
@@ -111,7 +121,6 @@ impl App {
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
         // check if we are in a user input mode
         if self.state.status == AppStatus::UserInput {
-            debug!("{}", key);
             // append to current user input if key is not enter else change state to Initialized
             if key != Key::Enter && key != Key::Esc {
                 let mut current_key = key.to_string();
@@ -805,6 +814,8 @@ impl App {
                                         if write_config_status.is_err() {
                                             error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
                                             self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        } else {
+                                            self.send_info_toast("Config updated Successfully", None);
                                         }
                                     } else if *config_item == "Auto Load Last Save" {
                                         let always_load_last_save = self.config.always_load_last_save;
@@ -816,6 +827,8 @@ impl App {
                                         if write_config_status.is_err() {
                                             error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
                                             self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        } else {
+                                            self.send_info_toast("Config updated Successfully", None);
                                         }
                                     } else if *config_item == "Disable Scrollbars" {
                                         let disable_scrollbars = self.config.disable_scrollbars;
@@ -827,6 +840,8 @@ impl App {
                                         if write_config_status.is_err() {
                                             error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
                                             self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        } else {
+                                            self.send_info_toast("Config updated Successfully", None);
                                         }
                                     } else {
                                         self.prev_ui_mode = Some(self.state.ui_mode.clone());
@@ -857,6 +872,8 @@ impl App {
                                     if write_config_status.is_err() {
                                         error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
                                         self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                    } else {
+                                        self.send_info_toast("Config updated Successfully", None);
                                     }
 
                                     // reset everything
@@ -888,6 +905,8 @@ impl App {
                                     if write_config_status.is_err() {
                                         error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
                                         self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                    } else {
+                                        self.send_info_toast("Config updated Successfully", None);
                                     }
 
                                     // reset everything
@@ -2011,6 +2030,7 @@ pub struct AppState {
     pub preview_visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
     pub popup_mode: bool,
     pub ui_mode: UiMode,
+    pub no_of_cards_to_show: u16,
 }
 
 impl Default for AppState {
@@ -2038,6 +2058,7 @@ impl Default for AppState {
             preview_visible_boards_and_cards: LinkedHashMap::new(),
             popup_mode: false,
             ui_mode: data_handler::get_default_ui_mode(),
+            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
         }
     }
 }
@@ -2052,6 +2073,8 @@ pub struct AppConfig {
     pub warning_delta: u16,
     pub keybindings: KeyBindings,
     pub tickrate: u64,
+    pub no_of_cards_to_show: u16,
+    pub no_of_boards_to_show: u16,
 }
 
 impl AppConfig {
@@ -2067,6 +2090,8 @@ impl AppConfig {
             warning_delta: DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
             keybindings: KeyBindings::default(),
             tickrate: DEFAULT_TICKRATE,
+            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
+            no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
         }
     }
 
@@ -2079,6 +2104,8 @@ impl AppConfig {
             vec![String::from("Disable Scrollbars"), self.disable_scrollbars.to_string()],
             vec![String::from("Number of Days to Warn Before Due Date"), self.warning_delta.to_string()],
             vec![String::from("Tickrate"), self.tickrate.to_string()],
+            vec![String::from("Number of Cards to Show per board"), self.no_of_cards_to_show.to_string()],
+            vec![String::from("Number of Boards to Show"), self.no_of_boards_to_show.to_string()],
             vec![String::from("Edit Keybindings")],
         ]
     }
@@ -2174,6 +2201,44 @@ impl AppConfig {
                         app.send_error_toast(&format!("Expected number of milliseconds (integer), got: {}", value),None);
                     }
                 }
+                "Number of Cards to Show per board" => {
+                    let new_no_cards = value.parse::<u16>();
+                    if new_no_cards.is_ok() {
+                        let unwrapped = new_no_cards.unwrap();
+                        if unwrapped < MIN_NO_CARDS_PER_BOARD {
+                            error!("Number of cards must be greater than {}", MIN_NO_CARDS_PER_BOARD);
+                            app.send_error_toast(&format!("Number of cards must be greater than {}", MIN_NO_CARDS_PER_BOARD),None);
+                        } else if unwrapped > MAX_NO_CARDS_PER_BOARD {
+                            error!("Number of cards must be less than {}", MAX_NO_CARDS_PER_BOARD);
+                            app.send_error_toast(&format!("Number of cards must be less than {}", MAX_NO_CARDS_PER_BOARD),None);
+                        } else {
+                            config.no_of_cards_to_show = unwrapped;
+                            app.send_info_toast(&format!("Number of cards per board to display set to {}", unwrapped),None);
+                        }
+                    } else {
+                        error!("Invalid number: {}", value);
+                        app.send_error_toast(&format!("Expected number of cards (integer), got: {}", value),None);
+                    }
+                }
+                "Number of Boards to Show" => {
+                    let new_no_boards = value.parse::<u16>();
+                    if new_no_boards.is_ok() {
+                        let unwrapped = new_no_boards.unwrap();
+                        if unwrapped < MIN_NO_BOARDS_PER_PAGE {
+                            error!("Number of boards must be greater than {}", MIN_NO_BOARDS_PER_PAGE);
+                            app.send_error_toast(&format!("Number of boards must be greater than {}", MIN_NO_BOARDS_PER_PAGE),None);
+                        } else if unwrapped > MAX_NO_BOARDS_PER_PAGE {
+                            error!("Number of boards must be less than {}", MAX_NO_BOARDS_PER_PAGE);
+                            app.send_error_toast(&format!("Number of boards must be less than {}", MAX_NO_BOARDS_PER_PAGE),None);
+                        } else {
+                            config.no_of_boards_to_show = unwrapped;
+                            app.send_info_toast(&format!("Number of boards to display set to {}", unwrapped),None);
+                        }
+                    } else {
+                        error!("Invalid number: {}", value);
+                        app.send_error_toast(&format!("Expected number of boards (integer), got: {}", value),None);
+                    }
+                }
                 _ => {
                     debug!("Invalid key: {}", key);
                     app.send_error_toast("Something went wrong 😢 ",None);
@@ -2181,6 +2246,7 @@ impl AppConfig {
                 }
             }
         }
+        refresh_visible_boards_and_cards(app);
         config
     }
 
