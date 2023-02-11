@@ -7,20 +7,20 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/yashs662/rust_kanban"
 
 [dependencies]
-log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
+log = { version = "0.4.17", features = ["max_level_debug", "release_max_level_info"] }
 tui-logger = "0.8.1"
 tui = "0.19.0"
 crossterm = "0.26.0"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.25.0", features = ["full"] }
 chrono = "0.4.23"
 textwrap = "0.16"
 eyre = "0.6"
 home = "0.5.4"
-serde = { version = "1.0.147", features = ["derive"]}
-serde_json = "1.0.89"
-clap = { version = "4.0.27", features = ["derive"] }
+serde = { version = "1.0.152", features = ["derive"]}
+serde_json = "1.0.93"
+clap = { version = "4.1.4", features = ["derive"] }
 savefile-derive = "0.12.0"
 savefile = "0.12.0"
-uuid = { version = "1.2.2", features = ["v4"] }
-regex = "1.7.0"
+uuid = { version = "1.3.0", features = ["v4"] }
+regex = "1.7.1"
 linked-hash-map = "0.5.6"
