@@ -1,14 +1,19 @@
 name: Linux build
 
 on:
-  workflow_dispatch
+  push:
+    paths:
+      - Cargo.toml
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
@@ -19,12 +24,13 @@ jobs:
             #!/bin/bash
             echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
 
-    - uses: "marvinpinto/action-automatic-releases@latest"
+    - name: Release on Windows, macOS, and Linux
+      uses: "marvinpinto/action-automatic-releases@latest"
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         automatic_release_tag: "v${{ env.version }}" 
         prerelease: true
         title: "Development Build"
         files: |
-          target/release/rust-kanban
+          target/release/rust-kanban*
       

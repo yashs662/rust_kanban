@@ -4,6 +4,7 @@
   I am new to rust and wanted to learn the language in a project-oriented manner, feel free to drop feedback on my code😁. Another reason for building a TUI is that I spend the majority of my time in the terminal whether it is testing or running code or writing code in neovim. I haven't been able to find any other alternatives so I have started to make my own!
 ## Contribution
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
+  I currently do not own a Mac so I am unable to test the app on Mac, if you are able to test it on Mac, please let me know if there are any issues.
 ## TODO
 - [ ] Allow Card to be modified in Card View
 - [ ] Add ability to export data to JSON / Switch to JSON for file saving (maybe? need to test speed of JSON vs savefile binary)
@@ -14,6 +15,8 @@
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to interact with the kanban board using the mouse (scrolling, dragging, etc)
 - [ ] Implement a way to sync with other services like notion
+- [ ] Write Tests
+- [ ] Add a Toutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
 - [x] Implement previews for loading a save
 - [x] Toast Message Implementation -- (Inspired by [nvim-notify](https://github.com/rcarriga/nvim-notify))
