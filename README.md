@@ -5,7 +5,7 @@
 ## Contribution
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
 ## TODO
-- [ ] Implement Card View and Board View (Expanded view of cards and boards)
+- [ ] Allow Card to be modified in Card View
 - [ ] Add ability to export data to JSON / Switch to JSON for file saving (maybe? need to test speed of JSON vs savefile binary)
 - [ ] Implement Cloud saves (Google drive maybe? as i am not going to host a server)
 - [ ] Implement a way to add custom colors (Theme support)
