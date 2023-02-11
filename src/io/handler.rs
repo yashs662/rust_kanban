@@ -987,8 +987,7 @@ fn get_latest_save_file() -> Result<(String, u32)> {
     } else {
         local_save_files.unwrap()
     };
-    let fall_back_version = "1".to_string();
-    // if local_save_files is empty, return empty vec
+    let fall_back_version = -1;
     if local_save_files.is_empty() {
         return Err(anyhow!("No local save files found"));
     }
@@ -1010,11 +1009,17 @@ fn get_latest_save_file() -> Result<(String, u32)> {
         })
         .map(|file| {
             let version = file.split("_v").collect::<Vec<&str>>()[1];
-            version.to_string()
+            // convert version t0 integer
+            version.parse::<i32>().unwrap_or(fall_back_version)
         })
         .max()
         .unwrap_or(fall_back_version);
-    let latest_version = latest_version.parse::<u32>().unwrap_or(1);
+
+        if latest_version == fall_back_version {
+            return Err(anyhow!("No local save files found"));
+        }
+        let latest_version = latest_version as u32;
+
     let latest_save_file = format!("kanban_{}_v{}", latest_date.format("%d-%m-%Y"), latest_version);
     Ok((latest_save_file, latest_version))
 }
