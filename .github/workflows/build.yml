@@ -20,18 +20,56 @@ jobs:
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build -r
+    
     - name: Get version from cargo.toml
       run: |
-            #!/bin/bash
-            echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          echo "version=$(Get-Content Cargo.toml | Select-String -Pattern 'version = \"(.*)\"' -AllMatches | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Groups | Select-Object -ExpandProperty Value -First 1)" >> $GITHUB_ENV
+        else
+          echo "version=$(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"' | head -1)" >> $GITHUB_ENV
+        fi
 
-    - name: Release on Windows, macOS, and Linux
-      uses: "marvinpinto/action-automatic-releases@latest"
+    - name: Upload release artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: rust-kanban-${{ matrix.os }}
+        path: target/release/rust-kanban
+
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Get version from Cargo.toml
+      run: |
+        echo "version=$(sed -n 's/version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> $GITHUB_ENV
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: rust-kanban-windows-latest
+        path: target/release/windows
+    - name: Download artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: rust-kanban-ubuntu-latest
+        path: target/release/linux
+    - name: Download artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: rust-kanban-macos-latest
+        path: target/release/macos
+
+    - name: Create Release
+      uses: marvinpinto/action-automatic-releases@latest
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "v${{ env.version }}" 
+        automatic_release_tag: "v${{ env.version }}"
         prerelease: true
         title: "Development Build"
         files: |
-          target/release/rust-kanban*
-      
+          target/release/windows/rust-kanban
+          target/release/linux/rust-kanban
+          target/release/macos/rust-kanban
