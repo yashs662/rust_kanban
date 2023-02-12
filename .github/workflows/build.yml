@@ -33,6 +33,12 @@ jobs:
       run: |
         echo "version=$(sed -n 's/version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> $GITHUB_ENV
 
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: rust-kanban-${{ matrix.os }}
+        path: target/release/rust-kanban
+
 
   release:
     runs-on: ubuntu-latest
