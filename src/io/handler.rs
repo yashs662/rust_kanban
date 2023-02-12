@@ -161,7 +161,7 @@ impl IoAsyncHandler {
         }
         info!("🚀 Loading save file: {}", save_file_name);
         let version = version.unwrap();
-        let board_data = get_local_kanban_state(save_file_name.clone(), version);
+        let board_data = get_local_kanban_state(save_file_name.clone(), version, false);
         match board_data {
             Ok(boards) => {
                 app.set_boards(boards);
@@ -742,7 +742,7 @@ impl IoAsyncHandler {
             return Ok(());
         }
         let version = version.unwrap();
-        let board_data = get_local_kanban_state(save_file_name.clone(), version);
+        let board_data = get_local_kanban_state(save_file_name.clone(), version, true);
         match board_data {
             Ok(boards) => {
                 app.state.preview_boards_and_cards = Some(boards);
@@ -858,7 +858,7 @@ fn prepare_boards (app: &mut App) -> Vec<Board> {
             let latest_save_file_info = latest_save_file_info.unwrap();
             let latest_save_file = latest_save_file_info.0;
             let latest_version = latest_save_file_info.1;
-            let local_data = get_local_kanban_state(latest_save_file.clone(), latest_version);
+            let local_data = get_local_kanban_state(latest_save_file.clone(), latest_version, false);
             match local_data {
                 Ok(data) => {
                     info!("👍 Local data loaded from {:?}", latest_save_file);

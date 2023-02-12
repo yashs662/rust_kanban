@@ -1121,20 +1121,15 @@ where
     } else {
         &app.boards
     };
-    let default_style = if app.state.popup_mode {
-        INACTIVE_TEXT_STYLE
-    } else {
-        DEFAULT_STYLE
-    };
-    let error_text_style = if app.state.popup_mode {
-        INACTIVE_TEXT_STYLE
-    } else {
-        ERROR_TEXT_STYLE
-    };
     let progress_bar_style = if app.state.popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
         PROGRESS_BAR_STYLE
+    };
+    let error_text_style = if app.state.popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else { 
+        ERROR_TEXT_STYLE
     };
     let current_board = &app.state.current_board_id.unwrap_or(0);
 
@@ -1170,7 +1165,7 @@ where
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded),
                 )
-                .style(default_style);
+                .style(error_text_style);
             rect.render_widget(empty_paragraph, area);
             return;
         }

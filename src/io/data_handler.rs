@@ -127,7 +127,7 @@ pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError
     }
 }
 
-pub fn get_local_kanban_state(file_name: String, version: u32) -> Result<Vec<Board>, SavefileError> {
+pub fn get_local_kanban_state(file_name: String, version: u32, preview_mode: bool) -> Result<Vec<Board>, SavefileError> {
     let get_config_status = get_config();
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
@@ -136,7 +136,9 @@ pub fn get_local_kanban_state(file_name: String, version: u32) -> Result<Vec<Boa
         get_config_status.unwrap()
     };
     let file_path = config.save_directory.join(file_name);
-    info!("Loading local save file: {:?}", file_path);
+    if !preview_mode {
+        info!("Loading local save file: {:?}", file_path);
+    }
     let boards = load_file(file_path, version)?;
     Ok(boards)
 }
