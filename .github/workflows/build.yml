@@ -21,16 +21,18 @@ jobs:
     - name: Build
       run: cargo build -r
     
-    - name: Get version from cargo.toml
+    - name: Get version from cargo.toml for windows
+      if: matrix.os == 'windows-latest'
+      env:
+        version: $(Get-Content Cargo.toml | Select-String -Pattern 'version =' | Select-Object -First 1 | ForEach-Object { $_.ToString().Split(' ')[2].Trim('"') })
       run: |
-        if [[ "${{ matrix.os }}" == "windows" ]]; then
-          env:
-            version: $(Get-Content Cargo.toml | Select-String -Pattern 'version =' | Select-Object -First 1 | ForEach-Object { $_.ToString().Split(' ')[2].Trim('"') })
-          echo "version=${{ env.version }}" >> $GITHUB_ENV
-        else
-          env:
-            version: $(grep 'version =' Cargo.toml | awk '{print $3}' | tr -d '"')
-          echo "version=${{ env.version }}" >> $GITHUB_ENV
+        echo "version=${{ env.version }}" >> $GITHUB_ENV
+      
+    - name: Get version from cargo.toml for linux and macos
+      if: matrix.os != 'windows-latest'
+      run: |
+        echo "version=$(sed -n 's/version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> $GITHUB_ENV
+
 
   release:
     runs-on: ubuntu-latest
