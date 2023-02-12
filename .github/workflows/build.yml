@@ -63,17 +63,17 @@ jobs:
       uses: actions/download-artifact@v2
       with:
         name: rust-kanban-windows-latest
-        path: target/release/windows
+        path: windows
     - name: Download artifacts
       uses: actions/download-artifact@v2
       with:
         name: rust-kanban-ubuntu-latest
-        path: target/release/linux
+        path: linux
     - name: Download artifacts
       uses: actions/download-artifact@v2
       with:
         name: rust-kanban-macos-latest
-        path: target/release/macos
+        path: macos
 
     - name: Create Release
       uses: marvinpinto/action-automatic-releases@latest
@@ -83,6 +83,6 @@ jobs:
         prerelease: true
         title: "Development Build"
         files: |
-          target/release/windows/rust-kanban
-          target/release/linux/rust-kanban
-          target/release/macos/rust-kanban
+          /home/runner/work/rust_kanban/rust_kanban/linux
+          /home/runner/work/rust_kanban/rust_kanban/windows
+          /home/runner/work/rust_kanban/rust_kanban/macos
