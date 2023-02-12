@@ -53,27 +53,33 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Get version from Cargo.toml
       run: |
         echo "version=$(sed -n 's/version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> $GITHUB_ENV
 
     - name: Download artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v3
       with:
         name: rust-kanban-windows-latest
         path: windows
     - name: Download artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v3
       with:
         name: rust-kanban-ubuntu-latest
         path: linux
     - name: Download artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v3
       with:
         name: rust-kanban-macos-latest
         path: macos
+
+    - name: Rename files
+      run: |
+        mv windows/rust-kanban.exe "windows/rust-kanban-Windows-v${{ env.version }}.exe"
+        mv linux/rust-kanban "linux/rust-kanban-Linux-v${{ env.version }}"
+        mv macos/rust-kanban "macos/rust-kanban-MacOS-v${{ env.version }}"
 
     - name: Create Release
       uses: marvinpinto/action-automatic-releases@latest
