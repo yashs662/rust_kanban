@@ -93,6 +93,10 @@ jobs:
           /home/runner/work/rust_kanban/rust_kanban/windows
           /home/runner/work/rust_kanban/rust_kanban/macos
 
+    - name: Reset git for publishing
+      run: |
+        git checkout .
+
     - uses: katyo/publish-crates@v2
       with:
         registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
