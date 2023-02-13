@@ -5,6 +5,9 @@ authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/yashs662/rust_kanban"
+description = "A kanban board for the terminal built with ❤️ in Rust"
+keywords = ["TUI", "Kanban", "CLI", "Terminal"]
+categories = ["command-line-utilities", "text-editors"]
 
 [dependencies]
 log = { version = "0.4.17", features = ["max_level_debug", "release_max_level_info"] }
