@@ -1990,10 +1990,20 @@ where
     }
 }
 
-pub fn render_load_save<B>(rect: &mut Frame<B>, load_save_state: &mut ListState, app: &App)
+pub fn render_load_save<B>(rect: &mut Frame<B>, app: &App, load_save_state: &mut ListState)
 where
     B: Backend,
 {
+    let default_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
+    let help_key_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        HELP_KEY_STYLE
+    };
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -2016,7 +2026,8 @@ where
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
-        );
+        )
+        .style(default_style);
     rect.render_widget(title_paragraph, chunks[0]);
 
     let item_list = get_available_local_savefiles();
@@ -2034,7 +2045,8 @@ where
         let choice_list = List::new(items)
             .block(Block::default().borders(Borders::ALL).title("Available Saves"))
             .highlight_style(LIST_SELECT_STYLE)
-            .highlight_symbol(LIST_SELECTED_SYMBOL);
+            .highlight_symbol(LIST_SELECTED_SYMBOL)
+            .style(default_style);
         rect.render_stateful_widget(choice_list, chunks[1], load_save_state);
     } else {
         let no_saves_paragraph = Paragraph::new("No saves found")
@@ -2063,20 +2075,20 @@ where
         .clone();
 
     let help_text = Spans::from(vec![
-        Span::styled("Use ", DEFAULT_STYLE),
-        Span::styled(up_key, HELP_KEY_STYLE),
-        Span::styled(" and ", DEFAULT_STYLE),
-        Span::styled(down_key, HELP_KEY_STYLE),
-        Span::styled("to navigate", DEFAULT_STYLE),
+        Span::styled("Use ", default_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled(" and ", default_style),
+        Span::styled(down_key, help_key_style),
+        Span::styled("to navigate", default_style),
         Span::raw("; "),
-        Span::styled("<Enter>", HELP_KEY_STYLE),
-        Span::styled(" to Load the save file", DEFAULT_STYLE),
+        Span::styled("<Enter>", help_key_style),
+        Span::styled(" to Load the save file", default_style),
         Span::raw("; "),
-        Span::styled("<Esc>", HELP_KEY_STYLE),
-        Span::styled(" to cancel", DEFAULT_STYLE),
+        Span::styled("<Esc>", help_key_style),
+        Span::styled(" to cancel", default_style),
         Span::raw("; "),
-        Span::styled(delete_key, HELP_KEY_STYLE),
-        Span::styled("to delete a save file", DEFAULT_STYLE),
+        Span::styled(delete_key, help_key_style),
+        Span::styled("to delete a save file", default_style),
     ]);
     let help_paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)
@@ -2085,7 +2097,8 @@ where
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .wrap(Wrap { trim: true });
+        .wrap(Wrap { trim: true })
+        .style(default_style);
     rect.render_widget(help_paragraph, chunks[2]);
 
     // preview pane
@@ -2096,7 +2109,8 @@ where
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
-            );
+            )
+            .style(default_style);
         rect.render_widget(preview_paragraph, main_chunks[1]);
     } else {
         if app.state.preview_boards_and_cards.is_none() {
@@ -2106,7 +2120,8 @@ where
                     Block::default()
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded),
-                );
+                )
+                .style(default_style);
             rect.render_widget(preview_paragraph, main_chunks[1]);
         } else {
             render_body(rect, main_chunks[1], app, true)
@@ -2448,11 +2463,13 @@ where
         return;
     }
     let mut card_name = String::new();
+    let mut board_name = String::new();
     if let Some(current_board_id) = app.state.current_board_id {
         if let Some(current_board) = app.boards.iter().find(|b| b.id == current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) = current_board.cards.iter().find(|c| c.id == current_card_id) {
                     card_name = current_card.name.clone();
+                    board_name = current_board.name.clone();
                 }
             }
         }
@@ -2468,7 +2485,7 @@ where
     let statuses = List::new(all_statuses)
         .block(
             Block::default()
-                .title(format!("Changing Status of {}", card_name))
+                .title(format!("Changing Status of \"{}\" in {}", card_name, board_name))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )

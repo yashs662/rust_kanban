@@ -525,20 +525,30 @@ impl App {
                                     self.dispatch(IoEvent::SaveLocalData).await;
                                 },
                                 CommandPaletteActions::NewBoard => {
-                                    self.state.popup_mode = None;
-                                    self.state.ui_mode = UiMode::NewBoard;
-                                    self.focus = Focus::NewBoardName;
+                                    if UiMode::view_modes().contains(&self.state.ui_mode) {
+                                        self.state.popup_mode = None;
+                                        self.state.ui_mode = UiMode::NewBoard;
+                                        self.focus = Focus::NewBoardName;
+                                    } else {
+                                        self.state.popup_mode = None;
+                                        self.send_error_toast("Cannot create a new board in this view", None);
+                                    }
                                 },
                                 CommandPaletteActions::NewCard => {
-                                    if self.state.current_board_id.is_none() {
-                                        self.send_error_toast("No board Selected / Available", None);
+                                    if UiMode::view_modes().contains(&self.state.ui_mode) {
+                                        if self.state.current_board_id.is_none() {
+                                            self.send_error_toast("No board Selected / Available", None);
+                                            self.state.popup_mode = None;
+                                            self.state.app_status = AppStatus::Initialized;
+                                            return AppReturn::Continue;
+                                        }
                                         self.state.popup_mode = None;
-                                        self.state.app_status = AppStatus::Initialized;
-                                        return AppReturn::Continue;
+                                        self.state.ui_mode = UiMode::NewCard;
+                                        self.focus = Focus::NewCardName;
+                                    } else {
+                                        self.state.popup_mode = None;
+                                        self.send_error_toast("Cannot create a new card in this view", None);
                                     }
-                                    self.state.popup_mode = None;
-                                    self.state.ui_mode = UiMode::NewCard;
-                                    self.focus = Focus::NewCardName;
                                 },
                                 CommandPaletteActions::ResetUI => {
                                     self.state.popup_mode = None;
@@ -549,19 +559,24 @@ impl App {
                                     self.state.popup_mode = Some(PopupMode::ChangeUIMode);
                                 },
                                 CommandPaletteActions::ChangeCurrentCardStatus => {
-                                    if let Some(current_board_id) = self.state.current_board_id {
-                                        if let Some(current_board) = self.boards.iter_mut().find(|b| b.id == current_board_id) {
-                                            if let Some(current_card_id) = self.state.current_card_id {
-                                                if let Some(_) = current_board.cards.iter_mut().find(|c| c.id == current_card_id) {
-                                                    self.state.popup_mode = Some(PopupMode::ChangeCurrentCardStatus);
-                                                    self.state.app_status = AppStatus::Initialized;
-                                                    self.state.card_status_selector_state.select(Some(0));
-                                                    return AppReturn::Continue;
+                                    if UiMode::view_modes().contains(&self.state.ui_mode) {
+                                        if let Some(current_board_id) = self.state.current_board_id {
+                                            if let Some(current_board) = self.boards.iter_mut().find(|b| b.id == current_board_id) {
+                                                if let Some(current_card_id) = self.state.current_card_id {
+                                                    if let Some(_) = current_board.cards.iter_mut().find(|c| c.id == current_card_id) {
+                                                        self.state.popup_mode = Some(PopupMode::ChangeCurrentCardStatus);
+                                                        self.state.app_status = AppStatus::Initialized;
+                                                        self.state.card_status_selector_state.select(Some(0));
+                                                        return AppReturn::Continue;
+                                                    }
                                                 }
                                             }
                                         }
+                                        self.send_error_toast("Could not find current card", None);
+                                    } else {
+                                        self.state.popup_mode = None;
+                                        self.send_error_toast("Cannot change card status in this view", None);
                                     }
-                                    self.send_error_toast("Could not find current card", None);
                                 },
                                 CommandPaletteActions::LoadASave => {
                                     self.state.popup_mode = None;

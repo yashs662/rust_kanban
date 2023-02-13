@@ -113,7 +113,7 @@ where
             render_new_card_form(rect, app)
         }
         UiMode::LoadSave => {
-            render_load_save(rect, &mut states.load_save_state, app);
+            render_load_save(rect, app, &mut states.load_save_state);
         }
     }
 
