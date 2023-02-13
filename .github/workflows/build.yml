@@ -93,9 +93,11 @@ jobs:
           /home/runner/work/rust_kanban/rust_kanban/windows
           /home/runner/work/rust_kanban/rust_kanban/macos
 
-    - name: Reset git for publishing
+    - name: prepare for publishing
       run: |
-        git checkout .
+        rm -rf "linux/rust-kanban-Linux-v${{ env.version }}"
+        rm -rf "macos/rust-kanban-MacOS-v${{ env.version }}"
+        rm -rf "windows/rust-kanban-Windows-v${{ env.version }}.exe"
 
     - uses: katyo/publish-crates@v2
       with:
