@@ -17,7 +17,7 @@ pub enum UiMode {
     TitleBodyLog,
     TitleBodyHelpLog,
     BodyHelpLog,
-    Config,
+    ConfigMenu,
     EditConfig,
     EditKeybindings,
     EditSpecificKeybinding,
@@ -44,7 +44,7 @@ pub enum Focus {
     Body,
     Help,
     Log,
-    Config,
+    ConfigTable,
     ConfigHelp,
     MainMenu,
     MainMenuHelp,
@@ -80,6 +80,7 @@ pub struct KeyBindings {
     pub change_card_status_to_stale: Vec<Key>,
     pub reset_ui: Vec<Key>,
     pub go_to_main_menu: Vec<Key>,
+    pub toggle_command_palette: Vec<Key>,
 }
 
 impl UiMode {
@@ -97,7 +98,7 @@ impl UiMode {
             UiMode::TitleBodyLog => "Title, Body and Log".to_string(),
             UiMode::BodyHelpLog => "Body, Help and Log".to_string(),
             UiMode::TitleBodyHelpLog => "Title, Body, Help and Log".to_string(),
-            UiMode::Config => "Config".to_string(),
+            UiMode::ConfigMenu => "Config".to_string(),
             UiMode::EditConfig => "Edit Config".to_string(),
             UiMode::EditKeybindings => "Edit Keybindings".to_string(),
             UiMode::EditSpecificKeybinding => "Edit Specific Keybinding".to_string(),
@@ -121,7 +122,7 @@ impl UiMode {
             "Title, Body and Log" => Some(UiMode::TitleBodyLog),
             "Body, Help and Log" => Some(UiMode::BodyHelpLog),
             "Title, Body, Help and Log" => Some(UiMode::TitleBodyHelpLog),
-            "Config" => Some(UiMode::Config),
+            "Config" => Some(UiMode::ConfigMenu),
             "Edit Config" => Some(UiMode::EditConfig),
             "Edit Keybindings" => Some(UiMode::EditKeybindings),
             "Edit Specific Keybinding" => Some(UiMode::EditSpecificKeybinding),
@@ -164,7 +165,7 @@ impl UiMode {
             UiMode::TitleBodyLog => vec![Focus::Title, Focus::Body, Focus::Log],
             UiMode::BodyHelpLog => vec![Focus::Body, Focus::Help, Focus::Log],
             UiMode::TitleBodyHelpLog => vec![Focus::Title, Focus::Body, Focus::Help, Focus::Log],
-            UiMode::Config => vec![Focus::Body, Focus::SubmitButton, Focus::ExtraFocus],
+            UiMode::ConfigMenu => vec![Focus::ConfigTable, Focus::SubmitButton, Focus::ExtraFocus],
             UiMode::EditConfig => vec![Focus::NoFocus],
             UiMode::EditKeybindings => vec![Focus::Title, Focus::SubmitButton],
             UiMode::EditSpecificKeybinding => vec![Focus::NoFocus],
@@ -225,7 +226,7 @@ impl Focus {
             Self::Body => "Body",
             Self::Help => "Help",
             Self::Log => "Log",
-            Self::Config => "Config",
+            Self::ConfigTable => "Config",
             Self::ConfigHelp => "Config Help",
             Self::MainMenu => "Main Menu",
             Self::MainMenuHelp => "Main Menu Help",
@@ -278,7 +279,7 @@ impl Focus {
             "Body" => Self::Body,
             "Help" => Self::Help,
             "Log" => Self::Log,
-            "Config" => Self::Config,
+            "Config" => Self::ConfigTable,
             "Config Help" => Self::ConfigHelp,
             "Main Menu" => Self::MainMenu,
             "Main Menu Help" => Self::MainMenuHelp,
@@ -318,6 +319,7 @@ impl KeyBindings {
             change_card_status_to_stale: vec![Key::Char('3')],
             reset_ui: vec![Key::Char('r')],
             go_to_main_menu: vec![Key::Char('m')],
+            toggle_command_palette: vec![Key::Ctrl('p')],
         }
     }
 
@@ -343,6 +345,7 @@ impl KeyBindings {
             ("change_card_status_to_stale", &self.change_card_status_to_stale),
             ("reset_ui", &self.reset_ui),
             ("go_to_main_menu", &self.go_to_main_menu),
+            ("toggle_command_palette", &self.toggle_command_palette),
         ]
         .into_iter()
     }
@@ -377,6 +380,7 @@ impl KeyBindings {
                     }
                     "reset_ui" => return Some(&Action::ResetUI),
                     "go_to_main_menu" => return Some(&Action::GoToMainMenu),
+                    "toggle_command_palette" => return Some(&Action::ToggleCommandPalette),
                     _ => return None,
                 }
             }
@@ -406,6 +410,7 @@ impl KeyBindings {
             "change_card_status_to_stale" => Some(&Action::ChangeCardStatusToStale),
             "reset_ui" => Some(&Action::ResetUI),
             "go_to_main_menu" => Some(&Action::GoToMainMenu),
+            "toggle_command_palette" => Some(&Action::ToggleCommandPalette),
             _ => None,
         }
     }

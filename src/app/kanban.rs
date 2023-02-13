@@ -56,6 +56,9 @@ impl CardStatus {
             CardStatus::Stale => "Stale".to_string(),
         }
     }
+    pub fn all() -> Vec<CardStatus> {
+        vec![CardStatus::Active, CardStatus::Complete, CardStatus::Stale]
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Savefile, PartialEq)]

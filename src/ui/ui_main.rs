@@ -1,11 +1,17 @@
-use tui::backend::Backend;
-use tui::Frame;
+use tui::{
+    backend::Backend,
+    Frame
+};
 
-use super::super::app::AppState;
-use super::super::app::state::{UiMode, AppStatus};
-use super::ui_helper::{self, render_toast};
+use super::{super::app::{
+    AppState,
+    state::{
+        UiMode,
+        AppStatus
+    }
+}, ui_helper::{render_change_ui_mode_popup, render_change_current_card_status_popup}};
 
-use ui_helper::{
+use super::ui_helper::{
     check_size,
     draw_size_error,
     render_zen_mode,
@@ -29,6 +35,8 @@ use ui_helper::{
     draw_loading_screen,
     render_edit_default_homescreen,
     render_view_card,
+    render_toast,
+    render_command_palette
 };
 use crate::app::App;
 
@@ -71,7 +79,7 @@ where
         UiMode::TitleBodyHelpLog => {
             render_title_body_help_log(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
-        UiMode::Config => {
+        UiMode::ConfigMenu => {
             render_config(rect, &app, &mut states.config_state);
         }
         UiMode::EditConfig => {
@@ -96,7 +104,7 @@ where
             render_help_menu(rect, &app, &mut states.help_state, states.keybind_store.clone());
         }
         UiMode::LogsOnly => {
-            render_logs_only(rect, &app.focus);
+            render_logs_only(rect, &app);
         }
         UiMode::NewBoard => {
             render_new_board_form(rect, &app);
@@ -109,7 +117,12 @@ where
         }
     }
 
+    // popups that do not have any UI modes / can be rendered on top of any UI mode,
+    // order determines which is rendered on top, last function is always on top
+
     render_view_card(rect, &app);
     render_toast(rect, &app);
-
+    render_change_ui_mode_popup(rect, &app, &mut states.default_view_state);
+    render_change_current_card_status_popup(rect, &app, &mut states.card_status_selector_state);
+    render_command_palette(rect, &app, &mut states.command_palette_list_state);
 }

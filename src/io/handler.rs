@@ -178,7 +178,7 @@ impl IoAsyncHandler {
         Ok(())
     }
 
-    async fn delete_save_file(&mut self) -> Result<()> {
+    pub async fn delete_save_file(&mut self) -> Result<()> {
         // get app.state.load_save_state.selected() and delete the file
         let app = self.app.lock().await;
         let file_list = get_available_local_savefiles();

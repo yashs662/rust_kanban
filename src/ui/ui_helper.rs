@@ -54,13 +54,17 @@ use crate::constants::{
     CARD_COMPLETED_STATUS_STYLE,
     CARD_STALE_STATUS_STYLE,
     MAX_TOASTS_TO_DISPLAY,
-    SCREEN_TO_TOAST_WIDTH_RATIO, FIELD_NOT_SET, CARD_PRIORITY_HIGH_STYLE, CARD_PRIORITY_MEDIUM_STYLE, CARD_PRIORITY_LOW_STYLE,
+    SCREEN_TO_TOAST_WIDTH_RATIO,
+    FIELD_NOT_SET,
+    CARD_PRIORITY_HIGH_STYLE,
+    CARD_PRIORITY_MEDIUM_STYLE,
+    CARD_PRIORITY_LOW_STYLE,
 };
 
 use crate::app::{
     MainMenuItem,
     App,
-    MainMenu, AppConfig
+    MainMenu, AppConfig, PopupMode
 };
 use crate::app::state::{
     Focus,
@@ -107,7 +111,7 @@ where
         )
         .split(rect.size());
 
-    let title = draw_title(&app.focus, app.state.popup_mode);
+    let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
     
     render_body(rect, chunks[1], app, false);
@@ -117,6 +121,11 @@ pub fn render_body_help<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut T
 where
     B: Backend,
 {
+    let default_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -143,8 +152,8 @@ where
     
     render_body(rect, chunks[0], app, false);
 
-    let help = draw_help(&app.focus, app.state.popup_mode, keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT);
+    let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
@@ -168,7 +177,7 @@ where
 
     render_body(rect, chunks[0], app, false);
 
-    let log = draw_logs(&app.focus, true, app.state.popup_mode);
+    let log = draw_logs(&app.focus, true, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[1]);
 }
 
@@ -176,6 +185,11 @@ pub fn render_title_body_help<'a,B>(rect: &mut Frame<B>, app: &App, help_state: 
 where
     B: Backend,
 {
+    let default_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -201,13 +215,13 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(&app.focus, app.state.popup_mode);
+    let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app, false);
 
-    let help = draw_help(&app.focus, app.state.popup_mode, keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT);
+    let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
@@ -230,12 +244,12 @@ where
         )
         .split(rect.size());
 
-    let title = draw_title(&app.focus, app.state.popup_mode);
+    let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app, false);
 
-    let log = draw_logs(&app.focus, true, app.state.popup_mode);
+    let log = draw_logs(&app.focus, true, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[2]);
 }
 
@@ -243,6 +257,11 @@ pub fn render_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &m
 where
     B: Backend,
 {
+    let default_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -270,14 +289,14 @@ where
 
     render_body(rect, chunks[0], app, false);
 
-    let help = draw_help(&app.focus, app.state.popup_mode, keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT);
+    let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 
-    let log = draw_logs(&app.focus, true, app.state.popup_mode);
+    let log = draw_logs(&app.focus, true, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[2]);
 }
 
@@ -285,6 +304,11 @@ pub fn render_title_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App, help_sta
 where
     B: Backend,
 {
+    let default_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -311,19 +335,19 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(&app.focus, app.state.popup_mode);
+    let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app, false);
 
-    let help = draw_help(&app.focus, app.state.popup_mode, keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT);
+    let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 
-    let log = draw_logs(&app.focus, true, app.state.popup_mode);
+    let log = draw_logs(&app.focus, true, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[3]);
 }
 
@@ -331,14 +355,13 @@ pub fn render_config<'a,B>(rect: &mut Frame<B>, app: &App, config_state: &mut Ta
 where
     B: Backend,
 {
-    let popup_mode = app.state.popup_mode;
+    let popup_mode = app.state.popup_mode.is_some();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
                 Constraint::Length(3),
                 Constraint::Min(8),
-                Constraint::Length(3),
                 Constraint::Length(3),
                 Constraint::Length(5),
                 Constraint::Length(5),
@@ -347,6 +370,17 @@ where
         )
         .split(rect.size());
     
+    let reset_btn_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .split(chunks[2]);
+
     let title = draw_title(&app.focus, popup_mode);
     rect.render_widget(title, chunks[0]);
     
@@ -376,19 +410,19 @@ where
         .block(Block::default().borders(Borders::ALL).title("Reset"))
         .style(reset_both_style)
         .alignment(Alignment::Center);
-    rect.render_widget(reset_both_button, chunks[2]);
+    rect.render_widget(reset_both_button, reset_btn_chunks[0]);
 
     let reset_config_button = Paragraph::new("Reset Only Config to Default")
         .block(Block::default().borders(Borders::ALL).title("Reset"))
         .style(reset_config_style)
         .alignment(Alignment::Center);
-    rect.render_widget(reset_config_button, chunks[3]);
+    rect.render_widget(reset_config_button, reset_btn_chunks[1]);
 
     let config_help = draw_config_help(&app.focus, popup_mode, app);
-    rect.render_widget(config_help, chunks[4]);
+    rect.render_widget(config_help, chunks[3]);
 
     let log = draw_logs(&app.focus, true, popup_mode);
-    rect.render_widget(log, chunks[5]);
+    rect.render_widget(log, chunks[4]);
 }
 
 /// Draws config list selector
@@ -396,7 +430,7 @@ fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static>
     let default_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
-        if *focus == Focus::Body {
+        if *focus == Focus::ConfigTable {
             FOCUSED_ELEMENT_STYLE
         } else {
             DEFAULT_STYLE
@@ -412,7 +446,7 @@ fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static>
     let current_element_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
-        if *focus == Focus::Body {
+        if *focus == Focus::ConfigTable {
             FOCUSED_ELEMENT_STYLE
         } else {
             DEFAULT_STYLE
@@ -435,9 +469,8 @@ fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static>
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
         .widths(&[
-            Constraint::Percentage(50),
-            Constraint::Length(30),
-            Constraint::Min(10),
+            Constraint::Percentage(40),
+            Constraint::Percentage(60),
         ])
 }
 
@@ -460,7 +493,7 @@ where
     B: Backend,
 {
     
-    let edit_box_style = if app.state.status == AppStatus::UserInput {
+    let edit_box_style = if app.state.app_status == AppStatus::UserInput {
         FOCUSED_ELEMENT_STYLE
     } else {
         DEFAULT_STYLE
@@ -504,7 +537,7 @@ where
 
     let log = draw_logs(&app.focus, true, false);
     
-    if app.state.status == AppStatus::UserInput {
+    if app.state.app_status == AppStatus::UserInput {
         let current_cursor_position = if app.state.current_cursor_position.is_some() {
             app.state.current_cursor_position.unwrap() as u16
         } else {
@@ -602,7 +635,7 @@ pub fn render_edit_keybindings<'a,B>(rect: &mut Frame<B>, app: &App, edit_keybin
 where
     B: Backend,
 {
-    let popup_mode = app.state.popup_mode;
+    let popup_mode = app.state.popup_mode.is_some();
     let default_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
@@ -723,7 +756,7 @@ pub fn render_edit_specific_keybinding<'a,B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
-    let edit_box_style = if app.state.status == AppStatus::KeyBindMode {
+    let edit_box_style = if app.state.app_status == AppStatus::KeyBindMode {
         FOCUSED_ELEMENT_STYLE
     } else {
         DEFAULT_STYLE
@@ -787,7 +820,7 @@ where
     
         let log = draw_logs(&app.focus, true, false);
         
-        if app.state.status == AppStatus::KeyBindMode {
+        if app.state.app_status == AppStatus::KeyBindMode {
             let current_cursor_position = if app.state.current_cursor_position.is_some() {
                 app.state.current_cursor_position.unwrap() as u16
             } else {
@@ -809,6 +842,11 @@ pub fn render_main_menu<'a,B>(rect: &mut Frame<B>, app: &App, main_menu_state: &
 where
     B: Backend,
 {
+    let default_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -835,20 +873,20 @@ where
         .margin(1)
         .split(chunks[2]);
     
-    let title = draw_title(&app.focus, app.state.popup_mode);
+    let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
     
     let main_menu = draw_main_menu(&app.focus, MainMenu::all());
     rect.render_stateful_widget(main_menu, chunks[1], main_menu_state);
 
-    let main_menu_help = draw_help(&app.focus, app.state.popup_mode, keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT);
+    let main_menu_help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
     rect.render_widget(main_menu_help.0, chunks[2]);
     rect.render_stateful_widget(main_menu_help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(main_menu_help.2, help_chunks[2], help_state);
 
-    let log = draw_logs(&app.focus, true, app.state.popup_mode);
+    let log = draw_logs(&app.focus, true, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[3]);
 }
 
@@ -856,6 +894,11 @@ pub fn render_help_menu<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut T
 where
     B: Backend,
 {
+    let default_style = if app.state.popup_mode.is_some() {
+        INACTIVE_TEXT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -880,18 +923,18 @@ where
         .margin(1)
         .split(chunks[0]);
 
-    let help_menu = draw_help(&app.focus, app.state.popup_mode, keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT);
+    let help_menu = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
+    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
     rect.render_widget(help_menu.0, chunks[0]);
     rect.render_stateful_widget(help_menu.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help_menu.2, help_chunks[2], help_state);
 
-    let log = draw_logs(&app.focus, true, app.state.popup_mode);
+    let log = draw_logs(&app.focus, true, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[1]);
 }
 
-pub fn render_logs_only<'a,B>(rect: &mut Frame<B>, focus: &Focus)
+pub fn render_logs_only<'a,B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
@@ -904,7 +947,7 @@ where
             .as_ref(),
         )
         .split(rect.size());
-    let log = draw_logs(focus, false, false);
+    let log = draw_logs(&app.focus, false, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[0]);
 }
 
@@ -950,7 +993,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
             Constraint::Percentage(30),
             Constraint::Percentage(70),
         ])
-        .style(default_style);
+        .style(DEFAULT_STYLE);
 
     let right_table = Table::new(right_rows)
         .block(Block::default())
@@ -960,7 +1003,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
             Constraint::Percentage(30),
             Constraint::Percentage(70),
         ])
-        .style(default_style);
+        .style(DEFAULT_STYLE);
 
     let border_block = Block::default()
         .title("Help")
@@ -1121,12 +1164,12 @@ where
     } else {
         &app.boards
     };
-    let progress_bar_style = if app.state.popup_mode {
+    let progress_bar_style = if app.state.popup_mode.is_some() {
         INACTIVE_TEXT_STYLE
     } else {
         PROGRESS_BAR_STYLE
     };
-    let error_text_style = if app.state.popup_mode {
+    let error_text_style = if app.state.popup_mode.is_some() {
         INACTIVE_TEXT_STYLE
     } else { 
         ERROR_TEXT_STYLE
@@ -1265,7 +1308,7 @@ where
             continue;
         }
 
-        let board_style = if app.state.popup_mode {
+        let board_style = if app.state.popup_mode.is_some() {
             INACTIVE_TEXT_STYLE
         } else {
             if *board_id == *current_board && matches!(focus, Focus::Body) && app.state.current_card_id == None {
@@ -1391,29 +1434,57 @@ where
                     let today = Local::now().naive_local();
                     let days_left = parsed_due_date.signed_duration_since(today).num_days();
                     if days_left <= app.config.warning_delta.into() && days_left >= 0 {
-                        Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_WARNING_STYLE))
+                        if app.state.popup_mode.is_some() {
+                            Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
+                        } else {
+                            Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_WARNING_STYLE))
+                        }
                     } else if days_left < 0 {
-                        Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_CRITICAL_STYLE))
+                        if app.state.popup_mode.is_some() {
+                            Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
+                        } else {
+                            Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_CRITICAL_STYLE))
+                        }
+                    } else {
+                        if app.state.popup_mode.is_some() {
+                            Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
+                        } else {
+                            Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_DEFAULT_STYLE))
+                        }
+                    }
+                } else {
+                    if app.state.popup_mode.is_some() {
+                        Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
                     } else {
                         Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_DEFAULT_STYLE))
                     }
-                } else {
-                    Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_DEFAULT_STYLE))
                 };
                 card_extra_info.extend(vec![card_due_date_styled]);
             }
             let card_status = format!("Status: {}",card.unwrap().card_status.clone().to_string());
             let card_status = if card_status == "Status: Active" {
-                Spans::from(Span::styled(card_status, CARD_ACTIVE_STATUS_STYLE))
+                if app.state.popup_mode.is_some() {
+                    Spans::from(Span::styled(card_status, INACTIVE_TEXT_STYLE))
+                } else {
+                    Spans::from(Span::styled(card_status, CARD_ACTIVE_STATUS_STYLE))
+                }
             } else if card_status == "Status: Complete" {
-                Spans::from(Span::styled(card_status, CARD_COMPLETED_STATUS_STYLE))
+                if app.state.popup_mode.is_some() {
+                    Spans::from(Span::styled(card_status, INACTIVE_TEXT_STYLE))
+                } else {
+                    Spans::from(Span::styled(card_status, CARD_COMPLETED_STATUS_STYLE))
+                }
             } else {
-                Spans::from(Span::styled(card_status, CARD_STALE_STATUS_STYLE))
+                if app.state.popup_mode.is_some() {
+                    Spans::from(Span::styled(card_status, INACTIVE_TEXT_STYLE))
+                } else {
+                    Spans::from(Span::styled(card_status, CARD_STALE_STATUS_STYLE))
+                }
             };
             card_extra_info.extend(vec![card_status]);
 
             // if card id is same as current_card, highlight it
-            let card_style = if app.state.popup_mode {
+            let card_style = if app.state.popup_mode.is_some() {
                 INACTIVE_TEXT_STYLE
             } else {
                 if app.state.current_card_id.unwrap_or(0) == *card_id && matches!(focus, Focus::Body) && *board_id == *current_board {
@@ -1711,7 +1782,7 @@ where
         );
     rect.render_widget(submit_button, chunks[4]);
 
-    if app.focus == Focus::NewBoardName && app.state.status == AppStatus::UserInput{
+    if app.focus == Focus::NewBoardName && app.state.app_status == AppStatus::UserInput{
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_title_text,
@@ -1721,7 +1792,7 @@ where
         } else {
             rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
         }
-    } else if app.focus == Focus::NewBoardDescription && app.state.status == AppStatus::UserInput{
+    } else if app.focus == Focus::NewBoardDescription && app.state.app_status == AppStatus::UserInput{
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_description_text,
@@ -1886,7 +1957,7 @@ where
         );
     rect.render_widget(submit_button, chunks[5]);
 
-    if app.focus == Focus::NewCardName && app.state.status == AppStatus::UserInput{
+    if app.focus == Focus::NewCardName && app.state.app_status == AppStatus::UserInput{
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_card_name_text,
@@ -1896,7 +1967,7 @@ where
         } else {
             rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
         }
-    } else if app.focus == Focus::NewCardDescription && app.state.status == AppStatus::UserInput{
+    } else if app.focus == Focus::NewCardDescription && app.state.app_status == AppStatus::UserInput{
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_card_description_text,
@@ -1906,7 +1977,7 @@ where
         } else {
             rect.set_cursor(chunks[2].x + 1, chunks[2].y + 1);
         }
-    } else if app.focus == Focus::NewCardDueDate && app.state.status == AppStatus::UserInput{
+    } else if app.focus == Focus::NewCardDueDate && app.state.app_status == AppStatus::UserInput{
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_card_due_date_text,
@@ -2111,7 +2182,9 @@ pub fn render_view_card<B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
-    if !app.state.popup_mode {
+    if app.state.popup_mode.is_none() {
+        return;
+    } else if app.state.popup_mode.unwrap() != PopupMode::CardView {
         return;
     }
     if !UiMode::view_modes().contains(&app.state.ui_mode) {
@@ -2217,4 +2290,191 @@ where
             rect.render_widget(card_extra_info, card_chunks[1]);
         }
     }
+}
+
+pub fn render_command_palette<B>(rect: &mut Frame<B>, app: &App, search_state: &mut ListState)
+where
+    B: Backend,
+{
+    if app.state.popup_mode.is_none() {
+        return;
+    } else if app.state.popup_mode.unwrap() != PopupMode::CommandPalette {
+        return;
+    }
+
+    let current_search_text_input = app.state.current_user_input.clone();
+    let horizontal_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ]
+            .as_ref(),
+        )
+        .split(rect.size());
+
+    let search_results = if app.command_palette.search_results.is_some() {
+        // convert the vec of strings to a vec of list items
+        let raw_search_results = app.command_palette.search_results
+            .as_ref()
+            .unwrap();
+
+        let mut list_items = vec![];
+        // make a for loop and go through the raw search results and check if the current item has a character that is in the charaters of the search string highlight it with selected style using Span::Styled
+        for item in raw_search_results {
+            let mut spans = vec![];
+            for (_, c) in item.to_string().chars().enumerate() {
+                if current_search_text_input.to_lowercase().contains(c.to_string().to_lowercase().as_str()) {
+                    spans.push(Span::styled(c.to_string(), FOCUSED_ELEMENT_STYLE));
+                } else {
+                    spans.push(Span::styled(c.to_string(), DEFAULT_STYLE));
+                }
+            }
+            list_items.push(ListItem::new(vec![Spans::from(spans)]));
+        }
+        list_items
+    } else {
+        app.command_palette.available_commands
+            .iter()
+            .map(|s| ListItem::new(vec![Spans::from(s.as_str().to_string())]))
+            .collect::<Vec<ListItem>>()
+    };
+
+    let search_results_length = if (search_results.len() + 2) > 3 {
+        if (search_results.len() + 2)  > (rect.size().height - 7) as usize {
+            rect.size().height - 7
+        } else {
+            (search_results.len() + 2) as u16
+        }
+    } else {
+        3
+    };
+
+    let vertical_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Length(3),
+            Constraint::Length(search_results_length as u16),
+            Constraint::Length(2),
+            ]
+            .as_ref()
+        )
+        .split(horizontal_chunks[1]);
+
+    let search_box_text = if app.state.current_user_input.is_empty() {
+        vec![Spans::from("Start typing to search")]
+    } else {
+        vec![Spans::from(app.state.current_user_input.clone())]
+    };
+
+    let current_cursor_position = if app.state.current_cursor_position.is_some() {
+        app.state.current_cursor_position.unwrap() as u16
+    } else {
+        app.state.current_user_input.len() as u16
+    };
+    let x_offset = current_cursor_position % (vertical_chunks[1].width - 2);
+    let y_offset = current_cursor_position / (vertical_chunks[1].width - 2);
+    let x_cursor_position = vertical_chunks[1].x + x_offset + 1;
+    let y_cursor_position = vertical_chunks[1].y + y_offset + 1;
+    rect.set_cursor(x_cursor_position, y_cursor_position);
+
+    // make a search bar and display all the commands that match the search below it in a list
+    let search_bar = Paragraph::new(search_box_text)
+        .block(
+            Block::default()
+                .title("Command Palette")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .wrap(Wrap { trim: false });
+    rect.render_widget(Clear, vertical_chunks[1]);
+    rect.render_widget(search_bar, vertical_chunks[1]);
+
+    let search_results = List::new(search_results)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_symbol(">>");
+
+    rect.render_widget(Clear, vertical_chunks[2]);
+    rect.render_stateful_widget(search_results, vertical_chunks[2], search_state);
+}
+
+pub fn render_change_ui_mode_popup<B>(rect: &mut Frame<B>, app: &App, ui_selector_state: &mut ListState)
+where
+    B: Backend,
+{
+    if app.state.popup_mode.is_none() {
+        return;
+    } else if app.state.popup_mode.unwrap() != PopupMode::ChangeUIMode {
+        return;
+    }
+
+    let all_ui_modes = UiMode::all()
+        .iter()
+        .map(|s| ListItem::new(
+            vec![Spans::from(s.as_str().to_string())]
+        ))
+        .collect::<Vec<ListItem>>();
+    let percent_height = (((all_ui_modes.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
+    let popup_area = centered_rect(50, percent_height, rect.size());
+    let ui_modes = List::new(all_ui_modes)
+        .block(
+            Block::default()
+                .title("Change UI Mode")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_symbol(">>");
+
+    rect.render_widget(Clear, popup_area);
+    rect.render_stateful_widget(ui_modes, popup_area, ui_selector_state);
+}
+
+pub fn render_change_current_card_status_popup<B>(rect: &mut Frame<B>, app: &App, status_selector_state: &mut ListState)
+where
+    B: Backend,
+{
+    if app.state.popup_mode.is_none() {
+        return;
+    } else if app.state.popup_mode.unwrap() != PopupMode::ChangeCurrentCardStatus {
+        return;
+    }
+    let mut card_name = String::new();
+    if let Some(current_board_id) = app.state.current_board_id {
+        if let Some(current_board) = app.boards.iter().find(|b| b.id == current_board_id) {
+            if let Some(current_card_id) = app.state.current_card_id {
+                if let Some(current_card) = current_board.cards.iter().find(|c| c.id == current_card_id) {
+                    card_name = current_card.name.clone();
+                }
+            }
+        }
+    }
+    let all_statuses = CardStatus::all()
+        .iter()
+        .map(|s| ListItem::new(
+            vec![Spans::from(s.to_string())]
+        ))
+        .collect::<Vec<ListItem>>();
+    let percent_height = (((all_statuses.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
+    let popup_area = centered_rect(50, percent_height, rect.size());
+    let statuses = List::new(all_statuses)
+        .block(
+            Block::default()
+                .title(format!("Changing Status of {}", card_name))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_symbol(">>");
+
+    rect.render_widget(Clear, popup_area);
+    rect.render_stateful_widget(statuses, popup_area, status_selector_state);
 }

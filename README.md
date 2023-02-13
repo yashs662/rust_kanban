@@ -11,13 +11,13 @@
 - [ ] Implement Cloud saves (Google drive maybe? as i am not going to host a server)
 - [ ] Implement a way to add custom colors (Theme support)
 - [ ] Implement a way to add custom keybindings from config file (maybe club this with the theme support)
-- [ ] Implement a Command Palette (like in vscode (Ctrl + Shift + P)) as a way to interact with the app instead of using keybindings (maybe use meilisearch for this?)
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to interact with the kanban board using the mouse (scrolling, dragging, etc)
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
 - [ ] Add a Toutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Implement a Command Palette (like in vscode (Ctrl + Shift + P)) as a way to interact with the app instead of using keybindings
 - [x] Implement previews for loading a save
 - [x] Toast Message Implementation -- (Inspired by [nvim-notify](https://github.com/rcarriga/nvim-notify))
 - [x] Improve Help Messages
