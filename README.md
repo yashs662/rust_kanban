@@ -1,3 +1,4 @@
+[![Crates.io](https://img.shields.io/crates/v/rust-kanban.svg)](https://crates.io/crates/rust-kanban)
 ## Kanban App for the terminal written in rust
   This kanban app will allow the user to be more productive by prioritizing tasks and achieving goals faster
 ## Why?
