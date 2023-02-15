@@ -407,13 +407,21 @@ where
     };
 
     let reset_both_button = Paragraph::new("Reset Config and Keybinds to Default")
-        .block(Block::default().borders(Borders::ALL).title("Reset"))
+        .block(Block::default()
+            .title("Reset")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+        )
         .style(reset_both_style)
         .alignment(Alignment::Center);
     rect.render_widget(reset_both_button, reset_btn_chunks[0]);
 
     let reset_config_button = Paragraph::new("Reset Only Config to Default")
-        .block(Block::default().borders(Borders::ALL).title("Reset"))
+        .block(Block::default()
+            .title("Reset")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+        )
         .style(reset_config_style)
         .alignment(Alignment::Center);
     rect.render_widget(reset_config_button, reset_btn_chunks[1]);
@@ -465,7 +473,13 @@ fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static>
         Row::new(cells).height(height as u16)
     });
     Table::new(rows)
-        .block(Block::default().borders(Borders::ALL).title("Config Editor").border_style(default_style).style(config_text_style))
+        .block(Block::default()
+            .title("Config Editor")
+            .borders(Borders::ALL)
+            .style(config_text_style)
+            .border_style(default_style)
+            .border_type(BorderType::Rounded)
+        )
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
         .widths(&[
@@ -502,9 +516,10 @@ where
     let area = centered_rect(70, 70, rect.size());
     let clear_area = centered_rect(80, 80, rect.size());
     let clear_area_border = Block::default()
+        .title("Config Editor")
         .borders(Borders::ALL)
         .border_style(FOCUSED_ELEMENT_STYLE)
-        .title("Config Editor");
+        .border_type(BorderType::Rounded);
     rect.render_widget(Clear, clear_area);
     rect.render_widget(clear_area_border, clear_area);
     let chunks = Layout::default()
@@ -529,10 +544,19 @@ where
         "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
     let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
     let config_item = Paragraph::new(paragraph_text)
-        .block(Block::default().borders(Borders::ALL).title(paragraph_title))
+        .block(Block::default()
+            .title(paragraph_title)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+        )
         .wrap(tui::widgets::Wrap { trim: true });
     let edit_item = Paragraph::new(&*app.state.current_user_input)
-        .block(Block::default().borders(Borders::ALL).title("Edit").border_style(edit_box_style))
+        .block(Block::default()
+            .title("Edit")
+            .borders(Borders::ALL)
+            .border_style(edit_box_style)
+            .border_type(BorderType::Rounded)
+        )
         .wrap(tui::widgets::Wrap { trim: true });
 
     let log = draw_logs(&app.focus, true, false);
@@ -561,9 +585,10 @@ where
     let area = centered_rect(70, 70, rect.size());
     let clear_area = centered_rect(80, 80, rect.size());
     let clear_area_border = Block::default()
+        .title("Default HomeScreen Editor")
         .borders(Borders::ALL)
         .border_style(FOCUSED_ELEMENT_STYLE)
-        .title("Default HomeScreen Editor");
+        .border_type(BorderType::Rounded);
     rect.render_widget(Clear, clear_area);
     rect.render_widget(clear_area_border, clear_area);
     let chunks = Layout::default()
@@ -693,7 +718,12 @@ where
         Row::new(cells).height(height as u16)
     });
     let t = Table::new(rows)
-        .block(Block::default().borders(Borders::ALL).title("Edit Keybindings").style(default_style))
+        .block(Block::default()
+            .title("Edit Keybindings")
+            .style(default_style)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+        )
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
         .widths(&[
@@ -736,13 +766,21 @@ where
     ]);
     
     let edit_keybind_help = Paragraph::new(edit_keybind_help_spans)
-        .block(Block::default().borders(Borders::ALL).title("Help"))
+        .block(Block::default()
+            .title("Help")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+        )
         .style(default_style)
         .alignment(Alignment::Center)
         .wrap(tui::widgets::Wrap { trim: true });
         
     let reset_button = Paragraph::new("Reset Keybindings to Default")
-        .block(Block::default().borders(Borders::ALL).title("Reset"))
+        .block(Block::default()
+            .title("Reset")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+        )
         .style(reset_style)
         .alignment(Alignment::Center);
         
@@ -765,9 +803,10 @@ where
     let area = centered_rect(70, 70, rect.size());
     let clear_area = centered_rect(80, 80, rect.size());
     let clear_area_border = Block::default()
+        .title("Edit Keybindings")
         .borders(Borders::ALL)
         .border_style(FOCUSED_ELEMENT_STYLE)
-        .title("Edit Keybindings");
+        .border_type(BorderType::Rounded);
     rect.render_widget(Clear, clear_area);
     rect.render_widget(clear_area_border, clear_area);
     let chunks = Layout::default()
@@ -804,7 +843,11 @@ where
             "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
         let paragraph_title = key.to_uppercase();
         let config_item = Paragraph::new(paragraph_text)
-        .block(Block::default().borders(Borders::ALL).title(paragraph_title))
+        .block(Block::default()
+            .title(paragraph_title)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+        )
         .wrap(tui::widgets::Wrap { trim: true });
         let current_edited_keybinding = app.state.edited_keybinding.clone();
         let mut current_edited_keybinding_string = String::new();
@@ -815,7 +858,12 @@ where
             }
         }
         let edit_item = Paragraph::new(current_edited_keybinding_string.clone())
-        .block(Block::default().borders(Borders::ALL).title("Edit").border_style(edit_box_style))
+        .block(Block::default()
+            .title("Edit")
+            .borders(Borders::ALL)
+            .border_style(edit_box_style)
+            .border_type(BorderType::Rounded)
+        )
         .wrap(tui::widgets::Wrap { trim: true });
     
         let log = draw_logs(&app.focus, true, false);
@@ -2043,7 +2091,11 @@ where
             .map(|i| ListItem::new(i.to_string()))
             .collect();
         let choice_list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Available Saves"))
+            .block(Block::default()
+                .title("Available Saves")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+            )
             .highlight_style(LIST_SELECT_STYLE)
             .highlight_symbol(LIST_SELECTED_SYMBOL)
             .style(default_style);

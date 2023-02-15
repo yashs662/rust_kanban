@@ -105,101 +105,124 @@ impl From<event::KeyEvent> for Key {
         match key_event {
             event::KeyEvent {
                 code: event::KeyCode::Esc,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Esc,
             event::KeyEvent {
                 code: event::KeyCode::Backspace,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Backspace,
             event::KeyEvent {
                 code: event::KeyCode::Left,
+                kind: event::KeyEventKind::Press,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::ShiftLeft,
             event::KeyEvent {
                 code: event::KeyCode::Left,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Left,
             event::KeyEvent {
                 code: event::KeyCode::Right,
+                kind: event::KeyEventKind::Press,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::ShiftRight,
             event::KeyEvent {
                 code: event::KeyCode::Right,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Right,
             event::KeyEvent {
                 code: event::KeyCode::Up,
+                kind: event::KeyEventKind::Press,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::ShiftUp,
             event::KeyEvent {
                 code: event::KeyCode::Up,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Up,
             event::KeyEvent {
                 code: event::KeyCode::Down,
+                kind: event::KeyEventKind::Press,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::ShiftDown,
             event::KeyEvent {
                 code: event::KeyCode::Down,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Down,
             event::KeyEvent {
                 code: event::KeyCode::Home,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Home,
             event::KeyEvent {
                 code: event::KeyCode::End,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::End,
             event::KeyEvent {
                 code: event::KeyCode::PageUp,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::PageUp,
             event::KeyEvent {
                 code: event::KeyCode::PageDown,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::PageDown,
             event::KeyEvent {
                 code: event::KeyCode::Delete,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Delete,
             event::KeyEvent {
                 code: event::KeyCode::Insert,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Ins,
             event::KeyEvent {
                 code: event::KeyCode::F(n),
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::from_f(n),
             event::KeyEvent {
                 code: event::KeyCode::Enter,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Enter,
             event::KeyEvent {
                 code: event::KeyCode::BackTab,
+                kind: event::KeyEventKind::Press,
                 modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::BackTab,
             event::KeyEvent {
                 code: event::KeyCode::Tab,
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Tab,
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
+                kind: event::KeyEventKind::Press,
                 modifiers: event::KeyModifiers::ALT,
                 ..
             } => Key::Alt(c),
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
+                kind: event::KeyEventKind::Press,
                 modifiers: event::KeyModifiers::CONTROL,
                 ..
             } => Key::Ctrl(c),
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
+                kind: event::KeyEventKind::Press,
                 ..
             } => Key::Char(c),
             _ => Key::Unknown,
