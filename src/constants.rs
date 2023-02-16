@@ -29,7 +29,7 @@ pub const TOAST_FADE_OUT_TIME: u64 = 400;
 pub const TOAST_FADE_IN_TIME: u64 = 200;
 pub const DEFAULT_TICKRATE: u64 = 50;
 pub const DEFAULT_TOAST_DURATION: u64 = 5;
-pub const WINDOWS_WAIT_TIME_MS: u128 = 75;    // To solve the issue of double input on windows
+pub const IO_EVENT_WAIT_TIME: u64 = 5; // ms
 
 // Style
 pub const DEFAULT_STYLE: Style = Style{

@@ -1,5 +1,6 @@
 use linked_hash_map::LinkedHashMap;
 use savefile::{load_file, save_file};
+use tui::widgets::ListState;
 use std::path::Path;
 use std::{
     sync::Arc,
@@ -12,7 +13,7 @@ use crate::constants::{
     CONFIG_DIR_NAME,
     CONFIG_FILE_NAME,
     SAVE_DIR_NAME,
-    SAVE_FILE_NAME
+    SAVE_FILE_NAME,
 };
 use crate::app::{
     AppConfig,
@@ -63,13 +64,13 @@ impl IoAsyncHandler {
             IoEvent::AutoSave => self.auto_save().await,
             IoEvent::LoadPreview => self.load_preview().await,
         };
-
+        
+        let mut app = self.app.lock().await;
         if let Err(err) = result {
             error!("Oops, something wrong happened 😢: {:?}", err);
-            self.app.lock().await.send_error_toast("Oops, something wrong happened 😢", None);
+            app.send_error_toast("Oops, something wrong happened 😢", None);
         }
 
-        let mut app = self.app.lock().await;
         app.loaded();
     }
 
@@ -134,7 +135,7 @@ impl IoAsyncHandler {
         let local_files = get_available_local_savefiles();
         let local_files = if local_files.is_none() {
             error!("Could not get local save files");
-            self.app.lock().await.send_error_toast("Could not get local save files", None);
+            app.send_error_toast("Could not get local save files", None);
             vec![]
         } else {
             local_files.unwrap()
@@ -142,21 +143,21 @@ impl IoAsyncHandler {
         // check if the file exists
         if save_file_index >= local_files.len() {
             error!("Cannot load save file: No such file");
-            self.app.lock().await.send_error_toast("Cannot load save file: No such file", None);
+            app.send_error_toast("Cannot load save file: No such file", None);
             return Ok(());
         }
         let save_file_name = local_files[save_file_index].clone();
         let version = save_file_name.split("_v").collect::<Vec<&str>>();
         if version.len() < 2 {
             error!("Cannot load save file: invalid file name");
-            self.app.lock().await.send_error_toast("Cannot load save file: invalid file name", None);
+            app.send_error_toast("Cannot load save file: invalid file name", None);
             return Ok(());
         }
         // convert to u32
         let version = version[1].parse::<u32>();
         if version.is_err() {
             error!("Cannot load save file: invalid file name");
-            self.app.lock().await.send_error_toast("Cannot load save file: invalid file name", None);
+            app.send_error_toast("Cannot load save file: invalid file name", None);
             return Ok(());
         }
         info!("🚀 Loading save file: {}", save_file_name);
@@ -180,19 +181,24 @@ impl IoAsyncHandler {
 
     pub async fn delete_save_file(&mut self) -> Result<()> {
         // get app.state.load_save_state.selected() and delete the file
-        let app = self.app.lock().await;
+        let mut app = self.app.lock().await;
         let file_list = get_available_local_savefiles();
         let file_list = if file_list.is_none() {
             error!("Cannot delete save file: no save files found");
-            self.app.lock().await.send_error_toast("Cannot delete save file: no save files found", None);
+            app.send_error_toast("Cannot delete save file: no save files found", None);
             return Ok(());
         } else {
             file_list.unwrap()
         };
+        if app.state.load_save_state.selected().is_none() {
+            error!("Cannot delete save file: no save file selected");
+            app.send_error_toast("Cannot delete save file: no save file selected", None);
+            return Ok(());
+        }
         let selected = app.state.load_save_state.selected().unwrap_or(0);
         if selected >= file_list.len() {
             debug!("Cannot delete save file: index out of range");
-            self.app.lock().await.send_error_toast("Cannot delete save file: Something went wrong", None);
+            app.send_error_toast("Cannot delete save file: Something went wrong", None);
             return Ok(());
         }
         let file_name = file_list[selected].clone();
@@ -208,17 +214,33 @@ impl IoAsyncHandler {
         // check if the file exists
         if !Path::new(&path).exists() {
             error!("Cannot delete save file: file not found");
-            self.app.lock().await.send_error_toast("Cannot delete save file: file not found", None);
+            app.send_error_toast("Cannot delete save file: file not found", None);
             return Ok(());
         } else {
             // delete the file
             if let Err(err) = std::fs::remove_file(&path) {
                 debug!("Cannot delete save file: {:?}", err);
-                self.app.lock().await.send_error_toast("Cannot delete save file: Something went wrong", None);
+                app.send_error_toast("Cannot delete save file: Something went wrong", None);
+                app.state.load_save_state = ListState::default();
                 return Ok(());
             } else {
                 info!("👍 Save file deleted");
-                self.app.lock().await.send_info_toast("👍 Save file deleted", None);
+                app.send_info_toast("👍 Save file deleted", None);
+            }
+        }
+        // check if selected is still in range
+        let file_list = get_available_local_savefiles();
+        let file_list = if file_list.is_none() {
+            app.state.load_save_state = ListState::default();
+            return Ok(());
+        } else {
+            file_list.unwrap()
+        };
+        if selected >= file_list.len() {
+            if file_list.len() > 0 {
+                app.state.load_save_state.select(Some(file_list.len() - 1));
+            } else {
+                app.state.load_save_state = ListState::default();
             }
         }
         Ok(())
@@ -233,7 +255,7 @@ impl IoAsyncHandler {
         // check if all_boards is empty, if so, return
         if all_boards.is_empty() {
             error!("Cannot go right: no boards found");
-            self.app.lock().await.send_error_toast("Cannot go right: no boards found", None);
+            app.send_error_toast("Cannot go right: no boards found", None);
             return Ok(());
         }
         let current_board_id = if current_board_id.is_none() {
@@ -247,7 +269,7 @@ impl IoAsyncHandler {
             .position(|(board_id, _)| *board_id == current_board_id);
         if current_board_index.is_none() {
             debug!("Cannot go right: current board not found");
-            self.app.lock().await.send_error_toast("Cannot go right: Something went wrong", None);
+            app.send_error_toast("Cannot go right: Something went wrong", None);
             return Ok(());
         }
         let current_board_index = current_board_index.unwrap();
@@ -258,7 +280,7 @@ impl IoAsyncHandler {
                 .position(|board| board.id == current_board_id);
             if current_board_index_in_all_boards.is_none() {
                 debug!("Cannot go right: current board not found");
-                self.app.lock().await.send_error_toast("Cannot go right: Something went wrong", None);
+                app.send_error_toast("Cannot go right: Something went wrong", None);
                 return Ok(());
             }
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
@@ -321,7 +343,7 @@ impl IoAsyncHandler {
         // check if all_boards is empty, if so, return
         if all_boards.is_empty() {
             error!("Cannot go left: no boards");
-            self.app.lock().await.send_error_toast("Cannot go left: no boards", None);
+            app.send_error_toast("Cannot go left: no boards", None);
             return Ok(());
         }
         let current_board_id = if current_board_id.is_none() {
@@ -335,7 +357,7 @@ impl IoAsyncHandler {
             .position(|(board_id, _)| *board_id == current_board_id);
         if current_board_index.is_none() {
             debug!("Cannot go left: current board not found");
-            self.app.lock().await.send_error_toast("Cannot go left: Something went wrong", None);
+            app.send_error_toast("Cannot go left: Something went wrong", None);
             return Ok(());
         }
         let current_board_index = current_board_index.unwrap();
@@ -346,7 +368,7 @@ impl IoAsyncHandler {
                 .position(|board| board.id == current_board_id);
             if current_board_index_in_all_boards.is_none() {
                 debug!("Cannot go left: current board not found");
-                self.app.lock().await.send_error_toast("Cannot go left: Something went wrong", None);
+                app.send_error_toast("Cannot go left: Something went wrong", None);
                 return Ok(());
             }
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
@@ -420,13 +442,13 @@ impl IoAsyncHandler {
             let current_board = app.boards.iter().find(|board| board.id == current_board_id);
             if current_board.is_none() {
                 debug!("Cannot go up: current board not found");
-                self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
+                app.send_error_toast("Cannot go up: Something went wrong", None);
                 return Ok(());
             }
             let current_board = current_board.unwrap();
             if current_board.cards.is_empty() {
                 error!("Cannot go up: current board has no cards");
-                self.app.lock().await.send_error_toast("Cannot go up: current board has no cards", None);
+                app.send_error_toast("Cannot go up: current board has no cards", None);
                 return Ok(());
             }
             current_board.cards[0].id
@@ -442,7 +464,7 @@ impl IoAsyncHandler {
             .position(|card_id| *card_id == current_card_id);
         if current_card_index.is_none() {
             debug!("Cannot go up: current card not found");
-            self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
+            app.send_error_toast("Cannot go up: Something went wrong", None);
             return Ok(());
         }
         let current_card_index = current_card_index.unwrap();
@@ -457,7 +479,7 @@ impl IoAsyncHandler {
                 .position(|card| card.id == current_card_id);
             if current_card_index_in_all_cards.is_none() {
                 debug!("Cannot go up: current card not found");
-                self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
+                app.send_error_toast("Cannot go up: Something went wrong", None);
                 return Ok(());
             }
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
@@ -501,7 +523,7 @@ impl IoAsyncHandler {
             // check if previous_card_id is 0
             if previous_card_id == 0 {
                 debug!("Cannot go up: previous card not found");
-                self.app.lock().await.send_error_toast("Cannot go up: Something went wrong", None);
+                app.send_error_toast("Cannot go up: Something went wrong", None);
                 return Ok(());
             } else {
                 app.state.current_card_id = Some(previous_card_id);
@@ -530,13 +552,13 @@ impl IoAsyncHandler {
             let current_board = app.boards.iter().find(|board| board.id == current_board_id);
             if current_board.is_none() {
                 debug!("Cannot go down: current board not found");
-                self.app.lock().await.send_error_toast("Cannot go down: Something went wrong", None);
+                app.send_error_toast("Cannot go down: Something went wrong", None);
                 return Ok(());
             }
             let current_board = current_board.unwrap();
             if current_board.cards.is_empty() {
                 error!("Cannot go down: current board has no cards");
-                self.app.lock().await.send_error_toast("Cannot go down: Current board has no cards", None);
+                app.send_error_toast("Cannot go down: Current board has no cards", None);
                 return Ok(());
             }
             current_board.cards[0].id
@@ -552,7 +574,7 @@ impl IoAsyncHandler {
             .position(|card_id| *card_id == current_card_id);
         if current_card_index.is_none() {
             debug!("Cannot go down: current card not found");
-            self.app.lock().await.send_error_toast("Cannot go down: Something went wrong", None);
+            app.send_error_toast("Cannot go down: Something went wrong", None);
             return Ok(());
         }
         let current_card_index = current_card_index.unwrap();
@@ -567,7 +589,7 @@ impl IoAsyncHandler {
                 .position(|card| card.id == current_card_id);
             if current_card_index_in_all_cards.is_none() {
                 debug!("Cannot go down: current card not found");
-                self.app.lock().await.send_error_toast("Cannot go down: Something went wrong", None);
+                app.send_error_toast("Cannot go down: Something went wrong", None);
                 return Ok(());
             }
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
@@ -716,7 +738,7 @@ impl IoAsyncHandler {
         let local_files = get_available_local_savefiles();
         let local_files = if local_files.is_none() {
             error!("Could not get local save files");
-            self.app.lock().await.send_error_toast("Could not get local save files", None);
+            app.send_error_toast("Could not get local save files", None);
             vec![]
         } else {
             local_files.unwrap()
@@ -724,21 +746,21 @@ impl IoAsyncHandler {
         // check if the file exists
         if save_file_index >= local_files.len() {
             error!("Cannot load preview: No such file");
-            self.app.lock().await.send_error_toast("Cannot load preview: No such file", None);
+            app.send_error_toast("Cannot load preview: No such file", None);
             return Ok(());
         }
         let save_file_name = local_files[save_file_index].clone();
         let version = save_file_name.split("_v").collect::<Vec<&str>>();
         if version.len() < 2 {
             error!("Cannot load preview: invalid file name");
-            self.app.lock().await.send_error_toast("Cannot load preview: invalid file name", None);
+            app.send_error_toast("Cannot load preview: invalid file name", None);
             return Ok(());
         }
         // convert to u32
         let version = version[1].parse::<u32>();
         if version.is_err() {
             error!("Cannot load preview: invalid file name");
-            self.app.lock().await.send_error_toast("Cannot load preview: invalid file name", None);
+            app.send_error_toast("Cannot load preview: invalid file name", None);
             return Ok(());
         }
         let version = version.unwrap();
@@ -774,7 +796,7 @@ impl IoAsyncHandler {
             },
             Err(e) => {
                 error!("Error loading preview: {}", e);
-                self.app.lock().await.send_error_toast("Error loading preview", None);
+                app.send_error_toast("Error loading preview", None);
             }
         }
         Ok(())

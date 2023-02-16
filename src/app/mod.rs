@@ -1,6 +1,5 @@
 use linked_hash_map::LinkedHashMap;
-use std::error::Error;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{
     env,
     vec
@@ -10,7 +9,7 @@ use std::fmt::{
     Formatter,
     Display
 };
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 
 use chrono::{NaiveDateTime, NaiveDate};
 use log::{
@@ -50,7 +49,7 @@ use crate::constants::{
     MAX_NO_CARDS_PER_BOARD,
     NO_OF_BOARDS_PER_PAGE,
     MIN_NO_BOARDS_PER_PAGE,
-    MAX_NO_BOARDS_PER_PAGE,
+    MAX_NO_BOARDS_PER_PAGE, IO_EVENT_WAIT_TIME,
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{
@@ -92,7 +91,8 @@ pub struct App {
     pub config: AppConfig,
     pub config_item_being_edited: Option<usize>,
     pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
-    pub command_palette: CommandPalette
+    pub command_palette: CommandPalette,
+    pub last_io_event_time: Option<Instant>,
 }
 
 impl App {
@@ -121,7 +121,8 @@ impl App {
             config: config,
             config_item_being_edited: None,
             visible_boards_and_cards: LinkedHashMap::new(),
-            command_palette: CommandPalette::new()
+            command_palette: CommandPalette::new(),
+            last_io_event_time: None,
         }
     }
 
@@ -1522,13 +1523,8 @@ impl App {
                         match self.state.ui_mode {
                             UiMode::LoadSave => {
                                 // run delete task in background
-                                let selected_save_index = self.state.load_save_state.selected().unwrap();
-                                tokio::spawn(async move {
-                                    let result = delete_save_file(selected_save_index).await;
-                                    if let Err(e) = result {
-                                        error!("Error deleting save file: {}", e);
-                                    }
-                                });
+                                self.dispatch(IoEvent::DeleteSave).await;
+                                tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
                                 self.dispatch(IoEvent::LoadPreview).await;
                                 AppReturn::Continue
                             }
@@ -1862,6 +1858,12 @@ impl App {
     pub async fn dispatch(&mut self, action: IoEvent) {
         // `is_loading` will be set to false again after the async action has finished in io/handler.rs
         self.is_loading = true;
+        // check if last_io_event_time is more thant current time + IO_EVENT_WAIT_TIME in ms
+        if self.last_io_event_time.unwrap_or_else(|| Instant::now() - Duration::from_millis(IO_EVENT_WAIT_TIME + 10)) + Duration::from_millis(IO_EVENT_WAIT_TIME) > Instant::now() {
+            self.send_error_toast(&format!("Please wait before sending another request - {:?}",action), None);
+            tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
+        }
+        self.last_io_event_time = Some(Instant::now());
         if let Err(e) = self.io_tx.send(action).await {
             self.is_loading = false;
             debug!("Error from dispatch {}", e);
@@ -2617,42 +2619,4 @@ impl AppConfig {
 pub fn get_term_bg_color() -> (u8, u8, u8) {
     // TODO: make this work on windows and unix
     (0, 0, 0)
-}
-
-async fn delete_save_file(selected: usize) -> Result<(), Box<dyn Error>> {
-    let file_list = get_available_local_savefiles();
-    let file_list = if file_list.is_none() {
-        error!("Cannot delete save file: no save files found");
-        return Ok(());
-    } else {
-        file_list.unwrap()
-    };
-    if selected >= file_list.len() {
-        debug!("Cannot delete save file: index out of range");
-        return Ok(());
-    }
-    let file_name = file_list[selected].clone();
-    info!("🚀 Deleting save file: {}", file_name);
-    let get_config_status = get_config();
-    let config = if get_config_status.is_err() {
-        debug!("Error getting config: {}", get_config_status.unwrap_err());
-        AppConfig::default()
-    } else {
-        get_config_status.unwrap()
-    };
-    let path = config.save_directory.join(file_name);
-    // check if the file exists
-    if !Path::new(&path).exists() {
-        error!("Cannot delete save file: file not found");
-        return Ok(());
-    } else {
-        // delete the file
-        if let Err(err) = std::fs::remove_file(&path) {
-            debug!("Cannot delete save file: {:?}", err);
-            return Ok(());
-        } else {
-            info!("👍 Save file deleted");
-            return Ok(());
-        }
-    }
 }
