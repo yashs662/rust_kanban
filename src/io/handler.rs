@@ -203,7 +203,7 @@ impl IoAsyncHandler {
         }
         let file_name = file_list[selected].clone();
         info!("🚀 Deleting save file: {}", file_name);
-        let get_config_status = get_config();
+        let get_config_status = get_config(false);
         let config = if get_config_status.is_err() {
             debug!("Error getting config: {}", get_config_status.unwrap_err());
             AppConfig::default()
@@ -286,6 +286,7 @@ impl IoAsyncHandler {
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
             if current_board_index_in_all_boards == all_boards.len() - 1 {
                 // we are at the last board, we cannot go right
+                app.send_error_toast("Cannot go right: already at the last board", None);
                 return Ok(());
             }
             // we are not at the last board, we can go right
@@ -374,6 +375,7 @@ impl IoAsyncHandler {
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
             if current_board_index_in_all_boards == 0 {
                 // we are at the first board, we cannot go left
+                app.send_error_toast("Cannot go left: already at the first board", None);
                 return Ok(());
             }
             // we are not at the first board, we can go left
@@ -649,7 +651,7 @@ impl IoAsyncHandler {
     async fn auto_save(&mut self) -> Result<()> {
         let app = self.app.lock().await;
         let latest_save_file_info = get_latest_save_file();
-        let get_config_status = get_config();
+        let get_config_status = get_config(false);
         let config = if get_config_status.is_err() {
             debug!("Error getting config: {}", get_config_status.unwrap_err());
             AppConfig::default()
@@ -809,7 +811,7 @@ pub(crate) fn get_config_dir() -> Result<PathBuf, String> {
     if home_dir.is_none() {
         return Err(String::from("Error getting home directory"));
     }
-    let mut config_dir = home_dir.unwrap().join(CONFIG_DIR_NAME);
+    let mut config_dir = home_dir.unwrap();
     // check if windows or unix
     if cfg!(windows) {
         config_dir.push("AppData");
@@ -867,7 +869,7 @@ fn prepare_save_dir() -> bool {
 }
 
 fn prepare_boards (app: &mut App) -> Vec<Board> {
-    let get_config_status = get_config();
+    let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()

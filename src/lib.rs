@@ -48,7 +48,10 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
         let mut app = app.lock().await;
         let mut states = app.state.clone();
         // Render
+        let render_start_time = std::time::Instant::now();
         terminal.draw(|rect| ui_main::draw(rect, &mut app, &mut states))?;
+        let render_end_time = std::time::Instant::now();
+        app.state.ui_render_time = Some(render_end_time.duration_since(render_start_time).as_millis());
 
         // Handle inputs
         let result = match events.next().await {

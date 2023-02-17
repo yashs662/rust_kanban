@@ -98,13 +98,35 @@ impl App {
     pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>) -> Self {
         let actions = vec![Action::Quit].into();
         let is_loading = false;
-        let state = AppState::default();
+        let mut state = AppState::default();
         let focus = Focus::NoFocus;
         let boards = vec![];
-        let get_config_status = get_config();
+        let get_config_status = get_config(false);
         let config = if get_config_status.is_err() {
-            debug!("Error getting config: {}", get_config_status.unwrap_err());
-            AppConfig::default()
+            let config_error_msg = get_config_status.unwrap_err();
+            if config_error_msg.contains("Overlapped keybinds found") {
+                error!("Keybinds overlap detected. Please check your config file and fix the keybinds. Using default keybinds for now.");
+                state.toasts.push(ToastWidget::new(config_error_msg, Duration::from_secs(DEFAULT_TOAST_DURATION) * 3, ToastType::Error));
+                state.toasts.push(ToastWidget::new("Please check your config file and fix the keybinds. Using default keybinds for now.".to_owned(),
+                    Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning));
+                let new_config = get_config(true);
+                if new_config.is_err() {
+                    error!("Unable to fix keybinds. Please check your config file. Using default config for now.");
+                    state.toasts.push(ToastWidget::new(new_config.unwrap_err(), Duration::from_secs(DEFAULT_TOAST_DURATION) * 3, ToastType::Error));
+                    state.toasts.push(ToastWidget::new("Using default config for now.".to_owned(),
+                        Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning));
+                    AppConfig::default()
+                } else {
+                    let mut unwrapped_new_config = new_config.unwrap();
+                    unwrapped_new_config.keybindings = KeyBindings::default();
+                    unwrapped_new_config
+                }
+            } else {
+                state.toasts.push(ToastWidget::new(config_error_msg, Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Error));
+                state.toasts.push(ToastWidget::new("Using default config for now.".to_owned(),
+                    Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Info));
+                AppConfig::default()
+            }
         } else {
             get_config_status.unwrap()
         };
@@ -589,6 +611,10 @@ impl App {
                                 CommandPaletteActions::LoadASave => {
                                     self.state.popup_mode = None;
                                     self.state.ui_mode = UiMode::LoadSave;
+                                },
+                                CommandPaletteActions::DebugMenu => {
+                                    self.state.debug_menu_toggled = !self.state.debug_menu_toggled;
+                                    self.state.popup_mode = None;
                                 }
                             }
                             self.state.current_user_input = "".to_string();
@@ -628,7 +654,7 @@ impl App {
                 }
                 match action {
                     Action::Quit => {
-                        let get_config_status = get_config();
+                        let get_config_status = get_config(false);
                         let config = if get_config_status.is_err() {
                             debug!("Error getting config: {}", get_config_status.unwrap_err());
                             AppConfig::default()
@@ -675,6 +701,7 @@ impl App {
                             }
                         }
                         self.state.ui_mode = new_ui_mode;
+                        self.state.popup_mode = None;
                         AppReturn::Continue
                     }
                     Action::OpenConfigMenu => {
@@ -766,13 +793,12 @@ impl App {
                         if self.state.popup_mode.is_some() {
                             if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeUIMode {
                                 self.select_default_view_next();
-                                return AppReturn::Continue;
                             } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeCurrentCardStatus {
                                 self.select_current_card_status_next();
-                                return AppReturn::Continue;
                             } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::SelectDefaultView{
                                 self.select_default_view_next();
                             }
+                            return AppReturn::Continue;
                         }
                         match self.state.ui_mode {
                             UiMode::ConfigMenu => {
@@ -2292,6 +2318,20 @@ pub enum PopupMode {
     SelectDefaultView,
 }
 
+impl Display for PopupMode {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            PopupMode::CardView => write!(f, "Card View"),
+            PopupMode::CommandPalette => write!(f, "Command Palette"),
+            PopupMode::EditSpecificKeyBinding => write!(f, "Edit Specific Key Binding"),
+            PopupMode::ChangeUIMode => write!(f, "Change UI Mode"),
+            PopupMode::ChangeCurrentCardStatus => write!(f, "Change Current Card Status"),
+            PopupMode::EditGeneralConfig => write!(f, "Edit General Config"),
+            PopupMode::SelectDefaultView => write!(f, "Select Default View"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub app_status: AppStatus,
@@ -2320,6 +2360,8 @@ pub struct AppState {
     pub command_palette_list_state: ListState,
     pub card_status_selector_state: ListState,
     pub prev_ui_mode: Option<UiMode>,
+    pub debug_menu_toggled: bool,
+    pub ui_render_time: Option<u128>
 }
 
 impl Default for AppState {
@@ -2351,6 +2393,8 @@ impl Default for AppState {
             command_palette_list_state: ListState::default(),
             card_status_selector_state: ListState::default(),
             prev_ui_mode: None,
+            debug_menu_toggled: false,
+            ui_render_time: None
         }
     }
 }
@@ -2545,7 +2589,7 @@ impl AppConfig {
     pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) -> Result<(), String> {
         // make sure key is not empty, or already assigned
         
-        let get_config_status = get_config();
+        let get_config_status = get_config(false);
         let config = if get_config_status.is_err() {
             debug!("Error getting config: {}", get_config_status.unwrap_err());
             AppConfig::default()

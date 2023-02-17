@@ -160,7 +160,7 @@ pub struct Actions(Vec<Action>);
 impl Actions {
     /// Given a key, find the corresponding action
     pub fn find(&self, key: Key) -> Option<&Action> {
-        let get_config_status = get_config();
+        let get_config_status = get_config(false);
         let config = if get_config_status.is_err() {
             debug!("Error getting config: {}", get_config_status.unwrap_err());
             AppConfig::default()

@@ -39,6 +39,7 @@ use super::ui_helper::{
     render_command_palette,
     render_change_ui_mode_popup,
     render_change_current_card_status_popup,
+    render_debug_panel
 };
 use crate::app::{App, PopupMode};
 
@@ -136,4 +137,10 @@ where
 
     // Toasts are always rendered on top of everything else
     render_toast(rect, &app);
+    if app.state.debug_menu_toggled {
+        render_debug_panel(rect, &app);
+        if app.state.popup_mode.is_some() && app.state.popup_mode.unwrap() == PopupMode::CommandPalette {
+            render_command_palette(rect, &app, &mut states.command_palette_list_state);
+        }
+    }
 }

@@ -1,6 +1,6 @@
 use std::{
     fs,
-    env
+    env, collections::HashMap
 };
 use log::{
     error,
@@ -21,12 +21,12 @@ use crate::{
     constants::{
         SAVE_DIR_NAME,
         SAVE_FILE_NAME
-    }, io::handler::prepare_config_dir
+    }, io::handler::prepare_config_dir, inputs::key::Key
 };
 use super::handler::get_config_dir;
 use crate::constants::CONFIG_FILE_NAME;
 
-pub fn get_config() -> Result<AppConfig, String> {
+pub fn get_config(ignore_overlapped_keybinds:bool) -> Result<AppConfig, String> {
     let config_dir_status = get_config_dir();
     if config_dir_status.is_err() {
         return Err(config_dir_status.unwrap_err());
@@ -55,6 +55,31 @@ pub fn get_config() -> Result<AppConfig, String> {
             AppConfig::default()
         }
     };
+    let config_keybinds = config.keybindings.clone();
+    // make sure there is no overlap between keybinds
+    if ignore_overlapped_keybinds {
+        return Ok(config);
+    }
+    let mut key_count_map: HashMap<Key, u16> = HashMap::new();
+    for (_, value) in config_keybinds.iter() {
+        for key in value.iter() {
+            let key_count = key_count_map.entry(*key).or_insert(0);
+            *key_count += 1;
+        }
+    }
+    let mut overlapped_keys: Vec<Key> = Vec::new();
+    for (key, count) in key_count_map.iter() {
+        if *count > 1 {
+            overlapped_keys.push(*key);
+        }
+    }
+    if overlapped_keys.len() > 0 {
+        let mut overlapped_keys_str = String::new();
+        for key in overlapped_keys.iter() {
+            overlapped_keys_str.push_str(&format!("{:?}, ", key));
+        }
+        return Err(format!("Overlapped keybinds found: {}", overlapped_keys_str));
+    }
     Ok(config)
 }
 
@@ -80,7 +105,7 @@ pub fn write_config(config: &AppConfig) -> Result<(), String> {
 }
 
 pub fn get_default_ui_mode() -> UiMode {
-    let get_config_status = get_config();
+    let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
@@ -99,7 +124,7 @@ pub fn reset_config() {
 }
 
 pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError> {
-    let get_config_status = get_config();
+    let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
@@ -129,7 +154,7 @@ pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError
 }
 
 pub fn get_local_kanban_state(file_name: String, version: u32, preview_mode: bool) -> Result<Vec<Board>, SavefileError> {
-    let get_config_status = get_config();
+    let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
@@ -145,7 +170,7 @@ pub fn get_local_kanban_state(file_name: String, version: u32, preview_mode: boo
 }
 
 pub fn get_available_local_savefiles() -> Option<Vec<String>> {
-    let get_config_status = get_config();
+    let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
@@ -217,7 +242,7 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
         boards: Vec<Board>
     }
     // use serde serialization
-    let get_config_status = get_config();
+    let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()

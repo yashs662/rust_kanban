@@ -172,12 +172,13 @@ pub enum CommandPaletteActions {
     OpenHelpMenu,
     ChangeUIMode,
     ChangeCurrentCardStatus,
+    DebugMenu,
     Quit
 }
 
 impl CommandPaletteActions {
     pub fn all() -> Vec<Self> {
-        vec![
+        let all = vec![
             Self::ExportToJSON,
             Self::OpenConfigMenu,
             Self::SaveKanbanState,
@@ -190,7 +191,15 @@ impl CommandPaletteActions {
             Self::ChangeUIMode,
             Self::ChangeCurrentCardStatus,
             Self::Quit,
-        ]
+        ];
+
+        if cfg!(debug_assertions) {
+            let mut all = all;
+            all.push(Self::DebugMenu);
+            all
+        } else {
+            all
+        }
     }
 
     pub fn as_str(&self) -> &str {
@@ -206,6 +215,7 @@ impl CommandPaletteActions {
             Self::OpenHelpMenu => "Open Help Menu",
             Self::ChangeUIMode => "Change UI Mode",
             Self::ChangeCurrentCardStatus => "Change Current Card Status",
+            Self::DebugMenu => "Toggle Debug Panel",
             Self::Quit => "Quit",
         }
     }
@@ -228,6 +238,7 @@ impl CommandPaletteActions {
                 "open help menu" => Some(Self::OpenHelpMenu),
                 "change ui mode" => Some(Self::ChangeUIMode),
                 "change current card status" => Some(Self::ChangeCurrentCardStatus),
+                "toggle debug panel" => Some(Self::DebugMenu),
                 "quit" => Some(Self::Quit),
                 _ => None,
             }
@@ -244,6 +255,7 @@ impl CommandPaletteActions {
                 "Open Help Menu" => Some(Self::OpenHelpMenu),
                 "Change UI Mode" => Some(Self::ChangeUIMode),
                 "Change Current Card Status" => Some(Self::ChangeCurrentCardStatus),
+                "Toggle Debug Panel" => Some(Self::DebugMenu),
                 "Quit" => Some(Self::Quit),
                 _ => None,
             }

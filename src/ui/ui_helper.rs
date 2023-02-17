@@ -76,6 +76,7 @@ use crate::io::data_handler::{
     get_config,
     get_available_local_savefiles
 };
+use crate::io::handler::get_config_dir;
 
 use super::widgets::{ToastWidget, ToastType};
 
@@ -492,7 +493,7 @@ fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static>
 /// returns a list of all config items as a vector of strings
 fn get_config_items() -> Vec<Vec<String>>
 {
-    let get_config_status = get_config();
+    let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
@@ -1634,7 +1635,33 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             .as_ref(),
         )
         .split(popup_layout[1])[1]
-    }
+}
+
+fn top_left_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+    
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[0])[0]
+}
     
 /// Draws size error screen if the terminal is too small
 pub fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)
@@ -2216,9 +2243,10 @@ where
     if toasts.len() == 0 {
         return;
     }
+    let mut total_height_rendered = 1; // for messages indicator
 
     // loop through the toasts and draw them
-    for (i, toast) in toasts.iter().enumerate() {
+    for (_, toast) in toasts.iter().enumerate() {
         let toast_style = Style::default()
             .fg(tui::style::Color::Rgb(
                 toast.toast_color.0, toast.toast_color.1, toast.toast_color.2
@@ -2229,10 +2257,10 @@ where
             ToastType::Warning => "Warning",
         };
         let x_offset = rect.size().width - (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO);
-        let mut toast_height = 2; // atleast one line of message + 1 line for the border
-        let lines  = textwrap::wrap(&toast.message, (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) as usize);
-        toast_height += lines.len() as u16;
-        let y_offset = toast_height * (i as u16) + 1;
+        let lines  = textwrap::wrap(
+            &toast.message,
+            (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) as usize);
+        let toast_height = lines.len() as u16 + 2;
         let toast_block = Block::default()
             .title(toast_title)
             .borders(Borders::ALL)
@@ -2243,9 +2271,10 @@ where
             .alignment(Alignment::Left)
             .wrap(Wrap { trim: true })
             .style(toast_style);
-        rect.render_widget(Clear, Rect::new(x_offset , y_offset,
+        rect.render_widget(Clear, Rect::new(x_offset , total_height_rendered,
             rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
-        rect.render_widget(toast_paragraph, Rect::new(x_offset, y_offset, rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
+        rect.render_widget(toast_paragraph, Rect::new(x_offset, total_height_rendered, rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
+        total_height_rendered += toast_height;
     }
 
     // display a total count of toasts on the top right corner
@@ -2368,6 +2397,19 @@ where
                 .alignment(Alignment::Left)
                 .wrap(Wrap { trim: true });
             rect.render_widget(card_extra_info, card_chunks[1]);
+        } else {
+            // render no cards found in <> board
+            let board_name = board.name.clone();
+            let no_cards_found = Paragraph::new(format!("No cards found in the board \"{}\"", board_name))
+                .block(Block::default()
+                    .title("Card Info")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .style(ERROR_TEXT_STYLE)
+                )
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true });
+            rect.render_widget(no_cards_found, popup_area);
         }
     }
 }
@@ -2544,4 +2586,44 @@ where
 
     rect.render_widget(Clear, popup_area);
     rect.render_stateful_widget(statuses, popup_area, status_selector_state);
+}
+
+pub fn render_debug_panel<B>(rect: &mut Frame<B>, app: &App)
+where
+    B: Backend,
+{
+    let current_ui_mode = &app.state.ui_mode.to_string();
+    let popup_mode = if app.state.popup_mode.is_some() {
+        app.state.popup_mode.as_ref().unwrap().to_string()
+    } else {
+        "None".to_string()
+    };
+    let tickrate = app.config.tickrate;
+    let ui_render_time = if app.state.ui_render_time.is_some() {
+        app.state.ui_render_time.unwrap()
+    } else {
+        0
+    };
+    let current_config_dir = get_config_dir();
+    let current_save_dir = app.config.save_directory.clone();
+
+    let menu_area = top_left_rect(30, 30, rect.size());
+    let debug_panel = Paragraph::new(vec![
+        Spans::from(format!("UI Mode: {}", current_ui_mode)),
+        Spans::from(format!("Popup Mode: {}", popup_mode)),
+        Spans::from(format!("Tickrate: {}ms", tickrate)),
+        Spans::from(format!("UI Render Time: {}ms", ui_render_time)),
+        Spans::from(format!("Config Dir: {:?}", current_config_dir)),
+        Spans::from(format!("Save Dir: {:?}", current_save_dir)),
+    ])
+    .block(
+        Block::default()
+            .title("Debug Panel")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(LOG_DEBUG_STYLE)
+    )
+    .wrap(Wrap { trim: false });
+    rect.render_widget(Clear, menu_area);
+    rect.render_widget(debug_panel, menu_area);
 }

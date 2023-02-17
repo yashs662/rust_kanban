@@ -1,6 +1,6 @@
 [package]
 name = "rust-kanban"
-version = "0.3.4"
+version = "0.3.5"
 authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
