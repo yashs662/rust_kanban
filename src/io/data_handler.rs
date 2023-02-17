@@ -9,6 +9,7 @@ use log::{
 extern crate savefile;
 use regex::Regex;
 use savefile::prelude::*;
+use serde::Serialize;
 
 
 use crate::{
@@ -205,5 +206,39 @@ pub fn get_available_local_savefiles() -> Option<Vec<String>> {
             }
             None
         }
+    }
+}
+
+pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
+    #[derive(Serialize)]
+    struct ExportStruct {
+        kanban_version: String,
+        export_date: String,
+        boards: Vec<Board>
+    }
+    // use serde serialization
+    let get_config_status = get_config();
+    let config = if get_config_status.is_err() {
+        debug!("Error getting config: {}", get_config_status.unwrap_err());
+        AppConfig::default()
+    } else {
+        get_config_status.unwrap()
+    };
+    // make json with the keys Version, Date, Boards
+    // get version from cargo.toml
+    let version = env!("CARGO_PKG_VERSION");
+    let date = chrono::Local::now().format("%d-%m-%Y");
+    // make sure boards list is not converted to string but is a list in json
+    let export_struct = ExportStruct {
+        kanban_version: version.to_string(),
+        export_date: date.to_string(),
+        boards: boards.clone()
+    };
+    let file_path = config.save_directory.join("kanban_export.json");
+    // write to file
+    let write_status = fs::write(file_path.clone(), serde_json::to_string_pretty(&export_struct).unwrap());
+    match write_status {
+        Ok(_) => Ok(file_path.to_str().unwrap().to_string()),
+        Err(e) => Err(e.to_string())
     }
 }

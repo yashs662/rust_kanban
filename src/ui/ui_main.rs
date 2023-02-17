@@ -9,7 +9,7 @@ use super::{super::app::{
         UiMode,
         AppStatus
     }
-}, ui_helper::{render_change_ui_mode_popup, render_change_current_card_status_popup}};
+}};
 
 use super::ui_helper::{
     check_size,
@@ -36,9 +36,11 @@ use super::ui_helper::{
     render_edit_default_homescreen,
     render_view_card,
     render_toast,
-    render_command_palette
+    render_command_palette,
+    render_change_ui_mode_popup,
+    render_change_current_card_status_popup,
 };
-use crate::app::App;
+use crate::app::{App, PopupMode};
 
 /// Main UI Drawing handler
 pub fn draw<B>(rect: &mut Frame<B>, app: &App, states: &mut AppState)
@@ -82,20 +84,8 @@ where
         UiMode::ConfigMenu => {
             render_config(rect, &app, &mut states.config_state);
         }
-        UiMode::EditConfig => {
-            render_config(rect, &app, &mut states.config_state);
-            render_edit_config(rect, &app);
-        }
-        UiMode::SelectDefaultView => {
-            render_config(rect, &app, &mut states.config_state);
-            render_edit_default_homescreen(rect, app, &mut states.default_view_state);
-        }
         UiMode::EditKeybindings => {
             render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state);
-        }
-        UiMode::EditSpecificKeybinding => {
-            render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state);
-            render_edit_specific_keybinding(rect, &app);
         }
         UiMode::MainMenu => {
             render_main_menu(rect, &app, &mut states.main_menu_state, &mut states.help_state, states.keybind_store.clone());
@@ -117,12 +107,33 @@ where
         }
     }
 
-    // popups that do not have any UI modes / can be rendered on top of any UI mode,
-    // order determines which is rendered on top, last function is always on top
+    // Popups are rendered above ui_mode
+    if app.state.popup_mode.is_some() {
+        match app.state.popup_mode.unwrap() {
+            PopupMode::CardView => {
+                render_view_card(rect, &app);
+            }
+            PopupMode::ChangeCurrentCardStatus => {
+                render_change_current_card_status_popup(rect, &app, &mut states.card_status_selector_state);
+            }
+            PopupMode::ChangeUIMode => {
+                render_change_ui_mode_popup(rect, &mut states.default_view_state);
+            }
+            PopupMode::CommandPalette => {
+                render_command_palette(rect, &app, &mut states.command_palette_list_state);
+            }
+            PopupMode::EditGeneralConfig => {
+                render_edit_config(rect, &app);
+            }
+            PopupMode::EditSpecificKeyBinding => {
+                render_edit_specific_keybinding(rect, &app);
+            }
+            PopupMode::SelectDefaultView => {
+                render_edit_default_homescreen(rect, app, &mut states.default_view_state);
+            }
+        }
+    }
 
-    render_view_card(rect, &app);
+    // Toasts are always rendered on top of everything else
     render_toast(rect, &app);
-    render_change_ui_mode_popup(rect, &app, &mut states.default_view_state);
-    render_change_current_card_status_popup(rect, &app, &mut states.card_status_selector_state);
-    render_command_palette(rect, &app, &mut states.command_palette_list_state);
 }

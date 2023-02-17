@@ -64,7 +64,8 @@ use crate::constants::{
 use crate::app::{
     MainMenuItem,
     App,
-    MainMenu, AppConfig, PopupMode
+    MainMenu,
+    AppConfig,
 };
 use crate::app::state::{
     Focus,
@@ -924,7 +925,7 @@ where
     let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
     
-    let main_menu = draw_main_menu(&app.focus, MainMenu::all());
+    let main_menu = draw_main_menu(&app.focus, MainMenu::all(), app.state.popup_mode.is_some());
     rect.render_stateful_widget(main_menu, chunks[1], main_menu_state);
 
     let main_menu_help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
@@ -1041,7 +1042,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
             Constraint::Percentage(30),
             Constraint::Percentage(70),
         ])
-        .style(DEFAULT_STYLE);
+        .style(default_style);
 
     let right_table = Table::new(right_rows)
         .block(Block::default())
@@ -1051,7 +1052,7 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
             Constraint::Percentage(30),
             Constraint::Percentage(70),
         ])
-        .style(DEFAULT_STYLE);
+        .style(default_style);
 
     let border_block = Block::default()
         .title("Help")
@@ -1078,6 +1079,11 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
     } else {
         DEFAULT_STYLE
     };
+    let helpkey_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        HELP_KEY_STYLE
+    };
 
     let up_key = app.state.keybind_store.iter()
         .find(|x| x[1] == "Go up")
@@ -1098,20 +1104,20 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
 
     let help_text = Spans::from(vec![
         Span::styled("Use ", text_style),
-        Span::styled(up_key, HELP_KEY_STYLE),
+        Span::styled(up_key, helpkey_style),
         Span::styled(" and ", text_style),
-        Span::styled(down_key, HELP_KEY_STYLE),
+        Span::styled(down_key, helpkey_style),
         Span::styled("to navigate", text_style),
-        Span::raw("; "),
-        Span::raw("To edit a value, press "),
-        Span::styled("<Enter>", HELP_KEY_STYLE),
-        Span::raw("; Press "),
-        Span::styled("<Esc>", HELP_KEY_STYLE),
-        Span::raw(" to cancel, To Reset Keybindings to Default, Press "),
-        Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
-        Span::raw("to highlight Reset Button and Press "),
-        Span::styled("<Enter>", HELP_KEY_STYLE),
-        Span::raw(" on the Reset Keybindings Button"),
+        Span::styled("; ", text_style),
+        Span::styled("To edit a value, press ", text_style),
+        Span::styled("<Enter>", helpkey_style),
+        Span::styled("; Press ", text_style),
+        Span::styled("<Esc>", helpkey_style),
+        Span::styled(" to cancel, To Reset Keybindings to Default, Press ", text_style),
+        Span::styled([next_focus_key, prev_focus_key].join(" or "), helpkey_style),
+        Span::styled("to highlight Reset Button and Press ", text_style),
+        Span::styled("<Enter>", helpkey_style),
+        Span::styled(" on the Reset Keybindings Button", text_style),
     ]);
 
     let help_span = Spans::from(help_text);
@@ -1174,11 +1180,25 @@ fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) 
 }
 
 /// Draws Main menu
-fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List<'a> {
-    let menu_style = if matches!(focus, Focus::MainMenu) {
-        FOCUSED_ELEMENT_STYLE
+fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>, popup_mode: bool) -> List<'a> {
+    let menu_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        if matches!(focus, Focus::MainMenu) {
+            FOCUSED_ELEMENT_STYLE
+        } else {
+            DEFAULT_STYLE
+        }
+    };
+    let default_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
     } else {
         DEFAULT_STYLE
+    };
+    let highlight_style = if popup_mode {
+        INACTIVE_TEXT_STYLE
+    } else {
+        LIST_SELECT_STYLE
     };
     let list_items = main_menu_items
         .iter()
@@ -1188,11 +1208,12 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>) -> List
         .block(
             Block::default()
                 .title("Main menu")
+                .style(default_style)
                 .borders(Borders::ALL)
                 .border_style(menu_style)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_style(highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL)
 }
 
@@ -2249,14 +2270,6 @@ pub fn render_view_card<B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
-    if app.state.popup_mode.is_none() {
-        return;
-    } else if app.state.popup_mode.unwrap() != PopupMode::CardView {
-        return;
-    }
-    if !UiMode::view_modes().contains(&app.state.ui_mode) {
-        return;
-    }
 
     let popup_area = centered_rect(90,90, rect.size());
     rect.render_widget(Clear, popup_area);
@@ -2363,11 +2376,6 @@ pub fn render_command_palette<B>(rect: &mut Frame<B>, app: &App, search_state: &
 where
     B: Backend,
 {
-    if app.state.popup_mode.is_none() {
-        return;
-    } else if app.state.popup_mode.unwrap() != PopupMode::CommandPalette {
-        return;
-    }
 
     let current_search_text_input = app.state.current_user_input.clone();
     let horizontal_chunks = Layout::default()
@@ -2473,15 +2481,10 @@ where
     rect.render_stateful_widget(search_results, vertical_chunks[2], search_state);
 }
 
-pub fn render_change_ui_mode_popup<B>(rect: &mut Frame<B>, app: &App, ui_selector_state: &mut ListState)
+pub fn render_change_ui_mode_popup<B>(rect: &mut Frame<B>, ui_selector_state: &mut ListState)
 where
     B: Backend,
 {
-    if app.state.popup_mode.is_none() {
-        return;
-    } else if app.state.popup_mode.unwrap() != PopupMode::ChangeUIMode {
-        return;
-    }
 
     let all_ui_modes = UiMode::all()
         .iter()
@@ -2509,11 +2512,6 @@ pub fn render_change_current_card_status_popup<B>(rect: &mut Frame<B>, app: &App
 where
     B: Backend,
 {
-    if app.state.popup_mode.is_none() {
-        return;
-    } else if app.state.popup_mode.unwrap() != PopupMode::ChangeCurrentCardStatus {
-        return;
-    }
     let mut card_name = String::new();
     let mut board_name = String::new();
     if let Some(current_board_id) = app.state.current_board_id {

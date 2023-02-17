@@ -18,16 +18,13 @@ pub enum UiMode {
     TitleBodyHelpLog,
     BodyHelpLog,
     ConfigMenu,
-    EditConfig,
     EditKeybindings,
-    EditSpecificKeybinding,
     MainMenu,
     HelpMenu,
     LogsOnly,
     NewBoard,
     NewCard,
     LoadSave,
-    SelectDefaultView
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -99,16 +96,13 @@ impl UiMode {
             UiMode::BodyHelpLog => "Body, Help and Log".to_string(),
             UiMode::TitleBodyHelpLog => "Title, Body, Help and Log".to_string(),
             UiMode::ConfigMenu => "Config".to_string(),
-            UiMode::EditConfig => "Edit Config".to_string(),
             UiMode::EditKeybindings => "Edit Keybindings".to_string(),
-            UiMode::EditSpecificKeybinding => "Edit Specific Keybinding".to_string(),
             UiMode::MainMenu => "Main Menu".to_string(),
             UiMode::HelpMenu => "Help Menu".to_string(),
             UiMode::LogsOnly => "Logs Only".to_string(),
             UiMode::NewBoard => "New Board".to_string(),
             UiMode::NewCard => "New Card".to_string(),
             UiMode::LoadSave => "Load a Save".to_string(),
-            UiMode::SelectDefaultView => "Select Default View".to_string(),
         }
     }
 
@@ -123,16 +117,13 @@ impl UiMode {
             "Body, Help and Log" => Some(UiMode::BodyHelpLog),
             "Title, Body, Help and Log" => Some(UiMode::TitleBodyHelpLog),
             "Config" => Some(UiMode::ConfigMenu),
-            "Edit Config" => Some(UiMode::EditConfig),
             "Edit Keybindings" => Some(UiMode::EditKeybindings),
-            "Edit Specific Keybinding" => Some(UiMode::EditSpecificKeybinding),
             "Main Menu" => Some(UiMode::MainMenu),
             "Help Menu" => Some(UiMode::HelpMenu),
             "Logs Only" => Some(UiMode::LogsOnly),
             "New Board" => Some(UiMode::NewBoard),
             "New Card" => Some(UiMode::NewCard),
             "Load a Save" => Some(UiMode::LoadSave),
-            "Select Default View" => Some(UiMode::SelectDefaultView),
             _ => None,
         }
     }
@@ -166,16 +157,13 @@ impl UiMode {
             UiMode::BodyHelpLog => vec![Focus::Body, Focus::Help, Focus::Log],
             UiMode::TitleBodyHelpLog => vec![Focus::Title, Focus::Body, Focus::Help, Focus::Log],
             UiMode::ConfigMenu => vec![Focus::ConfigTable, Focus::SubmitButton, Focus::ExtraFocus],
-            UiMode::EditConfig => vec![Focus::NoFocus],
             UiMode::EditKeybindings => vec![Focus::Title, Focus::SubmitButton],
-            UiMode::EditSpecificKeybinding => vec![Focus::NoFocus],
             UiMode::MainMenu => vec![Focus::MainMenu, Focus::MainMenuHelp, Focus::Log],
             UiMode::HelpMenu => vec![Focus::Help, Focus::Log],
             UiMode::LogsOnly => vec![Focus::Log],
             UiMode::NewBoard => vec![Focus::NewBoardName, Focus::NewBoardDescription, Focus::SubmitButton],
             UiMode::NewCard => vec![Focus::NewCardName, Focus::NewCardDescription, Focus::NewCardDueDate, Focus::SubmitButton],
             UiMode::LoadSave => vec![Focus::Body],
-            UiMode::SelectDefaultView => vec![Focus::NoFocus],
         }
     }
 
