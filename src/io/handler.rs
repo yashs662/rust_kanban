@@ -1,41 +1,20 @@
-use linked_hash_map::LinkedHashMap;
-use savefile::{load_file, save_file};
-use tui::widgets::ListState;
-use std::path::Path;
-use std::{
-    sync::Arc,
-    path::PathBuf
-};
 use crate::app::kanban::Board;
 use crate::app::state::UiMode;
-use std::env;
-use crate::constants::{
-    CONFIG_DIR_NAME,
-    CONFIG_FILE_NAME,
-    SAVE_DIR_NAME,
-    SAVE_FILE_NAME,
-};
-use crate::app::{
-    AppConfig,
-    App
-};
-use crate::io::data_handler::{
-    reset_config,
-    save_kanban_state_locally,
-    get_config
-};
+use crate::app::{App, AppConfig};
+use crate::constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME};
+use crate::io::data_handler::{get_config, reset_config, save_kanban_state_locally};
 use chrono::NaiveDate;
-use eyre::{Result, anyhow};
-use log::{
-    error,
-    info, debug,
-};
+use eyre::{anyhow, Result};
+use linked_hash_map::LinkedHashMap;
+use log::{debug, error, info};
+use savefile::{load_file, save_file};
+use std::env;
+use std::path::Path;
+use std::{path::PathBuf, sync::Arc};
+use tui::widgets::ListState;
 
+use super::data_handler::{get_available_local_savefiles, get_local_kanban_state};
 use super::IoEvent;
-use super::data_handler::{
-    get_available_local_savefiles,
-    get_local_kanban_state
-};
 
 /// In the IO thread, we handle IO event without blocking the UI thread
 pub struct IoAsyncHandler {
@@ -60,11 +39,11 @@ impl IoAsyncHandler {
             IoEvent::GoLeft => self.go_left().await,
             IoEvent::GoUp => self.go_up().await,
             IoEvent::GoDown => self.go_down().await,
-            IoEvent::RefreshVisibleBoardsandCards => self.refresh_visible_boards_and_cards().await,
+            IoEvent::ResetVisibleBoardsandCards => self.refresh_visible_boards_and_cards().await,
             IoEvent::AutoSave => self.auto_save().await,
             IoEvent::LoadPreview => self.load_preview().await,
         };
-        
+
         let mut app = self.app.lock().await;
         if let Err(err) = result {
             error!("Oops, something wrong happened 😢: {:?}", err);
@@ -88,7 +67,7 @@ impl IoAsyncHandler {
         }
         app.boards = prepare_boards(&mut app);
         app.keybind_list_maker();
-        app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+        app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
         app.send_info_toast("Application initialized", None);
@@ -120,7 +99,7 @@ impl IoAsyncHandler {
             Ok(_) => {
                 info!("👍 Local data saved");
                 app.send_info_toast("👍 Local data saved", None);
-            },
+            }
             Err(err) => {
                 debug!("Cannot save local data: {:?}", err);
                 app.send_error_toast("Cannot save local data", None);
@@ -174,12 +153,12 @@ impl IoAsyncHandler {
                 app.send_error_toast("Cannot load save file", None);
             }
         }
-        app.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+        app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         app.state.ui_mode = app.config.default_view.clone();
         Ok(())
     }
 
-    pub async fn delete_save_file(&mut self) -> Result<()> {
+    async fn delete_save_file(&mut self) -> Result<()> {
         // get app.state.load_save_state.selected() and delete the file
         let mut app = self.app.lock().await;
         let file_list = get_available_local_savefiles();
@@ -292,24 +271,31 @@ impl IoAsyncHandler {
             // we are not at the last board, we can go right
             // get the next NO_OF_BOARDS_PER_PAGE boards
             let next_board_index = current_board_index_in_all_boards + 1;
-            let next_board_index = if (next_board_index + app.config.no_of_boards_to_show as usize) > all_boards.len() {
-                all_boards.len() - app.config.no_of_boards_to_show as usize
+            let next_board = &all_boards[next_board_index];
+            let next_board_card_ids: Vec<u128> = next_board
+                .cards
+                .clone()
+                .iter()
+                .map(|card| card.id)
+                .collect();
+            app.visible_boards_and_cards
+                .insert(next_board.id, next_board_card_ids.clone());
+            // remove the first board from visible_boards
+            let first_board_id = app
+                .visible_boards_and_cards
+                .iter()
+                .nth(0)
+                .unwrap()
+                .0
+                .clone();
+            app.visible_boards_and_cards.remove(&first_board_id);
+            app.state.current_board_id = Some(next_board.id);
+            // reset the current card id to first card of current board from visible_boards if there is any
+            if next_board_card_ids.len() > 0 {
+                app.state.current_card_id = Some(next_board_card_ids[0]);
             } else {
-                next_board_index
-            };
-            let next_boards = all_boards[next_board_index..next_board_index + app.config.no_of_boards_to_show as usize].to_vec();
-            let mut visible_boards_and_cards = LinkedHashMap::new();
-            for board in &next_boards {
-                let card_ids = board.cards.iter().map(|card| card.id).collect::<Vec<u128>>();
-                visible_boards_and_cards.insert(board.id, card_ids);
+                app.state.current_card_id = None;
             }
-            app.visible_boards_and_cards = visible_boards_and_cards;
-            // check if the current board is in the next boards, if not, set the current board to the first board in the next boards
-            if !next_boards.iter().any(|board| board.id == current_board_id) {
-                app.state.current_board_id = Some(next_boards[0].id);
-            }
-            // reset the current card id
-            app.state.current_card_id = None;
         } else {
             // we are not at the last board, we can go right
             let next_board_id = current_visible_boards
@@ -381,24 +367,30 @@ impl IoAsyncHandler {
             // we are not at the first board, we can go left
             // get the previous NO_OF_BOARDS_PER_PAGE boards
             let previous_board_index = current_board_index_in_all_boards - 1;
-            let previous_board_index = if previous_board_index < app.config.no_of_boards_to_show as usize {
-                0
+            let previous_board = &all_boards[previous_board_index];
+            let previous_board_card_ids: Vec<u128> = previous_board
+                .cards
+                .clone()
+                .iter()
+                .map(|card| card.id)
+                .collect();
+            let mut new_visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> =
+                LinkedHashMap::new();
+            new_visible_boards_and_cards.insert(previous_board.id, previous_board_card_ids.clone());
+            for (board_id, card_ids) in current_visible_boards
+                .iter()
+                .take(current_visible_boards.len() - 1)
+            {
+                new_visible_boards_and_cards.insert(*board_id, card_ids.clone());
+            }
+            app.visible_boards_and_cards = new_visible_boards_and_cards;
+            app.state.current_board_id = Some(previous_board.id);
+            // reset the current card id to first card of current board from visible_boards if there is any
+            if previous_board_card_ids.len() > 0 {
+                app.state.current_card_id = Some(previous_board_card_ids[0]);
             } else {
-                previous_board_index - app.config.no_of_boards_to_show as usize
-            };
-            let previous_boards = all_boards[previous_board_index..previous_board_index + app.config.no_of_boards_to_show as usize].to_vec();
-            let mut visible_boards_and_cards = LinkedHashMap::new();
-            for board in &previous_boards {
-                let card_ids = board.cards.iter().map(|card| card.id).collect::<Vec<u128>>();
-                visible_boards_and_cards.insert(board.id, card_ids);
+                app.state.current_card_id = None;
             }
-            app.visible_boards_and_cards = visible_boards_and_cards;
-            // check if the current board is in the previous boards, if not, set the current board to the last board in the previous boards
-            if !previous_boards.iter().any(|board| board.id == current_board_id) {
-                app.state.current_board_id = Some(previous_boards[previous_boards.len() - 1].id);
-            }
-            // reset the current card id
-            app.state.current_card_id = None;
         } else {
             // we are not at the first board, we can go left
             let previous_board_id = current_visible_boards
@@ -492,25 +484,33 @@ impl IoAsyncHandler {
             // we are not at the first card, we can go up
             // get the previous NO_OF_CARDS_PER_PAGE cards
             let previous_card_index = current_card_index_in_all_cards - 1;
-            let previous_card_index = if previous_card_index < app.config.no_of_cards_to_show as usize {
-                0
-            } else {
-                previous_card_index - app.config.no_of_cards_to_show as usize
-            };
+            let previous_card_id = app
+                .boards
+                .iter()
+                .find(|board| board.id == current_board_id)
+                .unwrap()
+                .cards[previous_card_index]
+                .id;
             let previous_cards = app
                 .boards
                 .iter()
                 .find(|board| board.id == current_board_id)
                 .unwrap()
-                .cards[previous_card_index..previous_card_index + app.config.no_of_cards_to_show as usize]
+                .cards[previous_card_index
+                ..previous_card_index + app.config.no_of_cards_to_show as usize]
                 .to_vec();
             let mut visible_boards_and_cards = app.visible_boards_and_cards.clone();
             // replace the cards of the current board
-            visible_boards_and_cards.entry(current_board_id).and_modify(|cards| {
-                *cards = previous_cards.iter().map(|card| card.id).collect::<Vec<u128>>()
-            });
+            visible_boards_and_cards
+                .entry(current_board_id)
+                .and_modify(|cards| {
+                    *cards = previous_cards
+                        .iter()
+                        .map(|card| card.id)
+                        .collect::<Vec<u128>>()
+                });
             app.visible_boards_and_cards = visible_boards_and_cards;
-            app.state.current_card_id = Some(previous_cards[app.config.no_of_cards_to_show as usize - 1].id);
+            app.state.current_card_id = Some(previous_card_id);
         } else {
             // we are not at the first card, we can go up
             let previous_card_id = current_visible_boards
@@ -595,32 +595,86 @@ impl IoAsyncHandler {
                 return Ok(());
             }
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
-            if current_card_index_in_all_cards == app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.len() - 1 {
+            if current_card_index_in_all_cards
+                == app
+                    .boards
+                    .iter()
+                    .find(|board| board.id == current_board_id)
+                    .unwrap()
+                    .cards
+                    .len()
+                    - 1
+            {
                 // we are at the last card, we cannot go down
                 return Ok(());
             }
             // we are not at the last card, we can go down
             // get the next NO_OF_CARDS_PER_PAGE cards
             let next_card_index = current_card_index_in_all_cards + 1;
-            let next_card_index = if next_card_index + app.config.no_of_cards_to_show as usize > app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.len() {
-                app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.len() - app.config.no_of_cards_to_show as usize
-            } else {
-                next_card_index
-            };
-            let next_cards = app
+            let next_card_id = app
                 .boards
                 .iter()
                 .find(|board| board.id == current_board_id)
                 .unwrap()
-                .cards[next_card_index..next_card_index + app.config.no_of_cards_to_show as usize]
-                .to_vec();
-            let mut visible_boards_and_cards = app.visible_boards_and_cards.clone();
+                .cards[next_card_index]
+                .id;
+            let start_index = next_card_index - 1;
+            let end_index = next_card_index - 1 + app.config.no_of_cards_to_show as usize;
+            let end_index = if end_index
+                > app
+                    .boards
+                    .iter()
+                    .find(|board| board.id == current_board_id)
+                    .unwrap()
+                    .cards
+                    .len()
+            {
+                app.boards
+                    .iter()
+                    .find(|board| board.id == current_board_id)
+                    .unwrap()
+                    .cards
+                    .len()
+            } else {
+                end_index
+            };
+            let next_card_ids = app
+                .boards
+                .iter()
+                .find(|board| board.id == current_board_id)
+                .unwrap()
+                .cards[start_index..end_index]
+                .iter()
+                .map(|card| card.id)
+                .collect::<Vec<u128>>();
+            // if next_card_ids are less tha app.config.no_of_cards_to_show, then add cards before the start index till we have app.config.no_of_cards_to_show cards or we have reached index 0
+            let next_card_ids = if next_card_ids.len() < app.config.no_of_cards_to_show as usize {
+                let mut next_card_ids = next_card_ids.clone();
+                let mut start_index = start_index;
+                while next_card_ids.len() < app.config.no_of_cards_to_show as usize
+                    && start_index > 0
+                {
+                    start_index -= 1;
+                    next_card_ids.insert(
+                        0,
+                        app.boards
+                            .iter()
+                            .find(|board| board.id == current_board_id)
+                            .unwrap()
+                            .cards[start_index]
+                            .id,
+                    );
+                }
+                next_card_ids
+            } else {
+                next_card_ids
+            };
             // replace the cards of the current board
-            visible_boards_and_cards.entry(current_board_id).and_modify(|cards| {
-                *cards = next_cards.iter().map(|card| card.id).collect::<Vec<u128>>()
-            });
-            app.visible_boards_and_cards = visible_boards_and_cards;
-            app.state.current_card_id = Some(next_cards[0].id);
+            app.visible_boards_and_cards
+                .entry(current_board_id)
+                .and_modify(|cards| *cards = next_card_ids);
+            // set the current card id
+            app.state.current_card_id = Some(next_card_id);
         } else {
             // we are not at the last card, we can go down
             let next_card_id = current_visible_boards
@@ -647,7 +701,7 @@ impl IoAsyncHandler {
         refresh_visible_boards_and_cards(&mut app);
         Ok(())
     }
-    
+
     async fn auto_save(&mut self) -> Result<()> {
         let app = self.app.lock().await;
         let latest_save_file_info = get_latest_save_file();
@@ -660,7 +714,10 @@ impl IoAsyncHandler {
         };
         if latest_save_file_info.is_ok() {
             let latest_save_file_info = latest_save_file_info.unwrap();
-            let default_board = Board::new(String::from("Board not found"), String::from("Board not found"));
+            let default_board = Board::new(
+                String::from("Board not found"),
+                String::from("Board not found"),
+            );
             let save_file_name = latest_save_file_info.0;
             let version = latest_save_file_info.1;
             let file_path = config.save_directory.join(save_file_name);
@@ -672,7 +729,10 @@ impl IoAsyncHandler {
                 for board in &boards {
                     let board_id = board.id;
                     let board_cards = &board.cards;
-                    let app_board = app.boards.iter().find(|board| board.id == board_id)
+                    let app_board = app
+                        .boards
+                        .iter()
+                        .find(|board| board.id == board_id)
                         .unwrap_or_else(|| {
                             info!("board with id {} not found", board_id);
                             &default_board
@@ -690,7 +750,11 @@ impl IoAsyncHandler {
                     }
                     for card in board_cards {
                         let card_id = card.id;
-                        if app_board_cards.iter().find(|card| card.id == card_id).is_none() {
+                        if app_board_cards
+                            .iter()
+                            .find(|card| card.id == card_id)
+                            .is_none()
+                        {
                             boards_are_the_same = false;
                             break;
                         }
@@ -699,7 +763,12 @@ impl IoAsyncHandler {
                 if boards_are_the_same {
                     return Ok(());
                 } else {
-                    let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), version + 1);
+                    let file_name = format!(
+                        "{}_{}_v{}",
+                        SAVE_FILE_NAME,
+                        chrono::Local::now().format("%d-%m-%Y"),
+                        version + 1
+                    );
                     let file_path = config.save_directory.join(file_name);
                     let save_status = save_file(file_path, version, &app.boards);
                     match save_status {
@@ -709,7 +778,12 @@ impl IoAsyncHandler {
                 }
             } else {
                 // boards are not the same
-                let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), version + 1);
+                let file_name = format!(
+                    "{}_{}_v{}",
+                    SAVE_FILE_NAME,
+                    chrono::Local::now().format("%d-%m-%Y"),
+                    version + 1
+                );
                 let file_path = config.save_directory.join(file_name);
                 let save_status = save_file(file_path, version, &app.boards);
                 match save_status {
@@ -719,7 +793,12 @@ impl IoAsyncHandler {
             }
         } else {
             // there is no save file
-            let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), 1);
+            let file_name = format!(
+                "{}_{}_v{}",
+                SAVE_FILE_NAME,
+                chrono::Local::now().format("%d-%m-%Y"),
+                1
+            );
             let file_path = config.save_directory.join(file_name);
             let save_status = save_file(file_path, 1, &app.boards);
             match save_status {
@@ -770,17 +849,22 @@ impl IoAsyncHandler {
         match board_data {
             Ok(boards) => {
                 app.state.preview_boards_and_cards = Some(boards);
-                
+
                 let mut counter = 0;
                 // get self.boards and make Vec<LinkedHashMap<u128, Vec<u128>>> of visible boards and cards
-                let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
+                let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> =
+                    LinkedHashMap::new();
                 for board in app.state.preview_boards_and_cards.as_ref().unwrap().iter() {
                     if counter == app.config.no_of_boards_to_show {
                         break;
                     }
                     let mut visible_cards: Vec<u128> = Vec::new();
                     if board.cards.len() > app.config.no_of_cards_to_show.into() {
-                        for card in board.cards.iter().take(app.config.no_of_cards_to_show.into()) {
+                        for card in board
+                            .cards
+                            .iter()
+                            .take(app.config.no_of_cards_to_show.into())
+                        {
                             visible_cards.push(card.id);
                         }
                     } else {
@@ -795,7 +879,7 @@ impl IoAsyncHandler {
                     counter += 1;
                 }
                 app.state.preview_visible_boards_and_cards = visible_boards_and_cards;
-            },
+            }
             Err(e) => {
                 error!("Error loading preview: {}", e);
                 app.send_error_toast("Error loading preview", None);
@@ -803,7 +887,6 @@ impl IoAsyncHandler {
         }
         Ok(())
     }
-
 }
 
 pub(crate) fn get_config_dir() -> Result<PathBuf, String> {
@@ -868,7 +951,7 @@ fn prepare_save_dir() -> bool {
     true
 }
 
-fn prepare_boards (app: &mut App) -> Vec<Board> {
+fn prepare_boards(app: &mut App) -> Vec<Board> {
     let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
@@ -882,19 +965,23 @@ fn prepare_boards (app: &mut App) -> Vec<Board> {
             let latest_save_file_info = latest_save_file_info.unwrap();
             let latest_save_file = latest_save_file_info.0;
             let latest_version = latest_save_file_info.1;
-            let local_data = get_local_kanban_state(latest_save_file.clone(), latest_version, false);
+            let local_data =
+                get_local_kanban_state(latest_save_file.clone(), latest_version, false);
             match local_data {
                 Ok(data) => {
                     info!("👍 Local data loaded from {:?}", latest_save_file);
-                    app.send_info_toast(&format!("👍 Local data loaded from {:?}", latest_save_file), None);
+                    app.send_info_toast(
+                        &format!("👍 Local data loaded from {:?}", latest_save_file),
+                        None,
+                    );
                     data
-                },
+                }
                 Err(err) => {
                     debug!("Cannot get local data: {:?}", err);
                     error!("👎 Cannot get local data, Data might be corrupted or is not in the correct format");
                     app.send_error_toast("👎 Cannot get local data, Data might be corrupted or is not in the correct format", None);
                     vec![]
-                },
+                }
             }
         } else {
             vec![]
@@ -941,26 +1028,32 @@ fn get_latest_save_file() -> Result<(String, u32)> {
         .max()
         .unwrap_or(fall_back_version);
 
-        if latest_version == fall_back_version {
-            return Err(anyhow!("No local save files found"));
-        }
-        let latest_version = latest_version as u32;
+    if latest_version == fall_back_version {
+        return Err(anyhow!("No local save files found"));
+    }
+    let latest_version = latest_version as u32;
 
-    let latest_save_file = format!("kanban_{}_v{}", latest_date.format("%d-%m-%Y"), latest_version);
+    let latest_save_file = format!(
+        "kanban_{}_v{}",
+        latest_date.format("%d-%m-%Y"),
+        latest_version
+    );
     Ok((latest_save_file, latest_version))
 }
 
 pub fn refresh_visible_boards_and_cards(app: &mut App) {
-    let mut counter = 0;
-    // get self.boards and make Vec<LinkedHashMap<u128, Vec<u128>>> of visible boards and cards
     let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
-    for board in &app.boards {
-        if counter == app.config.no_of_boards_to_show {
+    for (i, board) in app.boards.iter().enumerate() {
+        if (i) as u16 == app.config.no_of_boards_to_show {
             break;
         }
         let mut visible_cards: Vec<u128> = Vec::new();
         if board.cards.len() > app.config.no_of_cards_to_show.into() {
-            for card in board.cards.iter().take(app.config.no_of_cards_to_show.into()) {
+            for card in board
+                .cards
+                .iter()
+                .take(app.config.no_of_cards_to_show.into())
+            {
                 visible_cards.push(card.id);
             }
         } else {
@@ -972,80 +1065,21 @@ pub fn refresh_visible_boards_and_cards(app: &mut App) {
         let mut visible_board: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
         visible_board.insert(board.id, visible_cards);
         visible_boards_and_cards.extend(visible_board);
-        counter += 1;
     }
     app.visible_boards_and_cards = visible_boards_and_cards;
-    // check if current_board_id and current_card_id are still valid if not chack if current_board_id is still valid and
-    // set current_card_id to the first card of the current board, else set current_board_id to the first board and
-    // current_card_id to the first card of the current board if there are any boards and cards
-    let current_board_id = app.state.current_board_id;
-    let current_card_id = app.state.current_card_id;
-    if current_board_id.is_none() {
-        // set current_board_id to the first board
-        if app.boards.is_empty() {
-            // there are no boards
-            app.state.current_board_id = None;
-            app.state.current_card_id = None;
-        } else {
-            // there are boards
-            app.state.current_board_id = Some(app.boards[0].id);
-            // set current_card_id to the first card of the current board
-            if app.boards[0].cards.is_empty() {
-                // there are no cards
-                app.state.current_card_id = None;
-            } else {
-                // there are cards
-                app.state.current_card_id = Some(app.boards[0].cards[0].id);
-            }
-        }
-    } else {
-        // current_board_id is not None
-        let current_board_id = current_board_id.unwrap();
-        if app.visible_boards_and_cards.iter().find(|board_card_tuple| *board_card_tuple.0 == current_board_id).is_none() {
-            // current_board_id is not valid
-            // set current_board_id to the first board
-            if app.boards.is_empty() {
-                // there are no boards
-                app.state.current_board_id = None;
-                app.state.current_card_id = None;
-            } else {
-                // there are boards
-                app.state.current_board_id = Some(app.boards[0].id);
-                // set current_card_id to the first card of the current board
-                if app.boards[0].cards.is_empty() {
-                    // there are no cards
-                    app.state.current_card_id = None;
-                } else {
-                    // there are cards
-                    app.state.current_card_id = Some(app.boards[0].cards[0].id);
-                }
-            }
-        } else {
-            // current_board_id is valid
-            if current_card_id.is_none() {
-                // set current_card_id to the first card of the current board
-                if app.visible_boards_and_cards.iter().find(|board_card_tuple| *board_card_tuple.0 == current_board_id).unwrap().1.is_empty() {
-                    // there are no cards
-                    app.state.current_card_id = None;
-                } else {
-                    // there are cards
-                    app.state.current_card_id = Some(app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards[0].id);
-                }
-            } else {
-                // current_card_id is not None
-                let current_card_id = current_card_id.unwrap();
-                if app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.iter().find(|card| card.id == current_card_id).is_none() {
-                    // current_card_id is not valid
-                    // set current_card_id to the first card of the current board
-                    if app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards.is_empty() {
-                        // there are no cards
-                        app.state.current_card_id = None;
-                    } else {
-                        // there are cards
-                        app.state.current_card_id = Some(app.boards.iter().find(|board| board.id == current_board_id).unwrap().cards[0].id);
-                    }
-                }
-            }
+    // if a board and card are there set it to current board and card
+    if !app.visible_boards_and_cards.is_empty() {
+        app.state.current_board_id =
+            Some(app.visible_boards_and_cards.keys().next().unwrap().clone());
+        if !app
+            .visible_boards_and_cards
+            .values()
+            .next()
+            .unwrap()
+            .is_empty()
+        {
+            app.state.current_card_id =
+                Some(app.visible_boards_and_cards.values().next().unwrap()[0]);
         }
     }
 }

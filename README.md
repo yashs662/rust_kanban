@@ -8,16 +8,15 @@
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
 - [ ] Allow Card to be modified in Card View
-- [ ] Add ability to export data to JSON / Switch to JSON for file saving (maybe? need to test the speed of JSON vs savefile binary)
 - [ ] Implement Cloud saves (Google drive maybe? as I am not going to host a server)
 - [ ] Implement a way to add custom colors (Theme support)
-- [ ] Implement a way to add custom keybindings from the config file (maybe club this with the theme support)
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to interact with the kanban board using the mouse (scrolling, dragging, etc)
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Added ability to export kanban data to JSON
 - [x] Implement a Command Palette (like in vs code (Ctrl + Shift + P)) as a way to interact with the app instead of using keybindings
 - [x] Implement previews for loading a save
 - [x] Toast Message Implementation -- (Inspired by [nvim-notify](https://github.com/rcarriga/nvim-notify))
@@ -33,7 +32,7 @@
 - [x] Logging
   
 ## Known Issues
-- [ ] When a card is moved below the last card in a column, the view is not refreshed and the card is not visible
+None till now, please let me know if you find any bugs
 
 ## How to use
 ### Default Keybindings

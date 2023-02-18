@@ -1,9 +1,6 @@
-use log::error;
-use serde::{
-    Serialize,
-    Deserialize
-};
 use crate::inputs::key::Key;
+use log::error;
+use serde::{Deserialize, Serialize};
 
 use super::actions::Action;
 
@@ -161,8 +158,17 @@ impl UiMode {
             UiMode::MainMenu => vec![Focus::MainMenu, Focus::MainMenuHelp, Focus::Log],
             UiMode::HelpMenu => vec![Focus::Help, Focus::Log],
             UiMode::LogsOnly => vec![Focus::Log],
-            UiMode::NewBoard => vec![Focus::NewBoardName, Focus::NewBoardDescription, Focus::SubmitButton],
-            UiMode::NewCard => vec![Focus::NewCardName, Focus::NewCardDescription, Focus::NewCardDueDate, Focus::SubmitButton],
+            UiMode::NewBoard => vec![
+                Focus::NewBoardName,
+                Focus::NewBoardDescription,
+                Focus::SubmitButton,
+            ],
+            UiMode::NewCard => vec![
+                Focus::NewCardName,
+                Focus::NewCardDescription,
+                Focus::NewCardDueDate,
+                Focus::SubmitButton,
+            ],
             UiMode::LoadSave => vec![Focus::Body],
         }
     }
@@ -184,7 +190,7 @@ impl UiMode {
             UiMode::TitleBodyHelp,
             UiMode::TitleBodyLog,
             UiMode::BodyHelpLog,
-            UiMode::TitleBodyHelpLog
+            UiMode::TitleBodyHelpLog,
         ]
     }
 }
@@ -279,7 +285,7 @@ impl Focus {
             "New Card Due Date" => Self::NewCardDueDate,
             "Submit Button" => Self::SubmitButton,
             "Extra Focus" => Self::ExtraFocus,
-            _ => Self::NoFocus
+            _ => Self::NoFocus,
         }
     }
 }
@@ -328,9 +334,18 @@ impl KeyBindings {
             ("new_card", &self.new_card),
             ("delete_card", &self.delete_card),
             ("delete_board", &self.delete_board),
-            ("change_card_status_to_completed", &self.change_card_status_to_completed),
-            ("change_card_status_to_active", &self.change_card_status_to_active),
-            ("change_card_status_to_stale", &self.change_card_status_to_stale),
+            (
+                "change_card_status_to_completed",
+                &self.change_card_status_to_completed,
+            ),
+            (
+                "change_card_status_to_active",
+                &self.change_card_status_to_active,
+            ),
+            (
+                "change_card_status_to_stale",
+                &self.change_card_status_to_stale,
+            ),
             ("reset_ui", &self.reset_ui),
             ("go_to_main_menu", &self.go_to_main_menu),
             ("toggle_command_palette", &self.toggle_command_palette),
@@ -363,9 +378,7 @@ impl KeyBindings {
                     "change_card_status_to_active" => {
                         return Some(&Action::ChangeCardStatusToActive)
                     }
-                    "change_card_status_to_stale" => {
-                        return Some(&Action::ChangeCardStatusToStale)
-                    }
+                    "change_card_status_to_stale" => return Some(&Action::ChangeCardStatusToStale),
                     "reset_ui" => return Some(&Action::ResetUI),
                     "go_to_main_menu" => return Some(&Action::GoToMainMenu),
                     "toggle_command_palette" => return Some(&Action::ToggleCommandPalette),
@@ -402,6 +415,4 @@ impl KeyBindings {
             _ => None,
         }
     }
-    
-
 }

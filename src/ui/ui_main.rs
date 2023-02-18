@@ -1,45 +1,18 @@
-use tui::{
-    backend::Backend,
-    Frame
+use tui::{backend::Backend, Frame};
+
+use super::super::app::{
+    state::{AppStatus, UiMode},
+    AppState,
 };
 
-use super::{super::app::{
-    AppState,
-    state::{
-        UiMode,
-        AppStatus
-    }
-}};
-
 use super::ui_helper::{
-    check_size,
-    draw_size_error,
-    render_zen_mode,
-    render_title_body,
-    render_body_help,
-    render_body_log,
-    render_title_body_help,
-    render_title_body_log,
-    render_body_help_log,
-    render_title_body_help_log,
-    render_config,
-    render_edit_config,
-    render_edit_keybindings,
-    render_edit_specific_keybinding,
-    render_main_menu,
-    render_help_menu,
-    render_logs_only,
-    render_new_board_form,
-    render_load_save,
-    render_new_card_form,
-    draw_loading_screen,
-    render_edit_default_homescreen,
-    render_view_card,
-    render_toast,
-    render_command_palette,
-    render_change_ui_mode_popup,
-    render_change_current_card_status_popup,
-    render_debug_panel
+    check_size, draw_loading_screen, draw_size_error, render_body_help, render_body_help_log,
+    render_body_log, render_change_current_card_status_popup, render_change_ui_mode_popup,
+    render_command_palette, render_config, render_debug_panel, render_edit_config,
+    render_edit_default_homescreen, render_edit_keybindings, render_edit_specific_keybinding,
+    render_help_menu, render_load_save, render_logs_only, render_main_menu, render_new_board_form,
+    render_new_card_form, render_title_body, render_title_body_help, render_title_body_help_log,
+    render_title_body_log, render_toast, render_view_card, render_zen_mode,
 };
 use crate::app::{App, PopupMode};
 
@@ -47,7 +20,7 @@ use crate::app::{App, PopupMode};
 pub fn draw<B>(rect: &mut Frame<B>, app: &App, states: &mut AppState)
 where
     B: Backend,
-{   
+{
     let msg = check_size(&rect.size());
     if &msg != "Size OK" {
         draw_size_error(rect, &rect.size(), msg);
@@ -65,22 +38,42 @@ where
             render_title_body(rect, &app);
         }
         UiMode::BodyHelp => {
-            render_body_help(rect, &app, &mut states.help_state, states.keybind_store.clone());
+            render_body_help(
+                rect,
+                &app,
+                &mut states.help_state,
+                states.keybind_store.clone(),
+            );
         }
         UiMode::BodyLog => {
             render_body_log(rect, &app);
         }
         UiMode::TitleBodyHelp => {
-            render_title_body_help(rect, &app, &mut states.help_state, states.keybind_store.clone());
+            render_title_body_help(
+                rect,
+                &app,
+                &mut states.help_state,
+                states.keybind_store.clone(),
+            );
         }
         UiMode::TitleBodyLog => {
             render_title_body_log(rect, &app);
         }
         UiMode::BodyHelpLog => {
-            render_body_help_log(rect, &app, &mut states.help_state, states.keybind_store.clone());
+            render_body_help_log(
+                rect,
+                &app,
+                &mut states.help_state,
+                states.keybind_store.clone(),
+            );
         }
         UiMode::TitleBodyHelpLog => {
-            render_title_body_help_log(rect, &app, &mut states.help_state, states.keybind_store.clone());
+            render_title_body_help_log(
+                rect,
+                &app,
+                &mut states.help_state,
+                states.keybind_store.clone(),
+            );
         }
         UiMode::ConfigMenu => {
             render_config(rect, &app, &mut states.config_state);
@@ -89,10 +82,21 @@ where
             render_edit_keybindings(rect, &app, &mut states.edit_keybindings_state);
         }
         UiMode::MainMenu => {
-            render_main_menu(rect, &app, &mut states.main_menu_state, &mut states.help_state, states.keybind_store.clone());
+            render_main_menu(
+                rect,
+                &app,
+                &mut states.main_menu_state,
+                &mut states.help_state,
+                states.keybind_store.clone(),
+            );
         }
         UiMode::HelpMenu => {
-            render_help_menu(rect, &app, &mut states.help_state, states.keybind_store.clone());
+            render_help_menu(
+                rect,
+                &app,
+                &mut states.help_state,
+                states.keybind_store.clone(),
+            );
         }
         UiMode::LogsOnly => {
             render_logs_only(rect, &app);
@@ -100,9 +104,7 @@ where
         UiMode::NewBoard => {
             render_new_board_form(rect, &app);
         }
-        UiMode::NewCard => {
-            render_new_card_form(rect, app)
-        }
+        UiMode::NewCard => render_new_card_form(rect, app),
         UiMode::LoadSave => {
             render_load_save(rect, app, &mut states.load_save_state);
         }
@@ -115,7 +117,11 @@ where
                 render_view_card(rect, &app);
             }
             PopupMode::ChangeCurrentCardStatus => {
-                render_change_current_card_status_popup(rect, &app, &mut states.card_status_selector_state);
+                render_change_current_card_status_popup(
+                    rect,
+                    &app,
+                    &mut states.card_status_selector_state,
+                );
             }
             PopupMode::ChangeUIMode => {
                 render_change_ui_mode_popup(rect, &mut states.default_view_state);
@@ -139,7 +145,9 @@ where
     render_toast(rect, &app);
     if app.state.debug_menu_toggled {
         render_debug_panel(rect, &app);
-        if app.state.popup_mode.is_some() && app.state.popup_mode.unwrap() == PopupMode::CommandPalette {
+        if app.state.popup_mode.is_some()
+            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
+        {
             render_command_palette(rect, &app, &mut states.command_palette_list_state);
         }
     }

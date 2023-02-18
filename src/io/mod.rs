@@ -1,10 +1,10 @@
-pub mod handler;
 pub mod data_handler;
+pub mod handler;
 // For this dummy application we only need two IO event
 #[derive(Debug, Clone)]
 pub enum IoEvent {
-    Initialize,      // Launch to initialize the application
-    GetCloudData,  // Launch to get cloud data
+    Initialize,   // Launch to initialize the application
+    GetCloudData, // Launch to get cloud data (Not implemented yet)
     Reset,
     SaveLocalData,
     LoadSave,
@@ -13,7 +13,7 @@ pub enum IoEvent {
     GoLeft,
     GoUp,
     GoDown,
-    RefreshVisibleBoardsandCards,
+    ResetVisibleBoardsandCards,
     AutoSave,
-    LoadPreview
+    LoadPreview,
 }

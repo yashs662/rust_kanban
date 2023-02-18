@@ -1,11 +1,8 @@
-use savefile_derive::Savefile;
-use serde::{
-    Serialize,
-    Deserialize
-};
-use chrono::Utc;
-use uuid::Uuid;
 use crate::constants::FIELD_NOT_SET;
+use chrono::Utc;
+use savefile_derive::Savefile;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
 pub struct Board {
@@ -45,7 +42,7 @@ impl Default for Board {
 pub enum CardStatus {
     Active,
     Complete,
-    Stale
+    Stale,
 }
 
 impl CardStatus {
@@ -94,14 +91,41 @@ pub struct Card {
 }
 
 impl Card {
-    pub fn new(name: String, description: String, date_due: String, priority: CardPriority, tags: Vec<String>, comments: Vec<String>) -> Self {
-        let name = if name.is_empty() { FIELD_NOT_SET } else { &name };
-        let description = if description.is_empty() { FIELD_NOT_SET } else { &description };
-        let date_due = if date_due.is_empty() { FIELD_NOT_SET } else { &date_due };
-        let priority = if priority.to_string().is_empty() { CardPriority::Low } else { priority };
+    pub fn new(
+        name: String,
+        description: String,
+        date_due: String,
+        priority: CardPriority,
+        tags: Vec<String>,
+        comments: Vec<String>,
+    ) -> Self {
+        let name = if name.is_empty() {
+            FIELD_NOT_SET
+        } else {
+            &name
+        };
+        let description = if description.is_empty() {
+            FIELD_NOT_SET
+        } else {
+            &description
+        };
+        let date_due = if date_due.is_empty() {
+            FIELD_NOT_SET
+        } else {
+            &date_due
+        };
+        let priority = if priority.to_string().is_empty() {
+            CardPriority::Low
+        } else {
+            priority
+        };
         let tags = if tags.is_empty() { Vec::new() } else { tags };
-        let comments = if comments.is_empty() { Vec::new() } else { comments };
-        
+        let comments = if comments.is_empty() {
+            Vec::new()
+        } else {
+            comments
+        };
+
         Self {
             id: get_id(),
             name: name.to_string(),

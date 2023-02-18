@@ -1,30 +1,25 @@
-use std::sync::Arc;
 use clap::Parser;
+use std::sync::Arc;
 
 use eyre::Result;
 use log::LevelFilter;
+use rust_kanban::start_ui;
 use rust_kanban::{
     app::App,
-    io::{
-        handler::IoAsyncHandler,
-        IoEvent
-    }
+    io::{handler::IoAsyncHandler, IoEvent},
 };
-use rust_kanban::start_ui;
 
 extern crate savefile_derive;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct CliArgs {
-    
     // optional argument to reset config
     #[arg(short, long)]
-    reset: Option<bool>
+    reset: Option<bool>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
     // parse cli args
     let args = CliArgs::parse();
 
@@ -48,7 +43,8 @@ async fn main() -> Result<()> {
     });
 
     tokio::spawn(async move {
-        let mut widget_manager = rust_kanban::ui::widgets::WidgetManager::new(app_widget_manager_instance);
+        let mut widget_manager =
+            rust_kanban::ui::widgets::WidgetManager::new(app_widget_manager_instance);
         loop {
             widget_manager.update().await;
         }

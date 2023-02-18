@@ -1,126 +1,68 @@
-use chrono::{Local, NaiveDateTime};
-use log::debug;
-use tui::backend::Backend;
-use tui::Frame;
-use tui::style::Style;
-use tui_logger::TuiLoggerWidget;
-use tui::layout::{
-    Alignment,
-    Constraint,
-    Direction,
-    Layout,
-    Rect
-};
-use tui::text::{
-    Span,
-    Spans,
-};
-use tui::widgets::{
-    Block,
-    BorderType,
-    Borders,
-    Paragraph,
-    List,
-    ListItem,
-    ListState,
-    Gauge, Table, Cell, Row, TableState, Clear, Wrap,
-};
 use crate::app::kanban::{CardPriority, CardStatus};
 use crate::calculate_cursor_position;
 use crate::constants::{
-    APP_TITLE,
-    MIN_TERM_WIDTH,
-    MIN_TERM_HEIGHT,
-    DEFAULT_BOARD_TITLE_LENGTH,
-    DEFAULT_CARD_TITLE_LENGTH,
-    LIST_SELECT_STYLE,
-    LIST_SELECTED_SYMBOL,
-    CARD_DUE_DATE_DEFAULT_STYLE,
-    CARD_DUE_DATE_WARNING_STYLE,
-    CARD_DUE_DATE_CRITICAL_STYLE,
-    CARD_ACTIVE_STATUS_STYLE,
-    FOCUSED_ELEMENT_STYLE,
-    DEFAULT_STYLE,
-    HELP_KEY_STYLE,
-    LOG_ERROR_STYLE,
-    LOG_DEBUG_STYLE,
-    LOG_WARN_STYLE,
-    LOG_TRACE_STYLE,
-    LOG_INFO_STYLE,
-    PROGRESS_BAR_STYLE,
-    ERROR_TEXT_STYLE,
-    INACTIVE_TEXT_STYLE,
-    VERTICAL_SCROLL_BAR_SYMBOL,
-    CARD_COMPLETED_STATUS_STYLE,
-    CARD_STALE_STATUS_STYLE,
-    MAX_TOASTS_TO_DISPLAY,
-    SCREEN_TO_TOAST_WIDTH_RATIO,
-    FIELD_NOT_SET,
-    CARD_PRIORITY_HIGH_STYLE,
-    CARD_PRIORITY_MEDIUM_STYLE,
-    CARD_PRIORITY_LOW_STYLE,
+    APP_TITLE, CARD_ACTIVE_STATUS_STYLE, CARD_COMPLETED_STATUS_STYLE, CARD_DUE_DATE_CRITICAL_STYLE,
+    CARD_DUE_DATE_DEFAULT_STYLE, CARD_DUE_DATE_WARNING_STYLE, CARD_PRIORITY_HIGH_STYLE,
+    CARD_PRIORITY_LOW_STYLE, CARD_PRIORITY_MEDIUM_STYLE, CARD_STALE_STATUS_STYLE,
+    DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, DEFAULT_STYLE, ERROR_TEXT_STYLE,
+    FIELD_NOT_SET, FOCUSED_ELEMENT_STYLE, HELP_KEY_STYLE, INACTIVE_TEXT_STYLE,
+    LIST_SELECTED_SYMBOL, LIST_SELECT_STYLE, LOG_DEBUG_STYLE, LOG_ERROR_STYLE, LOG_INFO_STYLE,
+    LOG_TRACE_STYLE, LOG_WARN_STYLE, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
+    PROGRESS_BAR_STYLE, SCREEN_TO_TOAST_WIDTH_RATIO, VERTICAL_SCROLL_BAR_SYMBOL,
 };
+use chrono::{Local, NaiveDateTime};
+use log::debug;
+use tui::backend::Backend;
+use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use tui::style::Style;
+use tui::text::{Span, Spans};
+use tui::widgets::{
+    Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, ListState, Paragraph, Row,
+    Table, TableState, Wrap,
+};
+use tui::Frame;
+use tui_logger::TuiLoggerWidget;
 
-use crate::app::{
-    MainMenuItem,
-    App,
-    MainMenu,
-    AppConfig,
-};
-use crate::app::state::{
-    Focus,
-    AppStatus,
-    UiMode,
-};
-use crate::io::data_handler::{
-    get_config,
-    get_available_local_savefiles
-};
-use crate::io::handler::get_config_dir;
+use crate::app::state::{AppStatus, Focus, UiMode};
+use crate::app::{App, AppConfig, MainMenu, MainMenuItem};
+use crate::io::data_handler::{get_available_local_savefiles, get_config};
 
-use super::widgets::{ToastWidget, ToastType};
+use super::widgets::{ToastType, ToastWidget};
 
 /// Draws main screen with kanban boards
-pub fn render_zen_mode<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_zen_mode<'a, B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(100),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Percentage(100)].as_ref())
         .split(rect.size());
 
     render_body(rect, chunks[0], app, false);
 }
 
-pub fn render_title_body<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_title_body<'a, B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(3),
-                Constraint::Percentage(80),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Length(3), Constraint::Percentage(80)].as_ref())
         .split(rect.size());
 
     let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
-    
+
     render_body(rect, chunks[1], app, false);
 }
 
-pub fn render_body_help<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
-where
+pub fn render_body_help<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    help_state: &mut TableState,
+    keybind_store: Vec<Vec<String>>,
+) where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
@@ -130,13 +72,7 @@ where
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(85),
-                Constraint::Length(5),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Percentage(85), Constraint::Length(5)].as_ref())
         .split(rect.size());
 
     let help_chunks = Layout::default()
@@ -151,30 +87,26 @@ where
         )
         .margin(1)
         .split(chunks[1]);
-    
+
     render_body(rect, chunks[0], app, false);
 
     let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(default_style);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 }
 
-pub fn render_body_log<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_body_log<'a, B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(80),
-                Constraint::Length(8),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Percentage(80), Constraint::Length(8)].as_ref())
         .split(rect.size());
 
     render_body(rect, chunks[0], app, false);
@@ -183,8 +115,12 @@ where
     rect.render_widget(log, chunks[1]);
 }
 
-pub fn render_title_body_help<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
-where
+pub fn render_title_body_help<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    help_state: &mut TableState,
+    keybind_store: Vec<Vec<String>>,
+) where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
@@ -204,7 +140,7 @@ where
         )
         .split(rect.size());
 
-        let help_chunks = Layout::default()
+    let help_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
             [
@@ -223,14 +159,16 @@ where
     render_body(rect, chunks[1], app, false);
 
     let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(default_style);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], help_state);
 }
 
-pub fn render_title_body_log<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_title_body_log<'a, B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
@@ -255,8 +193,12 @@ where
     rect.render_widget(log, chunks[2]);
 }
 
-pub fn render_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
-where
+pub fn render_body_help_log<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    help_state: &mut TableState,
+    keybind_store: Vec<Vec<String>>,
+) where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
@@ -276,7 +218,7 @@ where
         )
         .split(rect.size());
 
-        let help_chunks = Layout::default()
+    let help_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
             [
@@ -292,7 +234,9 @@ where
     render_body(rect, chunks[0], app, false);
 
     let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(default_style);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
@@ -302,8 +246,12 @@ where
     rect.render_widget(log, chunks[2]);
 }
 
-pub fn render_title_body_help_log<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
-where
+pub fn render_title_body_help_log<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    help_state: &mut TableState,
+    keybind_store: Vec<Vec<String>>,
+) where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
@@ -324,7 +272,7 @@ where
         )
         .split(rect.size());
 
-        let help_chunks = Layout::default()
+    let help_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
             [
@@ -343,7 +291,9 @@ where
     render_body(rect, chunks[1], app, false);
 
     let help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(default_style);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
@@ -353,7 +303,7 @@ where
     rect.render_widget(log, chunks[3]);
 }
 
-pub fn render_config<'a,B>(rect: &mut Frame<B>, app: &App, config_state: &mut TableState)
+pub fn render_config<'a, B>(rect: &mut Frame<B>, app: &App, config_state: &mut TableState)
 where
     B: Backend,
 {
@@ -371,21 +321,15 @@ where
             .as_ref(),
         )
         .split(rect.size());
-    
+
     let reset_btn_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(chunks[2]);
 
     let title = draw_title(&app.focus, popup_mode);
     rect.render_widget(title, chunks[0]);
-    
+
     let config_table = draw_config_table_selector(&app.focus, popup_mode);
     rect.render_stateful_widget(config_table, chunks[1], config_state);
 
@@ -409,20 +353,22 @@ where
     };
 
     let reset_both_button = Paragraph::new("Reset Config and Keybinds to Default")
-        .block(Block::default()
-            .title("Reset")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title("Reset")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
         )
         .style(reset_both_style)
         .alignment(Alignment::Center);
     rect.render_widget(reset_both_button, reset_btn_chunks[0]);
 
     let reset_config_button = Paragraph::new("Reset Only Config to Default")
-        .block(Block::default()
-            .title("Reset")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title("Reset")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
         )
         .style(reset_config_style)
         .alignment(Alignment::Center);
@@ -475,24 +421,21 @@ fn draw_config_table_selector(focus: &Focus, popup_mode: bool) -> Table<'static>
         Row::new(cells).height(height as u16)
     });
     Table::new(rows)
-        .block(Block::default()
-            .title("Config Editor")
-            .borders(Borders::ALL)
-            .style(config_text_style)
-            .border_style(default_style)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title("Config Editor")
+                .borders(Borders::ALL)
+                .style(config_text_style)
+                .border_style(default_style)
+                .border_type(BorderType::Rounded),
         )
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
-        .widths(&[
-            Constraint::Percentage(40),
-            Constraint::Percentage(60),
-        ])
+        .widths(&[Constraint::Percentage(40), Constraint::Percentage(60)])
 }
 
 /// returns a list of all config items as a vector of strings
-fn get_config_items() -> Vec<Vec<String>>
-{
+fn get_config_items() -> Vec<Vec<String>> {
     let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
@@ -504,17 +447,16 @@ fn get_config_items() -> Vec<Vec<String>>
     return config_list;
 }
 
-pub fn render_edit_config<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_edit_config<'a, B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
-    
     let edit_box_style = if app.state.app_status == AppStatus::UserInput {
         FOCUSED_ELEMENT_STYLE
     } else {
         DEFAULT_STYLE
     };
-    
+
     let area = centered_rect(70, 70, rect.size());
     let clear_area = centered_rect(80, 80, rect.size());
     let clear_area_border = Block::default()
@@ -539,30 +481,35 @@ where
     let config_item_index = &app.config_item_being_edited.unwrap_or(0);
     let list_items = get_config_items();
     let config_item_name = list_items[*config_item_index].first().unwrap();
-    let config_item_value = list_items.iter()
-        .find(|x| x.first().unwrap() == config_item_name).unwrap()
-        .get(1).unwrap();
+    let config_item_value = list_items
+        .iter()
+        .find(|x| x.first().unwrap() == config_item_name)
+        .unwrap()
+        .get(1)
+        .unwrap();
     let paragraph_text = format!("Current Value is {}\n\n{}",config_item_value,
         "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
     let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
     let config_item = Paragraph::new(paragraph_text)
-        .block(Block::default()
-            .title(paragraph_title)
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title(paragraph_title)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
         )
         .wrap(tui::widgets::Wrap { trim: true });
     let edit_item = Paragraph::new(&*app.state.current_user_input)
-        .block(Block::default()
-            .title("Edit")
-            .borders(Borders::ALL)
-            .border_style(edit_box_style)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title("Edit")
+                .borders(Borders::ALL)
+                .border_style(edit_box_style)
+                .border_type(BorderType::Rounded),
         )
         .wrap(tui::widgets::Wrap { trim: true });
 
     let log = draw_logs(&app.focus, true, false);
-    
+
     if app.state.app_status == AppStatus::UserInput {
         let current_cursor_position = if app.state.current_cursor_position.is_some() {
             app.state.current_cursor_position.unwrap() as u16
@@ -580,8 +527,11 @@ where
     rect.render_widget(log, chunks[2]);
 }
 
-pub fn render_edit_default_homescreen<'a,B>(rect: &mut Frame<B>, app: &App, default_view_selector_state: &mut ListState)
-where
+pub fn render_edit_default_homescreen<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    default_view_selector_state: &mut ListState,
+) where
     B: Backend,
 {
     let area = centered_rect(70, 70, rect.size());
@@ -595,13 +545,9 @@ where
     rect.render_widget(clear_area_border, clear_area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Min(8),
-                Constraint::Length(5),
-            ].as_ref(),
-        ).split(area);
-    
+        .constraints([Constraint::Min(8), Constraint::Length(5)].as_ref())
+        .split(area);
+
     let list_items = UiMode::all();
     let list_items: Vec<ListItem> = list_items
         .iter()
@@ -618,11 +564,17 @@ where
         .highlight_style(LIST_SELECT_STYLE)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    let up_key = app.state.keybind_store.iter()
+    let up_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let down_key = app.state.keybind_store.iter()
+    let down_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
@@ -658,8 +610,11 @@ where
     rect.render_widget(config_help, chunks[1]);
 }
 
-pub fn render_edit_keybindings<'a,B>(rect: &mut Frame<B>, app: &App, edit_keybindings_state: &mut TableState)
-where
+pub fn render_edit_keybindings<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    edit_keybindings_state: &mut TableState,
+) where
     B: Backend,
 {
     let popup_mode = app.state.popup_mode.is_some();
@@ -701,12 +656,15 @@ where
     }
 
     let rects = Layout::default()
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(8),
-            Constraint::Length(5),
-            Constraint::Length(3)
-            ].as_ref())
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Min(8),
+                Constraint::Length(5),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
         .split(rect.size());
 
     let rows = table_items.iter().map(|item| {
@@ -720,11 +678,12 @@ where
         Row::new(cells).height(height as u16)
     });
     let t = Table::new(rows)
-        .block(Block::default()
-            .title("Edit Keybindings")
-            .style(default_style)
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title("Edit Keybindings")
+                .style(default_style)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
         )
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
@@ -734,19 +693,31 @@ where
             Constraint::Min(10),
         ]);
 
-    let next_focus_key = app.state.keybind_store.iter()
+    let next_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let prev_focus_key = app.state.keybind_store.iter()
+    let prev_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let up_key = app.state.keybind_store.iter()
+    let up_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let down_key = app.state.keybind_store.iter()
+    let down_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
@@ -760,39 +731,47 @@ where
         Span::styled("<Enter>", current_element_style),
         Span::styled(" to edit, ", default_style),
         Span::styled("<Esc>", current_element_style),
-        Span::styled(" to cancel, To Reset Keybindings to Default, Press ", default_style),
-        Span::styled([next_focus_key, prev_focus_key].join(" or "), current_element_style),
+        Span::styled(
+            " to cancel, To Reset Keybindings to Default, Press ",
+            default_style,
+        ),
+        Span::styled(
+            [next_focus_key, prev_focus_key].join(" or "),
+            current_element_style,
+        ),
         Span::styled("to highlight Reset Button and Press ", default_style),
         Span::styled("<Enter>", current_element_style),
         Span::styled(" on the Reset Keybindings Button", default_style),
     ]);
-    
+
     let edit_keybind_help = Paragraph::new(edit_keybind_help_spans)
-        .block(Block::default()
-            .title("Help")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
         )
         .style(default_style)
         .alignment(Alignment::Center)
         .wrap(tui::widgets::Wrap { trim: true });
-        
+
     let reset_button = Paragraph::new("Reset Keybindings to Default")
-        .block(Block::default()
-            .title("Reset")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+        .block(
+            Block::default()
+                .title("Reset")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
         )
         .style(reset_style)
         .alignment(Alignment::Center);
-        
+
     rect.render_widget(title_bar, rects[0]);
     rect.render_stateful_widget(t, rects[1], edit_keybindings_state);
     rect.render_widget(edit_keybind_help, rects[2]);
     rect.render_widget(reset_button, rects[3]);
 }
 
-pub fn render_edit_specific_keybinding<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_edit_specific_keybinding<'a, B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
@@ -826,7 +805,7 @@ where
     let key_id = app.state.edit_keybindings_state.selected().unwrap_or(0);
     let current_bindings = app.config.keybindings.clone();
     let mut key_list = vec![];
-    
+
     for (k, v) in current_bindings.iter() {
         key_list.push((k, v));
     }
@@ -845,12 +824,13 @@ where
             "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
         let paragraph_title = key.to_uppercase();
         let config_item = Paragraph::new(paragraph_text)
-        .block(Block::default()
-            .title(paragraph_title)
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-        )
-        .wrap(tui::widgets::Wrap { trim: true });
+            .block(
+                Block::default()
+                    .title(paragraph_title)
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .wrap(tui::widgets::Wrap { trim: true });
         let current_edited_keybinding = app.state.edited_keybinding.clone();
         let mut current_edited_keybinding_string = String::new();
         if current_edited_keybinding.is_some() {
@@ -860,16 +840,17 @@ where
             }
         }
         let edit_item = Paragraph::new(current_edited_keybinding_string.clone())
-        .block(Block::default()
-            .title("Edit")
-            .borders(Borders::ALL)
-            .border_style(edit_box_style)
-            .border_type(BorderType::Rounded)
-        )
-        .wrap(tui::widgets::Wrap { trim: true });
-    
+            .block(
+                Block::default()
+                    .title("Edit")
+                    .borders(Borders::ALL)
+                    .border_style(edit_box_style)
+                    .border_type(BorderType::Rounded),
+            )
+            .wrap(tui::widgets::Wrap { trim: true });
+
         let log = draw_logs(&app.focus, true, false);
-        
+
         if app.state.app_status == AppStatus::KeyBindMode {
             let current_cursor_position = if app.state.current_cursor_position.is_some() {
                 app.state.current_cursor_position.unwrap() as u16
@@ -888,8 +869,13 @@ where
     }
 }
 
-pub fn render_main_menu<'a,B>(rect: &mut Frame<B>, app: &App, main_menu_state: &mut ListState, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
-where
+pub fn render_main_menu<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    main_menu_state: &mut ListState,
+    help_state: &mut TableState,
+    keybind_store: Vec<Vec<String>>,
+) where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
@@ -904,7 +890,7 @@ where
                 Constraint::Length(3),
                 Constraint::Length(16),
                 Constraint::Min(8),
-                Constraint::Length(8)
+                Constraint::Length(8),
             ]
             .as_ref(),
         )
@@ -922,15 +908,17 @@ where
         )
         .margin(1)
         .split(chunks[2]);
-    
+
     let title = draw_title(&app.focus, app.state.popup_mode.is_some());
     rect.render_widget(title, chunks[0]);
-    
+
     let main_menu = draw_main_menu(&app.focus, MainMenu::all(), app.state.popup_mode.is_some());
     rect.render_stateful_widget(main_menu, chunks[1], main_menu_state);
 
     let main_menu_help = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(default_style);
     rect.render_widget(main_menu_help.0, chunks[2]);
     rect.render_stateful_widget(main_menu_help.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
@@ -940,8 +928,12 @@ where
     rect.render_widget(log, chunks[3]);
 }
 
-pub fn render_help_menu<'a,B>(rect: &mut Frame<B>, app: &App, help_state: &mut TableState, keybind_store: Vec<Vec<String>>)
-where
+pub fn render_help_menu<'a, B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    help_state: &mut TableState,
+    keybind_store: Vec<Vec<String>>,
+) where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
@@ -951,13 +943,7 @@ where
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(70),
-                Constraint::Length(4)
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Percentage(70), Constraint::Length(4)].as_ref())
         .split(rect.size());
 
     let help_chunks = Layout::default()
@@ -974,7 +960,9 @@ where
         .split(chunks[0]);
 
     let help_menu = draw_help(&app.focus, app.state.popup_mode.is_some(), keybind_store);
-    let help_separator = Block::default().borders(Borders::LEFT).border_style(default_style);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(default_style);
     rect.render_widget(help_menu.0, chunks[0]);
     rect.render_stateful_widget(help_menu.1, help_chunks[0], help_state);
     rect.render_widget(help_separator, help_chunks[1]);
@@ -984,26 +972,24 @@ where
     rect.render_widget(log, chunks[1]);
 }
 
-pub fn render_logs_only<'a,B>(rect: &mut Frame<B>, app: &App)
+pub fn render_logs_only<'a, B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(100),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Percentage(100)].as_ref())
         .split(rect.size());
     let log = draw_logs(&app.focus, false, app.state.popup_mode.is_some());
     rect.render_widget(log, chunks[0]);
 }
 
 /// Draws Help section for normal mode
-fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>>) -> (Block<'a>,Table<'a>,Table<'a>) {
-    
+fn draw_help<'a>(
+    focus: &Focus,
+    popup_mode: bool,
+    keybind_store: Vec<Vec<String>>,
+) -> (Block<'a>, Table<'a>, Table<'a>) {
     let default_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
@@ -1039,20 +1025,14 @@ fn draw_help<'a>(focus: &Focus, popup_mode: bool, keybind_store: Vec<Vec<String>
         .block(Block::default())
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
-        .widths(&[
-            Constraint::Percentage(30),
-            Constraint::Percentage(70),
-        ])
+        .widths(&[Constraint::Percentage(30), Constraint::Percentage(70)])
         .style(default_style);
 
     let right_table = Table::new(right_rows)
         .block(Block::default())
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
-        .widths(&[
-            Constraint::Percentage(30),
-            Constraint::Percentage(70),
-        ])
+        .widths(&[Constraint::Percentage(30), Constraint::Percentage(70)])
         .style(default_style);
 
     let border_block = Block::default()
@@ -1086,19 +1066,31 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
         HELP_KEY_STYLE
     };
 
-    let up_key = app.state.keybind_store.iter()
+    let up_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let down_key = app.state.keybind_store.iter()
+    let down_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let next_focus_key = app.state.keybind_store.iter()
+    let next_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let prev_focus_key = app.state.keybind_store.iter()
+    let prev_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
@@ -1114,7 +1106,10 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
         Span::styled("<Enter>", helpkey_style),
         Span::styled("; Press ", text_style),
         Span::styled("<Esc>", helpkey_style),
-        Span::styled(" to cancel, To Reset Keybindings to Default, Press ", text_style),
+        Span::styled(
+            " to cancel, To Reset Keybindings to Default, Press ",
+            text_style,
+        ),
         Span::styled([next_focus_key, prev_focus_key].join(" or "), helpkey_style),
         Span::styled("to highlight Reset Button and Press ", text_style),
         Span::styled("<Enter>", helpkey_style),
@@ -1137,12 +1132,16 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
 }
 
 /// Draws logs
-fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) -> TuiLoggerWidget<'a> {
+fn draw_logs<'a>(
+    focus: &Focus,
+    enable_focus_highlight: bool,
+    popup_mode: bool,
+) -> TuiLoggerWidget<'a> {
     let logbox_style = if matches!(focus, Focus::Log) && enable_focus_highlight {
-            FOCUSED_ELEMENT_STYLE
-        } else {
-            DEFAULT_STYLE
-        };
+        FOCUSED_ELEMENT_STYLE
+    } else {
+        DEFAULT_STYLE
+    };
     if popup_mode {
         TuiLoggerWidget::default()
             .style_error(INACTIVE_TEXT_STYLE)
@@ -1158,7 +1157,7 @@ fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) 
                     .title("Logs")
                     .border_style(INACTIVE_TEXT_STYLE)
                     .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
+                    .border_type(BorderType::Rounded),
             )
     } else {
         TuiLoggerWidget::default()
@@ -1175,13 +1174,17 @@ fn draw_logs<'a>(focus: &Focus, enable_focus_highlight: bool, popup_mode: bool) 
                     .title("Logs")
                     .border_style(logbox_style)
                     .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
+                    .border_type(BorderType::Rounded),
             )
-        }
+    }
 }
 
 /// Draws Main menu
-fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>, popup_mode: bool) -> List<'a> {
+fn draw_main_menu<'a>(
+    focus: &Focus,
+    main_menu_items: Vec<MainMenuItem>,
+    popup_mode: bool,
+) -> List<'a> {
     let menu_style = if popup_mode {
         INACTIVE_TEXT_STYLE
     } else {
@@ -1219,7 +1222,7 @@ fn draw_main_menu<'a>(focus: &Focus, main_menu_items: Vec<MainMenuItem>, popup_m
 }
 
 /// Draws Kanban boards
-pub fn render_body<'a,B>(rect: &mut Frame<B>, area: Rect, app: &App, preview_mode: bool)
+pub fn render_body<'a, B>(rect: &mut Frame<B>, area: Rect, app: &App, preview_mode: bool)
 where
     B: Backend,
 {
@@ -1241,36 +1244,30 @@ where
     };
     let error_text_style = if app.state.popup_mode.is_some() {
         INACTIVE_TEXT_STYLE
-    } else { 
+    } else {
         ERROR_TEXT_STYLE
     };
     let current_board = &app.state.current_board_id.unwrap_or(0);
 
-    let add_board_key = app.state.keybind_store.iter()
+    let add_board_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Create new board")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
     // check if any boards are present
     if preview_mode {
-        if app.state.preview_boards_and_cards.is_none() || app.state.preview_boards_and_cards.as_ref().unwrap().is_empty() {
+        if app.state.preview_boards_and_cards.is_none()
+            || app
+                .state
+                .preview_boards_and_cards
+                .as_ref()
+                .unwrap()
+                .is_empty()
+        {
             let empty_paragraph = Paragraph::new("No boards found".to_string())
-                .alignment(Alignment::Center)
-                .block(
-                    Block::default()
-                        .title("Boards")
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                )
-                .style(error_text_style);
-            rect.render_widget(empty_paragraph, area);
-            return;
-        }
-    } else {
-        if app.visible_boards_and_cards.is_empty() {
-            let empty_paragraph = Paragraph::new(
-                ["No boards found, press ".to_string(), add_board_key, " to add a new board".to_string()]
-                .concat())
                 .alignment(Alignment::Center)
                 .block(
                     Block::default()
@@ -1282,36 +1279,48 @@ where
             rect.render_widget(empty_paragraph, area);
             return;
         }
+    } else {
+        if app.visible_boards_and_cards.is_empty() {
+            let empty_paragraph = Paragraph::new(
+                [
+                    "No boards found, press ".to_string(),
+                    add_board_key,
+                    " to add a new board".to_string(),
+                ]
+                .concat(),
+            )
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .title("Boards")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(error_text_style);
+            rect.render_widget(empty_paragraph, area);
+            return;
+        }
     }
-    
+
     // make a list of constraints depending on NO_OF_BOARDS_PER_PAGE constant
     let chunks = if app.config.disable_scrollbars {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .constraints(
-                    [
-                        Constraint::Percentage(100),
-                    ]
-                    .as_ref(),
-                )
-                .split(area)
-        } else {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .constraints(
-                    [
-                        Constraint::Percentage(99),
-                        Constraint::Length(1),
-                    ]
-                    .as_ref(),
-                )
-                .split(area)
-        };
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(100)].as_ref())
+            .split(area)
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(99), Constraint::Length(1)].as_ref())
+            .split(area)
+    };
     let mut constraints = vec![];
     // check if length of boards is more than NO_OF_BOARDS_PER_PAGE
     if boards.len() > app.config.no_of_boards_to_show.into() {
         for _i in 0..app.config.no_of_boards_to_show {
-            constraints.push(Constraint::Percentage(100 / app.config.no_of_boards_to_show as u16));
+            constraints.push(Constraint::Percentage(
+                100 / app.config.no_of_boards_to_show as u16,
+            ));
         }
     } else {
         for _i in 0..boards.len() {
@@ -1323,7 +1332,7 @@ where
         .constraints(constraints.as_ref())
         .split(chunks[0]);
     // visible_boards_and_cards: Vec<LinkedHashMap<String, Vec<String>>>
-    let visible_boards_and_cards = if preview_mode{
+    let visible_boards_and_cards = if preview_mode {
         app.state.preview_visible_boards_and_cards.clone()
     } else {
         app.visible_boards_and_cards.clone()
@@ -1337,7 +1346,12 @@ where
         let board_id = board_and_card_tuple.0;
         // find index of board with board_id in boards
         let board = if preview_mode {
-            app.state.preview_boards_and_cards.as_ref().unwrap().iter().find(|&b| b.id == *board_id)
+            app.state
+                .preview_boards_and_cards
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find(|&b| b.id == *board_id)
         } else {
             app.boards.iter().find(|&b| b.id == *board_id)
         };
@@ -1350,7 +1364,10 @@ where
         let board_cards = board_and_card_tuple.1;
         // if board title is longer than DEFAULT_BOARD_TITLE_LENGTH, truncate it and add ... at the end
         let board_title = if board_title.len() > DEFAULT_BOARD_TITLE_LENGTH.into() {
-            format!("{}...", &board_title[0..DEFAULT_BOARD_TITLE_LENGTH as usize])
+            format!(
+                "{}...",
+                &board_title[0..DEFAULT_BOARD_TITLE_LENGTH as usize]
+            )
         } else {
             board_title
         };
@@ -1365,7 +1382,9 @@ where
         let mut card_constraints = vec![];
         if board_cards.len() > app.config.no_of_cards_to_show.into() {
             for _i in 0..app.config.no_of_cards_to_show {
-                card_constraints.push(Constraint::Percentage(90 / app.config.no_of_cards_to_show as u16));
+                card_constraints.push(Constraint::Percentage(
+                    90 / app.config.no_of_cards_to_show as u16,
+                ));
             }
         } else {
             for _i in 0..board_cards.len() {
@@ -1381,13 +1400,16 @@ where
         let board_style = if app.state.popup_mode.is_some() {
             INACTIVE_TEXT_STYLE
         } else {
-            if *board_id == *current_board && matches!(focus, Focus::Body) && app.state.current_card_id == None {
+            if *board_id == *current_board
+                && matches!(focus, Focus::Body)
+                && app.state.current_card_id == None
+            {
                 FOCUSED_ELEMENT_STYLE
             } else {
                 DEFAULT_STYLE
             }
         };
-        
+
         let board_block = Block::default()
             .title(&*board_title)
             .borders(Borders::ALL)
@@ -1398,44 +1420,43 @@ where
         let card_area_chunks = if app.config.disable_scrollbars {
             Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints(
-                    [
-                        Constraint::Percentage(100),
-                    ]
-                    .as_ref(),
-                ).split(board_chunks[board_index])
+                .constraints([Constraint::Percentage(100)].as_ref())
+                .split(board_chunks[board_index])
         } else {
             Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints(
-                    [
-                        Constraint::Length(1),
-                        Constraint::Percentage(99),
-                    ]
-                    .as_ref(),
-                ).split(board_chunks[board_index])
-            };
-        
+                .constraints([Constraint::Length(1), Constraint::Percentage(99)].as_ref())
+                .split(board_chunks[board_index])
+        };
+
         let card_chunks = if app.config.disable_scrollbars {
-                Layout::default()
-                    .direction(Direction::Vertical)
-                    .margin(1)
-                    .constraints(card_constraints.as_ref())
-                    .split(card_area_chunks[0])
-            } else {
-                Layout::default()
-                    .direction(Direction::Vertical)
-                    .margin(1)
-                    .constraints(card_constraints.as_ref())
-                    .split(card_area_chunks[1])
-            };
+            Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints(card_constraints.as_ref())
+                .split(card_area_chunks[0])
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints(card_constraints.as_ref())
+                .split(card_area_chunks[1])
+        };
 
         if !app.config.disable_scrollbars {
             // calculate the current card scroll percentage
             // get the index of current card in board_cards
-            let all_board_cards = boards.iter().find(|&b| b.id == *board_id).unwrap().cards.clone();
-            let current_card_index = all_board_cards.iter().position(|c| c.id == app.state.current_card_id.unwrap_or(0));
-            let cards_scroll_percentage = (current_card_index.unwrap_or(0) + 1) as f64 / all_board_cards.len() as f64;
+            let all_board_cards = boards
+                .iter()
+                .find(|&b| b.id == *board_id)
+                .unwrap()
+                .cards
+                .clone();
+            let current_card_index = all_board_cards
+                .iter()
+                .position(|c| c.id == app.state.current_card_id.unwrap_or(0));
+            let cards_scroll_percentage =
+                (current_card_index.unwrap_or(0) + 1) as f64 / all_board_cards.len() as f64;
             let cards_scroll_percentage = cards_scroll_percentage.clamp(0.0, 1.0);
             let available_height = if card_area_chunks[0].height >= 2 {
                 (card_area_chunks[0].height - 2) as f64
@@ -1450,7 +1471,15 @@ where
                     let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
                         .style(progress_bar_style)
                         .block(Block::default().borders(Borders::NONE));
-                    rect.render_widget(block, Rect::new(card_area_chunks[0].x, card_area_chunks[0].y + i + 1, card_area_chunks[0].width, 1));
+                    rect.render_widget(
+                        block,
+                        Rect::new(
+                            card_area_chunks[0].x,
+                            card_area_chunks[0].y + i + 1,
+                            card_area_chunks[0].width,
+                            1,
+                        ),
+                    );
                 }
             }
         };
@@ -1460,13 +1489,8 @@ where
             }
             let inner_card_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints(
-                    [
-                        Constraint::Min(0),
-                        Constraint::Length(3),
-                    ]
-                    .as_ref(),
-                ).margin(1)
+                .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
+                .margin(1)
                 .split(card_chunks[card_index]);
             // unwrap card if panic skip it and log it
             let mut card = board.get_card(*card_id);
@@ -1497,7 +1521,8 @@ where
             let mut card_extra_info = vec![Spans::from("")];
             let card_due_date = card.unwrap().date_due.clone();
             if !card_due_date.is_empty() {
-                let parsed_due_date = NaiveDateTime::parse_from_str(&card_due_date, "%d/%m/%Y-%H:%M:%S");
+                let parsed_due_date =
+                    NaiveDateTime::parse_from_str(&card_due_date, "%d/%m/%Y-%H:%M:%S");
                 // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
                 let card_due_date_styled = if parsed_due_date.is_ok() {
                     let parsed_due_date = parsed_due_date.unwrap();
@@ -1505,33 +1530,57 @@ where
                     let days_left = parsed_due_date.signed_duration_since(today).num_days();
                     if days_left <= app.config.warning_delta.into() && days_left >= 0 {
                         if app.state.popup_mode.is_some() {
-                            Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
+                            Spans::from(Span::styled(
+                                format!("Due: {}", card_due_date),
+                                INACTIVE_TEXT_STYLE,
+                            ))
                         } else {
-                            Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_WARNING_STYLE))
+                            Spans::from(Span::styled(
+                                format!("Due: {}", card_due_date),
+                                CARD_DUE_DATE_WARNING_STYLE,
+                            ))
                         }
                     } else if days_left < 0 {
                         if app.state.popup_mode.is_some() {
-                            Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
+                            Spans::from(Span::styled(
+                                format!("Due: {}", card_due_date),
+                                INACTIVE_TEXT_STYLE,
+                            ))
                         } else {
-                            Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_CRITICAL_STYLE))
+                            Spans::from(Span::styled(
+                                format!("Due: {}", card_due_date),
+                                CARD_DUE_DATE_CRITICAL_STYLE,
+                            ))
                         }
                     } else {
                         if app.state.popup_mode.is_some() {
-                            Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
+                            Spans::from(Span::styled(
+                                format!("Due: {}", card_due_date),
+                                INACTIVE_TEXT_STYLE,
+                            ))
                         } else {
-                            Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_DEFAULT_STYLE))
+                            Spans::from(Span::styled(
+                                format!("Due: {}", card_due_date),
+                                CARD_DUE_DATE_DEFAULT_STYLE,
+                            ))
                         }
                     }
                 } else {
                     if app.state.popup_mode.is_some() {
-                        Spans::from(Span::styled(format!("Due: {}",card_due_date), INACTIVE_TEXT_STYLE))
+                        Spans::from(Span::styled(
+                            format!("Due: {}", card_due_date),
+                            INACTIVE_TEXT_STYLE,
+                        ))
                     } else {
-                        Spans::from(Span::styled(format!("Due: {}",card_due_date), CARD_DUE_DATE_DEFAULT_STYLE))
+                        Spans::from(Span::styled(
+                            format!("Due: {}", card_due_date),
+                            CARD_DUE_DATE_DEFAULT_STYLE,
+                        ))
                     }
                 };
                 card_extra_info.extend(vec![card_due_date_styled]);
             }
-            let card_status = format!("Status: {}",card.unwrap().card_status.clone().to_string());
+            let card_status = format!("Status: {}", card.unwrap().card_status.clone().to_string());
             let card_status = if card_status == "Status: Active" {
                 if app.state.popup_mode.is_some() {
                     Spans::from(Span::styled(card_status, INACTIVE_TEXT_STYLE))
@@ -1557,7 +1606,10 @@ where
             let card_style = if app.state.popup_mode.is_some() {
                 INACTIVE_TEXT_STYLE
             } else {
-                if app.state.current_card_id.unwrap_or(0) == *card_id && matches!(focus, Focus::Body) && *board_id == *current_board {
+                if app.state.current_card_id.unwrap_or(0) == *card_id
+                    && matches!(focus, Focus::Body)
+                    && *board_id == *current_board
+                {
                     FOCUSED_ELEMENT_STYLE
                 } else {
                     DEFAULT_STYLE
@@ -1590,7 +1642,8 @@ where
         let current_board_index = boards
             .iter()
             .position(|board| board.id == current_board_id)
-            .unwrap_or(0) + 1;
+            .unwrap_or(0)
+            + 1;
         let percentage = {
             // make sure percentage is not nan and is between 0 and 100
             let temp_percent = (current_board_index as f64 / boards.len() as f64) * 100.0;
@@ -1623,7 +1676,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             .as_ref(),
         )
         .split(r);
-    
+
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
@@ -1649,7 +1702,7 @@ fn top_left_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             .as_ref(),
         )
         .split(r);
-    
+
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
@@ -1662,7 +1715,7 @@ fn top_left_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         )
         .split(popup_layout[0])[0]
 }
-    
+
 /// Draws size error screen if the terminal is too small
 pub fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)
 where
@@ -1677,10 +1730,12 @@ where
     rect.render_widget(title, chunks[0]);
 
     let mut text = vec![Spans::from(Span::styled(msg, ERROR_TEXT_STYLE))];
-    text.append(&mut vec![Spans::from(Span::raw("Resize the window to continue, or press 'q' to quit."))]);
+    text.append(&mut vec![Spans::from(Span::raw(
+        "Resize the window to continue, or press 'q' to quit.",
+    ))]);
     let body = Paragraph::new(text)
-    .block(Block::default().borders(Borders::ALL))
-    .alignment(Alignment::Center);
+        .block(Block::default().borders(Borders::ALL))
+        .alignment(Alignment::Center);
     rect.render_widget(body, chunks[1]);
 }
 
@@ -1696,16 +1751,14 @@ where
     let title = draw_title(&Focus::default(), false);
     rect.render_widget(title, chunks[0]);
 
-    let text = Spans::from(
-        vec![
-            Span::styled("Loading......",FOCUSED_ELEMENT_STYLE),
-            Span::styled("`(*>﹏<*)′",FOCUSED_ELEMENT_STYLE),
-            Span::styled("Please wait",FOCUSED_ELEMENT_STYLE)
-            ],
-        );
+    let text = Spans::from(vec![
+        Span::styled("Loading......", FOCUSED_ELEMENT_STYLE),
+        Span::styled("`(*>﹏<*)′", FOCUSED_ELEMENT_STYLE),
+        Span::styled("Please wait", FOCUSED_ELEMENT_STYLE),
+    ]);
     let body = Paragraph::new(text)
-    .block(Block::default().borders(Borders::ALL))
-    .alignment(Alignment::Center);
+        .block(Block::default().borders(Borders::ALL))
+        .alignment(Alignment::Center);
     rect.render_widget(body, chunks[1]);
 }
 
@@ -1735,12 +1788,16 @@ pub fn draw_title<'a>(focus: &Focus, popup_mode: bool) -> Paragraph<'a> {
 pub fn check_size(rect: &Rect) -> String {
     let mut msg = String::new();
     if rect.width < MIN_TERM_WIDTH {
-        msg.push_str(&format!("For optimal viewing experience, Terminal width should be >= {}, (current width {})",MIN_TERM_WIDTH, rect.width));
-    }
-    else if rect.height < MIN_TERM_HEIGHT {
-        msg.push_str(&format!("For optimal viewing experience, Terminal height should be >= {}, (current height {})",MIN_TERM_HEIGHT, rect.height));
-    }
-    else {
+        msg.push_str(&format!(
+            "For optimal viewing experience, Terminal width should be >= {}, (current width {})",
+            MIN_TERM_WIDTH, rect.width
+        ));
+    } else if rect.height < MIN_TERM_HEIGHT {
+        msg.push_str(&format!(
+            "For optimal viewing experience, Terminal height should be >= {}, (current height {})",
+            MIN_TERM_HEIGHT, rect.height
+        ));
+    } else {
         msg.push_str("Size OK");
     }
     msg
@@ -1772,13 +1829,16 @@ where
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Length(5),
-            Constraint::Min(8),
-            Constraint::Length(4),
-            Constraint::Length(3),
-            ].as_ref())
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Length(5),
+                Constraint::Min(8),
+                Constraint::Length(4),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
         .split(rect.size());
 
     let title_paragraph = Paragraph::new("Create a new Board")
@@ -1790,21 +1850,19 @@ where
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let wrapped_title_text = textwrap::wrap(
-        &app.state.new_board_form[0],
-        (chunks[1].width - 2) as usize
-        );
-    let board_name_field = wrapped_title_text.iter()
+    let wrapped_title_text =
+        textwrap::wrap(&app.state.new_board_form[0], (chunks[1].width - 2) as usize);
+    let board_name_field = wrapped_title_text
+        .iter()
         .map(|x| Spans::from(Span::raw(&**x)))
         .collect::<Vec<Spans>>();
-    let wrapped_description_text = textwrap::wrap(
-        &app.state.new_board_form[1],
-        (chunks[2].width - 2) as usize
-        );
-    let board_description_field = wrapped_description_text.iter()
+    let wrapped_description_text =
+        textwrap::wrap(&app.state.new_board_form[1], (chunks[2].width - 2) as usize);
+    let board_description_field = wrapped_description_text
+        .iter()
         .map(|x| Spans::from(Span::raw(&**x)))
         .collect::<Vec<Spans>>();
-    
+
     let board_name = Paragraph::new(board_name_field)
         .alignment(Alignment::Left)
         .block(
@@ -1812,7 +1870,7 @@ where
                 .borders(Borders::ALL)
                 .style(name_style)
                 .border_type(BorderType::Rounded)
-                .title("Board Name (required)")
+                .title("Board Name (required)"),
         );
     rect.render_widget(board_name, chunks[1]);
 
@@ -1823,23 +1881,32 @@ where
                 .borders(Borders::ALL)
                 .style(description_style)
                 .border_type(BorderType::Rounded)
-                .title("Board Description")
+                .title("Board Description"),
         );
     rect.render_widget(board_description, chunks[2]);
 
-    let input_mode_key = app.state.keybind_store.iter()
+    let input_mode_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Enter input mode")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let next_focus_key = app.state.keybind_store.iter()
+    let next_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let prev_focus_key = app.state.keybind_store.iter()
+    let prev_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    
+
     let help_text = Spans::from(vec![
         Span::styled("Press ", DEFAULT_STYLE),
         Span::styled(input_mode_key, HELP_KEY_STYLE),
@@ -1849,7 +1916,10 @@ where
         Span::styled(" to stop typing", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("Press ", DEFAULT_STYLE),
-        Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
+        Span::styled(
+            [next_focus_key, prev_focus_key].join(" or "),
+            HELP_KEY_STYLE,
+        ),
         Span::styled("to switch focus", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
@@ -1868,32 +1938,38 @@ where
         .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[3]);
 
-    let submit_button = Paragraph::new("Submit")
-        .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(submit_style)
-                .border_type(BorderType::Rounded),
-        );
+    let submit_button = Paragraph::new("Submit").alignment(Alignment::Center).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .style(submit_style)
+            .border_type(BorderType::Rounded),
+    );
     rect.render_widget(submit_button, chunks[4]);
 
-    if app.focus == Focus::NewBoardName && app.state.app_status == AppStatus::UserInput{
+    if app.focus == Focus::NewBoardName && app.state.app_status == AppStatus::UserInput {
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_title_text,
-                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_board_form[0].len()),
-                chunks[1]);
+                app.state
+                    .current_cursor_position
+                    .unwrap_or_else(|| app.state.new_board_form[0].len()),
+                chunks[1],
+            );
             rect.set_cursor(x_pos, y_pos);
         } else {
             rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
         }
-    } else if app.focus == Focus::NewBoardDescription && app.state.app_status == AppStatus::UserInput{
+    } else if app.focus == Focus::NewBoardDescription
+        && app.state.app_status == AppStatus::UserInput
+    {
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_description_text,
-                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_board_form[1].len()),
-                chunks[2]);
+                app.state
+                    .current_cursor_position
+                    .unwrap_or_else(|| app.state.new_board_form[1].len()),
+                chunks[2],
+            );
             rect.set_cursor(x_pos, y_pos);
         } else {
             rect.set_cursor(chunks[2].x + 1, chunks[2].y + 1);
@@ -1928,14 +2004,17 @@ where
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Length(5),
-            Constraint::Min(8),
-            Constraint::Length(3),
-            Constraint::Length(4),
-            Constraint::Length(3),
-            ].as_ref())
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Length(5),
+                Constraint::Min(8),
+                Constraint::Length(3),
+                Constraint::Length(4),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
         .split(rect.size());
 
     let title_paragraph = Paragraph::new("Create a new Card")
@@ -1947,25 +2026,22 @@ where
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let wrapped_card_name_text = textwrap::wrap(
-        &app.state.new_card_form[0],
-        (chunks[1].width - 2) as usize
-        );
-    let card_name_field = wrapped_card_name_text.iter()
+    let wrapped_card_name_text =
+        textwrap::wrap(&app.state.new_card_form[0], (chunks[1].width - 2) as usize);
+    let card_name_field = wrapped_card_name_text
+        .iter()
         .map(|x| Spans::from(Span::raw(&**x)))
         .collect::<Vec<Spans>>();
-    let wrapped_card_description_text = textwrap::wrap(
-        &app.state.new_card_form[1],
-        (chunks[2].width - 2) as usize
-        );
-    let card_description_field = wrapped_card_description_text.iter()
+    let wrapped_card_description_text =
+        textwrap::wrap(&app.state.new_card_form[1], (chunks[2].width - 2) as usize);
+    let card_description_field = wrapped_card_description_text
+        .iter()
         .map(|x| Spans::from(Span::raw(&**x)))
         .collect::<Vec<Spans>>();
-    let wrapped_card_due_date_text = textwrap::wrap(
-        &app.state.new_card_form[2],
-        (chunks[3].width - 2) as usize
-        );
-    let card_due_date_field = wrapped_card_due_date_text.iter()
+    let wrapped_card_due_date_text =
+        textwrap::wrap(&app.state.new_card_form[2], (chunks[3].width - 2) as usize);
+    let card_due_date_field = wrapped_card_due_date_text
+        .iter()
         .map(|x| Spans::from(Span::raw(&**x)))
         .collect::<Vec<Spans>>();
     let card_name = Paragraph::new(card_name_field)
@@ -1975,7 +2051,7 @@ where
                 .borders(Borders::ALL)
                 .style(name_style)
                 .border_type(BorderType::Rounded)
-                .title("Card Name (required)")
+                .title("Card Name (required)"),
         );
     rect.render_widget(card_name, chunks[1]);
 
@@ -1986,7 +2062,7 @@ where
                 .borders(Borders::ALL)
                 .style(description_style)
                 .border_type(BorderType::Rounded)
-                .title("Card Description")
+                .title("Card Description"),
         );
     rect.render_widget(card_description, chunks[2]);
 
@@ -1997,23 +2073,32 @@ where
                 .borders(Borders::ALL)
                 .style(due_date_style)
                 .border_type(BorderType::Rounded)
-                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)")
+                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)"),
         );
     rect.render_widget(card_due_date, chunks[3]);
 
-    let input_mode_key = app.state.keybind_store.iter()
+    let input_mode_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Enter input mode")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let next_focus_key = app.state.keybind_store.iter()
+    let next_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let prev_focus_key = app.state.keybind_store.iter()
+    let prev_focus_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    
+
     let help_text = Spans::from(vec![
         Span::styled("Press ", DEFAULT_STYLE),
         Span::styled(input_mode_key, HELP_KEY_STYLE),
@@ -2023,7 +2108,10 @@ where
         Span::styled(" to stop typing", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("Press ", DEFAULT_STYLE),
-        Span::styled([next_focus_key, prev_focus_key].join(" or "), HELP_KEY_STYLE),
+        Span::styled(
+            [next_focus_key, prev_focus_key].join(" or "),
+            HELP_KEY_STYLE,
+        ),
         Span::styled("to switch focus", DEFAULT_STYLE),
         Span::raw("; "),
         Span::styled("<Enter>", HELP_KEY_STYLE),
@@ -2043,42 +2131,50 @@ where
         .wrap(tui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[4]);
 
-    let submit_button = Paragraph::new("Submit")
-        .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(submit_style)
-                .border_type(BorderType::Rounded),
-        );
+    let submit_button = Paragraph::new("Submit").alignment(Alignment::Center).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .style(submit_style)
+            .border_type(BorderType::Rounded),
+    );
     rect.render_widget(submit_button, chunks[5]);
 
-    if app.focus == Focus::NewCardName && app.state.app_status == AppStatus::UserInput{
+    if app.focus == Focus::NewCardName && app.state.app_status == AppStatus::UserInput {
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_card_name_text,
-                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_card_form[0].len()),
-                chunks[1]);
+                app.state
+                    .current_cursor_position
+                    .unwrap_or_else(|| app.state.new_card_form[0].len()),
+                chunks[1],
+            );
             rect.set_cursor(x_pos, y_pos);
         } else {
             rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
         }
-    } else if app.focus == Focus::NewCardDescription && app.state.app_status == AppStatus::UserInput{
+    } else if app.focus == Focus::NewCardDescription && app.state.app_status == AppStatus::UserInput
+    {
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_card_description_text,
-                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_card_form[1].len()),
-                chunks[2]);
+                app.state
+                    .current_cursor_position
+                    .unwrap_or_else(|| app.state.new_card_form[1].len()),
+                chunks[2],
+            );
             rect.set_cursor(x_pos, y_pos);
         } else {
             rect.set_cursor(chunks[2].x + 1, chunks[2].y + 1);
         }
-    } else if app.focus == Focus::NewCardDueDate && app.state.app_status == AppStatus::UserInput{
+    } else if app.focus == Focus::NewCardDueDate && app.state.app_status == AppStatus::UserInput {
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_card_due_date_text,
-                app.state.current_cursor_position.unwrap_or_else(|| app.state.new_card_form[2].len()),
-                chunks[3]);
+                app.state
+                    .current_cursor_position
+                    .unwrap_or_else(|| app.state.new_card_form[2].len()),
+                chunks[3],
+            );
             rect.set_cursor(x_pos, y_pos);
         } else {
             rect.set_cursor(chunks[3].x + 1, chunks[3].y + 1);
@@ -2102,18 +2198,18 @@ where
     };
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(30),
-            Constraint::Percentage(70),
-            ].as_ref())
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
         .split(rect.size());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Percentage(70),
-            Constraint::Length(3),
-            ].as_ref())
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Percentage(70),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
         .split(main_chunks[0]);
 
     let title_paragraph = Paragraph::new("Load a Save")
@@ -2139,10 +2235,11 @@ where
             .map(|i| ListItem::new(i.to_string()))
             .collect();
         let choice_list = List::new(items)
-            .block(Block::default()
-                .title("Available Saves")
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
+            .block(
+                Block::default()
+                    .title("Available Saves")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
             )
             .highlight_style(LIST_SELECT_STYLE)
             .highlight_symbol(LIST_SELECTED_SYMBOL)
@@ -2160,16 +2257,25 @@ where
         rect.render_widget(no_saves_paragraph, chunks[1]);
     }
 
-    let delete_key = app.state.keybind_store.iter()
+    let delete_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Delete focused element")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let up_key = app.state.keybind_store.iter()
+    let up_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
-    let down_key = app.state.keybind_store.iter()
+    let down_key = app
+        .state
+        .keybind_store
+        .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
@@ -2234,12 +2340,15 @@ where
     B: Backend,
 {
     // get the latest MAX_TOASTS_TO_DISPLAY number of toasts from app.state.toasts
-    let toasts = app.state.toasts.iter()
+    let toasts = app
+        .state
+        .toasts
+        .iter()
         .rev()
         .take(MAX_TOASTS_TO_DISPLAY)
         .rev()
         .collect::<Vec<&ToastWidget>>();
-  
+
     if toasts.len() == 0 {
         return;
     }
@@ -2247,19 +2356,21 @@ where
 
     // loop through the toasts and draw them
     for (_, toast) in toasts.iter().enumerate() {
-        let toast_style = Style::default()
-            .fg(tui::style::Color::Rgb(
-                toast.toast_color.0, toast.toast_color.1, toast.toast_color.2
-            ));
+        let toast_style = Style::default().fg(tui::style::Color::Rgb(
+            toast.toast_color.0,
+            toast.toast_color.1,
+            toast.toast_color.2,
+        ));
         let toast_title = match toast.toast_type {
             ToastType::Error => "Error",
             ToastType::Info => "Info",
             ToastType::Warning => "Warning",
         };
         let x_offset = rect.size().width - (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO);
-        let lines  = textwrap::wrap(
+        let lines = textwrap::wrap(
             &toast.message,
-            (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) as usize);
+            (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) as usize,
+        );
         let toast_height = lines.len() as u16 + 2;
         let toast_block = Block::default()
             .title(toast_title)
@@ -2271,9 +2382,24 @@ where
             .alignment(Alignment::Left)
             .wrap(Wrap { trim: true })
             .style(toast_style);
-        rect.render_widget(Clear, Rect::new(x_offset , total_height_rendered,
-            rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
-        rect.render_widget(toast_paragraph, Rect::new(x_offset, total_height_rendered, rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO, toast_height));
+        rect.render_widget(
+            Clear,
+            Rect::new(
+                x_offset,
+                total_height_rendered,
+                rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO,
+                toast_height,
+            ),
+        );
+        rect.render_widget(
+            toast_paragraph,
+            Rect::new(
+                x_offset,
+                total_height_rendered,
+                rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO,
+                toast_height,
+            ),
+        );
         total_height_rendered += toast_height;
     }
 
@@ -2286,38 +2412,41 @@ where
         .block(
             Block::default()
                 .borders(Borders::LEFT)
-                .border_type(BorderType::Rounded)
+                .border_type(BorderType::Rounded),
         )
         .style(DEFAULT_STYLE);
     let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
     rect.render_widget(Clear, message_area);
     rect.render_widget(toast_count_paragraph, message_area);
-
 }
 
 pub fn render_view_card<B>(rect: &mut Frame<B>, app: &App)
 where
     B: Backend,
 {
-
-    let popup_area = centered_rect(90,90, rect.size());
+    let popup_area = centered_rect(90, 90, rect.size());
     rect.render_widget(Clear, popup_area);
     let card_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(5),
-            Constraint::Length(12),
-        ])
+        .constraints([Constraint::Min(5), Constraint::Length(12)])
         .margin(1)
         .split(popup_area);
-    
+
     // get the current board id from app.state.current_board_id
     // get the board with the id
     // get the current card id from app.state.current_card_id
     // get the current card From the board
 
-    if let Some(board) = app.boards.iter().find(|b| b.id == app.state.current_board_id.unwrap_or_else(|| 0)) {
-        if let Some(card) = board.cards.iter().find(|c| c.id == app.state.current_card_id.unwrap_or_else(|| 0)) {
+    if let Some(board) = app
+        .boards
+        .iter()
+        .find(|b| b.id == app.state.current_board_id.unwrap_or_else(|| 0))
+    {
+        if let Some(card) = board
+            .cards
+            .iter()
+            .find(|c| c.id == app.state.current_card_id.unwrap_or_else(|| 0))
+        {
             let board_name = board.name.clone();
             let card_name = card.name.clone();
             let card_description = card.description.clone();
@@ -2345,27 +2474,40 @@ where
             let card_status = format!("Status: {}", card.card_status.to_string());
             let card_tags = format!("Tags: {}", card.tags.join(", "));
             let card_comments = format!("Comments: {}", card.comments.join(", "));
-            let parsed_due_date = NaiveDateTime::parse_from_str(&card.date_due, "%d/%m/%Y-%H:%M:%S");
+            let parsed_due_date =
+                NaiveDateTime::parse_from_str(&card.date_due, "%d/%m/%Y-%H:%M:%S");
             // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
             let card_due_date_styled = if parsed_due_date.is_ok() {
                 let parsed_due_date = parsed_due_date.unwrap();
                 let today = Local::now().naive_local();
                 let days_left = parsed_due_date.signed_duration_since(today).num_days();
                 if days_left <= app.config.warning_delta.into() && days_left >= 0 {
-                    Span::styled(format!("Due: {}",card.date_due), CARD_DUE_DATE_WARNING_STYLE)
+                    Span::styled(
+                        format!("Due: {}", card.date_due),
+                        CARD_DUE_DATE_WARNING_STYLE,
+                    )
                 } else if days_left < 0 {
-                    Span::styled(format!("Due: {}",card.date_due), CARD_DUE_DATE_CRITICAL_STYLE)
+                    Span::styled(
+                        format!("Due: {}", card.date_due),
+                        CARD_DUE_DATE_CRITICAL_STYLE,
+                    )
                 } else {
-                    Span::styled(format!("Due: {}",card.date_due), CARD_DUE_DATE_DEFAULT_STYLE)
+                    Span::styled(
+                        format!("Due: {}", card.date_due),
+                        CARD_DUE_DATE_DEFAULT_STYLE,
+                    )
                 }
             } else {
-                Span::styled(format!("Due: {}",card.date_due), CARD_DUE_DATE_DEFAULT_STYLE)
+                Span::styled(
+                    format!("Due: {}", card.date_due),
+                    CARD_DUE_DATE_DEFAULT_STYLE,
+                )
             };
             let card_priority_styled = if card.priority == CardPriority::High {
                 Span::styled(card_priority, CARD_PRIORITY_HIGH_STYLE)
             } else if card.priority == CardPriority::Medium {
                 Span::styled(card_priority, CARD_PRIORITY_MEDIUM_STYLE)
-            } else if card.priority == CardPriority::Low{
+            } else if card.priority == CardPriority::Low {
                 Span::styled(card_priority, CARD_PRIORITY_LOW_STYLE)
             } else {
                 Span::raw(card_priority)
@@ -2380,35 +2522,38 @@ where
                 Span::raw(card_status)
             };
             let card_extra_info = Paragraph::new(vec![
-                    Spans::from(card_date_created),
-                    Spans::from(card_date_modified),
-                    Spans::from(card_due_date_styled),
-                    Spans::from(card_date_completed),
-                    Spans::from(card_priority_styled),
-                    Spans::from(card_status_styled),
-                    Spans::from(card_tags),
-                    Spans::from(card_comments),
-                ])
-                .block(Block::default()
+                Spans::from(card_date_created),
+                Spans::from(card_date_modified),
+                Spans::from(card_due_date_styled),
+                Spans::from(card_date_completed),
+                Spans::from(card_priority_styled),
+                Spans::from(card_status_styled),
+                Spans::from(card_tags),
+                Spans::from(card_comments),
+            ])
+            .block(
+                Block::default()
                     .title("Card Info")
                     .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                )
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: true });
+                    .border_type(BorderType::Rounded),
+            )
+            .alignment(Alignment::Left)
+            .wrap(Wrap { trim: true });
             rect.render_widget(card_extra_info, card_chunks[1]);
         } else {
             // render no cards found in <> board
             let board_name = board.name.clone();
-            let no_cards_found = Paragraph::new(format!("No cards found in the board \"{}\"", board_name))
-                .block(Block::default()
-                    .title("Card Info")
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .style(ERROR_TEXT_STYLE)
-                )
-                .alignment(Alignment::Center)
-                .wrap(Wrap { trim: true });
+            let no_cards_found =
+                Paragraph::new(format!("No cards found in the board \"{}\"", board_name))
+                    .block(
+                        Block::default()
+                            .title("Card Info")
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Rounded)
+                            .style(ERROR_TEXT_STYLE),
+                    )
+                    .alignment(Alignment::Center)
+                    .wrap(Wrap { trim: true });
             rect.render_widget(no_cards_found, popup_area);
         }
     }
@@ -2418,7 +2563,6 @@ pub fn render_command_palette<B>(rect: &mut Frame<B>, app: &App, search_state: &
 where
     B: Backend,
 {
-
     let current_search_text_input = app.state.current_user_input.clone();
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -2434,16 +2578,17 @@ where
 
     let search_results = if app.command_palette.search_results.is_some() {
         // convert the vec of strings to a vec of list items
-        let raw_search_results = app.command_palette.search_results
-            .as_ref()
-            .unwrap();
+        let raw_search_results = app.command_palette.search_results.as_ref().unwrap();
 
         let mut list_items = vec![];
         // make a for loop and go through the raw search results and check if the current item has a character that is in the charaters of the search string highlight it with selected style using Span::Styled
         for item in raw_search_results {
             let mut spans = vec![];
             for (_, c) in item.to_string().chars().enumerate() {
-                if current_search_text_input.to_lowercase().contains(c.to_string().to_lowercase().as_str()) {
+                if current_search_text_input
+                    .to_lowercase()
+                    .contains(c.to_string().to_lowercase().as_str())
+                {
                     spans.push(Span::styled(c.to_string(), FOCUSED_ELEMENT_STYLE));
                 } else {
                     spans.push(Span::styled(c.to_string(), DEFAULT_STYLE));
@@ -2453,14 +2598,15 @@ where
         }
         list_items
     } else {
-        app.command_palette.available_commands
+        app.command_palette
+            .available_commands
             .iter()
             .map(|s| ListItem::new(vec![Spans::from(s.as_str().to_string())]))
             .collect::<Vec<ListItem>>()
     };
 
     let search_results_length = if (search_results.len() + 2) > 3 {
-        if (search_results.len() + 2)  > (rect.size().height - 7) as usize {
+        if (search_results.len() + 2) > (rect.size().height - 7) as usize {
             rect.size().height - 7
         } else {
             (search_results.len() + 2) as u16
@@ -2471,13 +2617,14 @@ where
 
     let vertical_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(2),
-            Constraint::Length(3),
-            Constraint::Length(search_results_length as u16),
-            Constraint::Length(2),
+        .constraints(
+            [
+                Constraint::Length(2),
+                Constraint::Length(3),
+                Constraint::Length(search_results_length as u16),
+                Constraint::Length(2),
             ]
-            .as_ref()
+            .as_ref(),
         )
         .split(horizontal_chunks[1]);
 
@@ -2527,14 +2674,12 @@ pub fn render_change_ui_mode_popup<B>(rect: &mut Frame<B>, ui_selector_state: &m
 where
     B: Backend,
 {
-
     let all_ui_modes = UiMode::all()
         .iter()
-        .map(|s| ListItem::new(
-            vec![Spans::from(s.as_str().to_string())]
-        ))
+        .map(|s| ListItem::new(vec![Spans::from(s.as_str().to_string())]))
         .collect::<Vec<ListItem>>();
-    let percent_height = (((all_ui_modes.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
+    let percent_height =
+        (((all_ui_modes.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
     let popup_area = centered_rect(50, percent_height, rect.size());
     let ui_modes = List::new(all_ui_modes)
         .block(
@@ -2550,8 +2695,11 @@ where
     rect.render_stateful_widget(ui_modes, popup_area, ui_selector_state);
 }
 
-pub fn render_change_current_card_status_popup<B>(rect: &mut Frame<B>, app: &App, status_selector_state: &mut ListState)
-where
+pub fn render_change_current_card_status_popup<B>(
+    rect: &mut Frame<B>,
+    app: &App,
+    status_selector_state: &mut ListState,
+) where
     B: Backend,
 {
     let mut card_name = String::new();
@@ -2559,7 +2707,9 @@ where
     if let Some(current_board_id) = app.state.current_board_id {
         if let Some(current_board) = app.boards.iter().find(|b| b.id == current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
-                if let Some(current_card) = current_board.cards.iter().find(|c| c.id == current_card_id) {
+                if let Some(current_card) =
+                    current_board.cards.iter().find(|c| c.id == current_card_id)
+                {
                     card_name = current_card.name.clone();
                     board_name = current_board.name.clone();
                 }
@@ -2568,16 +2718,18 @@ where
     }
     let all_statuses = CardStatus::all()
         .iter()
-        .map(|s| ListItem::new(
-            vec![Spans::from(s.to_string())]
-        ))
+        .map(|s| ListItem::new(vec![Spans::from(s.to_string())]))
         .collect::<Vec<ListItem>>();
-    let percent_height = (((all_statuses.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
+    let percent_height =
+        (((all_statuses.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
     let popup_area = centered_rect(50, percent_height, rect.size());
     let statuses = List::new(all_statuses)
         .block(
             Block::default()
-                .title(format!("Changing Status of \"{}\" in {}", card_name, board_name))
+                .title(format!(
+                    "Changing Status of \"{}\" in {}",
+                    card_name, board_name
+                ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -2604,8 +2756,8 @@ where
     } else {
         0
     };
-    let current_config_dir = get_config_dir();
-    let current_save_dir = app.config.save_directory.clone();
+    let current_board_id = app.state.current_board_id;
+    let current_card_id = app.state.current_card_id;
 
     let menu_area = top_left_rect(30, 30, rect.size());
     let debug_panel = Paragraph::new(vec![
@@ -2613,15 +2765,15 @@ where
         Spans::from(format!("Popup Mode: {}", popup_mode)),
         Spans::from(format!("Tickrate: {}ms", tickrate)),
         Spans::from(format!("UI Render Time: {}ms", ui_render_time)),
-        Spans::from(format!("Config Dir: {:?}", current_config_dir)),
-        Spans::from(format!("Save Dir: {:?}", current_save_dir)),
+        Spans::from(format!("Current Board ID: {:?}", current_board_id)),
+        Spans::from(format!("Current Card ID: {:?}", current_card_id)),
     ])
     .block(
         Block::default()
             .title("Debug Panel")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(LOG_DEBUG_STYLE)
+            .border_style(LOG_DEBUG_STYLE),
     )
     .wrap(Wrap { trim: false });
     rect.render_widget(Clear, menu_area);

@@ -3,23 +3,20 @@ use std::io::stdout;
 use std::sync::Arc;
 use std::time::Duration;
 
-use app::{
-    App,
-    AppReturn
-};
+use app::{App, AppReturn};
 use eyre::Result;
 use inputs::events::Events;
 use inputs::InputEvent;
 use io::IoEvent;
 use tui::backend::CrosstermBackend;
-use tui::Terminal;
 use tui::layout::Rect;
+use tui::Terminal;
 use ui::ui_main;
 
 pub mod app;
+pub mod constants;
 pub mod inputs;
 pub mod io;
-pub mod constants;
 pub mod ui;
 
 pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
@@ -51,14 +48,16 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
         let render_start_time = std::time::Instant::now();
         terminal.draw(|rect| ui_main::draw(rect, &mut app, &mut states))?;
         let render_end_time = std::time::Instant::now();
-        app.state.ui_render_time = Some(render_end_time.duration_since(render_start_time).as_millis());
+        app.state.ui_render_time = Some(
+            render_end_time
+                .duration_since(render_start_time)
+                .as_millis(),
+        );
 
         // Handle inputs
         let result = match events.next().await {
             InputEvent::Input(key) => app.do_action(key).await,
-            InputEvent::Tick => {
-                AppReturn::Continue
-            }
+            InputEvent::Tick => AppReturn::Continue,
         };
         // Check if we should exit
         if result == AppReturn::Exit {
@@ -77,7 +76,11 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
 }
 
 /// Takes wrapped text and the current cursor position (1D) and the avaiable space to return the x and y position of the cursor (2D)
-fn calculate_cursor_position(text: Vec<Cow<str>>, current_cursor_position: usize, view_box: Rect) -> (u16, u16) {
+fn calculate_cursor_position(
+    text: Vec<Cow<str>>,
+    current_cursor_position: usize,
+    view_box: Rect,
+) -> (u16, u16) {
     let wrapped_text_iter = text.iter();
     let mut cursor_pos = current_cursor_position;
 

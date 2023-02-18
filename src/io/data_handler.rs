@@ -1,32 +1,20 @@
-use std::{
-    fs,
-    env, collections::HashMap
-};
-use log::{
-    error,
-    info, debug
-};
+use log::{debug, error, info};
+use std::{collections::HashMap, env, fs};
 extern crate savefile;
 use regex::Regex;
 use savefile::prelude::*;
 use serde::Serialize;
 
-
-use crate::{
-    app::{
-        AppConfig,
-        state::UiMode,
-        kanban::Board
-    },
-    constants::{
-        SAVE_DIR_NAME,
-        SAVE_FILE_NAME
-    }, io::handler::prepare_config_dir, inputs::key::Key
-};
 use super::handler::get_config_dir;
 use crate::constants::CONFIG_FILE_NAME;
+use crate::{
+    app::{kanban::Board, state::UiMode, AppConfig},
+    constants::{SAVE_DIR_NAME, SAVE_FILE_NAME},
+    inputs::key::Key,
+    io::handler::prepare_config_dir,
+};
 
-pub fn get_config(ignore_overlapped_keybinds:bool) -> Result<AppConfig, String> {
+pub fn get_config(ignore_overlapped_keybinds: bool) -> Result<AppConfig, String> {
     let config_dir_status = get_config_dir();
     if config_dir_status.is_err() {
         return Err(config_dir_status.unwrap_err());
@@ -34,7 +22,7 @@ pub fn get_config(ignore_overlapped_keybinds:bool) -> Result<AppConfig, String> 
     let config_dir = config_dir_status.unwrap();
     let config_path = config_dir.join(CONFIG_FILE_NAME);
     let config = match fs::read_to_string(config_path) {
-        Ok(config) => AppConfig{
+        Ok(config) => AppConfig {
             // if config file has been found, parse it, if an error occurs, use default config and write it to file
             ..serde_json::from_str(&config).unwrap_or_else(|e| {
                 error!("Error parsing config file: {}", e);
@@ -78,7 +66,10 @@ pub fn get_config(ignore_overlapped_keybinds:bool) -> Result<AppConfig, String> 
         for key in overlapped_keys.iter() {
             overlapped_keys_str.push_str(&format!("{:?}, ", key));
         }
-        return Err(format!("Overlapped keybinds found: {}", overlapped_keys_str));
+        return Err(format!(
+            "Overlapped keybinds found: {}",
+            overlapped_keys_str
+        ));
     }
     Ok(config)
 }
@@ -119,7 +110,10 @@ pub fn reset_config() {
     let config = AppConfig::default();
     let write_config_status = write_config(&config);
     if write_config_status.is_err() {
-        error!("Error writing config file: {}", write_config_status.unwrap_err());
+        error!(
+            "Error writing config file: {}",
+            write_config_status.unwrap_err()
+        );
     }
 }
 
@@ -144,16 +138,25 @@ pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError
             version += 1;
         }
     }
-    let file_name = format!("{}_{}_v{}", SAVE_FILE_NAME, chrono::Local::now().format("%d-%m-%Y"), version);
+    let file_name = format!(
+        "{}_{}_v{}",
+        SAVE_FILE_NAME,
+        chrono::Local::now().format("%d-%m-%Y"),
+        version
+    );
     let file_path = config.save_directory.join(file_name);
     let save_status = save_file(file_path, version, &boards);
     match save_status {
         Ok(_) => Ok(()),
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
-pub fn get_local_kanban_state(file_name: String, version: u32, preview_mode: bool) -> Result<Vec<Board>, SavefileError> {
+pub fn get_local_kanban_state(
+    file_name: String,
+    version: u32,
+    preview_mode: bool,
+) -> Result<Vec<Board>, SavefileError> {
     let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
@@ -216,15 +219,18 @@ pub fn get_available_local_savefiles() -> Option<Vec<String>> {
                 }
             });
             Some(savefiles)
-        },
+        }
         Err(_) => {
             // try to create the save directory
             let default_save_path = env::temp_dir().join(SAVE_DIR_NAME);
             let dir_creation_status = fs::create_dir_all(&default_save_path);
             match dir_creation_status {
                 Ok(_) => {
-                    info!("Could not find save directory, created default save directory at: {:?}", default_save_path);
-                },
+                    info!(
+                        "Could not find save directory, created default save directory at: {:?}",
+                        default_save_path
+                    );
+                }
                 Err(e) => {
                     error!("Could not find save directory and could not create default save directory at: {:?}, error: {}", default_save_path, e);
                 }
@@ -239,7 +245,7 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
     struct ExportStruct {
         kanban_version: String,
         export_date: String,
-        boards: Vec<Board>
+        boards: Vec<Board>,
     }
     // use serde serialization
     let get_config_status = get_config(false);
@@ -257,13 +263,16 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
     let export_struct = ExportStruct {
         kanban_version: version.to_string(),
         export_date: date.to_string(),
-        boards: boards.clone()
+        boards: boards.clone(),
     };
     let file_path = config.save_directory.join("kanban_export.json");
     // write to file
-    let write_status = fs::write(file_path.clone(), serde_json::to_string_pretty(&export_struct).unwrap());
+    let write_status = fs::write(
+        file_path.clone(),
+        serde_json::to_string_pretty(&export_struct).unwrap(),
+    );
     match write_status {
         Ok(_) => Ok(file_path.to_str().unwrap().to_string()),
-        Err(e) => Err(e.to_string())
+        Err(e) => Err(e.to_string()),
     }
 }

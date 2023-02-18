@@ -1,77 +1,35 @@
 use linked_hash_map::LinkedHashMap;
-use std::time::{Duration, Instant};
-use std::{
-    env,
-    vec
-};
-use std::fmt::{
-    self,
-    Formatter,
-    Display
-};
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
+use std::{env, vec};
 
-use chrono::{NaiveDateTime, NaiveDate};
-use log::{
-    debug,
-    info,
-    error,
-    warn
-};
-use serde::{
-    Serialize, 
-    Deserialize
-};
+use chrono::{NaiveDate, NaiveDateTime};
+use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 use tui::widgets::{ListState, TableState};
 
 use self::actions::Actions;
-use self::state::{
-    AppStatus,
-    Focus,
-    UiMode,
-    KeyBindings,
-};
-use self::kanban::{
-    Board,
-    Card,
-    CardPriority
-};
+use self::kanban::{Board, Card, CardPriority};
+use self::state::{AppStatus, Focus, KeyBindings, UiMode};
 use crate::app::actions::Action;
 use crate::app::kanban::CardStatus;
 use crate::constants::{
-    SAVE_DIR_NAME,
-    FIELD_NOT_SET,
-    DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
-    DEFAULT_TICKRATE,
-    DEFAULT_TOAST_DURATION,
-    NO_OF_CARDS_PER_BOARD,
-    MIN_NO_CARDS_PER_BOARD,
-    MAX_NO_CARDS_PER_BOARD,
-    NO_OF_BOARDS_PER_PAGE,
-    MIN_NO_BOARDS_PER_PAGE,
-    MAX_NO_BOARDS_PER_PAGE, IO_EVENT_WAIT_TIME,
+    DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION, FIELD_NOT_SET,
+    IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE,
+    MIN_NO_CARDS_PER_BOARD, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD, SAVE_DIR_NAME,
 };
 use crate::inputs::key::Key;
 use crate::io::data_handler::{
-    write_config,
-    get_available_local_savefiles,
-    get_config, export_kanban_to_json
+    export_kanban_to_json, get_available_local_savefiles, get_config, write_config,
 };
-use crate::io::handler::{refresh_visible_boards_and_cards};
-use crate::io::{
-    IoEvent,
-    data_handler
-};
-use crate::ui::widgets::{
-    ToastWidget,
-    ToastType,
-    CommandPalette,
-    CommandPaletteActions
-};
+use crate::io::handler::refresh_visible_boards_and_cards;
+use crate::io::{data_handler, IoEvent};
+use crate::ui::widgets::{CommandPalette, CommandPaletteActions, ToastType, ToastWidget};
 
 pub mod actions;
-pub mod state;
 pub mod kanban;
+pub mod state;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AppReturn {
@@ -106,15 +64,26 @@ impl App {
             let config_error_msg = get_config_status.unwrap_err();
             if config_error_msg.contains("Overlapped keybinds found") {
                 error!("Keybinds overlap detected. Please check your config file and fix the keybinds. Using default keybinds for now.");
-                state.toasts.push(ToastWidget::new(config_error_msg, Duration::from_secs(DEFAULT_TOAST_DURATION) * 3, ToastType::Error));
+                state.toasts.push(ToastWidget::new(
+                    config_error_msg,
+                    Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
+                    ToastType::Error,
+                ));
                 state.toasts.push(ToastWidget::new("Please check your config file and fix the keybinds. Using default keybinds for now.".to_owned(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning));
                 let new_config = get_config(true);
                 if new_config.is_err() {
                     error!("Unable to fix keybinds. Please check your config file. Using default config for now.");
-                    state.toasts.push(ToastWidget::new(new_config.unwrap_err(), Duration::from_secs(DEFAULT_TOAST_DURATION) * 3, ToastType::Error));
-                    state.toasts.push(ToastWidget::new("Using default config for now.".to_owned(),
-                        Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning));
+                    state.toasts.push(ToastWidget::new(
+                        new_config.unwrap_err(),
+                        Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
+                        ToastType::Error,
+                    ));
+                    state.toasts.push(ToastWidget::new(
+                        "Using default config for now.".to_owned(),
+                        Duration::from_secs(DEFAULT_TOAST_DURATION),
+                        ToastType::Warning,
+                    ));
                     AppConfig::default()
                 } else {
                     let mut unwrapped_new_config = new_config.unwrap();
@@ -122,9 +91,16 @@ impl App {
                     unwrapped_new_config
                 }
             } else {
-                state.toasts.push(ToastWidget::new(config_error_msg, Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Error));
-                state.toasts.push(ToastWidget::new("Using default config for now.".to_owned(),
-                    Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Info));
+                state.toasts.push(ToastWidget::new(
+                    config_error_msg,
+                    Duration::from_secs(DEFAULT_TOAST_DURATION),
+                    ToastType::Error,
+                ));
+                state.toasts.push(ToastWidget::new(
+                    "Using default config for now.".to_owned(),
+                    Duration::from_secs(DEFAULT_TOAST_DURATION),
+                    ToastType::Info,
+                ));
                 AppConfig::default()
             }
         } else {
@@ -152,11 +128,18 @@ impl App {
         if self.state.app_status == AppStatus::UserInput {
             // append to current user input if key is not enter else change state to Initialized
             if key != Key::Enter && key != Key::Esc {
-                if self.config.keybindings.toggle_command_palette.contains(&key) {
+                if self
+                    .config
+                    .keybindings
+                    .toggle_command_palette
+                    .contains(&key)
+                {
                     self.state.app_status = AppStatus::Initialized;
                     self.state.popup_mode = None;
                 }
-                if self.state.popup_mode.is_some() && self.state.popup_mode.unwrap() == PopupMode::CommandPalette {
+                if self.state.popup_mode.is_some()
+                    && self.state.popup_mode.unwrap() == PopupMode::CommandPalette
+                {
                     if key == Key::Up {
                         self.command_palette_up();
                         return AppReturn::Continue;
@@ -174,77 +157,92 @@ impl App {
                     current_key = "  ".to_string();
                 } else if key == Key::Backspace {
                     match self.state.ui_mode {
-                        UiMode::NewBoard => {
-                            match self.focus {
-                                Focus::NewBoardName => {
-                                    if self.state.current_cursor_position.is_some() {
-                                        let current_cursor_position = self.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            self.state.new_board_form[0].remove(current_cursor_position - 1);
-                                            self.state.current_cursor_position = Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        self.state.new_board_form[0].pop();
+                        UiMode::NewBoard => match self.focus {
+                            Focus::NewBoardName => {
+                                if self.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        self.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        self.state.new_board_form[0]
+                                            .remove(current_cursor_position - 1);
+                                        self.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
                                     }
+                                } else {
+                                    self.state.new_board_form[0].pop();
                                 }
-                                Focus::NewBoardDescription => {
-                                    if self.state.current_cursor_position.is_some() {
-                                        let current_cursor_position = self.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            self.state.new_board_form[1].remove(current_cursor_position - 1);
-                                            self.state.current_cursor_position = Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        self.state.new_board_form[1].pop();
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
-                        UiMode::NewCard => {
-                            match self.focus {
-                                Focus::NewCardName => {
-                                    if self.state.current_cursor_position.is_some() {
-                                        let current_cursor_position = self.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            self.state.new_card_form[0].remove(current_cursor_position - 1);
-                                            self.state.current_cursor_position = Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        self.state.new_card_form[0].pop();
+                            Focus::NewBoardDescription => {
+                                if self.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        self.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        self.state.new_board_form[1]
+                                            .remove(current_cursor_position - 1);
+                                        self.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
                                     }
+                                } else {
+                                    self.state.new_board_form[1].pop();
                                 }
-                                Focus::NewCardDescription => {
-                                    if self.state.current_cursor_position.is_some() {
-                                        let current_cursor_position = self.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            self.state.new_card_form[1].remove(current_cursor_position - 1);
-                                            self.state.current_cursor_position = Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        self.state.new_card_form[1].pop();
-                                    }
-                                }
-                                Focus::NewCardDueDate => {
-                                    if self.state.current_cursor_position.is_some() {
-                                        let current_cursor_position = self.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            self.state.new_card_form[2].remove(current_cursor_position - 1);
-                                            self.state.current_cursor_position = Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        self.state.new_card_form[2].pop();
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match self.focus {
+                            Focus::NewCardName => {
+                                if self.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        self.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        self.state.new_card_form[0]
+                                            .remove(current_cursor_position - 1);
+                                        self.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    self.state.new_card_form[0].pop();
+                                }
+                            }
+                            Focus::NewCardDescription => {
+                                if self.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        self.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        self.state.new_card_form[1]
+                                            .remove(current_cursor_position - 1);
+                                        self.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    self.state.new_card_form[1].pop();
+                                }
+                            }
+                            Focus::NewCardDueDate => {
+                                if self.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        self.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        self.state.new_card_form[2]
+                                            .remove(current_cursor_position - 1);
+                                        self.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    self.state.new_card_form[2].pop();
+                                }
+                            }
+                            _ => {}
+                        },
                         _ => {
                             if self.state.current_cursor_position.is_some() {
-                                let current_cursor_position = self.state.current_cursor_position.unwrap();
+                                let current_cursor_position =
+                                    self.state.current_cursor_position.unwrap();
                                 if current_cursor_position > 0 {
-                                    self.state.current_user_input.remove(current_cursor_position - 1);
-                                    self.state.current_cursor_position = Some(current_cursor_position - 1);
+                                    self.state
+                                        .current_user_input
+                                        .remove(current_cursor_position - 1);
+                                    self.state.current_cursor_position =
+                                        Some(current_cursor_position - 1);
                                 }
                             } else {
                                 self.state.current_user_input.pop();
@@ -254,66 +252,74 @@ impl App {
                     current_key = "".to_string();
                 } else if key == Key::Left {
                     match self.state.ui_mode {
-                        UiMode::NewBoard => {
-                            match self.focus {
-                                Focus::NewBoardName => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_board_form[0].len());
-                                    } else if self.state.current_cursor_position.unwrap() > 0 {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() - 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(0);
-                                    }
+                        UiMode::NewBoard => match self.focus {
+                            Focus::NewBoardName => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_board_form[0].len());
+                                } else if self.state.current_cursor_position.unwrap() > 0 {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    self.state.current_cursor_position = Some(0);
                                 }
-                                Focus::NewBoardDescription => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_board_form[1].len());
-                                    } else if self.state.current_cursor_position.unwrap() > 0 {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() - 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(0);
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
-                        UiMode::NewCard => {
-                            match self.focus {
-                                Focus::NewCardName => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[0].len());
-                                    } else if self.state.current_cursor_position.unwrap() > 0 {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() - 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(0);
-                                    }
+                            Focus::NewBoardDescription => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_board_form[1].len());
+                                } else if self.state.current_cursor_position.unwrap() > 0 {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    self.state.current_cursor_position = Some(0);
                                 }
-                                Focus::NewCardDescription => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[1].len());
-                                    } else if self.state.current_cursor_position.unwrap() > 0 {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() - 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(0);
-                                    }
-                                }
-                                Focus::NewCardDueDate => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[2].len());
-                                    } else if self.state.current_cursor_position.unwrap() > 0 {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() - 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(0);
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match self.focus {
+                            Focus::NewCardName => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[0].len());
+                                } else if self.state.current_cursor_position.unwrap() > 0 {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    self.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            Focus::NewCardDescription => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[1].len());
+                                } else if self.state.current_cursor_position.unwrap() > 0 {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    self.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            Focus::NewCardDueDate => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[2].len());
+                                } else if self.state.current_cursor_position.unwrap() > 0 {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    self.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            _ => {}
+                        },
                         _ => {
                             if self.state.current_cursor_position.is_none() {
-                                self.state.current_cursor_position = Some(self.state.current_user_input.len());
+                                self.state.current_cursor_position =
+                                    Some(self.state.current_user_input.len());
                             } else if self.state.current_cursor_position.unwrap() > 0 {
-                                self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() - 1);
+                                self.state.current_cursor_position =
+                                    Some(self.state.current_cursor_position.unwrap() - 1);
                             } else {
                                 self.state.current_cursor_position = Some(0);
                             }
@@ -322,99 +328,121 @@ impl App {
                     current_key = "".to_string();
                 } else if key == Key::Right {
                     match self.state.ui_mode {
-                        UiMode::NewBoard => {
-                            match self.focus {
-                                Focus::NewBoardName => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_board_form[0].len());
-                                    } else if self.state.current_cursor_position.unwrap() < self.state.new_board_form[0].len() {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() + 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(self.state.new_board_form[0].len());
-                                    }
+                        UiMode::NewBoard => match self.focus {
+                            Focus::NewBoardName => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_board_form[0].len());
+                                } else if self.state.current_cursor_position.unwrap()
+                                    < self.state.new_board_form[0].len()
+                                {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_board_form[0].len());
                                 }
-                                Focus::NewBoardDescription => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_board_form[1].len());
-                                    } else if self.state.current_cursor_position.unwrap() < self.state.new_board_form[1].len() {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() + 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(self.state.new_board_form[1].len());
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
-                        UiMode::NewCard => {
-                            match self.focus {
-                                Focus::NewCardName => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[0].len());
-                                    } else if self.state.current_cursor_position.unwrap() < self.state.new_card_form[0].len() {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() + 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[0].len());
-                                    }
+                            Focus::NewBoardDescription => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_board_form[1].len());
+                                } else if self.state.current_cursor_position.unwrap()
+                                    < self.state.new_board_form[1].len()
+                                {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_board_form[1].len());
                                 }
-                                Focus::NewCardDescription => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[1].len());
-                                    } else if self.state.current_cursor_position.unwrap() < self.state.new_card_form[1].len() {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() + 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[1].len());
-                                    }
-                                }
-                                Focus::NewCardDueDate => {
-                                    if self.state.current_cursor_position.is_none() {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[2].len());
-                                    } else if self.state.current_cursor_position.unwrap() < self.state.new_card_form[2].len() {
-                                        self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() + 1);
-                                    } else {
-                                        self.state.current_cursor_position = Some(self.state.new_card_form[2].len());
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match self.focus {
+                            Focus::NewCardName => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[0].len());
+                                } else if self.state.current_cursor_position.unwrap()
+                                    < self.state.new_card_form[0].len()
+                                {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[0].len());
+                                }
+                            }
+                            Focus::NewCardDescription => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[1].len());
+                                } else if self.state.current_cursor_position.unwrap()
+                                    < self.state.new_card_form[1].len()
+                                {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[1].len());
+                                }
+                            }
+                            Focus::NewCardDueDate => {
+                                if self.state.current_cursor_position.is_none() {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[2].len());
+                                } else if self.state.current_cursor_position.unwrap()
+                                    < self.state.new_card_form[2].len()
+                                {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    self.state.current_cursor_position =
+                                        Some(self.state.new_card_form[2].len());
+                                }
+                            }
+                            _ => {}
+                        },
                         _ => {
                             if self.state.current_cursor_position.is_none() {
-                                self.state.current_cursor_position = Some(self.state.current_user_input.len());
-                            } else if self.state.current_cursor_position.unwrap() < self.state.current_user_input.len() {
-                                self.state.current_cursor_position = Some(self.state.current_cursor_position.unwrap() + 1);
+                                self.state.current_cursor_position =
+                                    Some(self.state.current_user_input.len());
+                            } else if self.state.current_cursor_position.unwrap()
+                                < self.state.current_user_input.len()
+                            {
+                                self.state.current_cursor_position =
+                                    Some(self.state.current_cursor_position.unwrap() + 1);
                             } else {
-                                self.state.current_cursor_position = Some(self.state.current_user_input.len());
+                                self.state.current_cursor_position =
+                                    Some(self.state.current_user_input.len());
                             }
                         }
                     };
                     current_key = "".to_string();
                 } else if key == Key::Home {
                     match self.state.ui_mode {
-                        UiMode::NewBoard => {
-                            match self.focus {
-                                Focus::NewBoardName => {
-                                    self.state.current_cursor_position = Some(0);
-                                }
-                                Focus::NewBoardDescription => {
-                                    self.state.current_cursor_position = Some(0);
-                                }
-                                _ => {}
+                        UiMode::NewBoard => match self.focus {
+                            Focus::NewBoardName => {
+                                self.state.current_cursor_position = Some(0);
                             }
-                        }
-                        UiMode::NewCard => {
-                            match self.focus {
-                                Focus::NewCardName => {
-                                    self.state.current_cursor_position = Some(0);
-                                }
-                                Focus::NewCardDescription => {
-                                    self.state.current_cursor_position = Some(0);
-                                }
-                                Focus::NewCardDueDate => {
-                                    self.state.current_cursor_position = Some(0);
-                                }
-                                _ => {}
+                            Focus::NewBoardDescription => {
+                                self.state.current_cursor_position = Some(0);
                             }
-                        }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match self.focus {
+                            Focus::NewCardName => {
+                                self.state.current_cursor_position = Some(0);
+                            }
+                            Focus::NewCardDescription => {
+                                self.state.current_cursor_position = Some(0);
+                            }
+                            Focus::NewCardDueDate => {
+                                self.state.current_cursor_position = Some(0);
+                            }
+                            _ => {}
+                        },
                         _ => {
                             self.state.current_cursor_position = Some(0);
                         }
@@ -422,33 +450,35 @@ impl App {
                     current_key = "".to_string();
                 } else if key == Key::End {
                     match self.state.ui_mode {
-                        UiMode::NewBoard => {
-                            match self.focus {
-                                Focus::NewBoardName => {
-                                    self.state.current_cursor_position = Some(self.state.new_board_form[0].len());
-                                }
-                                Focus::NewBoardDescription => {
-                                    self.state.current_cursor_position = Some(self.state.new_board_form[1].len());
-                                }
-                                _ => {}
+                        UiMode::NewBoard => match self.focus {
+                            Focus::NewBoardName => {
+                                self.state.current_cursor_position =
+                                    Some(self.state.new_board_form[0].len());
                             }
-                        }
-                        UiMode::NewCard => {
-                            match self.focus {
-                                Focus::NewCardName => {
-                                    self.state.current_cursor_position = Some(self.state.new_card_form[0].len());
-                                }
-                                Focus::NewCardDescription => {
-                                    self.state.current_cursor_position = Some(self.state.new_card_form[1].len());
-                                }
-                                Focus::NewCardDueDate => {
-                                    self.state.current_cursor_position = Some(self.state.new_card_form[2].len());
-                                }
-                                _ => {}
+                            Focus::NewBoardDescription => {
+                                self.state.current_cursor_position =
+                                    Some(self.state.new_board_form[1].len());
                             }
-                        }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match self.focus {
+                            Focus::NewCardName => {
+                                self.state.current_cursor_position =
+                                    Some(self.state.new_card_form[0].len());
+                            }
+                            Focus::NewCardDescription => {
+                                self.state.current_cursor_position =
+                                    Some(self.state.new_card_form[1].len());
+                            }
+                            Focus::NewCardDueDate => {
+                                self.state.current_cursor_position =
+                                    Some(self.state.new_card_form[2].len());
+                            }
+                            _ => {}
+                        },
                         _ => {
-                            self.state.current_cursor_position = Some(self.state.current_user_input.len());
+                            self.state.current_cursor_position =
+                                Some(self.state.current_user_input.len());
                         }
                     };
                     current_key = "".to_string();
@@ -460,27 +490,34 @@ impl App {
                 }
                 if self.focus == Focus::NewBoardName {
                     let cursor_position = self.state.current_cursor_position.unwrap_or(0);
-                    self.state.new_board_form[0].insert(cursor_position, current_key.chars().next().unwrap());
+                    self.state.new_board_form[0]
+                        .insert(cursor_position, current_key.chars().next().unwrap());
                     self.state.current_cursor_position = Some(cursor_position + 1);
                 } else if self.focus == Focus::NewBoardDescription {
                     let cursor_position = self.state.current_cursor_position.unwrap_or(0);
-                    self.state.new_board_form[1].insert(cursor_position, current_key.chars().next().unwrap());
+                    self.state.new_board_form[1]
+                        .insert(cursor_position, current_key.chars().next().unwrap());
                     self.state.current_cursor_position = Some(cursor_position + 1);
                 } else if self.focus == Focus::NewCardName {
                     let cursor_position = self.state.current_cursor_position.unwrap_or(0);
-                    self.state.new_card_form[0].insert(cursor_position, current_key.chars().next().unwrap());
+                    self.state.new_card_form[0]
+                        .insert(cursor_position, current_key.chars().next().unwrap());
                     self.state.current_cursor_position = Some(cursor_position + 1);
                 } else if self.focus == Focus::NewCardDescription {
                     let current_cursor_position = self.state.current_cursor_position.unwrap_or(0);
-                    self.state.new_card_form[1].insert(current_cursor_position, current_key.chars().next().unwrap());
+                    self.state.new_card_form[1]
+                        .insert(current_cursor_position, current_key.chars().next().unwrap());
                     self.state.current_cursor_position = Some(current_cursor_position + 1);
                 } else if self.focus == Focus::NewCardDueDate {
                     let current_cursor_position = self.state.current_cursor_position.unwrap_or(0);
-                    self.state.new_card_form[2].insert(current_cursor_position, current_key.chars().next().unwrap());
+                    self.state.new_card_form[2]
+                        .insert(current_cursor_position, current_key.chars().next().unwrap());
                     self.state.current_cursor_position = Some(current_cursor_position + 1);
                 } else {
                     let current_cursor_position = self.state.current_cursor_position.unwrap_or(0);
-                    self.state.current_user_input.insert(current_cursor_position, current_key.chars().next().unwrap());
+                    self.state
+                        .current_user_input
+                        .insert(current_cursor_position, current_key.chars().next().unwrap());
                     self.state.current_cursor_position = Some(current_cursor_position + 1);
                 }
             } else if key == Key::Esc {
@@ -497,18 +534,28 @@ impl App {
                 } else {
                     self.state.current_user_input = "".to_string();
                 }
-                if self.state.popup_mode.is_some() && self.state.popup_mode.unwrap() == PopupMode::CommandPalette {
+                if self.state.popup_mode.is_some()
+                    && self.state.popup_mode.unwrap() == PopupMode::CommandPalette
+                {
                     self.state.popup_mode = None;
                 }
                 self.state.app_status = AppStatus::Initialized;
                 self.state.current_cursor_position = None;
                 info!("Exiting user input mode");
             } else {
-                if key == Key::Enter && self.state.popup_mode.is_some() && self.state.popup_mode.unwrap() == PopupMode::CommandPalette {
+                if key == Key::Enter
+                    && self.state.popup_mode.is_some()
+                    && self.state.popup_mode.unwrap() == PopupMode::CommandPalette
+                {
                     if self.state.command_palette_list_state.selected().is_some() {
-                        let command_index = self.state.command_palette_list_state.selected().unwrap();
+                        let command_index =
+                            self.state.command_palette_list_state.selected().unwrap();
                         let command = if self.command_palette.search_results.is_some() {
-                            self.command_palette.search_results.as_ref().unwrap().get(command_index)
+                            self.command_palette
+                                .search_results
+                                .as_ref()
+                                .unwrap()
+                                .get(command_index)
                         } else {
                             None
                         };
@@ -517,42 +564,46 @@ impl App {
                                 CommandPaletteActions::ExportToJSON => {
                                     let export_result = export_kanban_to_json(&self.boards);
                                     if export_result.is_ok() {
-                                        let msg = format!("Exported JSON to {}", export_result.unwrap());
+                                        let msg =
+                                            format!("Exported JSON to {}", export_result.unwrap());
                                         self.send_info_toast(&msg, None);
                                         info!("{}", msg);
                                     } else {
-                                        let msg = format!("Failed to export JSON: {}", export_result.unwrap_err());
+                                        let msg = format!(
+                                            "Failed to export JSON: {}",
+                                            export_result.unwrap_err()
+                                        );
                                         self.send_error_toast(&msg, None);
                                         error!("{}", msg);
                                     }
                                     self.state.popup_mode = None;
-                                },
+                                }
                                 CommandPaletteActions::Quit => {
                                     info!("Quitting");
                                     return AppReturn::Exit;
-                                },
+                                }
                                 CommandPaletteActions::OpenConfigMenu => {
                                     self.state.popup_mode = None;
                                     self.state.ui_mode = UiMode::ConfigMenu;
                                     self.state.config_state.select(Some(0));
                                     self.focus = Focus::ConfigTable;
-                                },
+                                }
                                 CommandPaletteActions::OpenMainMenu => {
                                     self.state.popup_mode = None;
                                     self.state.ui_mode = UiMode::MainMenu;
                                     self.state.main_menu_state.select(Some(0));
                                     self.focus = Focus::MainMenu;
-                                },
+                                }
                                 CommandPaletteActions::OpenHelpMenu => {
                                     self.state.popup_mode = None;
                                     self.state.ui_mode = UiMode::HelpMenu;
                                     self.state.help_state.select(Some(0));
                                     self.focus = Focus::Body;
-                                },
+                                }
                                 CommandPaletteActions::SaveKanbanState => {
                                     self.state.popup_mode = None;
                                     self.dispatch(IoEvent::SaveLocalData).await;
-                                },
+                                }
                                 CommandPaletteActions::NewBoard => {
                                     if UiMode::view_modes().contains(&self.state.ui_mode) {
                                         self.state.popup_mode = None;
@@ -560,13 +611,19 @@ impl App {
                                         self.focus = Focus::NewBoardName;
                                     } else {
                                         self.state.popup_mode = None;
-                                        self.send_error_toast("Cannot create a new board in this view", None);
+                                        self.send_error_toast(
+                                            "Cannot create a new board in this view",
+                                            None,
+                                        );
                                     }
-                                },
+                                }
                                 CommandPaletteActions::NewCard => {
                                     if UiMode::view_modes().contains(&self.state.ui_mode) {
                                         if self.state.current_board_id.is_none() {
-                                            self.send_error_toast("No board Selected / Available", None);
+                                            self.send_error_toast(
+                                                "No board Selected / Available",
+                                                None,
+                                            );
                                             self.state.popup_mode = None;
                                             self.state.app_status = AppStatus::Initialized;
                                             return AppReturn::Continue;
@@ -577,26 +634,46 @@ impl App {
                                         self.focus = Focus::NewCardName;
                                     } else {
                                         self.state.popup_mode = None;
-                                        self.send_error_toast("Cannot create a new card in this view", None);
+                                        self.send_error_toast(
+                                            "Cannot create a new card in this view",
+                                            None,
+                                        );
                                     }
-                                },
+                                }
                                 CommandPaletteActions::ResetUI => {
                                     self.state.popup_mode = None;
                                     let default_view = self.config.default_view.clone();
                                     self.state.ui_mode = default_view;
-                                },
+                                    self.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
+                                }
                                 CommandPaletteActions::ChangeUIMode => {
                                     self.state.popup_mode = Some(PopupMode::ChangeUIMode);
-                                },
+                                }
                                 CommandPaletteActions::ChangeCurrentCardStatus => {
                                     if UiMode::view_modes().contains(&self.state.ui_mode) {
-                                        if let Some(current_board_id) = self.state.current_board_id {
-                                            if let Some(current_board) = self.boards.iter_mut().find(|b| b.id == current_board_id) {
-                                                if let Some(current_card_id) = self.state.current_card_id {
-                                                    if let Some(_) = current_board.cards.iter_mut().find(|c| c.id == current_card_id) {
-                                                        self.state.popup_mode = Some(PopupMode::ChangeCurrentCardStatus);
-                                                        self.state.app_status = AppStatus::Initialized;
-                                                        self.state.card_status_selector_state.select(Some(0));
+                                        if let Some(current_board_id) = self.state.current_board_id
+                                        {
+                                            if let Some(current_board) = self
+                                                .boards
+                                                .iter_mut()
+                                                .find(|b| b.id == current_board_id)
+                                            {
+                                                if let Some(current_card_id) =
+                                                    self.state.current_card_id
+                                                {
+                                                    if let Some(_) = current_board
+                                                        .cards
+                                                        .iter_mut()
+                                                        .find(|c| c.id == current_card_id)
+                                                    {
+                                                        self.state.popup_mode = Some(
+                                                            PopupMode::ChangeCurrentCardStatus,
+                                                        );
+                                                        self.state.app_status =
+                                                            AppStatus::Initialized;
+                                                        self.state
+                                                            .card_status_selector_state
+                                                            .select(Some(0));
                                                         return AppReturn::Continue;
                                                     }
                                                 }
@@ -605,13 +682,16 @@ impl App {
                                         self.send_error_toast("Could not find current card", None);
                                     } else {
                                         self.state.popup_mode = None;
-                                        self.send_error_toast("Cannot change card status in this view", None);
+                                        self.send_error_toast(
+                                            "Cannot change card status in this view",
+                                            None,
+                                        );
                                     }
-                                },
+                                }
                                 CommandPaletteActions::LoadASave => {
                                     self.state.popup_mode = None;
                                     self.state.ui_mode = UiMode::LoadSave;
-                                },
+                                }
                                 CommandPaletteActions::DebugMenu => {
                                     self.state.debug_menu_toggled = !self.state.debug_menu_toggled;
                                     self.state.popup_mode = None;
@@ -649,8 +729,9 @@ impl App {
                 if UiMode::get_available_targets(&self.state.ui_mode)
                     .iter()
                     .find(|x| *x == &self.focus)
-                    .is_none() {
-                        self.focus = UiMode::get_available_targets(&self.state.ui_mode)[0];
+                    .is_none()
+                {
+                    self.focus = UiMode::get_available_targets(&self.state.ui_mode)[0];
                 }
                 match action {
                     Action::Quit => {
@@ -668,7 +749,9 @@ impl App {
                     }
                     Action::NextFocus => {
                         let current_focus = self.focus.clone();
-                        let next_focus = self.focus.next(&UiMode::get_available_targets(&self.state.ui_mode));
+                        let next_focus = self
+                            .focus
+                            .next(&UiMode::get_available_targets(&self.state.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
                         if next_focus == current_focus || next_focus == Focus::NoFocus {
                             self.focus = current_focus;
@@ -679,7 +762,9 @@ impl App {
                     }
                     Action::PrvFocus => {
                         let current_focus = self.focus.clone();
-                        let next_focus = self.focus.prev(&UiMode::get_available_targets(&self.state.ui_mode));
+                        let next_focus = self
+                            .focus
+                            .prev(&UiMode::get_available_targets(&self.state.ui_mode));
                         // check if the next focus is the same as the current focus or NoFocus if so set back to the first focus
                         if next_focus == current_focus || next_focus == Focus::NoFocus {
                             self.focus = current_focus;
@@ -702,25 +787,35 @@ impl App {
                         }
                         self.state.ui_mode = new_ui_mode;
                         self.state.popup_mode = None;
+                        self.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
                         AppReturn::Continue
                     }
                     Action::OpenConfigMenu => {
                         match self.state.ui_mode {
                             UiMode::ConfigMenu => {
                                 // check if the prv ui mode is the same as the current ui mode
-                                if self.state.prev_ui_mode.is_some() && self.state.prev_ui_mode.as_ref().unwrap() == &UiMode::ConfigMenu {
+                                if self.state.prev_ui_mode.is_some()
+                                    && self.state.prev_ui_mode.as_ref().unwrap()
+                                        == &UiMode::ConfigMenu
+                                {
                                     self.state.ui_mode = self.config.default_view.clone();
                                 } else {
-                                    self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                    self.state.ui_mode = self
+                                        .state
+                                        .prev_ui_mode
+                                        .as_ref()
+                                        .unwrap_or_else(|| &self.config.default_view)
+                                        .clone();
                                 }
-                            },
+                            }
                             _ => {
                                 self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
                                 self.state.ui_mode = UiMode::ConfigMenu;
                                 if self.state.config_state.selected().is_none() {
                                     self.config_next()
                                 }
-                                let available_focus_targets = self.state.ui_mode.get_available_targets();
+                                let available_focus_targets =
+                                    self.state.ui_mode.get_available_targets();
                                 if !available_focus_targets.contains(&self.focus) {
                                     // check if available focus targets is empty
                                     if available_focus_targets.is_empty() {
@@ -740,9 +835,13 @@ impl App {
                         if self.state.popup_mode.is_some() {
                             if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeUIMode {
                                 self.select_default_view_prev();
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeCurrentCardStatus {
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::ChangeCurrentCardStatus
+                            {
                                 self.select_current_card_status_prev();
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::SelectDefaultView{
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::SelectDefaultView
+                            {
                                 self.select_default_view_prev();
                             }
                             return AppReturn::Continue;
@@ -752,8 +851,18 @@ impl App {
                                 if self.focus == Focus::ConfigTable {
                                     self.config_previous();
                                 } else {
-                                    let next_focus_key = self.config.keybindings.next_focus.get(0).unwrap_or_else(|| &Key::Tab);
-                                    let prev_focus_key = self.config.keybindings.prev_focus.get(0).unwrap_or_else(|| &Key::BackTab);
+                                    let next_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .next_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::Tab);
+                                    let prev_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .prev_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::BackTab);
                                     self.send_warning_toast(&format!(
                                         "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
                                         next_focus_key, prev_focus_key), None);
@@ -765,8 +874,18 @@ impl App {
                                 } else if self.focus == Focus::MainMenuHelp {
                                     self.help_prev();
                                 } else {
-                                    let next_focus_key = self.config.keybindings.next_focus.get(0).unwrap_or_else(|| &Key::Tab);
-                                    let prev_focus_key = self.config.keybindings.prev_focus.get(0).unwrap_or_else(|| &Key::BackTab);
+                                    let next_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .next_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::Tab);
+                                    let prev_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .prev_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::BackTab);
                                     self.send_warning_toast(&format!(
                                         "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
                                         next_focus_key, prev_focus_key), None);
@@ -793,9 +912,13 @@ impl App {
                         if self.state.popup_mode.is_some() {
                             if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeUIMode {
                                 self.select_default_view_next();
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeCurrentCardStatus {
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::ChangeCurrentCardStatus
+                            {
                                 self.select_current_card_status_next();
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::SelectDefaultView{
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::SelectDefaultView
+                            {
                                 self.select_default_view_next();
                             }
                             return AppReturn::Continue;
@@ -805,33 +928,53 @@ impl App {
                                 if self.focus == Focus::ConfigTable {
                                     self.config_next();
                                 } else {
-                                    let next_focus_key = self.config.keybindings.next_focus.get(0).unwrap_or_else(|| &Key::Tab);
-                                    let prev_focus_key = self.config.keybindings.prev_focus.get(0).unwrap_or_else(|| &Key::BackTab);
+                                    let next_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .next_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::Tab);
+                                    let prev_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .prev_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::BackTab);
                                     self.send_warning_toast(&format!(
                                         "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
                                         next_focus_key, prev_focus_key), None);
                                 }
-                            },
+                            }
                             UiMode::MainMenu => {
                                 if self.focus == Focus::MainMenu {
                                     self.main_menu_next();
                                 } else if self.focus == Focus::MainMenuHelp {
                                     self.help_next();
                                 } else {
-                                    let next_focus_key = self.config.keybindings.next_focus.get(0).unwrap_or_else(|| &Key::Tab);
-                                    let prev_focus_key = self.config.keybindings.prev_focus.get(0).unwrap_or_else(|| &Key::BackTab);
+                                    let next_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .next_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::Tab);
+                                    let prev_focus_key = self
+                                        .config
+                                        .keybindings
+                                        .prev_focus
+                                        .get(0)
+                                        .unwrap_or_else(|| &Key::BackTab);
                                     self.send_warning_toast(&format!(
                                         "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
                                         next_focus_key, prev_focus_key), None);
                                 }
-                            },
+                            }
                             UiMode::LoadSave => {
                                 self.load_save_next();
                                 self.dispatch(IoEvent::LoadPreview).await;
-                            },
+                            }
                             UiMode::EditKeybindings => {
                                 self.edit_keybindings_next();
-                            },
+                            }
                             _ => {
                                 if self.focus == Focus::Body {
                                     self.dispatch(IoEvent::GoDown).await;
@@ -843,13 +986,19 @@ impl App {
                         AppReturn::Continue
                     }
                     Action::Right => {
-                        if self.focus == Focus::Body && self.state.ui_mode != UiMode::LoadSave{
+                        if self.focus == Focus::Body
+                            && UiMode::view_modes().contains(&self.state.ui_mode)
+                            && self.state.popup_mode.is_none()
+                        {
                             self.dispatch(IoEvent::GoRight).await;
                         }
                         AppReturn::Continue
                     }
                     Action::Left => {
-                        if self.focus == Focus::Body && self.state.ui_mode != UiMode::LoadSave{
+                        if self.focus == Focus::Body
+                            && UiMode::view_modes().contains(&self.state.ui_mode)
+                            && self.state.popup_mode.is_none()
+                        {
                             self.dispatch(IoEvent::GoLeft).await;
                         }
                         AppReturn::Continue
@@ -859,13 +1008,17 @@ impl App {
                             UiMode::NewBoard | UiMode::NewCard => {
                                 self.state.app_status = AppStatus::UserInput;
                                 info!("Taking user input");
-                            },
+                            }
                             _ => {
                                 if self.state.popup_mode.is_some() {
-                                    if self.state.popup_mode.unwrap() == PopupMode::EditGeneralConfig {
+                                    if self.state.popup_mode.unwrap()
+                                        == PopupMode::EditGeneralConfig
+                                    {
                                         self.state.app_status = AppStatus::UserInput;
                                         info!("Taking user input");
-                                    } else if self.state.popup_mode.unwrap() == PopupMode::EditSpecificKeyBinding {
+                                    } else if self.state.popup_mode.unwrap()
+                                        == PopupMode::EditSpecificKeyBinding
+                                    {
                                         self.state.app_status = AppStatus::KeyBindMode;
                                         info!("Taking user keybind input");
                                     }
@@ -883,7 +1036,9 @@ impl App {
                                 }
                                 self.state.current_user_input = String::new();
                                 self.state.current_cursor_position = None;
-                            } else if self.state.popup_mode.unwrap() == PopupMode::EditSpecificKeyBinding {
+                            } else if self.state.popup_mode.unwrap()
+                                == PopupMode::EditSpecificKeyBinding
+                            {
                                 self.state.ui_mode = UiMode::EditKeybindings;
                                 if self.state.edit_keybindings_state.selected().is_none() {
                                     self.edit_keybindings_next();
@@ -901,14 +1056,17 @@ impl App {
                                     self.state.prev_ui_mode = None;
                                     self.state.ui_mode = self.config.default_view.clone();
                                 } else {
-                                    self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                    self.state.ui_mode = self
+                                        .state
+                                        .prev_ui_mode
+                                        .as_ref()
+                                        .unwrap_or_else(|| &self.config.default_view)
+                                        .clone();
                                     self.state.prev_ui_mode = Some(UiMode::ConfigMenu);
                                 }
                                 AppReturn::Continue
                             }
-                            UiMode::MainMenu => {
-                                AppReturn::Exit
-                            }
+                            UiMode::MainMenu => AppReturn::Exit,
                             UiMode::EditKeybindings => {
                                 self.state.ui_mode = UiMode::ConfigMenu;
                                 if self.state.config_state.selected().is_none() {
@@ -927,7 +1085,12 @@ impl App {
                                         self.main_menu_next();
                                     }
                                 } else {
-                                    self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &UiMode::MainMenu).clone();
+                                    self.state.ui_mode = self
+                                        .state
+                                        .prev_ui_mode
+                                        .as_ref()
+                                        .unwrap_or_else(|| &UiMode::MainMenu)
+                                        .clone();
                                     if self.state.main_menu_state.selected().is_none() {
                                         self.main_menu_next();
                                     }
@@ -939,7 +1102,8 @@ impl App {
                     Action::Enter => {
                         if self.state.popup_mode.is_some() {
                             if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeUIMode {
-                                let current_index = self.state.default_view_state.selected().unwrap_or(0);
+                                let current_index =
+                                    self.state.default_view_state.selected().unwrap_or(0);
                                 // UiMode::all() has strings map all of them to UiMode using UiMode::from_string which returns an option<UiMode>
                                 let all_ui_modes = UiMode::all()
                                     .iter()
@@ -956,8 +1120,14 @@ impl App {
                                 };
                                 let selected_ui_mode = all_ui_modes[current_index].clone();
                                 self.state.ui_mode = selected_ui_mode;
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::ChangeCurrentCardStatus {
-                                let current_index = self.state.card_status_selector_state.selected().unwrap_or(0);
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::ChangeCurrentCardStatus
+                            {
+                                let current_index = self
+                                    .state
+                                    .card_status_selector_state
+                                    .selected()
+                                    .unwrap_or(0);
                                 let all_statuses = CardStatus::all();
 
                                 let current_index = if current_index >= all_statuses.len() {
@@ -968,9 +1138,15 @@ impl App {
                                 let selected_status = all_statuses[current_index].clone();
                                 // find current board from self.boards
                                 if let Some(current_board_id) = self.state.current_board_id {
-                                    if let Some(current_board) = self.boards.iter_mut().find(|b| b.id == current_board_id) {
+                                    if let Some(current_board) =
+                                        self.boards.iter_mut().find(|b| b.id == current_board_id)
+                                    {
                                         if let Some(current_card_id) = self.state.current_card_id {
-                                            if let Some(current_card) = current_board.cards.iter_mut().find(|c| c.id == current_card_id) {
+                                            if let Some(current_card) = current_board
+                                                .cards
+                                                .iter_mut()
+                                                .find(|c| c.id == current_card_id)
+                                            {
                                                 current_card.card_status = selected_status;
                                                 self.state.popup_mode = None;
                                                 return AppReturn::Continue;
@@ -979,23 +1155,38 @@ impl App {
                                     }
                                 }
                                 self.send_error_toast("Error Could not find current card", None);
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::EditGeneralConfig {
-                                let config_item_index = self.state.config_state.selected().unwrap_or(0);
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::EditGeneralConfig
+                            {
+                                let config_item_index =
+                                    self.state.config_state.selected().unwrap_or(0);
                                 let config_item_list = AppConfig::to_list(&self.config);
                                 let config_item = config_item_list[config_item_index].clone();
                                 // key is the second item in the list
                                 let default_key = String::from("");
-                                let config_item_key = config_item.get(0).unwrap_or_else(|| &default_key);
+                                let config_item_key =
+                                    config_item.get(0).unwrap_or_else(|| &default_key);
                                 let new_value = self.state.current_user_input.clone();
                                 // if new value is not empty update the config
                                 if !new_value.is_empty() {
-                                    let config_string = format!("{}: {}", config_item_key, new_value);
-                                    let app_config = AppConfig::edit_with_string(&config_string, self);
+                                    let config_string =
+                                        format!("{}: {}", config_item_key, new_value);
+                                    let app_config =
+                                        AppConfig::edit_with_string(&config_string, self);
                                     self.config = app_config.clone();
                                     let write_config_status = write_config(&app_config);
                                     if write_config_status.is_err() {
-                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
-                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        error!(
+                                            "Error writing config file: {}",
+                                            write_config_status.clone().unwrap_err()
+                                        );
+                                        self.send_error_toast(
+                                            &format!(
+                                                "Error writing config file: {}",
+                                                write_config_status.unwrap_err()
+                                            ),
+                                            None,
+                                        );
                                     } else {
                                         self.send_info_toast("Config updated Successfully", None);
                                     }
@@ -1010,11 +1201,20 @@ impl App {
                                     }
                                 }
                                 self.state.config_state.select(Some(0));
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::EditSpecificKeyBinding {
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::EditSpecificKeyBinding
+                            {
                                 if self.state.edited_keybinding.is_some() {
-                                    let selected = self.state.edit_keybindings_state.selected().unwrap();
+                                    let selected =
+                                        self.state.edit_keybindings_state.selected().unwrap();
                                     if selected < self.config.keybindings.iter().count() {
-                                        let result = self.config.edit_keybinding(selected, self.state.edited_keybinding.clone().unwrap_or_else(|| vec![]));
+                                        let result = self.config.edit_keybinding(
+                                            selected,
+                                            self.state
+                                                .edited_keybinding
+                                                .clone()
+                                                .unwrap_or_else(|| vec![]),
+                                        );
                                         if result.is_err() {
                                             self.send_error_toast(&result.unwrap_err(), None);
                                         } else {
@@ -1024,9 +1224,23 @@ impl App {
                                             }
                                             let (key, _) = key_list[selected];
                                             let key_string = key.to_string();
-                                            let value = self.state.edited_keybinding.clone().unwrap_or_else(|| vec![]);
-                                            let value = value.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(" ");
-                                            self.send_info_toast(&format!("Keybind for {} updated to {}", key_string, value), None);
+                                            let value = self
+                                                .state
+                                                .edited_keybinding
+                                                .clone()
+                                                .unwrap_or_else(|| vec![]);
+                                            let value = value
+                                                .iter()
+                                                .map(|s| s.to_string())
+                                                .collect::<Vec<String>>()
+                                                .join(" ");
+                                            self.send_info_toast(
+                                                &format!(
+                                                    "Keybind for {} updated to {}",
+                                                    key_string, value
+                                                ),
+                                                None,
+                                            );
                                         }
                                     } else {
                                         error!("Selected keybind with id {} not found", selected);
@@ -1041,8 +1255,14 @@ impl App {
                                     self.state.edited_keybinding = None;
                                     let write_config_status = write_config(&self.config);
                                     if write_config_status.is_err() {
-                                        error!("Error writing config: {}", write_config_status.clone().unwrap_err());
-                                        self.send_error_toast(&write_config_status.unwrap_err(), None);
+                                        error!(
+                                            "Error writing config: {}",
+                                            write_config_status.clone().unwrap_err()
+                                        );
+                                        self.send_error_toast(
+                                            &write_config_status.unwrap_err(),
+                                            None,
+                                        );
                                     }
                                 } else {
                                     self.state.ui_mode = UiMode::EditKeybindings;
@@ -1051,20 +1271,36 @@ impl App {
                                     }
                                 }
                                 self.keybind_list_maker();
-                            } else if self.state.popup_mode.as_ref().unwrap() == &PopupMode::SelectDefaultView{
+                            } else if self.state.popup_mode.as_ref().unwrap()
+                                == &PopupMode::SelectDefaultView
+                            {
                                 let all_ui_modes = UiMode::all();
-                                let current_selected_mode = self.state.default_view_state.selected().unwrap_or(0);
+                                let current_selected_mode =
+                                    self.state.default_view_state.selected().unwrap_or(0);
                                 if current_selected_mode < all_ui_modes.len() {
                                     let selected_mode = &all_ui_modes[current_selected_mode];
-                                    self.config.default_view = UiMode::from_string(&selected_mode).unwrap_or(UiMode::MainMenu);
-                                    self.state.prev_ui_mode = Some(self.config.default_view.clone());
-                                    let config_string = format!("{}: {}", "Select Default View", selected_mode);
-                                    let app_config = AppConfig::edit_with_string(&config_string, self);
+                                    self.config.default_view = UiMode::from_string(&selected_mode)
+                                        .unwrap_or(UiMode::MainMenu);
+                                    self.state.prev_ui_mode =
+                                        Some(self.config.default_view.clone());
+                                    let config_string =
+                                        format!("{}: {}", "Select Default View", selected_mode);
+                                    let app_config =
+                                        AppConfig::edit_with_string(&config_string, self);
                                     self.config = app_config.clone();
                                     let write_config_status = write_config(&app_config);
                                     if write_config_status.is_err() {
-                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
-                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        error!(
+                                            "Error writing config file: {}",
+                                            write_config_status.clone().unwrap_err()
+                                        );
+                                        self.send_error_toast(
+                                            &format!(
+                                                "Error writing config file: {}",
+                                                write_config_status.unwrap_err()
+                                            ),
+                                            None,
+                                        );
                                     } else {
                                         self.send_info_toast("Config updated Successfully", None);
                                     }
@@ -1079,7 +1315,10 @@ impl App {
                                         self.state.popup_mode = None;
                                     }
                                 } else {
-                                    debug!("Selected mode {} is not in the list of all UI modes", current_selected_mode);
+                                    debug!(
+                                        "Selected mode {} is not in the list of all UI modes",
+                                        current_selected_mode
+                                    );
                                 }
                             }
                             self.state.popup_mode = None;
@@ -1093,11 +1332,23 @@ impl App {
                                     self.state.config_state.select(Some(0));
                                     let write_config_status = write_config(&self.config);
                                     if write_config_status.is_err() {
-                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
-                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        error!(
+                                            "Error writing config file: {}",
+                                            write_config_status.clone().unwrap_err()
+                                        );
+                                        self.send_error_toast(
+                                            &format!(
+                                                "Error writing config file: {}",
+                                                write_config_status.unwrap_err()
+                                            ),
+                                            None,
+                                        );
                                     } else {
                                         warn!("Reset Config and Keybinds to default");
-                                        self.send_warning_toast("Reset Config and Keybinds to default", None);
+                                        self.send_warning_toast(
+                                            "Reset Config and Keybinds to default",
+                                            None,
+                                        );
                                     }
                                     self.keybind_list_maker();
                                     return AppReturn::Continue;
@@ -1110,20 +1361,35 @@ impl App {
                                     self.state.config_state.select(Some(0));
                                     let write_config_status = write_config(&self.config);
                                     if write_config_status.is_err() {
-                                        error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
-                                        self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                        error!(
+                                            "Error writing config file: {}",
+                                            write_config_status.clone().unwrap_err()
+                                        );
+                                        self.send_error_toast(
+                                            &format!(
+                                                "Error writing config file: {}",
+                                                write_config_status.unwrap_err()
+                                            ),
+                                            None,
+                                        );
                                     } else {
                                         warn!("Reset Config to default");
                                         self.send_warning_toast("Reset Config to default", None);
                                     }
                                     return AppReturn::Continue;
                                 }
-                                self.config_item_being_edited = Some(self.state.config_state.selected().unwrap_or(0));
+                                self.config_item_being_edited =
+                                    Some(self.state.config_state.selected().unwrap_or(0));
                                 // check if the config_item_being_edited index is in the AppConfig list and the value in the list is Edit Keybindings
                                 let app_config_list = &self.config.to_list();
-                                if self.config_item_being_edited.unwrap_or(0) < app_config_list.len() {
+                                if self.config_item_being_edited.unwrap_or(0)
+                                    < app_config_list.len()
+                                {
                                     let default_config_item = String::from("");
-                                    let config_item = &app_config_list[self.config_item_being_edited.unwrap_or(0)].first().unwrap_or_else(|| &default_config_item);
+                                    let config_item = &app_config_list
+                                        [self.config_item_being_edited.unwrap_or(0)]
+                                    .first()
+                                    .unwrap_or_else(|| &default_config_item);
                                     if *config_item == "Edit Keybindings" {
                                         self.state.ui_mode = UiMode::EditKeybindings;
                                         if self.state.edit_keybindings_state.selected().is_none() {
@@ -1137,103 +1403,156 @@ impl App {
                                     } else if *config_item == "Auto Save on Exit" {
                                         let save_on_exit = self.config.save_on_exit;
                                         self.config.save_on_exit = !save_on_exit;
-                                        let config_string = format!("{}: {}", "Auto Save on Exit", self.config.save_on_exit);
-                                        let app_config = AppConfig::edit_with_string(&config_string, self);
+                                        let config_string = format!(
+                                            "{}: {}",
+                                            "Auto Save on Exit", self.config.save_on_exit
+                                        );
+                                        let app_config =
+                                            AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
                                         let write_config_status = write_config(&app_config);
                                         if write_config_status.is_err() {
-                                            error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
-                                            self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                            error!(
+                                                "Error writing config file: {}",
+                                                write_config_status.clone().unwrap_err()
+                                            );
+                                            self.send_error_toast(
+                                                &format!(
+                                                    "Error writing config file: {}",
+                                                    write_config_status.unwrap_err()
+                                                ),
+                                                None,
+                                            );
                                         } else {
-                                            self.send_info_toast("Config updated Successfully", None);
+                                            self.send_info_toast(
+                                                "Config updated Successfully",
+                                                None,
+                                            );
                                         }
                                     } else if *config_item == "Auto Load Last Save" {
-                                        let always_load_last_save = self.config.always_load_last_save;
+                                        let always_load_last_save =
+                                            self.config.always_load_last_save;
                                         self.config.always_load_last_save = !always_load_last_save;
-                                        let config_string = format!("{}: {}", "Auto Load Last Save", self.config.always_load_last_save);
-                                        let app_config = AppConfig::edit_with_string(&config_string, self);
+                                        let config_string = format!(
+                                            "{}: {}",
+                                            "Auto Load Last Save",
+                                            self.config.always_load_last_save
+                                        );
+                                        let app_config =
+                                            AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
                                         let write_config_status = write_config(&app_config);
                                         if write_config_status.is_err() {
-                                            error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
-                                            self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                            error!(
+                                                "Error writing config file: {}",
+                                                write_config_status.clone().unwrap_err()
+                                            );
+                                            self.send_error_toast(
+                                                &format!(
+                                                    "Error writing config file: {}",
+                                                    write_config_status.unwrap_err()
+                                                ),
+                                                None,
+                                            );
                                         } else {
-                                            self.send_info_toast("Config updated Successfully", None);
+                                            self.send_info_toast(
+                                                "Config updated Successfully",
+                                                None,
+                                            );
                                         }
                                     } else if *config_item == "Disable Scrollbars" {
                                         let disable_scrollbars = self.config.disable_scrollbars;
                                         self.config.disable_scrollbars = !disable_scrollbars;
-                                        let config_string = format!("{}: {}", "Disable Scrollbars", self.config.disable_scrollbars);
-                                        let app_config = AppConfig::edit_with_string(&config_string, self);
+                                        let config_string = format!(
+                                            "{}: {}",
+                                            "Disable Scrollbars", self.config.disable_scrollbars
+                                        );
+                                        let app_config =
+                                            AppConfig::edit_with_string(&config_string, self);
                                         self.config = app_config.clone();
                                         let write_config_status = write_config(&app_config);
                                         if write_config_status.is_err() {
-                                            error!("Error writing config file: {}", write_config_status.clone().unwrap_err());
-                                            self.send_error_toast(&format!("Error writing config file: {}", write_config_status.unwrap_err()), None);
+                                            error!(
+                                                "Error writing config file: {}",
+                                                write_config_status.clone().unwrap_err()
+                                            );
+                                            self.send_error_toast(
+                                                &format!(
+                                                    "Error writing config file: {}",
+                                                    write_config_status.unwrap_err()
+                                                ),
+                                                None,
+                                            );
                                         } else {
-                                            self.send_info_toast("Config updated Successfully", None);
+                                            self.send_info_toast(
+                                                "Config updated Successfully",
+                                                None,
+                                            );
                                         }
                                     } else {
                                         self.state.popup_mode = Some(PopupMode::EditGeneralConfig);
                                     }
                                 } else {
-                                    debug!("Config item being edited {} is not in the AppConfig list", self.config_item_being_edited.unwrap_or(0));
+                                    debug!(
+                                        "Config item being edited {} is not in the AppConfig list",
+                                        self.config_item_being_edited.unwrap_or(0)
+                                    );
                                 }
                                 AppReturn::Continue
                             }
-                            UiMode::MainMenu => {
-                                match self.focus {
-                                    Focus::MainMenu => {
-                                        let selected = self.state.main_menu_state.selected().unwrap_or(0);
-                                        let selected_item = MainMenu::from_index(selected);
-                                        self.state.main_menu_state.select(Some(0));
-                                        match selected_item {
-                                            MainMenuItem::Quit => {
-                                                AppReturn::Exit
+                            UiMode::MainMenu => match self.focus {
+                                Focus::MainMenu => {
+                                    let selected =
+                                        self.state.main_menu_state.selected().unwrap_or(0);
+                                    let selected_item = MainMenu::from_index(selected);
+                                    self.state.main_menu_state.select(Some(0));
+                                    match selected_item {
+                                        MainMenuItem::Quit => AppReturn::Exit,
+                                        MainMenuItem::Config => {
+                                            self.state.prev_ui_mode =
+                                                Some(self.state.ui_mode.clone());
+                                            self.state.ui_mode = UiMode::ConfigMenu;
+                                            if self.state.config_state.selected().is_none() {
+                                                self.config_next();
                                             }
-                                            MainMenuItem::Config => {
-                                                self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
-                                                self.state.ui_mode = UiMode::ConfigMenu;
-                                                if self.state.config_state.selected().is_none() {
-                                                    self.config_next();
-                                                }
-                                                AppReturn::Continue
-                                            }
-                                            MainMenuItem::View => {
-                                                self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
-                                                self.state.ui_mode = self.config.default_view.clone();
-                                                AppReturn::Continue
-                                            }
-                                            MainMenuItem::Help => {
-                                                self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
-                                                self.state.ui_mode = UiMode::HelpMenu;
-                                                AppReturn::Continue
-                                            }
-                                            MainMenuItem::LoadSave => {
-                                                self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
-                                                self.state.ui_mode = UiMode::LoadSave;
-                                                AppReturn::Continue
-                                            }
+                                            AppReturn::Continue
                                         }
-                                    },
-                                    Focus::MainMenuHelp => {
-                                        self.state.ui_mode = UiMode::HelpMenu;
-                                        AppReturn::Continue
-                                    },
-                                    Focus::Log => {
-                                        self.state.ui_mode = UiMode::LogsOnly;
-                                        AppReturn::Continue
-                                    },
-                                    _ => {
-                                        AppReturn::Continue
+                                        MainMenuItem::View => {
+                                            self.state.prev_ui_mode =
+                                                Some(self.state.ui_mode.clone());
+                                            self.state.ui_mode = self.config.default_view.clone();
+                                            AppReturn::Continue
+                                        }
+                                        MainMenuItem::Help => {
+                                            self.state.prev_ui_mode =
+                                                Some(self.state.ui_mode.clone());
+                                            self.state.ui_mode = UiMode::HelpMenu;
+                                            AppReturn::Continue
+                                        }
+                                        MainMenuItem::LoadSave => {
+                                            self.state.prev_ui_mode =
+                                                Some(self.state.ui_mode.clone());
+                                            self.state.ui_mode = UiMode::LoadSave;
+                                            AppReturn::Continue
+                                        }
                                     }
                                 }
-                            }
+                                Focus::MainMenuHelp => {
+                                    self.state.ui_mode = UiMode::HelpMenu;
+                                    AppReturn::Continue
+                                }
+                                Focus::Log => {
+                                    self.state.ui_mode = UiMode::LogsOnly;
+                                    AppReturn::Continue
+                                }
+                                _ => AppReturn::Continue,
+                            },
                             UiMode::NewBoard => {
                                 if self.focus == Focus::SubmitButton {
                                     // check if self.state.new_board_form[0] is not empty or is not the same as any of the existing boards
                                     let new_board_name = self.state.new_board_form[0].clone();
-                                    let new_board_description = self.state.new_board_form[1].clone();
+                                    let new_board_description =
+                                        self.state.new_board_form[1].clone();
                                     let mut same_name_exists = false;
                                     for board in self.boards.iter() {
                                         if board.name == new_board_name {
@@ -1242,19 +1561,33 @@ impl App {
                                         }
                                     }
                                     if !new_board_name.is_empty() && !same_name_exists {
-                                        let new_board = Board::new(new_board_name, new_board_description);
+                                        let new_board =
+                                            Board::new(new_board_name, new_board_description);
                                         self.boards.push(new_board.clone());
                                         self.state.current_board_id = Some(new_board.id);
-                                        self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self
+                                            .state
+                                            .prev_ui_mode
+                                            .as_ref()
+                                            .unwrap_or_else(|| &self.config.default_view)
+                                            .clone();
                                     } else {
                                         warn!("New board name is empty or already exists");
-                                        self.send_warning_toast("New board name is empty or already exists", None);
+                                        self.send_warning_toast(
+                                            "New board name is empty or already exists",
+                                            None,
+                                        );
                                     }
-                                    self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                    self.state.ui_mode = self
+                                        .state
+                                        .prev_ui_mode
+                                        .as_ref()
+                                        .unwrap_or_else(|| &self.config.default_view)
+                                        .clone();
                                     if let Some(previous_focus) = &self.state.previous_focus {
                                         self.focus = previous_focus.clone();
                                     }
-                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                    self.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
                                 }
                                 AppReturn::Continue
                             }
@@ -1266,7 +1599,10 @@ impl App {
                                     let new_card_due_date = self.state.new_card_form[2].clone();
                                     let mut same_name_exists = false;
                                     let current_board_id = self.state.current_board_id.unwrap_or(0);
-                                    let current_board = self.boards.iter().find(|board| board.id == current_board_id);
+                                    let current_board = self
+                                        .boards
+                                        .iter()
+                                        .find(|board| board.id == current_board_id);
                                     if let Some(current_board) = current_board {
                                         for card in current_board.cards.iter() {
                                             if card.name == new_card_name {
@@ -1277,14 +1613,22 @@ impl App {
                                     } else {
                                         error!("Current board not found");
                                         self.send_error_toast("Current board not found", None);
-                                        self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self
+                                            .state
+                                            .prev_ui_mode
+                                            .as_ref()
+                                            .unwrap_or_else(|| &self.config.default_view)
+                                            .clone();
                                         return AppReturn::Continue;
                                     }
                                     // check if due date is empty or is a valid date
                                     let due_date = if new_card_due_date.is_empty() {
                                         Some(FIELD_NOT_SET.to_string())
                                     } else {
-                                        match NaiveDateTime::parse_from_str(&new_card_due_date, "%d/%m/%Y-%H:%M:%S") {
+                                        match NaiveDateTime::parse_from_str(
+                                            &new_card_due_date,
+                                            "%d/%m/%Y-%H:%M:%S",
+                                        ) {
                                             Ok(due_date) => {
                                                 debug!("Due date: {}", due_date);
                                                 let new_due = due_date.to_string();
@@ -1293,20 +1637,24 @@ impl App {
                                                 let new_due = new_due.replace(" ", "-");
                                                 debug!("New due date: {}", new_due);
                                                 Some(new_due)
-                                            },
+                                            }
                                             Err(_) => {
                                                 // cehck if the user has not put the time if not put the default time
-                                                match NaiveDate::parse_from_str(&new_card_due_date, "%d/%m/%Y") {
+                                                match NaiveDate::parse_from_str(
+                                                    &new_card_due_date,
+                                                    "%d/%m/%Y",
+                                                ) {
                                                     Ok(due_date) => {
                                                         debug!("Due date: {}", due_date);
                                                         let new_due = due_date.to_string();
                                                         // the date is in the format 2023-01-20 14:10:00 convert it to 20/01/2023-14:10:00
                                                         let new_due = new_due.replace("-", "/");
                                                         let new_due = new_due.replace(" ", "-");
-                                                        let new_due = format!("{}-{}", new_due, "12:00:00");
+                                                        let new_due =
+                                                            format!("{}-{}", new_due, "12:00:00");
                                                         debug!("New due date: {}", new_due);
                                                         Some(new_due)
-                                                    },
+                                                    }
                                                     Err(e) => {
                                                         debug!("Invalid due date: {}", e);
                                                         debug!("Due date: {}", new_card_due_date);
@@ -1319,32 +1667,59 @@ impl App {
                                     if due_date.is_none() {
                                         warn!("Invalid due date");
                                         self.send_warning_toast("Invalid due date", None);
-                                        self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self
+                                            .state
+                                            .prev_ui_mode
+                                            .as_ref()
+                                            .unwrap_or_else(|| &self.config.default_view)
+                                            .clone();
                                         return AppReturn::Continue;
                                     }
                                     if !new_card_name.is_empty() && !same_name_exists {
-                                        let new_card = Card::new(new_card_name, new_card_description, due_date.unwrap().to_string(),
-                                            CardPriority::Low, vec![], vec![]);
-                                        let current_board = self.boards.iter_mut().find(|board| board.id == current_board_id);
+                                        let new_card = Card::new(
+                                            new_card_name,
+                                            new_card_description,
+                                            due_date.unwrap().to_string(),
+                                            CardPriority::Low,
+                                            vec![],
+                                            vec![],
+                                        );
+                                        let current_board = self
+                                            .boards
+                                            .iter_mut()
+                                            .find(|board| board.id == current_board_id);
                                         if let Some(current_board) = current_board {
                                             current_board.cards.push(new_card.clone());
                                             self.state.current_card_id = Some(new_card.id);
                                         } else {
                                             error!("Current board not found");
                                             self.send_error_toast("Current board not found", None);
-                                            self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                            self.state.ui_mode = self
+                                                .state
+                                                .prev_ui_mode
+                                                .as_ref()
+                                                .unwrap_or_else(|| &self.config.default_view)
+                                                .clone();
                                             return AppReturn::Continue;
                                         }
-                                        self.state.ui_mode = self.state.prev_ui_mode.as_ref().unwrap_or_else(|| &self.config.default_view).clone();
+                                        self.state.ui_mode = self
+                                            .state
+                                            .prev_ui_mode
+                                            .as_ref()
+                                            .unwrap_or_else(|| &self.config.default_view)
+                                            .clone();
                                     } else {
                                         warn!("New card name is empty or already exists");
-                                        self.send_warning_toast("New card name is empty or already exists", None);
+                                        self.send_warning_toast(
+                                            "New card name is empty or already exists",
+                                            None,
+                                        );
                                     }
 
                                     if let Some(previous_focus) = &self.state.previous_focus {
                                         self.focus = previous_focus.clone();
                                     }
-                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                    self.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
                                 }
                                 AppReturn::Continue
                             }
@@ -1353,7 +1728,9 @@ impl App {
                                 AppReturn::Continue
                             }
                             UiMode::EditKeybindings => {
-                                if self.state.edit_keybindings_state.selected().is_some() && self.focus != Focus::SubmitButton {
+                                if self.state.edit_keybindings_state.selected().is_some()
+                                    && self.focus != Focus::SubmitButton
+                                {
                                     self.state.popup_mode = Some(PopupMode::EditSpecificKeyBinding);
                                 } else if self.focus == Focus::SubmitButton {
                                     self.config.keybindings = KeyBindings::default();
@@ -1363,8 +1740,14 @@ impl App {
                                     self.state.edit_keybindings_state.select(None);
                                     let write_config_status = write_config(&self.config);
                                     if write_config_status.is_err() {
-                                        error!("Error writing config: {}", write_config_status.clone().unwrap_err());
-                                        self.send_error_toast(&write_config_status.unwrap_err(), None);
+                                        error!(
+                                            "Error writing config: {}",
+                                            write_config_status.clone().unwrap_err()
+                                        );
+                                        self.send_error_toast(
+                                            &write_config_status.unwrap_err(),
+                                            None,
+                                        );
                                     }
                                     self.keybind_list_maker();
                                 }
@@ -1375,23 +1758,33 @@ impl App {
                                     Focus::Help => {
                                         self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
                                         self.state.ui_mode = UiMode::HelpMenu;
-                                    },
+                                    }
                                     Focus::Log => {
                                         self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
                                         self.state.ui_mode = UiMode::LogsOnly;
-                                    },
+                                    }
                                     _ => {}
                                 }
-                                if UiMode::view_modes().contains(&self.state.ui_mode) && self.focus == Focus::Body{
+                                if UiMode::view_modes().contains(&self.state.ui_mode)
+                                    && self.focus == Focus::Body
+                                {
                                     // check if there is a current card
                                     if let Some(current_card_id) = self.state.current_card_id {
-                                        if let Some(current_board_id) = self.state.current_board_id {
+                                        if let Some(current_board_id) = self.state.current_board_id
+                                        {
                                             // check if the current card is in the current board
-                                            let current_board = self.boards.iter().find(|board| board.id == current_board_id);
+                                            let current_board = self
+                                                .boards
+                                                .iter()
+                                                .find(|board| board.id == current_board_id);
                                             if let Some(current_board) = current_board {
-                                                let current_card = current_board.cards.iter().find(|card| card.id == current_card_id);
+                                                let current_card = current_board
+                                                    .cards
+                                                    .iter()
+                                                    .find(|card| card.id == current_card_id);
                                                 if let Some(_) = current_card {
-                                                    self.state.popup_mode = Some(PopupMode::CardView);
+                                                    self.state.popup_mode =
+                                                        Some(PopupMode::CardView);
                                                 } else {
                                                     // if the current card is not in the current board then set the current card to None
                                                     self.state.current_card_id = None;
@@ -1418,8 +1811,8 @@ impl App {
                         if current_ui_mode == UiMode::Zen {
                             self.state.ui_mode = UiMode::MainMenu;
                             if self.state.main_menu_state.selected().is_none() {
-                                    self.main_menu_next();
-                                }
+                                self.main_menu_next();
+                            }
                         } else if current_ui_mode == UiMode::TitleBody {
                             if current_focus == Focus::Title {
                                 self.state.ui_mode = UiMode::Zen;
@@ -1454,12 +1847,10 @@ impl App {
                             if current_focus == Focus::Title {
                                 self.state.ui_mode = UiMode::BodyHelp;
                                 self.focus = Focus::Body;
-                            }
-                            else if current_focus == Focus::Help {
+                            } else if current_focus == Focus::Help {
                                 self.state.ui_mode = UiMode::TitleBody;
                                 self.focus = Focus::Title;
-                            }
-                            else {
+                            } else {
                                 self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
@@ -1469,12 +1860,10 @@ impl App {
                             if current_focus == Focus::Title {
                                 self.state.ui_mode = UiMode::BodyLog;
                                 self.focus = Focus::Body;
-                            }
-                            else if current_focus == Focus::Log {
+                            } else if current_focus == Focus::Log {
                                 self.state.ui_mode = UiMode::TitleBody;
                                 self.focus = Focus::Title;
-                            }
-                            else {
+                            } else {
                                 self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
@@ -1484,16 +1873,13 @@ impl App {
                             if current_focus == Focus::Title {
                                 self.state.ui_mode = UiMode::BodyHelpLog;
                                 self.focus = Focus::Body;
-                            }
-                            else if current_focus == Focus::Help {
+                            } else if current_focus == Focus::Help {
                                 self.state.ui_mode = UiMode::TitleBodyLog;
                                 self.focus = Focus::Title;
-                            }
-                            else if current_focus == Focus::Log {
+                            } else if current_focus == Focus::Log {
                                 self.state.ui_mode = UiMode::TitleBodyHelp;
                                 self.focus = Focus::Title;
-                            }
-                            else {
+                            } else {
                                 self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
@@ -1503,12 +1889,10 @@ impl App {
                             if current_focus == Focus::Help {
                                 self.state.ui_mode = UiMode::BodyLog;
                                 self.focus = Focus::Body;
-                            }
-                            else if current_focus == Focus::Log {
+                            } else if current_focus == Focus::Log {
                                 self.state.ui_mode = UiMode::BodyHelp;
                                 self.focus = Focus::Body;
-                            }
-                            else {
+                            } else {
                                 self.state.ui_mode = UiMode::MainMenu;
                                 if self.state.main_menu_state.selected().is_none() {
                                     self.main_menu_next();
@@ -1535,10 +1919,11 @@ impl App {
                             // check if current board is not empty
                             if self.state.current_board_id.is_none() {
                                 warn!("No board available to add card to");
-                                self.send_warning_toast("No board available to add card to",None);
+                                self.send_warning_toast("No board available to add card to", None);
                                 return AppReturn::Continue;
                             }
-                            self.state.new_card_form = vec![String::new(), String::new(), String::new()];
+                            self.state.new_card_form =
+                                vec![String::new(), String::new(), String::new()];
                             self.set_ui_mode(UiMode::NewCard);
                             self.state.previous_focus = Some(self.focus.clone());
                         }
@@ -1562,56 +1947,104 @@ impl App {
                                         // delete the current card
                                         if let Some(current_board) = self.state.current_board_id {
                                             // find index of current board id in self.boards
-                                            let index = self.boards.iter().position(|board| board.id == current_board);
+                                            let index = self
+                                                .boards
+                                                .iter()
+                                                .position(|board| board.id == current_board);
                                             if let Some(current_card) = self.state.current_card_id {
-                                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                                let card_index = self.boards[index.unwrap()]
+                                                    .cards
+                                                    .iter()
+                                                    .position(|card| card.id == current_card);
                                                 if let Some(card_index) = card_index {
-                                                    let card_name = self.boards[index.unwrap()].cards[card_index].name.clone();
-                                                    self.boards[index.unwrap()].cards.remove(card_index);
+                                                    let card_name = self.boards[index.unwrap()]
+                                                        .cards[card_index]
+                                                        .name
+                                                        .clone();
+                                                    self.boards[index.unwrap()]
+                                                        .cards
+                                                        .remove(card_index);
                                                     // if index is > 0, set current card to previous card, else set to next card, else set to None
                                                     if card_index > 0 {
-                                                        self.state.current_card_id = Some(self.boards[index.unwrap()].cards[card_index - 1].id);
-                                                    } else if self.boards[index.unwrap()].cards.len() > 0 {
-                                                        self.state.current_card_id = Some(self.boards[index.unwrap()].cards[0].id);
+                                                        self.state.current_card_id = Some(
+                                                            self.boards[index.unwrap()].cards
+                                                                [card_index - 1]
+                                                                .id,
+                                                        );
+                                                    } else if self.boards[index.unwrap()]
+                                                        .cards
+                                                        .len()
+                                                        > 0
+                                                    {
+                                                        self.state.current_card_id = Some(
+                                                            self.boards[index.unwrap()].cards[0].id,
+                                                        );
                                                     } else {
                                                         self.state.current_card_id = None;
                                                     }
                                                     warn!("Deleted card {}", card_name);
-                                                    self.send_warning_toast(&format!("Deleted card {}", card_name), None);
+                                                    self.send_warning_toast(
+                                                        &format!("Deleted card {}", card_name),
+                                                        None,
+                                                    );
                                                     // remove card_id from self.visible_boards_and_cards if it is there, where visible_boards_and_cards is a LinkedHashMap of board_id to a vector of card_ids
-                                                    if let Some(visible_cards) = self.visible_boards_and_cards.get_mut(&current_board) {
-                                                        if let Some(card_index) = visible_cards.iter().position(|card_id| *card_id == current_card) {
+                                                    if let Some(visible_cards) = self
+                                                        .visible_boards_and_cards
+                                                        .get_mut(&current_board)
+                                                    {
+                                                        if let Some(card_index) =
+                                                            visible_cards.iter().position(
+                                                                |card_id| *card_id == current_card,
+                                                            )
+                                                        {
                                                             visible_cards.remove(card_index);
                                                         }
                                                     }
-                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                    self.dispatch(
+                                                        IoEvent::ResetVisibleBoardsandCards,
+                                                    )
+                                                    .await;
                                                 }
-
-                                            } else if let Some(current_board) = self.state.current_board_id {
+                                            } else if let Some(current_board) =
+                                                self.state.current_board_id
+                                            {
                                                 // find index of current board id in self.boards
-                                                let index = self.boards.iter().position(|board| board.id == current_board);
+                                                let index = self
+                                                    .boards
+                                                    .iter()
+                                                    .position(|board| board.id == current_board);
                                                 if let Some(index) = index {
-                                                    let board_name = self.boards[index].name.clone();
+                                                    let board_name =
+                                                        self.boards[index].name.clone();
                                                     self.boards.remove(index);
                                                     // if index is > 0, set current board to previous board, else set to next board, else set to None
                                                     if index > 0 {
-                                                        self.state.current_board_id = Some(self.boards[index - 1].id);
+                                                        self.state.current_board_id =
+                                                            Some(self.boards[index - 1].id);
                                                     } else if self.boards.len() > 0 {
-                                                        self.state.current_board_id = Some(self.boards[0].id);
+                                                        self.state.current_board_id =
+                                                            Some(self.boards[0].id);
                                                     } else {
                                                         self.state.current_board_id = None;
                                                     }
                                                     warn!("Deleted board {}", board_name);
-                                                    self.send_warning_toast(&format!("Deleted board {}", board_name), None);
+                                                    self.send_warning_toast(
+                                                        &format!("Deleted board {}", board_name),
+                                                        None,
+                                                    );
                                                     // remove board_id from self.visible_boards_and_cards if it is there
-                                                    self.visible_boards_and_cards.remove(&current_board);
-                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
+                                                    self.visible_boards_and_cards
+                                                        .remove(&current_board);
+                                                    self.dispatch(
+                                                        IoEvent::ResetVisibleBoardsandCards,
+                                                    )
+                                                    .await;
                                                 }
                                             }
                                         }
                                         AppReturn::Continue
-                                    },
-                                    _ => AppReturn::Continue   
+                                    }
+                                    _ => AppReturn::Continue,
                                 }
                             }
                         }
@@ -1625,26 +2058,34 @@ impl App {
                                 // delete the current board from self.boards
                                 if let Some(current_board) = self.state.current_board_id.clone() {
                                     // find index of current board id in self.boards
-                                    let index = self.boards.iter().position(|board| board.id == current_board);
+                                    let index = self
+                                        .boards
+                                        .iter()
+                                        .position(|board| board.id == current_board);
                                     if let Some(index) = index {
                                         let board_name = self.boards[index].name.clone();
                                         self.boards.remove(index);
                                         // if index is > 0, set current board to previous board, else set to next board, else set to None
                                         if index > 0 {
-                                            self.state.current_board_id = Some(self.boards[index - 1].id.clone());
+                                            self.state.current_board_id =
+                                                Some(self.boards[index - 1].id.clone());
                                         } else if index < self.boards.len() {
-                                            self.state.current_board_id = Some(self.boards[index].id.clone());
+                                            self.state.current_board_id =
+                                                Some(self.boards[index].id.clone());
                                         } else {
                                             self.state.current_board_id = None;
                                         }
                                         self.visible_boards_and_cards.remove(&current_board);
                                         warn!("Deleted board: {}", board_name);
-                                        self.send_warning_toast(&format!("Deleted board: {}", board_name), None);
+                                        self.send_warning_toast(
+                                            &format!("Deleted board: {}", board_name),
+                                            None,
+                                        );
                                     }
                                 }
                                 AppReturn::Continue
-                            },
-                            _ => AppReturn::Continue
+                            }
+                            _ => AppReturn::Continue,
                         }
                     }
                     Action::ChangeCardStatusToCompleted => {
@@ -1658,13 +2099,29 @@ impl App {
                         // get the current card and change its status to complete
                         if let Some(current_board) = self.state.current_board_id {
                             // find index of current board id in self.boards
-                            let index = self.boards.iter().position(|board| board.id == current_board);
+                            let index = self
+                                .boards
+                                .iter()
+                                .position(|board| board.id == current_board);
                             if let Some(current_card) = self.state.current_card_id {
-                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                let card_index = self.boards[index.unwrap()]
+                                    .cards
+                                    .iter()
+                                    .position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
-                                    self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Complete;
-                                    info!("Changed status to Completed for card {}", self.boards[index.unwrap()].cards[card_index].name);
-                                    self.send_info_toast(&format!("Changed status to Completed for card {}", self.boards[index.unwrap()].cards[card_index].name), None);
+                                    self.boards[index.unwrap()].cards[card_index].card_status =
+                                        CardStatus::Complete;
+                                    info!(
+                                        "Changed status to Completed for card {}",
+                                        self.boards[index.unwrap()].cards[card_index].name
+                                    );
+                                    self.send_info_toast(
+                                        &format!(
+                                            "Changed status to Completed for card {}",
+                                            self.boards[index.unwrap()].cards[card_index].name
+                                        ),
+                                        None,
+                                    );
                                 }
                             }
                         }
@@ -1681,13 +2138,29 @@ impl App {
                         // get the current card and change its status to active
                         if let Some(current_board) = self.state.current_board_id {
                             // find index of current board id in self.boards
-                            let index = self.boards.iter().position(|board| board.id == current_board);
+                            let index = self
+                                .boards
+                                .iter()
+                                .position(|board| board.id == current_board);
                             if let Some(current_card) = self.state.current_card_id {
-                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                let card_index = self.boards[index.unwrap()]
+                                    .cards
+                                    .iter()
+                                    .position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
-                                    self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Active;
-                                    info!("Changed status to Active for card {}", self.boards[index.unwrap()].cards[card_index].name);
-                                    self.send_info_toast(&format!("Changed status to Active for card {}", self.boards[index.unwrap()].cards[card_index].name), None);
+                                    self.boards[index.unwrap()].cards[card_index].card_status =
+                                        CardStatus::Active;
+                                    info!(
+                                        "Changed status to Active for card {}",
+                                        self.boards[index.unwrap()].cards[card_index].name
+                                    );
+                                    self.send_info_toast(
+                                        &format!(
+                                            "Changed status to Active for card {}",
+                                            self.boards[index.unwrap()].cards[card_index].name
+                                        ),
+                                        None,
+                                    );
                                 }
                             }
                         }
@@ -1704,13 +2177,29 @@ impl App {
                         // get the current card and change its status to stale
                         if let Some(current_board) = self.state.current_board_id {
                             // find index of current board id in self.boards
-                            let index = self.boards.iter().position(|board| board.id == current_board);
+                            let index = self
+                                .boards
+                                .iter()
+                                .position(|board| board.id == current_board);
                             if let Some(current_card) = self.state.current_card_id {
-                                let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                let card_index = self.boards[index.unwrap()]
+                                    .cards
+                                    .iter()
+                                    .position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
-                                    self.boards[index.unwrap()].cards[card_index].card_status = CardStatus::Stale;
-                                    info!("Changed status to Stale for card {}", self.boards[index.unwrap()].cards[card_index].name);
-                                    self.send_info_toast(&format!("Changed status to Stale for card {}", self.boards[index.unwrap()].cards[card_index].name), None);
+                                    self.boards[index.unwrap()].cards[card_index].card_status =
+                                        CardStatus::Stale;
+                                    info!(
+                                        "Changed status to Stale for card {}",
+                                        self.boards[index.unwrap()].cards[card_index].name
+                                    );
+                                    self.send_info_toast(
+                                        &format!(
+                                            "Changed status to Stale for card {}",
+                                            self.boards[index.unwrap()].cards[card_index].name
+                                        ),
+                                        None,
+                                    );
                                 }
                             }
                         }
@@ -1735,26 +2224,91 @@ impl App {
                                 if self.state.current_card_id.is_none() {
                                     return AppReturn::Continue;
                                 } else {
-                                    if let Some(current_board) = self.state.current_board_id {
-                                        let index = self.boards.iter().position(|board| board.id == current_board);
-                                        if let Some(current_card) = self.state.current_card_id {
-                                            let card_index = self.boards[index.unwrap()].cards.iter().position(|card| card.id == current_card);
-                                            if let Some(card_index) = card_index {
-                                                if card_index > 0 {
-                                                    self.boards[index.unwrap()].cards.swap(card_index, card_index - 1);
-                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
-                                                    // check if current card is visible if not set it to the first visible card
-                                                    if !self.visible_boards_and_cards[&current_board].contains(&self.state.current_card_id.unwrap()) {
-                                                        self.state.current_card_id = Some(self.visible_boards_and_cards[&current_board][0]);
-                                                    }
-                                                    info!("Moved card {} up", self.boards[index.unwrap()].cards[card_index].name);
-                                                    self.send_info_toast(&format!("Moved card {} up", self.boards[index.unwrap()].cards[card_index].name), None);
-                                                }
+                                    if self.state.current_board_id.is_none() {
+                                        error!("Cannot move card up without a current board id");
+                                        return AppReturn::Continue;
+                                    }
+                                    if self.state.current_card_id.is_none() {
+                                        error!("Cannot move card up without a current card id");
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_board_id = self.state.current_board_id.unwrap();
+                                    let current_card_id = self.state.current_card_id.unwrap();
+                                    let current_board_index_in_all_boards = self
+                                        .boards
+                                        .iter()
+                                        .position(|board| board.id == current_board_id);
+                                    if current_board_index_in_all_boards.is_none() {
+                                        error!("Cannot move card up without a current board index");
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_card_index_in_all = self.boards
+                                        [current_board_index_in_all_boards.unwrap()]
+                                    .cards
+                                    .iter()
+                                    .position(|card| card.id == current_card_id);
+                                    if current_card_index_in_all.is_none() {
+                                        error!("Cannot move card up without a current card index");
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_card_index_in_all =
+                                        current_card_index_in_all.unwrap();
+                                    if current_card_index_in_all == 0 {
+                                        self.send_error_toast("Cannot move card up, it is already at the top of the board", None);
+                                        error!("Cannot move card up, it is already at the top of the board");
+                                        return AppReturn::Continue;
+                                    }
+                                    // update visible boards and cards
+                                    // check if both the cards that are being swapped are in the visible cards
+                                    let current_card_index_in_visible = self
+                                        .visible_boards_and_cards[&current_board_id]
+                                        .iter()
+                                        .position(|card_id| *card_id == current_card_id);
+                                    if current_card_index_in_visible.is_none() {
+                                        error!("Cannot move card up without a current card index in visible cards");
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_card_index_in_visible =
+                                        current_card_index_in_visible.unwrap();
+                                    if current_card_index_in_visible == 0 {
+                                        let card_above_id = self.boards
+                                            [current_board_index_in_all_boards.unwrap()]
+                                        .cards[current_card_index_in_all - 1]
+                                            .id;
+                                        let mut visible_cards: Vec<u128> = vec![];
+                                        visible_cards.push(current_card_id);
+                                        visible_cards.push(card_above_id);
+
+                                        for card in
+                                            self.visible_boards_and_cards[&current_board_id].iter()
+                                        {
+                                            if *card != current_card_id
+                                                && visible_cards.len()
+                                                    < self.config.no_of_cards_to_show as usize
+                                            {
+                                                visible_cards.push(*card);
                                             }
                                         }
+                                        self.visible_boards_and_cards
+                                            .entry(current_board_id)
+                                            .and_modify(|cards| *cards = visible_cards);
+                                    } else {
+                                        self.visible_boards_and_cards
+                                            .get_mut(&current_board_id)
+                                            .unwrap()
+                                            .swap(
+                                                current_card_index_in_visible,
+                                                current_card_index_in_visible - 1,
+                                            );
                                     }
+                                    self.boards[current_board_index_in_all_boards.unwrap()]
+                                        .cards
+                                        .swap(
+                                            current_card_index_in_all,
+                                            current_card_index_in_all - 1,
+                                        );
                                 }
-                            },
+                            }
                             _ => {}
                         }
                         AppReturn::Continue
@@ -1768,26 +2322,113 @@ impl App {
                                 if self.state.current_card_id.is_none() {
                                     return AppReturn::Continue;
                                 } else {
-                                    if let Some(current_board) = self.state.current_board_id {
-                                        let board_index = self.boards.iter().position(|board| board.id == current_board);
-                                        if let Some(current_card) = self.state.current_card_id {
-                                            let card_index = self.boards[board_index.unwrap()].cards.iter().position(|card| card.id == current_card);
-                                            if let Some(card_index) = card_index {
-                                                if card_index < self.boards[board_index.unwrap()].cards.len() - 1 {
-                                                    self.boards[board_index.unwrap()].cards.swap(card_index, card_index + 1);
-                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
-                                                    // check if current card is visible if not set it to the last visible card
-                                                    if !self.visible_boards_and_cards[&current_board].contains(&self.state.current_card_id.unwrap()) {
-                                                        self.state.current_card_id = Some(self.visible_boards_and_cards[&current_board][self.visible_boards_and_cards[&current_board].len() - 1]);
-                                                    }
-                                                    info!("Moved card {} down", self.boards[board_index.unwrap()].cards[card_index].name);
-                                                    self.send_info_toast(&format!("Moved card {} down", self.boards[board_index.unwrap()].cards[card_index].name), None);
-                                                }
+                                    if self.state.current_board_id.is_none() {
+                                        error!("Cannot move card down without a current board id");
+                                        return AppReturn::Continue;
+                                    }
+                                    if self.state.current_card_id.is_none() {
+                                        error!("Cannot move card down without a current card id");
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_board_id = self.state.current_board_id.unwrap();
+                                    let current_card_id = self.state.current_card_id.unwrap();
+                                    let current_board_index_in_all_boards = self
+                                        .boards
+                                        .iter()
+                                        .position(|board| board.id == current_board_id);
+                                    if current_board_index_in_all_boards.is_none() {
+                                        error!(
+                                            "Cannot move card down without a current board index"
+                                        );
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_card_index_in_all = self.boards
+                                        [current_board_index_in_all_boards.unwrap()]
+                                    .cards
+                                    .iter()
+                                    .position(|card| card.id == current_card_id);
+                                    if current_card_index_in_all.is_none() {
+                                        error!(
+                                            "Cannot move card down without a current card index"
+                                        );
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_card_index_in_all =
+                                        current_card_index_in_all.unwrap();
+                                    if current_card_index_in_all
+                                        == self.boards[current_board_index_in_all_boards.unwrap()]
+                                            .cards
+                                            .len()
+                                            - 1
+                                    {
+                                        self.send_error_toast("Cannot move card down, it is already at the bottom of the board", None);
+                                        error!("Cannot move card down, it is already at the bottom of the board");
+                                        return AppReturn::Continue;
+                                    }
+                                    // update visible boards and cards
+                                    // check if both the cards that are being swapped are in the visible cards
+                                    let current_card_index_in_visible = self
+                                        .visible_boards_and_cards[&current_board_id]
+                                        .iter()
+                                        .position(|card_id| *card_id == current_card_id);
+                                    if current_card_index_in_visible.is_none() {
+                                        error!("Cannot move card down without a current card index in visible cards");
+                                        return AppReturn::Continue;
+                                    }
+                                    let current_card_index_in_visible =
+                                        current_card_index_in_visible.unwrap();
+                                    if current_card_index_in_visible
+                                        == self.visible_boards_and_cards[&current_board_id].len()
+                                            - 1
+                                    {
+                                        let card_below_id = self.boards
+                                            [current_board_index_in_all_boards.unwrap()]
+                                        .cards[current_card_index_in_all + 1]
+                                            .id;
+                                        debug!(
+                                            "Current card id: {}, card below id: {}",
+                                            current_card_id, card_below_id
+                                        );
+                                        let mut visible_cards: Vec<u128> = vec![];
+                                        visible_cards.push(card_below_id);
+                                        visible_cards.push(current_card_id);
+                                        // insert in reverse order till we reach the no of cards to show
+                                        for card in self.visible_boards_and_cards[&current_board_id]
+                                            .iter()
+                                            .rev()
+                                        {
+                                            if *card != current_card_id
+                                                && visible_cards.len()
+                                                    < self.config.no_of_cards_to_show as usize
+                                            {
+                                                visible_cards.insert(0, *card);
                                             }
                                         }
+
+                                        self.visible_boards_and_cards
+                                            .entry(current_board_id)
+                                            .and_modify(|cards| *cards = visible_cards);
+                                    } else {
+                                        self.visible_boards_and_cards
+                                            .get_mut(&current_board_id)
+                                            .unwrap()
+                                            .swap(
+                                                current_card_index_in_visible,
+                                                current_card_index_in_visible + 1,
+                                            );
                                     }
+                                    debug!(
+                                        "current cards: {:?}",
+                                        self.visible_boards_and_cards[&current_board_id]
+                                    );
+                                    self.boards[current_board_index_in_all_boards.unwrap()]
+                                        .cards
+                                        .swap(
+                                            current_card_index_in_all,
+                                            current_card_index_in_all + 1,
+                                        );
                                 }
-                            },
+                            }
                             _ => {}
                         }
                         AppReturn::Continue
@@ -1802,25 +2443,102 @@ impl App {
                                     return AppReturn::Continue;
                                 } else {
                                     if let Some(current_board) = self.state.current_board_id {
-                                        let board_index = self.boards.iter().position(|board| board.id == current_board);
+                                        let board_index = self
+                                            .boards
+                                            .iter()
+                                            .position(|board| board.id == current_board);
                                         // check if board is the last board
                                         if board_index.unwrap() < self.boards.len() - 1 {
                                             if let Some(current_card) = self.state.current_card_id {
-                                                let card_index = self.boards[board_index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                                let card_index = self.boards[board_index.unwrap()]
+                                                    .cards
+                                                    .iter()
+                                                    .position(|card| card.id == current_card);
                                                 if let Some(card_index) = card_index {
-                                                    let card = self.boards[board_index.unwrap()].cards.remove(card_index);
+                                                    let card = self.boards[board_index.unwrap()]
+                                                        .cards
+                                                        .remove(card_index);
+                                                    let card_id = card.id;
                                                     let card_name = card.name.clone();
-                                                    self.boards[board_index.unwrap() + 1].cards.push(card);
-                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
-                                                    self.state.current_board_id = Some(self.boards[board_index.unwrap() + 1].id);
-                                                    info!("Moved card {} right", card_name);
-                                                    self.send_info_toast(&format!("Moved card {} right", card_name), None);
+                                                    self.boards[board_index.unwrap() + 1]
+                                                        .cards
+                                                        .push(card);
+                                                    // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
+                                                    if self.boards[board_index.unwrap() + 1]
+                                                        .cards
+                                                        .len()
+                                                        <= self.config.no_of_cards_to_show as usize
+                                                    {
+                                                        self.visible_boards_and_cards
+                                                            .entry(
+                                                                self.boards
+                                                                    [board_index.unwrap() + 1]
+                                                                    .id,
+                                                            )
+                                                            .and_modify(|cards| {
+                                                                cards.push(card_id)
+                                                            });
+                                                    }
+                                                    // remove the moved card from visible cards for the current board
+                                                    self.visible_boards_and_cards
+                                                        .entry(self.boards[board_index.unwrap()].id)
+                                                        .and_modify(|cards| {
+                                                            cards.retain(|card_id| {
+                                                                *card_id != current_card
+                                                            })
+                                                        });
+                                                    // set the visible cards to the last no_of_cards_to_show cards
+                                                    let mut visible_cards: Vec<u128> = vec![];
+                                                    for card in self.boards
+                                                        [board_index.unwrap() + 1]
+                                                        .cards
+                                                        .iter()
+                                                        .rev()
+                                                    {
+                                                        if visible_cards.len()
+                                                            < self.config.no_of_cards_to_show
+                                                                as usize
+                                                        {
+                                                            visible_cards.insert(0, card.id);
+                                                        }
+                                                    }
+                                                    self.visible_boards_and_cards
+                                                        .entry(
+                                                            self.boards[board_index.unwrap() + 1]
+                                                                .id,
+                                                        )
+                                                        .and_modify(|cards| *cards = visible_cards);
+                                                    self.state.current_board_id = Some(
+                                                        self.boards[board_index.unwrap() + 1].id,
+                                                    );
+                                                    info!(
+                                                        "Moved card {} to board \"{}\"",
+                                                        card_name,
+                                                        self.boards[board_index.unwrap() + 1].name
+                                                    );
+                                                    self.send_info_toast(
+                                                        &format!(
+                                                            "Moved card {} to board \"{}\"",
+                                                            card_name,
+                                                            self.boards[board_index.unwrap() + 1]
+                                                                .name
+                                                        ),
+                                                        None,
+                                                    );
                                                 }
                                             }
+                                        } else {
+                                            error!(
+                                                "Cannot move card right as it is the last board"
+                                            );
+                                            self.send_error_toast(
+                                                "Cannot move card right as it is the last board",
+                                                None,
+                                            );
                                         }
                                     }
                                 }
-                            },
+                            }
                             _ => {}
                         }
                         AppReturn::Continue
@@ -1835,25 +2553,102 @@ impl App {
                                     return AppReturn::Continue;
                                 } else {
                                     if let Some(current_board) = self.state.current_board_id {
-                                        let board_index = self.boards.iter().position(|board| board.id == current_board);
+                                        let board_index = self
+                                            .boards
+                                            .iter()
+                                            .position(|board| board.id == current_board);
                                         // check if board is the first board
                                         if board_index.unwrap() > 0 {
                                             if let Some(current_card) = self.state.current_card_id {
-                                                let card_index = self.boards[board_index.unwrap()].cards.iter().position(|card| card.id == current_card);
+                                                let card_index = self.boards[board_index.unwrap()]
+                                                    .cards
+                                                    .iter()
+                                                    .position(|card| card.id == current_card);
                                                 if let Some(card_index) = card_index {
-                                                    let card = self.boards[board_index.unwrap()].cards.remove(card_index);
+                                                    let card = self.boards[board_index.unwrap()]
+                                                        .cards
+                                                        .remove(card_index);
+                                                    let card_id = card.id;
                                                     let card_name = card.name.clone();
-                                                    self.boards[board_index.unwrap() - 1].cards.push(card);
-                                                    self.dispatch(IoEvent::RefreshVisibleBoardsandCards).await;
-                                                    self.state.current_board_id = Some(self.boards[board_index.unwrap() - 1].id);
-                                                    info!("Moved card {} left", card_name);
-                                                    self.send_info_toast(&format!("Moved card {} left", card_name), None);
+                                                    self.boards[board_index.unwrap() - 1]
+                                                        .cards
+                                                        .push(card);
+                                                    // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
+                                                    if self.boards[board_index.unwrap() - 1]
+                                                        .cards
+                                                        .len()
+                                                        <= self.config.no_of_cards_to_show as usize
+                                                    {
+                                                        self.visible_boards_and_cards
+                                                            .entry(
+                                                                self.boards
+                                                                    [board_index.unwrap() - 1]
+                                                                    .id,
+                                                            )
+                                                            .and_modify(|cards| {
+                                                                cards.push(card_id)
+                                                            });
+                                                    }
+                                                    // remove the moved card from visible cards for the current board
+                                                    self.visible_boards_and_cards
+                                                        .entry(self.boards[board_index.unwrap()].id)
+                                                        .and_modify(|cards| {
+                                                            cards.retain(|card_id| {
+                                                                *card_id != current_card
+                                                            })
+                                                        });
+                                                    // set the visible cards to the last no_of_cards_to_show cards
+                                                    let mut visible_cards: Vec<u128> = vec![];
+                                                    for card in self.boards
+                                                        [board_index.unwrap() - 1]
+                                                        .cards
+                                                        .iter()
+                                                        .rev()
+                                                    {
+                                                        if visible_cards.len()
+                                                            < self.config.no_of_cards_to_show
+                                                                as usize
+                                                        {
+                                                            visible_cards.insert(0, card.id);
+                                                        }
+                                                    }
+                                                    self.visible_boards_and_cards
+                                                        .entry(
+                                                            self.boards[board_index.unwrap() - 1]
+                                                                .id,
+                                                        )
+                                                        .and_modify(|cards| *cards = visible_cards);
+                                                    self.state.current_board_id = Some(
+                                                        self.boards[board_index.unwrap() - 1].id,
+                                                    );
+                                                    info!(
+                                                        "Moved card {} to board \"{}\"",
+                                                        card_name,
+                                                        self.boards[board_index.unwrap() - 1].name
+                                                    );
+                                                    self.send_info_toast(
+                                                        &format!(
+                                                            "Moved card {} to board \"{}\"",
+                                                            card_name,
+                                                            self.boards[board_index.unwrap() - 1]
+                                                                .name
+                                                        ),
+                                                        None,
+                                                    );
                                                 }
                                             }
+                                        } else {
+                                            error!(
+                                                "Cannot move card left as it is the first board"
+                                            );
+                                            self.send_error_toast(
+                                                "Cannot move card left as it is the first board",
+                                                None,
+                                            );
                                         }
                                     }
                                 }
-                            },
+                            }
                             _ => {}
                         }
                         AppReturn::Continue
@@ -1884,8 +2679,16 @@ impl App {
         // `is_loading` will be set to false again after the async action has finished in io/handler.rs
         self.is_loading = true;
         // check if last_io_event_time is more thant current time + IO_EVENT_WAIT_TIME in ms
-        if self.last_io_event_time.unwrap_or_else(|| Instant::now() - Duration::from_millis(IO_EVENT_WAIT_TIME + 10)) + Duration::from_millis(IO_EVENT_WAIT_TIME) > Instant::now() {
-            self.send_error_toast(&format!("Please wait before sending another request - {:?}",action), None);
+        if self
+            .last_io_event_time
+            .unwrap_or_else(|| Instant::now() - Duration::from_millis(IO_EVENT_WAIT_TIME + 10))
+            + Duration::from_millis(IO_EVENT_WAIT_TIME)
+            > Instant::now()
+        {
+            self.send_error_toast(
+                &format!("Please wait before sending another request - {:?}", action),
+                None,
+            );
             tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
         }
         self.last_io_event_time = Some(Instant::now());
@@ -1893,7 +2696,7 @@ impl App {
             self.is_loading = false;
             debug!("Error from dispatch {}", e);
             error!("Error in handling request please, restart the app");
-            self.send_error_toast("Error in handling request please, restart the app",None);
+            self.send_error_toast("Error in handling request please, restart the app", None);
         };
     }
     pub fn actions(&self) -> &Actions {
@@ -1907,8 +2710,7 @@ impl App {
     }
     pub fn initialized(&mut self) {
         // Update contextual actions
-        self.actions = Action::all()
-        .into();
+        self.actions = Action::all().into();
         if self.state.ui_mode == UiMode::MainMenu {
             self.main_menu_next();
         } else if self.focus == Focus::NoFocus {
@@ -2168,12 +2970,11 @@ impl App {
         self.state.command_palette_list_state.select(Some(i));
     }
     pub fn keybind_list_maker(&mut self) {
-
         let keybinds = &self.config.keybindings;
         let default_actions = &self.actions;
         let keybind_action_iter = keybinds.iter();
         let mut keybind_action_list: Vec<Vec<String>> = Vec::new();
-    
+
         for (action, keys) in keybind_action_iter {
             let mut keybind_action = Vec::new();
             let mut keybind_string = String::new();
@@ -2182,18 +2983,21 @@ impl App {
                 keybind_string.push_str(" ");
             }
             keybind_action.push(keybind_string);
-            let action_translated_string = KeyBindings::str_to_action(keybinds.clone(), action).unwrap_or_else(|| &Action::Quit).to_string();
+            let action_translated_string = KeyBindings::str_to_action(keybinds.clone(), action)
+                .unwrap_or_else(|| &Action::Quit)
+                .to_string();
             keybind_action.push(action_translated_string);
             keybind_action_list.push(keybind_action);
         }
-    
+
         let default_action_iter = default_actions.actions().iter();
         // append to keybind_action_list if the keybind is not already in the list
         for action in default_action_iter {
             let str_action = action.to_string();
             if !keybind_action_list.iter().any(|x| x[1] == str_action) {
                 let mut keybind_action = Vec::new();
-                let action_keys = action.keys()
+                let action_keys = action
+                    .keys()
                     .iter()
                     .map(|x| x.to_string())
                     .collect::<Vec<String>>()
@@ -2208,25 +3012,49 @@ impl App {
 
     pub fn send_info_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
-            self.state.toasts.push(ToastWidget::new(message.to_string(), duration, ToastType::Info));
+            self.state.toasts.push(ToastWidget::new(
+                message.to_string(),
+                duration,
+                ToastType::Info,
+            ));
         } else {
-            self.state.toasts.push(ToastWidget::new(message.to_string(), Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Info));
+            self.state.toasts.push(ToastWidget::new(
+                message.to_string(),
+                Duration::from_secs(DEFAULT_TOAST_DURATION),
+                ToastType::Info,
+            ));
         }
     }
 
     pub fn send_error_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
-            self.state.toasts.push(ToastWidget::new(message.to_string(), duration, ToastType::Error));
+            self.state.toasts.push(ToastWidget::new(
+                message.to_string(),
+                duration,
+                ToastType::Error,
+            ));
         } else {
-            self.state.toasts.push(ToastWidget::new(message.to_string(), Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Error));
+            self.state.toasts.push(ToastWidget::new(
+                message.to_string(),
+                Duration::from_secs(DEFAULT_TOAST_DURATION),
+                ToastType::Error,
+            ));
         }
     }
 
     pub fn send_warning_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
-            self.state.toasts.push(ToastWidget::new(message.to_string(), duration, ToastType::Warning));
+            self.state.toasts.push(ToastWidget::new(
+                message.to_string(),
+                duration,
+                ToastType::Warning,
+            ));
         } else {
-            self.state.toasts.push(ToastWidget::new(message.to_string(), Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning));
+            self.state.toasts.push(ToastWidget::new(
+                message.to_string(),
+                Duration::from_secs(DEFAULT_TOAST_DURATION),
+                ToastType::Warning,
+            ));
         }
     }
 
@@ -2265,7 +3093,7 @@ pub enum MainMenuItem {
     Config,
     Help,
     LoadSave,
-    Quit
+    Quit,
 }
 
 impl Display for MainMenuItem {
@@ -2281,7 +3109,7 @@ impl Display for MainMenuItem {
 }
 
 pub struct MainMenu {
-    pub items: Vec<MainMenuItem>
+    pub items: Vec<MainMenuItem>,
 }
 
 impl MainMenu {
@@ -2302,7 +3130,7 @@ impl MainMenu {
             2 => MainMenuItem::Help,
             3 => MainMenuItem::LoadSave,
             4 => MainMenuItem::Quit,
-            _ => MainMenuItem::Quit
+            _ => MainMenuItem::Quit,
         }
     }
 }
@@ -2361,7 +3189,7 @@ pub struct AppState {
     pub card_status_selector_state: ListState,
     pub prev_ui_mode: Option<UiMode>,
     pub debug_menu_toggled: bool,
-    pub ui_render_time: Option<u128>
+    pub ui_render_time: Option<u128>,
 }
 
 impl Default for AppState {
@@ -2394,7 +3222,7 @@ impl Default for AppState {
             card_status_selector_state: ListState::default(),
             prev_ui_mode: None,
             debug_menu_toggled: false,
-            ui_render_time: None
+            ui_render_time: None,
         }
     }
 }
@@ -2433,15 +3261,39 @@ impl AppConfig {
 
     pub fn to_list(&self) -> Vec<Vec<String>> {
         vec![
-            vec![String::from("Save Directory"), self.save_directory.to_str().unwrap().to_string()],
-            vec![String::from("Select Default View"), self.default_view.to_string()],
-            vec![String::from("Auto Load Last Save"), self.always_load_last_save.to_string()],
-            vec![String::from("Auto Save on Exit"), self.save_on_exit.to_string()],
-            vec![String::from("Disable Scrollbars"), self.disable_scrollbars.to_string()],
-            vec![String::from("Number of Days to Warn Before Due Date"), self.warning_delta.to_string()],
+            vec![
+                String::from("Save Directory"),
+                self.save_directory.to_str().unwrap().to_string(),
+            ],
+            vec![
+                String::from("Select Default View"),
+                self.default_view.to_string(),
+            ],
+            vec![
+                String::from("Auto Load Last Save"),
+                self.always_load_last_save.to_string(),
+            ],
+            vec![
+                String::from("Auto Save on Exit"),
+                self.save_on_exit.to_string(),
+            ],
+            vec![
+                String::from("Disable Scrollbars"),
+                self.disable_scrollbars.to_string(),
+            ],
+            vec![
+                String::from("Number of Days to Warn Before Due Date"),
+                self.warning_delta.to_string(),
+            ],
             vec![String::from("Tickrate"), self.tickrate.to_string()],
-            vec![String::from("Number of Cards to Show per board"), self.no_of_cards_to_show.to_string()],
-            vec![String::from("Number of Boards to Show"), self.no_of_boards_to_show.to_string()],
+            vec![
+                String::from("Number of Cards to Show per board"),
+                self.no_of_cards_to_show.to_string(),
+            ],
+            vec![
+                String::from("Number of Boards to Show"),
+                self.no_of_boards_to_show.to_string(),
+            ],
             vec![String::from("Edit Keybindings")],
         ]
     }
@@ -2461,8 +3313,8 @@ impl AppConfig {
                         config.save_directory = new_path;
                     } else {
                         error!("Invalid path: {}", value);
-                        app.send_error_toast(&format!("Invalid path: {}", value),None);
-                        app.send_info_toast("Check if the path exists",None);
+                        app.send_error_toast(&format!("Invalid path: {}", value), None);
+                        app.send_info_toast("Check if the path exists", None);
                     }
                 }
                 "Select Default View" => {
@@ -2471,7 +3323,7 @@ impl AppConfig {
                         config.default_view = new_ui_mode.unwrap();
                     } else {
                         error!("Invalid UiMode: {}", value);
-                        app.send_error_toast(&format!("Invalid UiMode: {}", value),None);
+                        app.send_error_toast(&format!("Invalid UiMode: {}", value), None);
                         info!("Valid UiModes are: {:?}", UiMode::all());
                     }
                 }
@@ -2482,7 +3334,7 @@ impl AppConfig {
                         config.always_load_last_save = false;
                     } else {
                         error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value),None);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
                     }
                 }
                 "Auto Save on Exit" => {
@@ -2492,7 +3344,7 @@ impl AppConfig {
                         config.save_on_exit = false;
                     } else {
                         error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value),None);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
                     }
                 }
                 "Disable Scrollbars" => {
@@ -2502,7 +3354,7 @@ impl AppConfig {
                         config.disable_scrollbars = false;
                     } else {
                         error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value),None);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
                     }
                 }
                 "Number of Days to Warn Before Due Date" => {
@@ -2511,7 +3363,10 @@ impl AppConfig {
                         config.warning_delta = new_delta.unwrap();
                     } else {
                         error!("Invalid number: {}", value);
-                        app.send_error_toast(&format!("Expected number of days (integer), got: {}", value),None);
+                        app.send_error_toast(
+                            &format!("Expected number of days (integer), got: {}", value),
+                            None,
+                        );
                     }
                 }
                 "Tickrate" => {
@@ -2520,21 +3375,32 @@ impl AppConfig {
                         let new_tickrate = new_tickrate.unwrap();
                         // make sure tickrate is not too low or too high
                         if new_tickrate < 50 {
-                            error!("Tickrate must be greater than 50ms, to avoid overloading the CPU");
-                            app.send_error_toast("Tickrate must be greater than 50ms, to avoid overloading the CPU",None);
+                            error!(
+                                "Tickrate must be greater than 50ms, to avoid overloading the CPU"
+                            );
+                            app.send_error_toast(
+                                "Tickrate must be greater than 50ms, to avoid overloading the CPU",
+                                None,
+                            );
                         } else if new_tickrate > 1000 {
                             error!("Tickrate must be less than 1000ms");
-                            app.send_error_toast("Tickrate must be less than 1000ms",None);
+                            app.send_error_toast("Tickrate must be less than 1000ms", None);
                         } else {
                             config.tickrate = new_tickrate;
                             info!("Tickrate set to {}ms", new_tickrate);
                             info!("Restart the program to apply changes");
                             info!("If experiencing slow input, or stuttering, try adjusting the tickrate");
-                            app.send_info_toast(&format!("Tickrate set to {}ms", new_tickrate),None);
+                            app.send_info_toast(
+                                &format!("Tickrate set to {}ms", new_tickrate),
+                                None,
+                            );
                         }
                     } else {
                         error!("Invalid number: {}", value);
-                        app.send_error_toast(&format!("Expected number of milliseconds (integer), got: {}", value),None);
+                        app.send_error_toast(
+                            &format!("Expected number of milliseconds (integer), got: {}", value),
+                            None,
+                        );
                     }
                 }
                 "Number of Cards to Show per board" => {
@@ -2542,18 +3408,45 @@ impl AppConfig {
                     if new_no_cards.is_ok() {
                         let unwrapped = new_no_cards.unwrap();
                         if unwrapped < MIN_NO_CARDS_PER_BOARD {
-                            error!("Number of cards must be greater than {}", MIN_NO_CARDS_PER_BOARD);
-                            app.send_error_toast(&format!("Number of cards must be greater than {}", MIN_NO_CARDS_PER_BOARD),None);
+                            error!(
+                                "Number of cards must be greater than {}",
+                                MIN_NO_CARDS_PER_BOARD
+                            );
+                            app.send_error_toast(
+                                &format!(
+                                    "Number of cards must be greater than {}",
+                                    MIN_NO_CARDS_PER_BOARD
+                                ),
+                                None,
+                            );
                         } else if unwrapped > MAX_NO_CARDS_PER_BOARD {
-                            error!("Number of cards must be less than {}", MAX_NO_CARDS_PER_BOARD);
-                            app.send_error_toast(&format!("Number of cards must be less than {}", MAX_NO_CARDS_PER_BOARD),None);
+                            error!(
+                                "Number of cards must be less than {}",
+                                MAX_NO_CARDS_PER_BOARD
+                            );
+                            app.send_error_toast(
+                                &format!(
+                                    "Number of cards must be less than {}",
+                                    MAX_NO_CARDS_PER_BOARD
+                                ),
+                                None,
+                            );
                         } else {
                             config.no_of_cards_to_show = unwrapped;
-                            app.send_info_toast(&format!("Number of cards per board to display set to {}", unwrapped),None);
+                            app.send_info_toast(
+                                &format!(
+                                    "Number of cards per board to display set to {}",
+                                    unwrapped
+                                ),
+                                None,
+                            );
                         }
                     } else {
                         error!("Invalid number: {}", value);
-                        app.send_error_toast(&format!("Expected number of cards (integer), got: {}", value),None);
+                        app.send_error_toast(
+                            &format!("Expected number of cards (integer), got: {}", value),
+                            None,
+                        );
                     }
                 }
                 "Number of Boards to Show" => {
@@ -2561,23 +3454,47 @@ impl AppConfig {
                     if new_no_boards.is_ok() {
                         let unwrapped = new_no_boards.unwrap();
                         if unwrapped < MIN_NO_BOARDS_PER_PAGE {
-                            error!("Number of boards must be greater than {}", MIN_NO_BOARDS_PER_PAGE);
-                            app.send_error_toast(&format!("Number of boards must be greater than {}", MIN_NO_BOARDS_PER_PAGE),None);
+                            error!(
+                                "Number of boards must be greater than {}",
+                                MIN_NO_BOARDS_PER_PAGE
+                            );
+                            app.send_error_toast(
+                                &format!(
+                                    "Number of boards must be greater than {}",
+                                    MIN_NO_BOARDS_PER_PAGE
+                                ),
+                                None,
+                            );
                         } else if unwrapped > MAX_NO_BOARDS_PER_PAGE {
-                            error!("Number of boards must be less than {}", MAX_NO_BOARDS_PER_PAGE);
-                            app.send_error_toast(&format!("Number of boards must be less than {}", MAX_NO_BOARDS_PER_PAGE),None);
+                            error!(
+                                "Number of boards must be less than {}",
+                                MAX_NO_BOARDS_PER_PAGE
+                            );
+                            app.send_error_toast(
+                                &format!(
+                                    "Number of boards must be less than {}",
+                                    MAX_NO_BOARDS_PER_PAGE
+                                ),
+                                None,
+                            );
                         } else {
                             config.no_of_boards_to_show = unwrapped;
-                            app.send_info_toast(&format!("Number of boards to display set to {}", unwrapped),None);
+                            app.send_info_toast(
+                                &format!("Number of boards to display set to {}", unwrapped),
+                                None,
+                            );
                         }
                     } else {
                         error!("Invalid number: {}", value);
-                        app.send_error_toast(&format!("Expected number of boards (integer), got: {}", value),None);
+                        app.send_error_toast(
+                            &format!("Expected number of boards (integer), got: {}", value),
+                            None,
+                        );
                     }
                 }
                 _ => {
                     debug!("Invalid key: {}", key);
-                    app.send_error_toast("Something went wrong 😢 ",None);
+                    app.send_error_toast("Something went wrong 😢 ", None);
                     return config;
                 }
             }
@@ -2588,7 +3505,7 @@ impl AppConfig {
 
     pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) -> Result<(), String> {
         // make sure key is not empty, or already assigned
-        
+
         let get_config_status = get_config(false);
         let config = if get_config_status.is_err() {
             debug!("Error getting config: {}", get_config_status.unwrap_err());
@@ -2608,7 +3525,7 @@ impl AppConfig {
             debug!("Invalid key index: {}", key_index);
             error!("Unable to edit keybinding");
             return Err("Unable to edit keybinding 😢 ".to_string());
-        }   
+        }
         let (key, _) = key_list[key_index];
 
         // check if key is present in current bindings if not, return error
@@ -2624,7 +3541,7 @@ impl AppConfig {
                     error!("Value {} is already assigned to {}", new_value, k);
                     return Err(format!("Value {} is already assigned to {}", new_value, k));
                 }
-            }          
+            }
         }
 
         debug!("Editing keybinding: {} to {:?}", key, value);
@@ -2645,7 +3562,9 @@ impl AppConfig {
             "new_card" => self.keybindings.new_card = value,
             "delete_card" => self.keybindings.delete_card = value,
             "delete_board" => self.keybindings.delete_board = value,
-            "change_card_status_to_completed" => self.keybindings.change_card_status_to_completed = value,
+            "change_card_status_to_completed" => {
+                self.keybindings.change_card_status_to_completed = value
+            }
             "change_card_status_to_active" => self.keybindings.change_card_status_to_active = value,
             "change_card_status_to_stale" => self.keybindings.change_card_status_to_stale = value,
             "reset_ui" => self.keybindings.reset_ui = value,
@@ -2657,7 +3576,7 @@ impl AppConfig {
         }
         Ok(())
     }
-    
+
     pub fn len(&self) -> usize {
         self.to_list().len()
     }

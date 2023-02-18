@@ -1,12 +1,5 @@
-use std::fmt::{
-    self,
-    Display,
-    Formatter
-};
-use serde::{
-    Serialize,
-    Deserialize
-};
+use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display, Formatter};
 
 use crossterm::event;
 

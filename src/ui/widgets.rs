@@ -1,17 +1,11 @@
-use std::{
-    time::Duration,
-    sync::Arc,
-};
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
+use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
 use crate::{
     app::{App, PopupMode},
-    constants::{
-        TOAST_FADE_OUT_TIME,
-        TOAST_FADE_IN_TIME
-    },
-    lerp_between
+    constants::{TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
+    lerp_between,
 };
 
 #[derive(Clone, Debug)]
@@ -77,15 +71,23 @@ impl WidgetManager {
             // based on the toast_type lerp between the toast_type color and 0,0,0 within the TOAST_FADE_TIME which is in milliseconds
             if toasts[i].start_time.elapsed() < Duration::from_millis(TOAST_FADE_IN_TIME) {
                 // make the toast fade in use fade in time lerp from 0,0,0 to toast_type color
-                let t = toasts[i].start_time.elapsed().as_millis() as f32 / TOAST_FADE_IN_TIME as f32;
-                toasts[i].toast_color = lerp_between(term_background_color, toasts[i].toast_type.as_color(), t);
-            } else if toasts[i].start_time.elapsed() < toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME) {
+                let t =
+                    toasts[i].start_time.elapsed().as_millis() as f32 / TOAST_FADE_IN_TIME as f32;
+                toasts[i].toast_color =
+                    lerp_between(term_background_color, toasts[i].toast_type.as_color(), t);
+            } else if toasts[i].start_time.elapsed()
+                < toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME)
+            {
                 // make the toast stay at the toast_type color
                 toasts[i].toast_color = toasts[i].toast_type.as_color();
             } else {
                 // make the toast fade out use fade out time lerp from toast_type color to 0,0,0
-                let t = (toasts[i].start_time.elapsed() - (toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME))).as_millis() as f32 / TOAST_FADE_OUT_TIME as f32;
-                toasts[i].toast_color = lerp_between(toasts[i].toast_type.as_color(), term_background_color, t);
+                let t = (toasts[i].start_time.elapsed()
+                    - (toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME)))
+                .as_millis() as f32
+                    / TOAST_FADE_OUT_TIME as f32;
+                toasts[i].toast_color =
+                    lerp_between(toasts[i].toast_type.as_color(), term_background_color, t);
             }
             if toasts[i].start_time.elapsed() > toasts[i].duration {
                 toasts.remove(i);
@@ -93,16 +95,22 @@ impl WidgetManager {
         }
 
         // update command palette
-        if app.state.popup_mode.is_some() && app.state.popup_mode.unwrap() == PopupMode::CommandPalette {
+        if app.state.popup_mode.is_some()
+            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
+        {
             let mut search_result_changed = false;
             let current_search_results = app.command_palette.search_results.clone();
             let current_search_string = app.state.current_user_input.clone().to_lowercase();
-            let result = app.command_palette.corpus.search(&current_search_string, 0.2);
+            let result = app
+                .command_palette
+                .corpus
+                .search(&current_search_string, 0.2);
             let mut search_results = vec![];
             for item in result {
                 search_results.push(CommandPaletteActions::from_string(&item.text, true));
             }
-            let search_results: Vec<CommandPaletteActions> = search_results.into_iter().filter_map(|x| x).collect();
+            let search_results: Vec<CommandPaletteActions> =
+                search_results.into_iter().filter_map(|x| x).collect();
             // if the search results are empty, then show all commands
             let search_results = if search_results.is_empty() {
                 CommandPaletteActions::all()
@@ -111,11 +119,15 @@ impl WidgetManager {
             };
             app.command_palette.search_results = Some(search_results);
             if current_search_results.is_some() {
-                if current_search_results.as_ref().unwrap().len() != app.command_palette.search_results.clone().unwrap().len() {
+                if current_search_results.as_ref().unwrap().len()
+                    != app.command_palette.search_results.clone().unwrap().len()
+                {
                     search_result_changed = true;
                 } else {
                     for i in 0..current_search_results.as_ref().unwrap().len() {
-                        if current_search_results.as_ref().unwrap()[i] != app.command_palette.search_results.clone().unwrap()[i] {
+                        if current_search_results.as_ref().unwrap()[i]
+                            != app.command_palette.search_results.clone().unwrap()[i]
+                        {
                             search_result_changed = true;
                             break;
                         }
@@ -138,23 +150,20 @@ impl WidgetManager {
 pub struct CommandPalette {
     pub search_results: Option<Vec<CommandPaletteActions>>,
     pub available_commands: Vec<CommandPaletteActions>,
-    pub corpus: Corpus
+    pub corpus: Corpus,
 }
 
 impl CommandPalette {
     pub fn new() -> Self {
         let available_commands = CommandPaletteActions::all();
-        let mut corpus = CorpusBuilder::new()
-            .arity(2)
-            .pad_full(Pad::Auto)
-            .finish();
+        let mut corpus = CorpusBuilder::new().arity(2).pad_full(Pad::Auto).finish();
         for command in available_commands {
             corpus.add_text(command.as_str().to_lowercase().as_str());
         }
         Self {
             search_results: None,
             available_commands: CommandPaletteActions::all(),
-            corpus
+            corpus,
         }
     }
 }
@@ -173,7 +182,7 @@ pub enum CommandPaletteActions {
     ChangeUIMode,
     ChangeCurrentCardStatus,
     DebugMenu,
-    Quit
+    Quit,
 }
 
 impl CommandPaletteActions {
@@ -241,7 +250,7 @@ impl CommandPaletteActions {
                 "toggle debug panel" => Some(Self::DebugMenu),
                 "quit" => Some(Self::Quit),
                 _ => None,
-            }
+            };
         } else {
             return match s {
                 "Export to JSON" => Some(Self::ExportToJSON),
@@ -258,7 +267,7 @@ impl CommandPaletteActions {
                 "Toggle Debug Panel" => Some(Self::DebugMenu),
                 "Quit" => Some(Self::Quit),
                 _ => None,
-            }
+            };
         }
     }
 }

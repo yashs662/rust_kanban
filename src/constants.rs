@@ -1,8 +1,4 @@
-use tui::style::{
-    Style,
-    Color,
-    Modifier
-};
+use tui::style::{Color, Modifier, Style};
 
 pub const FIELD_NOT_SET: &str = "Not Set";
 pub const CONFIG_FILE_NAME: &str = "config.json";
@@ -24,7 +20,7 @@ pub const LIST_SELECTED_SYMBOL: &str = ">> ";
 pub const VERTICAL_SCROLL_BAR_SYMBOL: &str = "█";
 pub const DEFAULT_CARD_WARNING_DUE_DATE_DAYS: u16 = 3;
 pub const MAX_TOASTS_TO_DISPLAY: usize = 5;
-pub const SCREEN_TO_TOAST_WIDTH_RATIO: u16 = 3;  // 1/3rd of the screen width
+pub const SCREEN_TO_TOAST_WIDTH_RATIO: u16 = 3; // 1/3rd of the screen width
 pub const TOAST_FADE_OUT_TIME: u64 = 400;
 pub const TOAST_FADE_IN_TIME: u64 = 200;
 pub const DEFAULT_TICKRATE: u64 = 50;
@@ -32,7 +28,7 @@ pub const DEFAULT_TOAST_DURATION: u64 = 5;
 pub const IO_EVENT_WAIT_TIME: u64 = 5; // ms
 
 // Style
-pub const DEFAULT_STYLE: Style = Style{
+pub const DEFAULT_STYLE: Style = Style {
     fg: Some(Color::White),
     bg: Some(Color::Reset),
     add_modifier: Modifier::empty(),

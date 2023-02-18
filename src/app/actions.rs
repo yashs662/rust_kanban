@@ -1,16 +1,13 @@
 use std::collections::HashMap;
-use std::fmt::{
-    self,
-    Display
-};
+use std::fmt::{self, Display};
 use std::slice::Iter;
 
 use log::debug;
 
+use super::state::KeyBindings;
 use crate::app::AppConfig;
 use crate::inputs::key::Key;
 use crate::io::data_handler::get_config;
-use super::state::KeyBindings;
 
 /// We define all available action
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -41,7 +38,7 @@ pub enum Action {
     ChangeCardStatusToStale,
     ResetUI,
     GoToMainMenu,
-    ToggleCommandPalette
+    ToggleCommandPalette,
 }
 
 impl Action {
@@ -74,7 +71,7 @@ impl Action {
             Action::ChangeCardStatusToStale,
             Action::ResetUI,
             Action::GoToMainMenu,
-            Action::ToggleCommandPalette
+            Action::ToggleCommandPalette,
         ];
         ACTIONS.iter()
     }
@@ -108,7 +105,7 @@ impl Action {
             Action::ChangeCardStatusToStale => &[Key::Char('3')],
             Action::ResetUI => &[Key::Char('r')],
             Action::GoToMainMenu => &[Key::Char('m')],
-            Action::ToggleCommandPalette => &[Key::Ctrl('p')]
+            Action::ToggleCommandPalette => &[Key::Ctrl('p')],
         }
     }
 
@@ -147,7 +144,7 @@ impl Display for Action {
             Action::ChangeCardStatusToStale => "Change card status to stale",
             Action::ResetUI => "Reset UI",
             Action::GoToMainMenu => "Go to main menu",
-            Action::ToggleCommandPalette => "Open command palette"
+            Action::ToggleCommandPalette => "Open command palette",
         };
         write!(f, "{}", str)
     }
@@ -170,7 +167,10 @@ impl Actions {
         let current_bindings = config.keybindings.clone();
         let action_list = &mut Vec::new();
         for (k, _v) in current_bindings.iter() {
-            action_list.push(KeyBindings::str_to_action(current_bindings.clone(), k.clone()));
+            action_list.push(KeyBindings::str_to_action(
+                current_bindings.clone(),
+                k.clone(),
+            ));
         }
         let binding_action = KeyBindings::key_to_action(config.keybindings.clone(), key);
         if binding_action.is_some() {
@@ -254,12 +254,7 @@ mod tests {
 
     #[test]
     fn should_create_actions_from_vec() {
-        let _actions: Actions = vec![
-            Action::Quit,
-            Action::NextFocus,
-            Action::PrvFocus,
-        ]
-        .into();
+        let _actions: Actions = vec![Action::Quit, Action::NextFocus, Action::PrvFocus].into();
     }
 
     #[test]
