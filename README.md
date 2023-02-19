@@ -32,7 +32,7 @@
 - [x] Logging
   
 ## Known Issues
-None till now, please let me know if you find any bugs
+Moving Cards around causes cards to be invisible, pressing reset ui remedies this issue
 
 ## How to use
 ### Default Keybindings

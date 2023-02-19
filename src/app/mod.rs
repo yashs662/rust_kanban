@@ -2385,10 +2385,6 @@ impl App {
                                             [current_board_index_in_all_boards.unwrap()]
                                         .cards[current_card_index_in_all + 1]
                                             .id;
-                                        debug!(
-                                            "Current card id: {}, card below id: {}",
-                                            current_card_id, card_below_id
-                                        );
                                         let mut visible_cards: Vec<u128> = vec![];
                                         visible_cards.push(card_below_id);
                                         visible_cards.push(current_card_id);
@@ -2417,10 +2413,6 @@ impl App {
                                                 current_card_index_in_visible + 1,
                                             );
                                     }
-                                    debug!(
-                                        "current cards: {:?}",
-                                        self.visible_boards_and_cards[&current_board_id]
-                                    );
                                     self.boards[current_board_index_in_all_boards.unwrap()]
                                         .cards
                                         .swap(
@@ -2685,10 +2677,6 @@ impl App {
             + Duration::from_millis(IO_EVENT_WAIT_TIME)
             > Instant::now()
         {
-            self.send_error_toast(
-                &format!("Please wait before sending another request - {:?}", action),
-                None,
-            );
             tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
         }
         self.last_io_event_time = Some(Instant::now());
