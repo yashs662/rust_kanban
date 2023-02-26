@@ -265,7 +265,7 @@ impl IoAsyncHandler {
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
             if current_board_index_in_all_boards == all_boards.len() - 1 {
                 // we are at the last board, we cannot go right
-                app.send_error_toast("Cannot go right: already at the last board", None);
+                app.send_error_toast("Cannot go right: Already at the last board", None);
                 return Ok(());
             }
             // we are not at the last board, we can go right
@@ -361,7 +361,7 @@ impl IoAsyncHandler {
             let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
             if current_board_index_in_all_boards == 0 {
                 // we are at the first board, we cannot go left
-                app.send_error_toast("Cannot go left: already at the first board", None);
+                app.send_error_toast("Cannot go left: Already at the first board", None);
                 return Ok(());
             }
             // we are not at the first board, we can go left
@@ -479,6 +479,7 @@ impl IoAsyncHandler {
             let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
             if current_card_index_in_all_cards == 0 {
                 // we are at the first card, we cannot go up
+                app.send_error_toast("Cannot go up: Already at the first card", None);
                 return Ok(());
             }
             // we are not at the first card, we can go up
@@ -606,6 +607,7 @@ impl IoAsyncHandler {
                     - 1
             {
                 // we are at the last card, we cannot go down
+                app.send_error_toast("Cannot go down: Already at the last card", None);
                 return Ok(());
             }
             // we are not at the last card, we can go down

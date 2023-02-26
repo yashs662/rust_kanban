@@ -1199,6 +1199,7 @@ impl App {
                                     if self.state.config_state.selected().is_none() {
                                         self.config_next();
                                     }
+                                    refresh_visible_boards_and_cards(self);
                                 }
                                 self.state.config_state.select(Some(0));
                             } else if self.state.popup_mode.as_ref().unwrap()
@@ -2435,28 +2436,36 @@ impl App {
                                     return AppReturn::Continue;
                                 } else {
                                     if let Some(current_board) = self.state.current_board_id {
-                                        let board_index = self
+                                        let moved_from_board_index = self
                                             .boards
                                             .iter()
                                             .position(|board| board.id == current_board);
+                                        if moved_from_board_index.is_none() {
+                                            self.send_error_toast("Something went wrong, could not find the board", None);
+                                            debug!("Moved from board index is none");
+                                            return AppReturn::Continue;
+                                        }
+                                        let moved_from_board_index = moved_from_board_index.unwrap();
                                         // check if board is the last board
-                                        if board_index.unwrap() < self.boards.len() - 1 {
+                                        if moved_from_board_index < self.boards.len() - 1 {
+                                            let moved_to_board_index = moved_from_board_index
+                                                + 1;
                                             if let Some(current_card) = self.state.current_card_id {
-                                                let card_index = self.boards[board_index.unwrap()]
+                                                let card_index = self.boards[moved_from_board_index]
                                                     .cards
                                                     .iter()
                                                     .position(|card| card.id == current_card);
                                                 if let Some(card_index) = card_index {
-                                                    let card = self.boards[board_index.unwrap()]
+                                                    let card = self.boards[moved_from_board_index]
                                                         .cards
                                                         .remove(card_index);
                                                     let card_id = card.id;
                                                     let card_name = card.name.clone();
-                                                    self.boards[board_index.unwrap() + 1]
+                                                    self.boards[moved_to_board_index]
                                                         .cards
                                                         .push(card);
                                                     // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
-                                                    if self.boards[board_index.unwrap() + 1]
+                                                    if self.boards[moved_to_board_index]
                                                         .cards
                                                         .len()
                                                         <= self.config.no_of_cards_to_show as usize
@@ -2464,7 +2473,7 @@ impl App {
                                                         self.visible_boards_and_cards
                                                             .entry(
                                                                 self.boards
-                                                                    [board_index.unwrap() + 1]
+                                                                    [moved_to_board_index]
                                                                     .id,
                                                             )
                                                             .and_modify(|cards| {
@@ -2473,46 +2482,70 @@ impl App {
                                                     }
                                                     // remove the moved card from visible cards for the current board
                                                     self.visible_boards_and_cards
-                                                        .entry(self.boards[board_index.unwrap()].id)
+                                                        .entry(self.boards[moved_from_board_index].id)
                                                         .and_modify(|cards| {
                                                             cards.retain(|card_id| {
                                                                 *card_id != current_card
                                                             })
                                                         });
                                                     // set the visible cards to the last no_of_cards_to_show cards
-                                                    let mut visible_cards: Vec<u128> = vec![];
+                                                    let mut moved_to_board_visible_cards: Vec<u128> = vec![];
+                                                    let mut moved_from_board_visible_cards: Vec<u128> = vec![];
                                                     for card in self.boards
-                                                        [board_index.unwrap() + 1]
+                                                        [moved_to_board_index]
                                                         .cards
                                                         .iter()
                                                         .rev()
                                                     {
-                                                        if visible_cards.len()
+                                                        if moved_to_board_visible_cards.len()
                                                             < self.config.no_of_cards_to_show
                                                                 as usize
                                                         {
-                                                            visible_cards.insert(0, card.id);
+                                                            moved_to_board_visible_cards.insert(0, card.id);
+                                                        }
+                                                    }
+                                                    for card in self.boards
+                                                        [moved_from_board_index]
+                                                        .cards
+                                                        .iter()
+                                                        .rev()
+                                                    {
+                                                        if moved_from_board_visible_cards.len()
+                                                            < self.config.no_of_cards_to_show
+                                                                as usize
+                                                            && !moved_to_board_visible_cards
+                                                                .contains(&card.id)
+                                                        {
+                                                            moved_from_board_visible_cards.insert(0, card.id);
                                                         }
                                                     }
                                                     self.visible_boards_and_cards
                                                         .entry(
-                                                            self.boards[board_index.unwrap() + 1]
+                                                            self.boards[moved_to_board_index]
                                                                 .id,
                                                         )
-                                                        .and_modify(|cards| *cards = visible_cards);
+                                                        .and_modify(|cards| *cards = moved_to_board_visible_cards);
+                                                    self.visible_boards_and_cards
+                                                        .entry(
+                                                            self.boards[moved_from_board_index]
+                                                                .id,
+                                                        )
+                                                        .and_modify(|cards| {
+                                                            *cards = moved_from_board_visible_cards
+                                                        });
                                                     self.state.current_board_id = Some(
-                                                        self.boards[board_index.unwrap() + 1].id,
+                                                        self.boards[moved_to_board_index].id,
                                                     );
                                                     info!(
                                                         "Moved card {} to board \"{}\"",
                                                         card_name,
-                                                        self.boards[board_index.unwrap() + 1].name
+                                                        self.boards[moved_to_board_index].name
                                                     );
                                                     self.send_info_toast(
                                                         &format!(
                                                             "Moved card {} to board \"{}\"",
                                                             card_name,
-                                                            self.boards[board_index.unwrap() + 1]
+                                                            self.boards[moved_to_board_index]
                                                                 .name
                                                         ),
                                                         None,
@@ -2545,28 +2578,36 @@ impl App {
                                     return AppReturn::Continue;
                                 } else {
                                     if let Some(current_board) = self.state.current_board_id {
-                                        let board_index = self
+                                        let moved_from_board_index = self
                                             .boards
                                             .iter()
                                             .position(|board| board.id == current_board);
+                                        if moved_from_board_index.is_none() {
+                                            self.send_error_toast("Something went wrong, could not find the board", None);
+                                            debug!("Moved from board index is none");
+                                            return AppReturn::Continue;
+                                        }
+                                        let moved_from_board_index = moved_from_board_index.unwrap();
+                                        let moved_to_board_index = moved_from_board_index
+                                            - 1;
                                         // check if board is the first board
-                                        if board_index.unwrap() > 0 {
+                                        if moved_from_board_index > 0 {
                                             if let Some(current_card) = self.state.current_card_id {
-                                                let card_index = self.boards[board_index.unwrap()]
+                                                let card_index = self.boards[moved_from_board_index]
                                                     .cards
                                                     .iter()
                                                     .position(|card| card.id == current_card);
                                                 if let Some(card_index) = card_index {
-                                                    let card = self.boards[board_index.unwrap()]
+                                                    let card = self.boards[moved_from_board_index]
                                                         .cards
                                                         .remove(card_index);
                                                     let card_id = card.id;
                                                     let card_name = card.name.clone();
-                                                    self.boards[board_index.unwrap() - 1]
+                                                    self.boards[moved_to_board_index]
                                                         .cards
                                                         .push(card);
                                                     // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
-                                                    if self.boards[board_index.unwrap() - 1]
+                                                    if self.boards[moved_to_board_index]
                                                         .cards
                                                         .len()
                                                         <= self.config.no_of_cards_to_show as usize
@@ -2574,7 +2615,7 @@ impl App {
                                                         self.visible_boards_and_cards
                                                             .entry(
                                                                 self.boards
-                                                                    [board_index.unwrap() - 1]
+                                                                    [moved_to_board_index]
                                                                     .id,
                                                             )
                                                             .and_modify(|cards| {
@@ -2583,46 +2624,70 @@ impl App {
                                                     }
                                                     // remove the moved card from visible cards for the current board
                                                     self.visible_boards_and_cards
-                                                        .entry(self.boards[board_index.unwrap()].id)
+                                                        .entry(self.boards[moved_from_board_index].id)
                                                         .and_modify(|cards| {
                                                             cards.retain(|card_id| {
                                                                 *card_id != current_card
                                                             })
                                                         });
                                                     // set the visible cards to the last no_of_cards_to_show cards
-                                                    let mut visible_cards: Vec<u128> = vec![];
+                                                    let mut moved_to_board_visible_cards: Vec<u128> = vec![];
+                                                    let mut moved_from_board_visible_cards: Vec<u128> = vec![];
                                                     for card in self.boards
-                                                        [board_index.unwrap() - 1]
+                                                        [moved_to_board_index]
                                                         .cards
                                                         .iter()
                                                         .rev()
                                                     {
-                                                        if visible_cards.len()
+                                                        if moved_to_board_visible_cards.len()
                                                             < self.config.no_of_cards_to_show
                                                                 as usize
                                                         {
-                                                            visible_cards.insert(0, card.id);
+                                                            moved_to_board_visible_cards.insert(0, card.id);
+                                                        }
+                                                    }
+                                                    for card in self.boards
+                                                        [moved_from_board_index]
+                                                        .cards
+                                                        .iter()
+                                                        .rev()
+                                                    {
+                                                        if moved_from_board_visible_cards.len()
+                                                            < self.config.no_of_cards_to_show
+                                                                as usize
+                                                            && !moved_to_board_visible_cards
+                                                                .contains(&card.id)
+                                                        {
+                                                            moved_from_board_visible_cards.insert(0, card.id);
                                                         }
                                                     }
                                                     self.visible_boards_and_cards
                                                         .entry(
-                                                            self.boards[board_index.unwrap() - 1]
+                                                            self.boards[moved_to_board_index]
                                                                 .id,
                                                         )
-                                                        .and_modify(|cards| *cards = visible_cards);
+                                                        .and_modify(|cards| *cards = moved_to_board_visible_cards);
+                                                    self.visible_boards_and_cards
+                                                        .entry(
+                                                            self.boards[moved_from_board_index]
+                                                                .id,
+                                                        )
+                                                        .and_modify(|cards| {
+                                                            *cards = moved_from_board_visible_cards
+                                                        });
                                                     self.state.current_board_id = Some(
-                                                        self.boards[board_index.unwrap() - 1].id,
+                                                        self.boards[moved_to_board_index].id,
                                                     );
                                                     info!(
                                                         "Moved card {} to board \"{}\"",
                                                         card_name,
-                                                        self.boards[board_index.unwrap() - 1].name
+                                                        self.boards[moved_to_board_index].name
                                                     );
                                                     self.send_info_toast(
                                                         &format!(
                                                             "Moved card {} to board \"{}\"",
                                                             card_name,
-                                                            self.boards[board_index.unwrap() - 1]
+                                                            self.boards[moved_to_board_index]
                                                                 .name
                                                         ),
                                                         None,

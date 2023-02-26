@@ -1,4 +1,5 @@
 use clap::Parser;
+use crossterm::terminal;
 use std::sync::Arc;
 
 use eyre::Result;
@@ -20,6 +21,15 @@ struct CliArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+
+    // Handling Panic when terminal is in raw mode
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        _ = terminal::disable_raw_mode();
+        println!();
+        default_panic(info);
+    }));
+
     // parse cli args
     let args = CliArgs::parse();
 
