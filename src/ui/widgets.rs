@@ -8,8 +8,9 @@ use crate::{
     lerp_between,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToastWidget {
+    pub title: String,
     pub message: String,
     pub duration: Duration,
     pub start_time: Instant,
@@ -20,6 +21,22 @@ pub struct ToastWidget {
 impl ToastWidget {
     pub fn new(message: String, duration: Duration, toast_type: ToastType) -> Self {
         Self {
+            title: toast_type.as_str().to_string(),
+            message,
+            duration,
+            start_time: Instant::now(),
+            toast_type: toast_type.clone(),
+            toast_color: toast_type.as_color(),
+        }
+    }
+    pub fn new_with_title(
+        title: String,
+        message: String,
+        duration: Duration,
+        toast_type: ToastType,
+    ) -> Self {
+        Self {
+            title,
             message,
             duration,
             start_time: Instant::now(),
@@ -29,11 +46,12 @@ impl ToastWidget {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToastType {
     Error,
     Warning,
     Info,
+    Loading,
 }
 
 impl ToastType {
@@ -42,6 +60,7 @@ impl ToastType {
             Self::Error => "Error",
             Self::Warning => "Warning",
             Self::Info => "Info",
+            Self::Loading => "Loading",
         }
     }
     pub fn as_color(&self) -> (u8, u8, u8) {
@@ -49,6 +68,7 @@ impl ToastType {
             Self::Error => (255, 0, 0),
             Self::Warning => (255, 255, 0),
             Self::Info => (0, 255, 255),
+            Self::Loading => (0, 255, 0),
         }
     }
 }

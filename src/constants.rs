@@ -154,3 +154,6 @@ pub const CARD_PRIORITY_HIGH_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
+pub const SPINNER_FRAMES: [&str; 7] = [
+    "[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]",
+];

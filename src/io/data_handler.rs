@@ -134,8 +134,33 @@ pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError
     for file in files {
         let file = file?;
         let file_name = file.file_name().into_string().unwrap();
-        if file_name.contains(SAVE_FILE_NAME) {
-            version += 1;
+        if file_name.contains(SAVE_FILE_NAME)
+            && file_name.contains(chrono::Local::now().format("%d-%m-%Y").to_string().as_str())
+        {
+            let file_version = file_name.split("_").last();
+            if file_version.is_none() {
+                debug!("File version not found");
+                continue;
+            } else {
+                // remove v from version number and find max of version numbers
+                let file_version = file_version.unwrap().replace("v", "");
+                let file_version = file_version.parse::<u32>();
+                if file_version.is_err() {
+                    debug!(
+                        "Error parsing version number: {}",
+                        file_version.unwrap_err()
+                    );
+                    continue;
+                } else {
+                    let file_version = file_version.unwrap();
+                    if file_version > version {
+                        version = file_version;
+                        version += 1;
+                    } else if file_version == version {
+                        version += 1;
+                    }
+                }
+            }
         }
     }
     let file_name = format!(

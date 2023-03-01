@@ -8,7 +8,7 @@ use crate::constants::{
     FIELD_NOT_SET, FOCUSED_ELEMENT_STYLE, HELP_KEY_STYLE, INACTIVE_TEXT_STYLE,
     LIST_SELECTED_SYMBOL, LIST_SELECT_STYLE, LOG_DEBUG_STYLE, LOG_ERROR_STYLE, LOG_INFO_STYLE,
     LOG_TRACE_STYLE, LOG_WARN_STYLE, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
-    PROGRESS_BAR_STYLE, SCREEN_TO_TOAST_WIDTH_RATIO, VERTICAL_SCROLL_BAR_SYMBOL,
+    PROGRESS_BAR_STYLE, SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
 };
 use chrono::{Local, NaiveDateTime};
 use log::debug;
@@ -2340,14 +2340,66 @@ where
     B: Backend,
 {
     // get the latest MAX_TOASTS_TO_DISPLAY number of toasts from app.state.toasts
-    let toasts = app
-        .state
-        .toasts
+    let all_toasts = &app.state.toasts;
+    let mut loading_toasts = all_toasts
         .iter()
-        .rev()
-        .take(MAX_TOASTS_TO_DISPLAY)
-        .rev()
+        .filter(|x| x.toast_type == ToastType::Loading)
         .collect::<Vec<&ToastWidget>>();
+    let toasts = if loading_toasts.len() > 0 {
+        // if loading_toasts are > MAX_TOASTS_TO_DISPLAY then put the loading toasts in the order of start time where the oldest is at the top only put MAX_TOASTS_TO_DISPLAY - 1 loading toasts and put the latest regular toast at the bottom
+        let sorted_loading_toasts = if loading_toasts.len() > MAX_TOASTS_TO_DISPLAY - 1 {
+            loading_toasts.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+            loading_toasts
+                .iter()
+                .map(|x| *x)
+                .take(MAX_TOASTS_TO_DISPLAY - 1)
+                .rev()
+                .collect::<Vec<&ToastWidget>>()
+        } else {
+            loading_toasts
+        };
+        // append the latest regular toast to the loading toasts till length is MAX_TOASTS_TO_DISPLAY
+        let mut toasts = sorted_loading_toasts;
+        let mut regular_toasts = all_toasts
+            .iter()
+            .filter(|x| x.toast_type != ToastType::Loading)
+            .collect::<Vec<&ToastWidget>>();
+        regular_toasts.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+        while toasts.len() < MAX_TOASTS_TO_DISPLAY {
+            if let Some(toast) = regular_toasts.pop() {
+                toasts.push(toast);
+            } else {
+                break;
+            }
+        }
+        // check if any more loading toasts are there and if so then append them to the toasts if there is space
+        if toasts.len() < MAX_TOASTS_TO_DISPLAY {
+            let mut loading_toasts = all_toasts
+                .iter()
+                .filter(|x| x.toast_type == ToastType::Loading)
+                .collect::<Vec<&ToastWidget>>();
+            loading_toasts.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+            while toasts.len() < MAX_TOASTS_TO_DISPLAY {
+                if let Some(toast) = loading_toasts.pop() {
+                    // check if the toast is already present in toasts
+                    if !toasts.contains(&toast) {
+                        toasts.push(toast);
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+        toasts
+    } else {
+        app.state
+            .toasts
+            .iter()
+            .rev()
+            .take(MAX_TOASTS_TO_DISPLAY)
+            .rev()
+            .collect::<Vec<&ToastWidget>>()
+    };
 
     if toasts.len() == 0 {
         return;
@@ -2355,7 +2407,7 @@ where
     let mut total_height_rendered = 1; // for messages indicator
 
     // loop through the toasts and draw them
-    for (_, toast) in toasts.iter().enumerate() {
+    for toast in toasts.iter() {
         let toast_style = Style::default().fg(tui::style::Color::Rgb(
             toast.toast_color.0,
             toast.toast_color.1,
@@ -2365,6 +2417,18 @@ where
             ToastType::Error => "Error",
             ToastType::Info => "Info",
             ToastType::Warning => "Warning",
+            ToastType::Loading => "Loading",
+        };
+        // if the toast type is loading display a spinner next to the title and use the duration.elapsed() to determine the current frame of the spinner
+        let toast_title = match toast.toast_type {
+            ToastType::Loading => {
+                let spinner_frames = &SPINNER_FRAMES;
+                let frame =
+                    (toast.start_time.elapsed().as_millis() / 100) % spinner_frames.len() as u128;
+                let frame = frame as usize;
+                format!("{} {}", spinner_frames[frame], toast_title)
+            }
+            _ => toast_title.to_string(),
         };
         let x_offset = rect.size().width - (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO);
         let lines = textwrap::wrap(
