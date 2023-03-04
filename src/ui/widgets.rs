@@ -1,10 +1,15 @@
+use log::{error, info};
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
 use crate::{
-    app::{App, PopupMode},
+    app::{
+        state::{AppStatus, Focus, UiMode},
+        App, AppReturn, PopupMode,
+    },
     constants::{TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
+    io::{data_handler::export_kanban_to_json, IoEvent},
     lerp_between,
 };
 
@@ -185,6 +190,144 @@ impl CommandPalette {
             available_commands: CommandPaletteActions::all(),
             corpus,
         }
+    }
+
+    pub async fn handle_command(app: &mut App) -> AppReturn {
+        if app.state.command_palette_list_state.selected().is_some() {
+            let command_index = app.state.command_palette_list_state.selected().unwrap();
+            let command = if app.command_palette.search_results.is_some() {
+                app.command_palette
+                    .search_results
+                    .as_ref()
+                    .unwrap()
+                    .get(command_index)
+            } else {
+                None
+            };
+            if command.is_some() {
+                match command.unwrap() {
+                    CommandPaletteActions::ExportToJSON => {
+                        let export_result = export_kanban_to_json(&app.boards);
+                        if export_result.is_ok() {
+                            let msg = format!("Exported JSON to {}", export_result.unwrap());
+                            app.send_info_toast(&msg, None);
+                            info!("{}", msg);
+                        } else {
+                            let msg =
+                                format!("Failed to export JSON: {}", export_result.unwrap_err());
+                            app.send_error_toast(&msg, None);
+                            error!("{}", msg);
+                        }
+                        app.state.popup_mode = None;
+                    }
+                    CommandPaletteActions::Quit => {
+                        info!("Quitting");
+                        return AppReturn::Exit;
+                    }
+                    CommandPaletteActions::OpenConfigMenu => {
+                        app.state.popup_mode = None;
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.ui_mode = UiMode::ConfigMenu;
+                        app.state.config_state.select(Some(0));
+                        app.state.focus = Focus::ConfigTable;
+                    }
+                    CommandPaletteActions::OpenMainMenu => {
+                        app.state.popup_mode = None;
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.ui_mode = UiMode::MainMenu;
+                        app.state.main_menu_state.select(Some(0));
+                        app.state.focus = Focus::MainMenu;
+                    }
+                    CommandPaletteActions::OpenHelpMenu => {
+                        app.state.popup_mode = None;
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.ui_mode = UiMode::HelpMenu;
+                        app.state.help_state.select(Some(0));
+                        app.state.focus = Focus::Body;
+                    }
+                    CommandPaletteActions::SaveKanbanState => {
+                        app.state.popup_mode = None;
+                        app.dispatch(IoEvent::SaveLocalData).await;
+                    }
+                    CommandPaletteActions::NewBoard => {
+                        if UiMode::view_modes().contains(&app.state.ui_mode) {
+                            app.state.popup_mode = None;
+                            app.state.prev_ui_mode = Some(app.state.ui_mode.clone());
+                            app.state.ui_mode = UiMode::NewBoard;
+                            app.state.focus = Focus::NewBoardName;
+                        } else {
+                            app.state.popup_mode = None;
+                            app.send_error_toast("Cannot create a new board in this view", None);
+                        }
+                    }
+                    CommandPaletteActions::NewCard => {
+                        if UiMode::view_modes().contains(&app.state.ui_mode) {
+                            if app.state.current_board_id.is_none() {
+                                app.send_error_toast("No board Selected / Available", None);
+                                app.state.popup_mode = None;
+                                app.state.app_status = AppStatus::Initialized;
+                                return AppReturn::Continue;
+                            }
+                            app.state.popup_mode = None;
+                            app.state.prev_ui_mode = Some(app.state.ui_mode.clone());
+                            app.state.ui_mode = UiMode::NewCard;
+                            app.state.focus = Focus::NewCardName;
+                        } else {
+                            app.state.popup_mode = None;
+                            app.send_error_toast("Cannot create a new card in this view", None);
+                        }
+                    }
+                    CommandPaletteActions::ResetUI => {
+                        app.state.popup_mode = None;
+                        let default_view = app.config.default_view.clone();
+                        app.state.ui_mode = default_view;
+                        app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
+                    }
+                    CommandPaletteActions::ChangeUIMode => {
+                        app.state.popup_mode = Some(PopupMode::ChangeUIMode);
+                    }
+                    CommandPaletteActions::ChangeCurrentCardStatus => {
+                        if UiMode::view_modes().contains(&app.state.ui_mode) {
+                            if let Some(current_board_id) = app.state.current_board_id {
+                                if let Some(current_board) =
+                                    app.boards.iter_mut().find(|b| b.id == current_board_id)
+                                {
+                                    if let Some(current_card_id) = app.state.current_card_id {
+                                        if let Some(_) = current_board
+                                            .cards
+                                            .iter_mut()
+                                            .find(|c| c.id == current_card_id)
+                                        {
+                                            app.state.popup_mode =
+                                                Some(PopupMode::ChangeCurrentCardStatus);
+                                            app.state.app_status = AppStatus::Initialized;
+                                            app.state.card_status_selector_state.select(Some(0));
+                                            return AppReturn::Continue;
+                                        }
+                                    }
+                                }
+                            }
+                            app.send_error_toast("Could not find current card", None);
+                        } else {
+                            app.state.popup_mode = None;
+                            app.send_error_toast("Cannot change card status in this view", None);
+                        }
+                    }
+                    CommandPaletteActions::LoadASave => {
+                        app.state.popup_mode = None;
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.ui_mode = UiMode::LoadSave;
+                    }
+                    CommandPaletteActions::DebugMenu => {
+                        app.state.debug_menu_toggled = !app.state.debug_menu_toggled;
+                        app.state.popup_mode = None;
+                    }
+                }
+                app.state.current_user_input = "".to_string();
+            }
+        }
+        app.state.app_status = AppStatus::Initialized;
+        AppReturn::Continue
     }
 }
 

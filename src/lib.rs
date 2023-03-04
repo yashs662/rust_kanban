@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use app::{App, AppReturn};
+use crossterm::event::EnableMouseCapture;
+use crossterm::execute;
 use eyre::Result;
 use inputs::events::Events;
 use inputs::InputEvent;
@@ -21,9 +23,15 @@ pub mod ui;
 
 pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     // Configure Crossterm backend for tui
-    let stdout = stdout();
     crossterm::terminal::enable_raw_mode()?;
-    let backend = CrosstermBackend::new(stdout);
+    {
+        let app = app.lock().await;
+        if app.config.enable_mouse_support {
+            execute!(stdout(), EnableMouseCapture)?;
+        }
+    }
+    let my_stdout = stdout();
+    let backend = CrosstermBackend::new(my_stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
     terminal.hide_cursor()?;
@@ -43,20 +51,20 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
 
     loop {
         let mut app = app.lock().await;
-        let mut states = app.state.clone();
         // Render
         let render_start_time = std::time::Instant::now();
-        terminal.draw(|rect| ui_main::draw(rect, &mut app, &mut states))?;
+        terminal.draw(|rect| ui_main::draw(rect, &mut app))?;
         let render_end_time = std::time::Instant::now();
         app.state.ui_render_time = Some(
             render_end_time
                 .duration_since(render_start_time)
-                .as_millis(),
+                .as_micros(),
         );
 
         // Handle inputs
         let result = match events.next().await {
-            InputEvent::Input(key) => app.do_action(key).await,
+            InputEvent::KeyBoardInput(key) => app.do_action(key).await,
+            InputEvent::MouseAction(mouse_action) => app.handle_mouse(mouse_action).await,
             InputEvent::Tick => AppReturn::Continue,
         };
         // Check if we should exit
@@ -67,6 +75,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     }
 
     // Restore the terminal and close application
+    execute!(stdout(), crossterm::event::DisableMouseCapture)?;
     terminal.clear()?;
     terminal.set_cursor(0, 0)?;
     terminal.show_cursor()?;

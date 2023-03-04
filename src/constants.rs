@@ -82,6 +82,12 @@ pub const FOCUSED_ELEMENT_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
+pub const MOUSE_HIGHLIGHT_STYLE: Style = Style {
+    fg: Some(Color::Rgb(255, 165, 0)),
+    bg: Some(Color::Reset),
+    add_modifier: Modifier::BOLD,
+    sub_modifier: Modifier::empty(),
+};
 pub const HELP_KEY_STYLE: Style = Style {
     fg: Some(Color::LightCyan),
     bg: Some(Color::Reset),

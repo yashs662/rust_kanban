@@ -29,9 +29,17 @@ impl Events {
             loop {
                 // poll for tick rate duration, if no event, sent tick event.
                 if crossterm::event::poll(tick_rate).unwrap() {
-                    if let crossterm::event::Event::Key(key) = crossterm::event::read().unwrap() {
+                    let event = crossterm::event::read().unwrap();
+                    if let crossterm::event::Event::Mouse(mouse_action) =
+                        event
+                    {
+                        if let Err(err) = event_tx.send(InputEvent::MouseAction(mouse_action)).await
+                        {
+                            error!("Oops!, {}", err);
+                        }
+                    } else if let crossterm::event::Event::Key(key) = event {
                         let key = Key::from(key);
-                        if let Err(err) = event_tx.send(InputEvent::Input(key)).await {
+                        if let Err(err) = event_tx.send(InputEvent::KeyBoardInput(key)).await {
                             error!("Oops!, {}", err);
                         }
                     }
@@ -55,7 +63,7 @@ impl Events {
     /// Attempts to read an event.
     pub async fn next(&mut self) -> InputEvent {
         let new_event = self.rx.recv().await.unwrap_or(InputEvent::Tick);
-        if new_event == InputEvent::Input(Key::Unknown) {
+        if new_event == InputEvent::KeyBoardInput(Key::Unknown) {
             InputEvent::Tick
         } else {
             new_event

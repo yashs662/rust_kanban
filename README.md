@@ -7,15 +7,16 @@
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
+- [ ] Allow for more mouse Interactions (Scrolling, Dragging, etc)
 - [ ] Allow Card to be modified in Card View
 - [ ] Implement Cloud saves (Google drive maybe? as I am not going to host a server)
 - [ ] Implement a way to add custom colors (Theme support)
 - [ ] Implement animations for UI elements
-- [ ] Implement a way to interact with the kanban board using the mouse (scrolling, dragging, etc)
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Implement a way to interact with the kanban board using the mouse (Only Clicking works for now)
 - [x] Added ability to export kanban data to JSON
 - [x] Implement a Command Palette (like in vs code (Ctrl + Shift + P)) as a way to interact with the app instead of using keybindings
 - [x] Implement previews for loading a save
@@ -37,30 +38,33 @@ None as of now, please let me know if you find any bugs
 ## How to use
 ### Default Keybindings
 
-| Keybinding         | Action                                    |
-| ------------------ | ---------------------------               |
-| 'Ctrl + c' or 'q'  | Quit                                      |
-| 'Tab'              | Next Focus                                |
-| 'BackTab'          | Previous Focus                            |
-| 'c'                | Open Config Menu                          |
-| 'Up'               | Move Up                                   |
-| 'Down'             | Move Down                                 |
-| 'Right'            | Move Right                                |
-| 'Left'             | Move Left                                 |
-| 'i'                | Take User Input (when filling out a form) |
-| 'h'                | Hide UI Element                           |
-| 'Ctrl + s'         | Save State                                |
-| 'b'                | New Board                                 |
-| 'n'                | New Card                                  |
-| 'd'                | Delete Card                               |
-| 'D' or 'Shift + d' | Delete Board                              |
-| '1'                | Change Card Status to Completed           |
-| '2'                | Change Card Status to Active              |
-| '3'                | Change Card Status to Stale               |
-| 'r'                | Reset UI to Default                       |
-| 'm'                | Go to Main Menu                           |
-| 'Ctrl + p'         | Toggle Command Palette                    |
-
+| Keybinding           | Action                                    |
+| ------------------   | ---------------------------               |
+| 'Ctrl + c' or 'q'    | Quit                                      |
+| 'Tab'                | Next Focus                                |
+| 'BackTab'            | Previous Focus                            |
+| 'c'                  | Open Config Menu                          |
+| 'Up'                 | Move Up                                   |
+| 'Down'               | Move Down                                 |
+| 'Right'              | Move Right                                |
+| 'Left'               | Move Left                                 |
+| 'i'                  | Take User Input (when filling out a form) |
+| 'h'                  | Hide UI Element                           |
+| 'Ctrl + s'           | Save State                                |
+| 'b'                  | New Board                                 |
+| 'n'                  | New Card                                  |
+| 'd'                  | Delete Card                               |
+| 'D' or 'Shift + d'   | Delete Board                              |
+| '1'                  | Change Card Status to Completed           |
+| '2'                  | Change Card Status to Active              |
+| '3'                  | Change Card Status to Stale               |
+| 'r'                  | Reset UI to Default                       |
+| 'm'                  | Go to Main Menu                           |
+| 'Ctrl + p'           | Toggle Command Palette                    |
+| 'Esc'                | Go to Previous UI Mode                    |
+| 'Mouse Left Click'   | Select UI Element                         |
+| 'Mouse Middle Click' | Open Command Palette                      |
+| 'Mouse Right Click'  | Go to Previous UI Mode                    |
 
 
 ## Screenshots

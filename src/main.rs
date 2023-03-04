@@ -1,5 +1,7 @@
 use clap::Parser;
-use crossterm::terminal;
+use crossterm::event::DisableMouseCapture;
+use crossterm::{execute, terminal};
+use std::io::stdout;
 use std::sync::Arc;
 
 use eyre::Result;
@@ -21,11 +23,14 @@ struct CliArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
     // Handling Panic when terminal is in raw mode
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         _ = terminal::disable_raw_mode();
+        let execute_result = execute!(stdout(), DisableMouseCapture);
+        if let Err(e) = execute_result {
+            println!("Error while disabling mouse capture: {}", e);
+        }
         println!();
         default_panic(info);
     }));
@@ -39,7 +44,6 @@ async fn main() -> Result<()> {
     let main_app_instance = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
     let app_widget_manager_instance = Arc::clone(&main_app_instance);
     let app_ui_instance = Arc::clone(&main_app_instance);
-
     // Configure log
     tui_logger::init_logger(LevelFilter::Debug).unwrap();
     tui_logger::set_default_level(log::LevelFilter::Debug);

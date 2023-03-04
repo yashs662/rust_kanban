@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::actions::Action;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
 pub enum UiMode {
     Zen,
     TitleBody,
@@ -48,6 +48,15 @@ pub enum Focus {
     NewCardDescription,
     NewCardDueDate,
     SubmitButton,
+    EditKeybindingsTable,
+    CloseButton,
+    CommandPalette,
+    LoadSave,
+    SelectDefaultView,
+    ChangeUiModePopup,
+    ChangeCardStatusPopup,
+    EditGeneralConfigPopup,
+    EditSpecificKeyBindingPopup,
     NoFocus,
     ExtraFocus, // Used in cases where defining a new focus is not necessary
 }
@@ -154,7 +163,11 @@ impl UiMode {
             UiMode::BodyHelpLog => vec![Focus::Body, Focus::Help, Focus::Log],
             UiMode::TitleBodyHelpLog => vec![Focus::Title, Focus::Body, Focus::Help, Focus::Log],
             UiMode::ConfigMenu => vec![Focus::ConfigTable, Focus::SubmitButton, Focus::ExtraFocus],
-            UiMode::EditKeybindings => vec![Focus::Title, Focus::SubmitButton],
+            UiMode::EditKeybindings => vec![
+                Focus::Title,
+                Focus::EditKeybindingsTable,
+                Focus::SubmitButton,
+            ],
             UiMode::MainMenu => vec![Focus::MainMenu, Focus::MainMenuHelp, Focus::Log],
             UiMode::HelpMenu => vec![Focus::Help, Focus::Log],
             UiMode::LogsOnly => vec![Focus::Log],
@@ -230,6 +243,15 @@ impl Focus {
             Self::NewCardDescription => "New Card Description",
             Self::NewCardDueDate => "New Card Due Date",
             Self::SubmitButton => "Submit Button",
+            Self::EditKeybindingsTable => "Edit Keybindings Table",
+            Self::CloseButton => "Close Button",
+            Self::CommandPalette => "Command Palette",
+            Self::LoadSave => "Load Save",
+            Self::SelectDefaultView => "Select Default View",
+            Self::ChangeUiModePopup => "Change Ui Mode Popup",
+            Self::ChangeCardStatusPopup => "Change Card Status Popup",
+            Self::EditGeneralConfigPopup => "Edit General Config Popup",
+            Self::EditSpecificKeyBindingPopup => "Edit Specific Key Binding Popup",
             Self::NoFocus => "No Focus",
             Self::ExtraFocus => "Extra Focus",
         }
@@ -283,6 +305,15 @@ impl Focus {
             "New Card Name" => Self::NewCardName,
             "New Card Description" => Self::NewCardDescription,
             "New Card Due Date" => Self::NewCardDueDate,
+            "Edit Keybindings Table" => Self::EditKeybindingsTable,
+            "Close Button" => Self::CloseButton,
+            "Command Palette" => Self::CommandPalette,
+            "Load Save" => Self::LoadSave,
+            "Select Default View" => Self::SelectDefaultView,
+            "Change Ui Mode Popup" => Self::ChangeUiModePopup,
+            "Change Card Status Popup" => Self::ChangeCardStatusPopup,
+            "Edit General Config Popup" => Self::EditGeneralConfigPopup,
+            "Edit Specific Key Binding Popup" => Self::EditSpecificKeyBindingPopup,
             "Submit Button" => Self::SubmitButton,
             "Extra Focus" => Self::ExtraFocus,
             _ => Self::NoFocus,
