@@ -2,7 +2,7 @@ use linked_hash_map::LinkedHashMap;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use std::{env, vec};
+use std::vec;
 
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
@@ -20,10 +20,14 @@ use crate::app::kanban::CardStatus;
 use crate::constants::{
     DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
     IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE,
-    MIN_NO_CARDS_PER_BOARD, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD, SAVE_DIR_NAME,
+    MIN_NO_CARDS_PER_BOARD, MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE,
+    NO_OF_CARDS_PER_BOARD,
 };
 use crate::inputs::key::Key;
-use crate::io::data_handler::{get_available_local_savefiles, get_config};
+use crate::inputs::mouse::Mouse;
+use crate::io::data_handler::{
+    get_available_local_savefiles, get_config, get_default_save_directory,
+};
 use crate::io::handler::refresh_visible_boards_and_cards;
 use crate::io::{data_handler, IoEvent};
 use crate::ui::widgets::{CommandPalette, ToastType, ToastWidget};
@@ -108,7 +112,7 @@ impl App {
         };
     }
 
-    pub async fn handle_mouse(&mut self, mouse_action: crossterm::event::MouseEvent) -> AppReturn {
+    pub async fn handle_mouse(&mut self, mouse_action: Mouse) -> AppReturn {
         return handle_mouse_action(self, mouse_action).await;
     }
 
@@ -622,6 +626,7 @@ pub struct AppState {
     pub term_background_color: (u8, u8, u8),
     pub preview_boards_and_cards: Option<Vec<Board>>,
     pub preview_visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
+    pub preview_file_name: Option<String>,
     pub popup_mode: Option<PopupMode>,
     pub ui_mode: UiMode,
     pub no_of_cards_to_show: u16,
@@ -633,6 +638,8 @@ pub struct AppState {
     pub current_mouse_coordinates: (u16, u16),
     pub mouse_focus: Option<Focus>,
     pub mouse_list_index: Option<u16>,
+    pub last_mouse_action: Option<Mouse>,
+    pub last_mouse_action_time: Option<Instant>,
 }
 
 impl Default for AppState {
@@ -659,6 +666,7 @@ impl Default for AppState {
             term_background_color: get_term_bg_color(),
             preview_boards_and_cards: None,
             preview_visible_boards_and_cards: LinkedHashMap::new(),
+            preview_file_name: None,
             popup_mode: None,
             ui_mode: data_handler::get_default_ui_mode(),
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
@@ -667,9 +675,11 @@ impl Default for AppState {
             prev_ui_mode: None,
             debug_menu_toggled: false,
             ui_render_time: None,
-            current_mouse_coordinates: (9999, 9999), // make sure it's out of bounds when mouse mode is disabled
+            current_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES, // make sure it's out of bounds when mouse mode is disabled
             mouse_focus: None,
             mouse_list_index: None,
+            last_mouse_action: None,
+            last_mouse_action_time: None,
         }
     }
 }
@@ -691,10 +701,9 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn default() -> Self {
-        let save_directory = env::temp_dir().join(SAVE_DIR_NAME);
         let default_view = UiMode::TitleBodyHelpLog;
         Self {
-            save_directory: save_directory,
+            save_directory: get_default_save_directory(),
             default_view,
             always_load_last_save: true,
             save_on_exit: true,
@@ -1033,6 +1042,7 @@ impl AppConfig {
             "reset_ui" => self.keybindings.reset_ui = value,
             "go_to_main_menu" => self.keybindings.go_to_main_menu = value,
             "toggle_command_palette" => self.keybindings.toggle_command_palette = value,
+            "clear_all_toasts" => self.keybindings.clear_all_toasts = value,
             _ => {
                 debug!("Invalid key: {}", key);
                 error!("Unable to edit keybinding");

@@ -710,7 +710,6 @@ pub fn render_edit_keybindings<'a, B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let mouse_coordinates = app.state.current_mouse_coordinates;
     let popup_mode = app.state.popup_mode.is_some();
     let chunks = Layout::default()
         .constraints(
@@ -811,17 +810,6 @@ where
             && app.state.popup_mode.is_none()
         {
             app.state.mouse_focus = Some(Focus::EditKeybindingsTable);
-            let top_of_list = chunks[1].top() + 1;
-            let mut bottom_of_list = top_of_list + rows.len() as u16;
-            if bottom_of_list > chunks[1].bottom() {
-                bottom_of_list = chunks[1].bottom();
-            }
-            let mouse_y = mouse_coordinates.1;
-            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-                app.state
-                    .edit_keybindings_state
-                    .select(Some((mouse_y - top_of_list) as usize));
-            }
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::EditKeybindingsTable) {
@@ -881,10 +869,13 @@ where
     let edit_keybind_help_spans = Spans::from(vec![
         Span::styled("Use ", default_style),
         Span::styled(up_key, current_element_style),
-        Span::styled(" and ", default_style),
+        Span::styled("and ", default_style),
         Span::styled(down_key, current_element_style),
+        Span::styled("or scroll with the mouse", default_style),
         Span::styled(" to select a keybinding, ", default_style),
         Span::styled("<Enter>", current_element_style),
+        Span::styled(" or ", default_style),
+        Span::styled("<Mouse Left Click>", current_element_style),
         Span::styled(" to edit, ", default_style),
         Span::styled("<Esc>", current_element_style),
         Span::styled(
@@ -892,7 +883,7 @@ where
             default_style,
         ),
         Span::styled(
-            [next_focus_key, prev_focus_key].join(" or "),
+            [next_focus_key, prev_focus_key].join("or "),
             current_element_style,
         ),
         Span::styled("to highlight Reset Button and Press ", default_style),
@@ -950,7 +941,7 @@ where
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Min(6),
+                    Constraint::Length(7),
                     Constraint::Min(6),
                     Constraint::Length(4),
                     Constraint::Length(3),
@@ -1127,6 +1118,10 @@ where
 
     let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[3]);
     rect.render_widget(log, chunks[3]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app);
+    }
 }
 
 pub fn render_help_menu<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -1466,7 +1461,7 @@ where
     B: Backend,
 {
     let fallback_boards = vec![];
-    let focus = &app.state.focus;
+    let focus = app.state.focus.clone();
     let boards = if preview_mode {
         if app.state.preview_boards_and_cards.is_some() {
             &app.state.preview_boards_and_cards.as_ref().unwrap()
@@ -1649,6 +1644,7 @@ where
                 board_chunks[board_index],
             ) {
                 app.state.mouse_focus = Some(Focus::Body);
+                app.state.focus = Focus::Body;
                 app.state.current_board_id = Some(*board_id);
                 MOUSE_HIGHLIGHT_STYLE
             } else {
@@ -1865,6 +1861,7 @@ where
                     card_chunks[card_index],
                 ) {
                     app.state.mouse_focus = Some(Focus::Body);
+                    app.state.focus = Focus::Body;
                     app.state.current_card_id = Some(*card_id);
                     MOUSE_HIGHLIGHT_STYLE
                 } else {
@@ -2113,7 +2110,12 @@ where
         INACTIVE_TEXT_STYLE
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
+            if app.state.mouse_focus != Some(Focus::NewBoardName) {
+                app.state.current_cursor_position = None;
+                app.state.app_status = AppStatus::Initialized;
+            }
             app.state.mouse_focus = Some(Focus::NewBoardName);
+            app.state.focus = Focus::NewBoardName;
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::NewBoardName) {
@@ -2127,7 +2129,12 @@ where
         INACTIVE_TEXT_STYLE
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
+            if app.state.mouse_focus != Some(Focus::NewBoardDescription) {
+                app.state.current_cursor_position = None;
+                app.state.app_status = AppStatus::Initialized;
+            }
             app.state.mouse_focus = Some(Focus::NewBoardDescription);
+            app.state.focus = Focus::NewBoardDescription;
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::NewBoardDescription) {
@@ -2147,6 +2154,9 @@ where
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[4]) {
             app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+            app.state.focus = Focus::SubmitButton;
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::SubmitButton) {
@@ -2327,7 +2337,12 @@ where
         INACTIVE_TEXT_STYLE
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
+            if app.state.mouse_focus != Some(Focus::NewCardName) {
+                app.state.current_cursor_position = None;
+                app.state.app_status = AppStatus::Initialized;
+            }
             app.state.mouse_focus = Some(Focus::NewCardName);
+            app.state.focus = Focus::NewCardName;
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::NewCardName) {
@@ -2341,7 +2356,12 @@ where
         INACTIVE_TEXT_STYLE
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
+            if app.state.mouse_focus != Some(Focus::NewCardDescription) {
+                app.state.current_cursor_position = None;
+                app.state.app_status = AppStatus::Initialized;
+            }
             app.state.mouse_focus = Some(Focus::NewCardDescription);
+            app.state.focus = Focus::NewCardDescription;
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::NewCardDescription) {
@@ -2355,7 +2375,12 @@ where
         INACTIVE_TEXT_STYLE
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
+            if app.state.mouse_focus != Some(Focus::NewCardDueDate) {
+                app.state.current_cursor_position = None;
+                app.state.app_status = AppStatus::Initialized;
+            }
             app.state.mouse_focus = Some(Focus::NewCardDueDate);
+            app.state.focus = Focus::NewCardDueDate;
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::NewCardDueDate) {
@@ -2375,6 +2400,9 @@ where
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[5]) {
             app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+            app.state.focus = Focus::SubmitButton;
             MOUSE_HIGHLIGHT_STYLE
         } else {
             if matches!(app.state.focus, Focus::SubmitButton) {
@@ -2573,19 +2601,7 @@ where
     } else {
         HELP_KEY_STYLE
     };
-    let main_chunks = if app.config.enable_mouse_support {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(
-                [
-                    Constraint::Percentage(30),
-                    Constraint::Percentage(68),
-                    Constraint::Length(3),
-                ]
-                .as_ref(),
-            )
-            .split(rect.size())
-    } else {
+    let main_chunks = {
         Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
@@ -2602,6 +2618,16 @@ where
             .as_ref(),
         )
         .split(main_chunks[0]);
+
+    let preview_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+        .split(main_chunks[1]);
+
+    let title_bar_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
+        .split(preview_chunks[0]);
 
     let title_paragraph = Paragraph::new("Load a Save")
         .alignment(Alignment::Center)
@@ -2733,7 +2759,7 @@ where
                 )
                 .style(default_style)
                 .wrap(Wrap { trim: true });
-        rect.render_widget(preview_paragraph, main_chunks[1]);
+        rect.render_widget(preview_paragraph, preview_chunks[1]);
     } else {
         if app.state.preview_boards_and_cards.is_none() {
             let loading_text = if app.config.enable_mouse_support {
@@ -2750,13 +2776,39 @@ where
                 )
                 .style(default_style)
                 .wrap(Wrap { trim: true });
-            rect.render_widget(preview_paragraph, main_chunks[1]);
+            rect.render_widget(preview_paragraph, preview_chunks[1]);
         } else {
-            render_body(rect, main_chunks[1], app, true)
+            render_body(rect, preview_chunks[1], app, true)
         }
     }
+
+    let preview_title_paragraph = if app.state.preview_file_name.is_some() {
+        Paragraph::new("Previewing: ".to_string() + &app.state.preview_file_name.clone().unwrap())
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(default_style)
+            .wrap(Wrap { trim: true })
+    } else {
+        Paragraph::new("Select a file to preview")
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(default_style)
+            .wrap(Wrap { trim: true })
+    };
+
     if app.config.enable_mouse_support {
+        rect.render_widget(preview_title_paragraph, title_bar_chunks[0]);
         render_close_button(rect, app);
+    } else {
+        rect.render_widget(preview_title_paragraph, preview_chunks[0]);
     }
 }
 

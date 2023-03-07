@@ -1,4 +1,5 @@
 use log::{debug, error, info};
+use std::path::PathBuf;
 use std::{collections::HashMap, env, fs};
 extern crate savefile;
 use regex::Regex;
@@ -300,4 +301,10 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
         Ok(_) => Ok(file_path.to_str().unwrap().to_string()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+pub fn get_default_save_directory() -> PathBuf {
+    let mut default_save_path = env::temp_dir();
+    default_save_path.push(SAVE_DIR_NAME);
+    default_save_path
 }

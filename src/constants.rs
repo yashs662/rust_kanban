@@ -26,6 +26,9 @@ pub const TOAST_FADE_IN_TIME: u64 = 200;
 pub const DEFAULT_TICKRATE: u64 = 50;
 pub const DEFAULT_TOAST_DURATION: u64 = 5;
 pub const IO_EVENT_WAIT_TIME: u64 = 5; // ms
+pub const MOUSE_OUT_OF_BOUNDS_COORDINATES: (u16, u16) = (9999, 9999);
+pub const NEW_CARD_FORM_DEFAULT_STATE: [&'static str; 3] = ["", "", ""];
+pub const NEW_BOARD_FORM_DEFAULT_STATE: [&'static str; 2] = ["", ""];
 
 // Style
 pub const DEFAULT_STYLE: Style = Style {

@@ -39,12 +39,13 @@ pub enum Action {
     ResetUI,
     GoToMainMenu,
     ToggleCommandPalette,
+    ClearAllToasts
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 27] = [
+        static ACTIONS: [Action; 28] = [
             Action::Quit,
             Action::NextFocus,
             Action::PrvFocus,
@@ -72,6 +73,7 @@ impl Action {
             Action::ResetUI,
             Action::GoToMainMenu,
             Action::ToggleCommandPalette,
+            Action::ClearAllToasts
         ];
         ACTIONS.iter()
     }
@@ -106,6 +108,7 @@ impl Action {
             Action::ResetUI => &[Key::Char('r')],
             Action::GoToMainMenu => &[Key::Char('m')],
             Action::ToggleCommandPalette => &[Key::Ctrl('p')],
+            Action::ClearAllToasts => &[Key::Char('t')]
         }
     }
 
@@ -145,6 +148,7 @@ impl Display for Action {
             Action::ResetUI => "Reset UI",
             Action::GoToMainMenu => "Go to main menu",
             Action::ToggleCommandPalette => "Open command palette",
+            Action::ClearAllToasts => "Clear all toasts"
         };
         write!(f, "{}", str)
     }

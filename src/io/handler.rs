@@ -2,7 +2,9 @@ use crate::app::kanban::Board;
 use crate::app::state::UiMode;
 use crate::app::{App, AppConfig};
 use crate::constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME};
-use crate::io::data_handler::{get_config, reset_config, save_kanban_state_locally};
+use crate::io::data_handler::{
+    get_config, get_default_save_directory, reset_config, save_kanban_state_locally,
+};
 use chrono::NaiveDate;
 use eyre::{anyhow, Result};
 use linked_hash_map::LinkedHashMap;
@@ -10,6 +12,7 @@ use log::{debug, error, info};
 use savefile::{load_file, save_file};
 use std::env;
 use std::path::Path;
+use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tui::widgets::ListState;
 
@@ -66,6 +69,13 @@ impl IoAsyncHandler {
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
         info!("👍 Application initialized");
+        if app.config.save_directory == get_default_save_directory() {
+            app.send_warning_toast(
+                "Save directory is set to a temporary directory,
+            your operating system may delete it at any time. Please change it in the settings.",
+                Some(Duration::from_secs(10)),
+            );
+        }
         app.send_info_toast("Application initialized", None);
         Ok(())
     }
@@ -404,6 +414,7 @@ impl IoAsyncHandler {
                     counter += 1;
                 }
                 app.state.preview_visible_boards_and_cards = visible_boards_and_cards;
+                app.state.preview_file_name = Some(save_file_name);
             }
             Err(e) => {
                 error!("Error loading preview: {}", e);

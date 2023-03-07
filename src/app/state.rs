@@ -84,6 +84,7 @@ pub struct KeyBindings {
     pub reset_ui: Vec<Key>,
     pub go_to_main_menu: Vec<Key>,
     pub toggle_command_palette: Vec<Key>,
+    pub clear_all_toasts: Vec<Key>,
 }
 
 impl UiMode {
@@ -345,6 +346,7 @@ impl KeyBindings {
             reset_ui: vec![Key::Char('r')],
             go_to_main_menu: vec![Key::Char('m')],
             toggle_command_palette: vec![Key::Ctrl('p')],
+            clear_all_toasts: vec![Key::Char('t')],
         }
     }
 
@@ -380,6 +382,7 @@ impl KeyBindings {
             ("reset_ui", &self.reset_ui),
             ("go_to_main_menu", &self.go_to_main_menu),
             ("toggle_command_palette", &self.toggle_command_palette),
+            ("clear_all_toasts", &self.clear_all_toasts),
         ]
         .into_iter()
     }
@@ -413,6 +416,7 @@ impl KeyBindings {
                     "reset_ui" => return Some(&Action::ResetUI),
                     "go_to_main_menu" => return Some(&Action::GoToMainMenu),
                     "toggle_command_palette" => return Some(&Action::ToggleCommandPalette),
+                    "clear_all_toasts" => return Some(&Action::ClearAllToasts),
                     _ => return None,
                 }
             }
@@ -443,6 +447,7 @@ impl KeyBindings {
             "reset_ui" => Some(&Action::ResetUI),
             "go_to_main_menu" => Some(&Action::GoToMainMenu),
             "toggle_command_palette" => Some(&Action::ToggleCommandPalette),
+            "clear_all_toasts" => Some(&Action::ClearAllToasts),
             _ => None,
         }
     }
