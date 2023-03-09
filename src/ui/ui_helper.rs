@@ -3378,6 +3378,7 @@ where
     let menu_area = top_left_rect(30, 30, rect.size());
     let debug_panel = Paragraph::new(vec![
         Spans::from(format!("UI Mode: {}", current_ui_mode)),
+        Spans::from(format!("Current Mouse position: {:?}", app.state.current_mouse_coordinates)),
         Spans::from(format!("Popup Mode: {}", popup_mode)),
         Spans::from(format!("Tickrate: {}ms", tickrate)),
         Spans::from(format!("UI Render Time: {}", ui_render_time)),

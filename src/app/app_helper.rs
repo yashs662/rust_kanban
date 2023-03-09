@@ -48,9 +48,14 @@ pub fn go_right(app: &mut App) {
         .iter()
         .position(|(board_id, _)| *board_id == current_board_id);
     if current_board_index.is_none() {
-        debug!("Cannot go right: current board not found");
-        app.send_error_toast("Cannot go right: Something went wrong", None);
-        return;
+        debug!("Cannot go right: current board not found, trying to assign to the first board");
+        if current_visible_boards.is_empty() {
+            debug!("Cannot go right: current board not found, no visible boards found");
+            app.send_error_toast("Cannot go right: Something went wrong", None);
+            return;
+        } else {
+            app.state.current_board_id = Some(current_visible_boards.keys().next().unwrap().clone());
+        }
     }
     let current_board_index = current_board_index.unwrap();
     if current_board_index == current_visible_boards.len() - 1 {
@@ -346,9 +351,17 @@ pub fn go_down(app: &mut App) {
         // get the first card of the current board
         let current_board = app.boards.iter().find(|board| board.id == current_board_id);
         if current_board.is_none() {
-            debug!("Cannot go down: current board not found");
-            app.send_error_toast("Cannot go down: Something went wrong", None);
-            return;
+            debug!("Cannot go down: current board not found, trying to get the first board");
+            // check if app.visible_boards_and_cards is empty, if so, return else select the first board and first card
+            if current_visible_boards.is_empty() {
+                debug!("Cannot go down: current board not found, tried to get the first board, but failed");
+                app.send_error_toast("Cannot go down: Something went wrong", None);
+                return;
+            } else {
+                app.state.current_board_id = Some(current_visible_boards.keys().nth(0).unwrap().clone());
+                app.state.current_card_id = Some(current_visible_boards.values().nth(0).unwrap()[0]);
+                return;
+            }
         }
         let current_board = current_board.unwrap();
         if current_board.cards.is_empty() {
@@ -2170,12 +2183,18 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
             Action::ToggleCommandPalette => {
                 if app.state.popup_mode.is_none() {
                     app.state.popup_mode = Some(PopupMode::CommandPalette);
+                    app.state.current_user_input = String::new();
+                    app.state.current_cursor_position = None;
                     app.state.app_status = AppStatus::UserInput;
                 } else if app.state.popup_mode == Some(PopupMode::CommandPalette) {
                     app.state.popup_mode = None;
+                    app.state.current_user_input = String::new();
+                    app.state.current_cursor_position = None;
                     app.state.app_status = AppStatus::Initialized;
                 } else {
                     app.state.popup_mode = Some(PopupMode::CommandPalette);
+                    app.state.current_user_input = String::new();
+                    app.state.current_cursor_position = None;
                     app.state.app_status = AppStatus::UserInput;
                 }
                 AppReturn::Continue
@@ -2274,9 +2293,13 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
     if middle_button_pressed {
         if app.state.popup_mode == Some(PopupMode::CommandPalette) {
             app.state.popup_mode = None;
+            app.state.current_user_input = String::new();
+            app.state.current_cursor_position = None;
             app.state.app_status = AppStatus::Initialized;
         } else {
             app.state.popup_mode = Some(PopupMode::CommandPalette);
+            app.state.current_user_input = String::new();
+            app.state.current_cursor_position = None;
             app.state.app_status = AppStatus::UserInput;
         }
         return AppReturn::Continue;

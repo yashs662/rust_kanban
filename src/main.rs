@@ -3,6 +3,8 @@ use crossterm::event::DisableMouseCapture;
 use crossterm::{execute, terminal};
 use std::io::stdout;
 use std::sync::Arc;
+use tui::backend::CrosstermBackend;
+use tui::Terminal;
 
 use eyre::Result;
 use log::LevelFilter;
@@ -32,6 +34,12 @@ async fn main() -> Result<()> {
             println!("Error while disabling mouse capture: {}", e);
         }
         println!();
+        let stdout = stdout();
+        let backend = CrosstermBackend::new(stdout);
+        let terminal = Terminal::new(backend);
+        if terminal.is_ok() {
+            let _ = terminal.unwrap().clear();
+        }
         default_panic(info);
     }));
 
