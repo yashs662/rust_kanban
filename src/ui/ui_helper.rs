@@ -1,15 +1,9 @@
 use crate::app::kanban::{CardPriority, CardStatus};
 use crate::calculate_cursor_position;
 use crate::constants::{
-    APP_TITLE, CARD_ACTIVE_STATUS_STYLE, CARD_COMPLETED_STATUS_STYLE, CARD_DUE_DATE_CRITICAL_STYLE,
-    CARD_DUE_DATE_DEFAULT_STYLE, CARD_DUE_DATE_WARNING_STYLE, CARD_PRIORITY_HIGH_STYLE,
-    CARD_PRIORITY_LOW_STYLE, CARD_PRIORITY_MEDIUM_STYLE, CARD_STALE_STATUS_STYLE,
-    DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, DEFAULT_STYLE, ERROR_TEXT_STYLE,
-    FIELD_NOT_SET, FOCUSED_ELEMENT_STYLE, HELP_KEY_STYLE, INACTIVE_TEXT_STYLE,
-    LIST_SELECTED_SYMBOL, LIST_SELECT_STYLE, LOG_DEBUG_STYLE, LOG_ERROR_STYLE, LOG_INFO_STYLE,
-    LOG_TRACE_STYLE, LOG_WARN_STYLE, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
-    MOUSE_HIGHLIGHT_STYLE, PROGRESS_BAR_STYLE, SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES,
-    VERTICAL_SCROLL_BAR_SYMBOL,
+    APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
+    LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
+    SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
 };
 use chrono::{Local, NaiveDateTime};
 use log::debug;
@@ -28,6 +22,7 @@ use crate::app::{App, AppConfig, MainMenu, PopupMode};
 use crate::io::data_handler::{get_available_local_savefiles, get_config};
 
 use super::widgets::{ToastType, ToastWidget};
+use super::{TextColorOptions, TextModifierOptions};
 
 /// Draws main screen with kanban boards
 pub fn render_zen_mode<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -40,6 +35,10 @@ where
         .split(rect.size());
 
     render_body(rect, chunks[0], app, false);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_title_body<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -51,10 +50,14 @@ where
         .constraints([Constraint::Length(3), Constraint::Percentage(80)].as_ref())
         .split(rect.size());
 
-    let title = draw_title(Some(app), chunks[0]);
+    let title = draw_title(app, chunks[0]);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app, false);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_body_help<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -62,9 +65,9 @@ where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -94,6 +97,10 @@ where
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.help_state);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_body_log<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -109,6 +116,10 @@ where
 
     let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[1]);
     rect.render_widget(log, chunks[1]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_title_body_help<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -116,9 +127,9 @@ where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -145,7 +156,7 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(Some(app), chunks[0]);
+    let title = draw_title(app, chunks[0]);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app, false);
@@ -158,6 +169,10 @@ where
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.help_state);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.help_state);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_title_body_log<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -176,13 +191,17 @@ where
         )
         .split(rect.size());
 
-    let title = draw_title(Some(app), chunks[0]);
+    let title = draw_title(app, chunks[0]);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app, false);
 
     let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[2]);
     rect.render_widget(log, chunks[2]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_body_help_log<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -190,9 +209,9 @@ where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -232,6 +251,10 @@ where
 
     let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[2]);
     rect.render_widget(log, chunks[2]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_title_body_help_log<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -239,9 +262,9 @@ where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -269,7 +292,7 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(Some(app), chunks[0]);
+    let title = draw_title(app, chunks[0]);
     rect.render_widget(title, chunks[0]);
 
     render_body(rect, chunks[1], app, false);
@@ -285,6 +308,10 @@ where
 
     let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[3]);
     rect.render_widget(log, chunks[3]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
 }
 
 pub fn render_config<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -311,39 +338,39 @@ where
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(chunks[2]);
 
-    let title = draw_title(Some(app), chunks[0]);
+    let title = draw_title(app, chunks[0]);
     rect.render_widget(title, chunks[0]);
 
     let config_table = draw_config_table_selector(app, chunks[1]);
     rect.render_stateful_widget(config_table, chunks[1], &mut app.state.config_state);
 
     let reset_both_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, reset_btn_chunks[0]) {
             app.state.mouse_focus = Some(Focus::SubmitButton);
             app.state.focus = Focus::SubmitButton;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::SubmitButton) {
-                ERROR_TEXT_STYLE
+                app.theme.error_text_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let reset_config_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, reset_btn_chunks[1]) {
             app.state.mouse_focus = Some(Focus::ExtraFocus);
             app.state.focus = Focus::ExtraFocus;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::ExtraFocus) {
-                ERROR_TEXT_STYLE
+                app.theme.error_text_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
@@ -388,7 +415,7 @@ fn draw_config_table_selector(app: &mut App, render_area: Rect) -> Table<'static
     let focus = app.state.focus.clone();
     let config_list = get_config_items();
     let default_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
             app.state.mouse_focus = Some(Focus::ConfigTable);
@@ -404,12 +431,12 @@ fn draw_config_table_selector(app: &mut App, render_area: Rect) -> Table<'static
                     .config_state
                     .select(Some((mouse_y - top_of_list) as usize));
             }
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if focus == Focus::ConfigTable {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
@@ -426,25 +453,25 @@ fn draw_config_table_selector(app: &mut App, render_area: Rect) -> Table<'static
     });
 
     let config_text_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
 
     let current_element_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         let mouse_row = mouse_coordinates.1 as usize;
         let current_selected_row = app.state.config_state.selected().unwrap_or(0);
         let current_selected_row_in_terminal_area =
             current_selected_row + render_area.y as usize + 1; // +1 for border
         if mouse_row == current_selected_row_in_terminal_area {
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if focus == Focus::ConfigTable {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.list_select_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
@@ -464,7 +491,7 @@ fn draw_config_table_selector(app: &mut App, render_area: Rect) -> Table<'static
 }
 
 /// returns a list of all config items as a vector of strings
-fn get_config_items() -> Vec<Vec<String>> {
+pub fn get_config_items() -> Vec<Vec<String>> {
     let get_config_status = get_config(false);
     let config = if get_config_status.is_err() {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
@@ -485,9 +512,10 @@ where
     let clear_area_border = Block::default()
         .title("Config Editor")
         .borders(Borders::ALL)
-        .border_style(FOCUSED_ELEMENT_STYLE)
+        .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
     rect.render_widget(Clear, clear_area);
+    render_blank_styled_canvas(rect, app, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
 
     let chunks = if app.config.enable_mouse_support {
@@ -520,24 +548,34 @@ where
     let edit_box_style =
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
             app.state.mouse_focus = Some(Focus::EditGeneralConfigPopup);
-            MOUSE_HIGHLIGHT_STYLE
+            app.state.focus = Focus::EditGeneralConfigPopup;
+            app.theme.mouse_focus_style
         } else {
             if app.state.app_status == AppStatus::UserInput {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         };
 
-    let config_item_index = &app.config_item_being_edited.unwrap_or(0);
+    let config_item_index = &app.config_item_being_edited;
     let list_items = get_config_items();
-    let config_item_name = list_items[*config_item_index].first().unwrap();
-    let config_item_value = list_items
-        .iter()
-        .find(|x| x.first().unwrap() == config_item_name)
-        .unwrap()
-        .get(1)
-        .unwrap();
+    let config_item_name = if config_item_index.is_some() {
+        list_items[config_item_index.unwrap()].first().unwrap()
+    } else {
+        // TODO: This is temporary, as only the Theme editor uses this other than config
+        "Theme Name"
+    };
+    let config_item_value = if config_item_index.is_some() {
+        list_items
+            .iter()
+            .find(|x| x.first().unwrap() == config_item_name)
+            .unwrap()
+            .get(1)
+            .unwrap()
+    } else {
+        &app.state.theme_being_edited.name
+    };
     let paragraph_text = format!("Current Value is {}\n\n{}",config_item_value,
         "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
     let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
@@ -581,12 +619,13 @@ where
         let submit_button_style =
             if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
                 app.state.mouse_focus = Some(Focus::SubmitButton);
-                MOUSE_HIGHLIGHT_STYLE
+                app.state.focus = Focus::SubmitButton;
+                app.theme.mouse_focus_style
             } else {
                 if app.state.app_status == AppStatus::KeyBindMode {
-                    FOCUSED_ELEMENT_STYLE
+                    app.theme.keyboard_focus_style
                 } else {
-                    DEFAULT_STYLE
+                    app.theme.general_style
                 }
             };
         let submit_button = Paragraph::new("Submit")
@@ -612,9 +651,10 @@ where
     let clear_area_border = Block::default()
         .title("Default HomeScreen Editor")
         .borders(Borders::ALL)
-        .border_style(FOCUSED_ELEMENT_STYLE)
+        .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
     rect.render_widget(Clear, clear_area);
+    render_blank_styled_canvas(rect, app, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -629,6 +669,7 @@ where
 
     if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
         app.state.mouse_focus = Some(Focus::SelectDefaultView);
+        app.state.focus = Focus::SelectDefaultView;
         let top_of_list = render_area.top() + 1;
         let mut bottom_of_list = top_of_list + list_items.len() as u16;
         if bottom_of_list > render_area.bottom() {
@@ -646,10 +687,10 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(DEFAULT_STYLE)
+                .border_style(app.theme.general_style)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(LIST_SELECT_STYLE)
+        .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     let up_key = app
@@ -668,16 +709,16 @@ where
         .clone();
 
     let help_text = Spans::from(vec![
-        Span::styled("Use ", DEFAULT_STYLE),
-        Span::styled(up_key, HELP_KEY_STYLE),
-        Span::styled(" and ", DEFAULT_STYLE),
-        Span::styled(down_key, HELP_KEY_STYLE),
-        Span::styled("to navigate", DEFAULT_STYLE),
+        Span::styled("Use ", app.theme.general_style),
+        Span::styled(up_key, app.theme.help_key_style),
+        Span::styled(" and ", app.theme.general_style),
+        Span::styled(down_key, app.theme.help_key_style),
+        Span::styled("to navigate", app.theme.general_style),
         Span::raw("; "),
         Span::raw("Press "),
-        Span::styled("<Enter>", HELP_KEY_STYLE),
+        Span::styled("<Enter>", app.theme.help_key_style),
         Span::raw(" To select a Default View; Press "),
-        Span::styled("<Esc>", HELP_KEY_STYLE),
+        Span::styled("<Esc>", app.theme.help_key_style),
         Span::raw(" to cancel"),
     ]);
 
@@ -688,7 +729,7 @@ where
             Block::default()
                 .title("Help")
                 .borders(Borders::ALL)
-                .style(DEFAULT_STYLE)
+                .style(app.theme.general_style)
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
@@ -727,38 +768,39 @@ where
         .constraints([Constraint::Percentage(95), Constraint::Length(1)].as_ref())
         .split(chunks[1]);
     let default_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let progress_bar_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        PROGRESS_BAR_STYLE
+        app.theme.progress_bar_style
     };
     let reset_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3])
             && app.state.popup_mode.is_none()
         {
             app.state.mouse_focus = Some(Focus::SubmitButton);
-            MOUSE_HIGHLIGHT_STYLE
+            app.state.focus = Focus::SubmitButton;
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::SubmitButton) {
-                ERROR_TEXT_STYLE
+                app.theme.error_text_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let current_element_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        FOCUSED_ELEMENT_STYLE
+        app.theme.list_select_style
     };
 
-    let title_bar = draw_title(Some(app), chunks[0]);
+    let title_bar = draw_title(app, chunks[0]);
 
     let mut table_items: Vec<Vec<String>> = Vec::new();
     // app.config.keybindings
@@ -804,20 +846,26 @@ where
     }
 
     let table_border_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
             && app.state.popup_mode.is_none()
         {
             app.state.mouse_focus = Some(Focus::EditKeybindingsTable);
-            MOUSE_HIGHLIGHT_STYLE
+            app.state.focus = Focus::EditKeybindingsTable;
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::EditKeybindingsTable) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
+    };
+    let help_key_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_key_style
     };
 
     let t = Table::new(rows)
@@ -867,28 +915,31 @@ where
         .clone();
 
     let edit_keybind_help_spans = Spans::from(vec![
-        Span::styled("Use ", default_style),
-        Span::styled(up_key, current_element_style),
-        Span::styled("and ", default_style),
-        Span::styled(down_key, current_element_style),
-        Span::styled("or scroll with the mouse", default_style),
-        Span::styled(" to select a keybinding, ", default_style),
-        Span::styled("<Enter>", current_element_style),
-        Span::styled(" or ", default_style),
-        Span::styled("<Mouse Left Click>", current_element_style),
-        Span::styled(" to edit, ", default_style),
-        Span::styled("<Esc>", current_element_style),
+        Span::styled("Use ", app.theme.help_text_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled("and ", app.theme.help_text_style),
+        Span::styled(down_key, help_key_style),
+        Span::styled("or scroll with the mouse", app.theme.help_text_style),
+        Span::styled(" to select a keybinding, ", app.theme.help_text_style),
+        Span::styled("<Enter>", help_key_style),
+        Span::styled(" or ", app.theme.help_text_style),
+        Span::styled("<Mouse Left Click>", help_key_style),
+        Span::styled(" to edit, ", app.theme.help_text_style),
+        Span::styled("<Esc>", help_key_style),
         Span::styled(
             " to cancel, To Reset Keybindings to Default, Press ",
-            default_style,
+            app.theme.help_text_style,
         ),
+        Span::styled([next_focus_key, prev_focus_key].join("or "), help_key_style),
         Span::styled(
-            [next_focus_key, prev_focus_key].join("or "),
-            current_element_style,
+            "to highlight Reset Button and Press ",
+            app.theme.help_text_style,
         ),
-        Span::styled("to highlight Reset Button and Press ", default_style),
-        Span::styled("<Enter>", current_element_style),
-        Span::styled(" on the Reset Keybindings Button", default_style),
+        Span::styled("<Enter>", help_key_style),
+        Span::styled(
+            " on the Reset Keybindings Button",
+            app.theme.help_text_style,
+        ),
     ]);
 
     let edit_keybind_help = Paragraph::new(edit_keybind_help_spans)
@@ -931,10 +982,11 @@ where
     let clear_area_border = Block::default()
         .title("Edit Keybindings")
         .borders(Borders::ALL)
-        .border_style(FOCUSED_ELEMENT_STYLE)
+        .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
 
     rect.render_widget(Clear, clear_area);
+    render_blank_styled_canvas(rect, app, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     let chunks = if app.config.enable_mouse_support {
         Layout::default()
@@ -966,12 +1018,13 @@ where
     let edit_box_style =
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
             app.state.mouse_focus = Some(Focus::EditSpecificKeyBindingPopup);
-            MOUSE_HIGHLIGHT_STYLE
+            app.state.focus = Focus::EditSpecificKeyBindingPopup;
+            app.theme.mouse_focus_style
         } else {
             if app.state.app_status == AppStatus::KeyBindMode {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         };
 
@@ -1045,12 +1098,13 @@ where
         let submit_button_style =
             if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
                 app.state.mouse_focus = Some(Focus::SubmitButton);
-                MOUSE_HIGHLIGHT_STYLE
+                app.state.focus = Focus::SubmitButton;
+                app.theme.mouse_focus_style
             } else {
                 if app.state.app_status == AppStatus::KeyBindMode {
-                    FOCUSED_ELEMENT_STYLE
+                    app.theme.keyboard_focus_style
                 } else {
-                    DEFAULT_STYLE
+                    app.theme.general_style
                 }
             };
         let submit_button = Paragraph::new("Submit")
@@ -1071,9 +1125,9 @@ where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1101,11 +1155,10 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(Some(app), chunks[0]);
+    let title = draw_title(app, chunks[0]);
     rect.render_widget(title, chunks[0]);
 
-    let main_menu = draw_main_menu(app, chunks[1]);
-    rect.render_stateful_widget(main_menu, chunks[1], &mut app.state.main_menu_state);
+    draw_main_menu(app, chunks[1], rect);
 
     let main_menu_help = draw_help(app, chunks[2]);
     let help_separator = Block::default()
@@ -1129,9 +1182,9 @@ where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1189,24 +1242,25 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
     let mouse_coordinates = app.state.current_mouse_coordinates;
     let focus = &mut app.state.focus;
     let default_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
             app.state.mouse_focus = Some(Focus::Help);
-            MOUSE_HIGHLIGHT_STYLE
+            app.state.focus = Focus::Help;
+            app.theme.mouse_focus_style
         } else {
             if *focus == Focus::Help || *focus == Focus::MainMenuHelp {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
 
     let current_element_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        FOCUSED_ELEMENT_STYLE
+        app.theme.list_select_style
     };
 
     let rows = keybind_store.iter().map(|item| {
@@ -1250,23 +1304,23 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
 /// Draws help section for config mode
 fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Paragraph<'a> {
     let helpbox_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if matches!(focus, Focus::ConfigHelp) {
-            FOCUSED_ELEMENT_STYLE
+            app.theme.keyboard_focus_style
         } else {
-            DEFAULT_STYLE
+            app.theme.general_style
         }
     };
     let text_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let helpkey_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        HELP_KEY_STYLE
+        app.theme.help_key_style
     };
 
     let up_key = app
@@ -1347,38 +1401,39 @@ fn draw_logs<'a>(
         && app.state.popup_mode.is_none()
     {
         app.state.mouse_focus = Some(Focus::Log);
-        MOUSE_HIGHLIGHT_STYLE
+        app.state.focus = Focus::Log;
+        app.theme.mouse_focus_style
     } else {
         if matches!(focus, Focus::Log) && enable_focus_highlight {
-            FOCUSED_ELEMENT_STYLE
+            app.theme.keyboard_focus_style
         } else {
-            DEFAULT_STYLE
+            app.theme.general_style
         }
     };
     if popup_mode {
         TuiLoggerWidget::default()
-            .style_error(INACTIVE_TEXT_STYLE)
-            .style_debug(INACTIVE_TEXT_STYLE)
-            .style_warn(INACTIVE_TEXT_STYLE)
-            .style_trace(INACTIVE_TEXT_STYLE)
-            .style_info(INACTIVE_TEXT_STYLE)
+            .style_error(app.theme.inactive_text_style)
+            .style_debug(app.theme.inactive_text_style)
+            .style_warn(app.theme.inactive_text_style)
+            .style_trace(app.theme.inactive_text_style)
+            .style_info(app.theme.inactive_text_style)
             .output_file(false)
             .output_line(false)
             .output_target(false)
             .block(
                 Block::default()
                     .title("Logs")
-                    .border_style(INACTIVE_TEXT_STYLE)
+                    .border_style(app.theme.inactive_text_style)
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
     } else {
         TuiLoggerWidget::default()
-            .style_error(LOG_ERROR_STYLE)
-            .style_debug(LOG_DEBUG_STYLE)
-            .style_warn(LOG_WARN_STYLE)
-            .style_trace(LOG_TRACE_STYLE)
-            .style_info(LOG_INFO_STYLE)
+            .style_error(app.theme.log_error_style)
+            .style_debug(app.theme.log_debug_style)
+            .style_warn(app.theme.log_warn_style)
+            .style_trace(app.theme.log_trace_style)
+            .style_info(app.theme.log_info_style)
             .output_file(false)
             .output_line(false)
             .output_target(false)
@@ -1393,19 +1448,23 @@ fn draw_logs<'a>(
 }
 
 /// Draws Main menu
-fn draw_main_menu<'a>(app: &mut App, render_area: Rect) -> List<'a> {
+fn draw_main_menu<B>(app: &mut App, render_area: Rect, rect: &mut Frame<B>)
+where
+    B: Backend,
+{
     let main_menu_items = MainMenu::all();
     let popup_mode = app.state.popup_mode.is_some();
     let focus = app.state.focus;
     let mouse_coordinates = app.state.current_mouse_coordinates;
     let menu_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
             if !(app.state.popup_mode.is_some()
                 && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
             {
                 app.state.mouse_focus = Some(Focus::MainMenu);
+                app.state.focus = Focus::MainMenu;
                 // calculate the mouse_list_index based on the mouse coordinates and the length of the list
                 let top_of_list = render_area.top() + 1;
                 let mut bottom_of_list = top_of_list + main_menu_items.len() as u16;
@@ -1419,30 +1478,30 @@ fn draw_main_menu<'a>(app: &mut App, render_area: Rect) -> List<'a> {
                         .select(Some((mouse_y - top_of_list) as usize));
                 }
             }
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(focus, Focus::MainMenu) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let default_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let highlight_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        LIST_SELECT_STYLE
+        app.theme.list_select_style
     };
     let list_items = main_menu_items
         .iter()
         .map(|i| ListItem::new(i.to_string()))
         .collect::<Vec<ListItem>>();
-    List::new(list_items)
+    let main_menu = List::new(list_items)
         .block(
             Block::default()
                 .title("Main menu")
@@ -1452,7 +1511,8 @@ fn draw_main_menu<'a>(app: &mut App, render_area: Rect) -> List<'a> {
                 .border_type(BorderType::Rounded),
         )
         .highlight_style(highlight_style)
-        .highlight_symbol(LIST_SELECTED_SYMBOL)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    rect.render_stateful_widget(main_menu, render_area, &mut app.state.main_menu_state);
 }
 
 /// Draws Kanban boards
@@ -1472,14 +1532,14 @@ where
         &app.boards
     };
     let progress_bar_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        PROGRESS_BAR_STYLE
+        app.theme.progress_bar_style
     };
     let error_text_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        ERROR_TEXT_STYLE
+        app.theme.error_text_style
     };
     let current_board = &app.state.current_board_id.unwrap_or(0);
 
@@ -1632,12 +1692,12 @@ where
         }
 
         let board_style = if app.state.popup_mode.is_some() {
-            INACTIVE_TEXT_STYLE
+            app.theme.inactive_text_style
         } else {
-            DEFAULT_STYLE
+            app.theme.general_style
         };
         let board_border_style = if app.state.popup_mode.is_some() {
-            INACTIVE_TEXT_STYLE
+            app.theme.inactive_text_style
         } else {
             if check_if_mouse_is_in_area(
                 app.state.current_mouse_coordinates,
@@ -1646,15 +1706,15 @@ where
                 app.state.mouse_focus = Some(Focus::Body);
                 app.state.focus = Focus::Body;
                 app.state.current_board_id = Some(*board_id);
-                MOUSE_HIGHLIGHT_STYLE
+                app.theme.mouse_focus_style
             } else {
                 if *board_id == *current_board
                     && matches!(focus, Focus::Body)
                     && app.state.current_card_id == None
                 {
-                    FOCUSED_ELEMENT_STYLE
+                    app.theme.keyboard_focus_style
                 } else {
-                    DEFAULT_STYLE
+                    app.theme.general_style
                 }
             }
         };
@@ -1782,36 +1842,36 @@ where
                         if app.state.popup_mode.is_some() {
                             Spans::from(Span::styled(
                                 format!("Due: {}", card_due_date),
-                                INACTIVE_TEXT_STYLE,
+                                app.theme.inactive_text_style,
                             ))
                         } else {
                             Spans::from(Span::styled(
                                 format!("Due: {}", card_due_date),
-                                CARD_DUE_DATE_WARNING_STYLE,
+                                app.theme.card_due_warning_style,
                             ))
                         }
                     } else if days_left < 0 {
                         if app.state.popup_mode.is_some() {
                             Spans::from(Span::styled(
                                 format!("Due: {}", card_due_date),
-                                INACTIVE_TEXT_STYLE,
+                                app.theme.inactive_text_style,
                             ))
                         } else {
                             Spans::from(Span::styled(
                                 format!("Due: {}", card_due_date),
-                                CARD_DUE_DATE_CRITICAL_STYLE,
+                                app.theme.card_due_overdue_style,
                             ))
                         }
                     } else {
                         if app.state.popup_mode.is_some() {
                             Spans::from(Span::styled(
                                 format!("Due: {}", card_due_date),
-                                INACTIVE_TEXT_STYLE,
+                                app.theme.inactive_text_style,
                             ))
                         } else {
                             Spans::from(Span::styled(
                                 format!("Due: {}", card_due_date),
-                                CARD_DUE_DATE_DEFAULT_STYLE,
+                                app.theme.card_due_default_style,
                             ))
                         }
                     }
@@ -1819,12 +1879,12 @@ where
                     if app.state.popup_mode.is_some() {
                         Spans::from(Span::styled(
                             format!("Due: {}", card_due_date),
-                            INACTIVE_TEXT_STYLE,
+                            app.theme.inactive_text_style,
                         ))
                     } else {
                         Spans::from(Span::styled(
                             format!("Due: {}", card_due_date),
-                            CARD_DUE_DATE_DEFAULT_STYLE,
+                            app.theme.card_due_default_style,
                         ))
                     }
                 };
@@ -1833,28 +1893,34 @@ where
             let card_status = format!("Status: {}", card.unwrap().card_status.clone().to_string());
             let card_status = if card_status == "Status: Active" {
                 if app.state.popup_mode.is_some() {
-                    Spans::from(Span::styled(card_status, INACTIVE_TEXT_STYLE))
+                    Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
                 } else {
-                    Spans::from(Span::styled(card_status, CARD_ACTIVE_STATUS_STYLE))
+                    Spans::from(Span::styled(
+                        card_status,
+                        app.theme.card_status_active_style,
+                    ))
                 }
             } else if card_status == "Status: Complete" {
                 if app.state.popup_mode.is_some() {
-                    Spans::from(Span::styled(card_status, INACTIVE_TEXT_STYLE))
+                    Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
                 } else {
-                    Spans::from(Span::styled(card_status, CARD_COMPLETED_STATUS_STYLE))
+                    Spans::from(Span::styled(
+                        card_status,
+                        app.theme.card_status_completed_style,
+                    ))
                 }
             } else {
                 if app.state.popup_mode.is_some() {
-                    Spans::from(Span::styled(card_status, INACTIVE_TEXT_STYLE))
+                    Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
                 } else {
-                    Spans::from(Span::styled(card_status, CARD_STALE_STATUS_STYLE))
+                    Spans::from(Span::styled(card_status, app.theme.card_status_stale_style))
                 }
             };
             card_extra_info.extend(vec![card_status]);
 
             // if card id is same as current_card, highlight it
             let card_style = if app.state.popup_mode.is_some() {
-                INACTIVE_TEXT_STYLE
+                app.theme.inactive_text_style
             } else {
                 if check_if_mouse_is_in_area(
                     app.state.current_mouse_coordinates,
@@ -1863,15 +1929,15 @@ where
                     app.state.mouse_focus = Some(Focus::Body);
                     app.state.focus = Focus::Body;
                     app.state.current_card_id = Some(*card_id);
-                    MOUSE_HIGHLIGHT_STYLE
+                    app.theme.mouse_focus_style
                 } else {
                     if app.state.current_card_id.unwrap_or(0) == *card_id
                         && matches!(focus, Focus::Body)
                         && *board_id == *current_board
                     {
-                        FOCUSED_ELEMENT_STYLE
+                        app.theme.keyboard_focus_style
                     } else {
-                        DEFAULT_STYLE
+                        app.theme.general_style
                     }
                 }
             };
@@ -1977,7 +2043,7 @@ fn top_left_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 }
 
 /// Draws size error screen if the terminal is too small
-pub fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String)
+pub fn draw_size_error<B>(rect: &mut Frame<B>, size: &Rect, msg: String, app: &mut App)
 where
     B: Backend,
 {
@@ -1986,10 +2052,10 @@ where
         .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
         .split(*size);
 
-    let title = draw_title(None, *size);
+    let title = draw_title(app, *size);
     rect.render_widget(title, chunks[0]);
 
-    let mut text = vec![Spans::from(Span::styled(msg, ERROR_TEXT_STYLE))];
+    let mut text = vec![Spans::from(Span::styled(msg, app.theme.error_text_style))];
     text.append(&mut vec![Spans::from(Span::raw(
         "Resize the window to continue, or press 'q' to quit.",
     ))]);
@@ -1999,7 +2065,7 @@ where
     rect.render_widget(body, chunks[1]);
 }
 
-pub fn draw_loading_screen<B>(rect: &mut Frame<B>, size: &Rect)
+pub fn draw_loading_screen<B>(rect: &mut Frame<B>, size: &Rect, app: &mut App)
 where
     B: Backend,
 {
@@ -2008,13 +2074,13 @@ where
         .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
         .split(*size);
 
-    let title = draw_title(None, *size);
+    let title = draw_title(app, *size);
     rect.render_widget(title, chunks[0]);
 
     let text = Spans::from(vec![
-        Span::styled("Loading......", FOCUSED_ELEMENT_STYLE),
-        Span::styled("`(*>﹏<*)′", FOCUSED_ELEMENT_STYLE),
-        Span::styled("Please wait", FOCUSED_ELEMENT_STYLE),
+        Span::styled("Loading......", app.theme.keyboard_focus_style),
+        Span::styled("`(*>﹏<*)′", app.theme.keyboard_focus_style),
+        Span::styled("Please wait", app.theme.keyboard_focus_style),
     ]);
     let body = Paragraph::new(text)
         .block(Block::default().borders(Borders::ALL))
@@ -2023,33 +2089,26 @@ where
 }
 
 /// Draws the title bar
-pub fn draw_title<'a>(app: Option<&mut App>, render_area: Rect) -> Paragraph<'a> {
-    let mut popup_mode = false;
-    let mut mouse_coordinates = (0, 0);
-    let mut focus = Focus::NoFocus;
-    if app.is_some() {
-        popup_mode = app.as_ref().unwrap().state.popup_mode.is_some();
-        mouse_coordinates = app.as_ref().unwrap().state.current_mouse_coordinates;
-        focus = app.as_ref().unwrap().state.focus;
-    }
-    // check if focus is on title
+pub fn draw_title<'a>(app: &mut App, render_area: Rect) -> Paragraph<'a> {
+    let popup_mode = app.state.popup_mode.is_some();
+    let mouse_coordinates = app.state.current_mouse_coordinates;
+    let focus = app.state.focus;
     let title_style = if popup_mode {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
-            if app.is_some() {
-                let mut app = app.unwrap();
-                app.state.mouse_focus = Some(Focus::Title);
-            }
-            MOUSE_HIGHLIGHT_STYLE
+            app.state.mouse_focus = Some(Focus::Title);
+            app.state.focus = Focus::Title;
+            app.theme.mouse_focus_style
         } else {
             if matches!(focus, Focus::Title) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
+    // check if focus is on title
     Paragraph::new(APP_TITLE)
         .alignment(Alignment::Center)
         .block(
@@ -2102,12 +2161,12 @@ where
         .split(rect.size());
 
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let name_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
             if app.state.mouse_focus != Some(Focus::NewBoardName) {
@@ -2116,17 +2175,17 @@ where
             }
             app.state.mouse_focus = Some(Focus::NewBoardName);
             app.state.focus = Focus::NewBoardName;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::NewBoardName) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let description_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
             if app.state.mouse_focus != Some(Focus::NewBoardDescription) {
@@ -2135,34 +2194,34 @@ where
             }
             app.state.mouse_focus = Some(Focus::NewBoardDescription);
             app.state.focus = Focus::NewBoardDescription;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::NewBoardDescription) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let help_key_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        HELP_KEY_STYLE
+        app.theme.help_key_style
     };
     let submit_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[4]) {
             app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.focus = Focus::SubmitButton;
             app.state.current_cursor_position = None;
             app.state.app_status = AppStatus::Initialized;
-            app.state.focus = Focus::SubmitButton;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::SubmitButton) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
@@ -2329,12 +2388,12 @@ where
         .split(rect.size());
 
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let name_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
             if app.state.mouse_focus != Some(Focus::NewCardName) {
@@ -2343,17 +2402,17 @@ where
             }
             app.state.mouse_focus = Some(Focus::NewCardName);
             app.state.focus = Focus::NewCardName;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::NewCardName) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let description_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
             if app.state.mouse_focus != Some(Focus::NewCardDescription) {
@@ -2362,17 +2421,17 @@ where
             }
             app.state.mouse_focus = Some(Focus::NewCardDescription);
             app.state.focus = Focus::NewCardDescription;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::NewCardDescription) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let due_date_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
             if app.state.mouse_focus != Some(Focus::NewCardDueDate) {
@@ -2381,34 +2440,34 @@ where
             }
             app.state.mouse_focus = Some(Focus::NewCardDueDate);
             app.state.focus = Focus::NewCardDueDate;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::NewCardDueDate) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
     let help_key_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        HELP_KEY_STYLE
+        app.theme.help_key_style
     };
     let submit_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[5]) {
             app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.focus = Focus::SubmitButton;
             app.state.current_cursor_position = None;
             app.state.app_status = AppStatus::Initialized;
-            app.state.focus = Focus::SubmitButton;
-            MOUSE_HIGHLIGHT_STYLE
+            app.theme.mouse_focus_style
         } else {
             if matches!(app.state.focus, Focus::SubmitButton) {
-                FOCUSED_ELEMENT_STYLE
+                app.theme.keyboard_focus_style
             } else {
-                DEFAULT_STYLE
+                app.theme.general_style
             }
         }
     };
@@ -2592,14 +2651,14 @@ where
     B: Backend,
 {
     let default_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        DEFAULT_STYLE
+        app.theme.general_style
     };
     let help_key_style = if app.state.popup_mode.is_some() {
-        INACTIVE_TEXT_STYLE
+        app.theme.inactive_text_style
     } else {
-        HELP_KEY_STYLE
+        app.theme.help_key_style
     };
     let main_chunks = {
         Layout::default()
@@ -2658,7 +2717,7 @@ where
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .highlight_style(LIST_SELECT_STYLE)
+            .highlight_style(app.theme.list_select_style)
             .highlight_symbol(LIST_SELECTED_SYMBOL)
             .style(default_style);
 
@@ -2667,6 +2726,7 @@ where
         {
             if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
                 app.state.mouse_focus = Some(Focus::LoadSave);
+                app.state.focus = Focus::LoadSave;
                 let top_of_list = chunks[1].y + 1;
                 let mut bottom_of_list = chunks[1].y + item_list.len() as u16;
                 if bottom_of_list > chunks[1].bottom() {
@@ -2689,7 +2749,7 @@ where
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .style(LOG_ERROR_STYLE);
+            .style(app.theme.error_text_style);
         rect.render_widget(no_saves_paragraph, chunks[1]);
     }
 
@@ -2812,16 +2872,17 @@ where
     }
 }
 
-pub fn render_toast<B>(rect: &mut Frame<B>, app: &App)
+pub fn render_toast<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
     // get the latest MAX_TOASTS_TO_DISPLAY number of toasts from app.state.toasts
-    let all_toasts = &app.state.toasts;
+    let all_toasts = app.state.toasts.clone();
     let mut loading_toasts = all_toasts
         .iter()
         .filter(|x| x.toast_type == ToastType::Loading)
         .collect::<Vec<&ToastWidget>>();
+    let app_toasts = app.state.toasts.clone();
     let toasts = if loading_toasts.len() > 0 {
         // if loading_toasts are > MAX_TOASTS_TO_DISPLAY then put the loading toasts in the order of start time where the oldest is at the top only put MAX_TOASTS_TO_DISPLAY - 1 loading toasts and put the latest regular toast at the bottom
         let sorted_loading_toasts = if loading_toasts.len() > MAX_TOASTS_TO_DISPLAY - 1 {
@@ -2869,8 +2930,7 @@ where
         }
         toasts
     } else {
-        app.state
-            .toasts
+        app_toasts
             .iter()
             .rev()
             .take(MAX_TOASTS_TO_DISPLAY)
@@ -2885,7 +2945,7 @@ where
 
     // loop through the toasts and draw them
     for toast in toasts.iter() {
-        let toast_style = Style::default().fg(tui::style::Color::Rgb(
+        let toast_style = app.theme.general_style.fg(tui::style::Color::Rgb(
             toast.toast_color.0,
             toast.toast_color.1,
             toast.toast_color.2,
@@ -2935,6 +2995,17 @@ where
                 toast_height,
             ),
         );
+        render_blank_styled_canvas(
+            rect,
+            app,
+            Rect::new(
+                x_offset,
+                total_height_rendered,
+                rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO,
+                toast_height,
+            ),
+            false,
+        );
         rect.render_widget(
             toast_paragraph,
             Rect::new(
@@ -2958,9 +3029,10 @@ where
                 .borders(Borders::LEFT)
                 .border_type(BorderType::Rounded),
         )
-        .style(DEFAULT_STYLE);
+        .style(app.theme.general_style);
     let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
     rect.render_widget(Clear, message_area);
+    render_blank_styled_canvas(rect, app, message_area, false);
     rect.render_widget(toast_count_paragraph, message_area);
 }
 
@@ -2970,6 +3042,7 @@ where
 {
     let popup_area = centered_rect(90, 90, rect.size());
     rect.render_widget(Clear, popup_area);
+    render_blank_styled_canvas(rect, app, popup_area, false);
     let card_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(5), Constraint::Length(12)])
@@ -3028,40 +3101,40 @@ where
                 if days_left <= app.config.warning_delta.into() && days_left >= 0 {
                     Span::styled(
                         format!("Due: {}", card.date_due),
-                        CARD_DUE_DATE_WARNING_STYLE,
+                        app.theme.card_due_warning_style,
                     )
                 } else if days_left < 0 {
                     Span::styled(
                         format!("Due: {}", card.date_due),
-                        CARD_DUE_DATE_CRITICAL_STYLE,
+                        app.theme.card_due_overdue_style,
                     )
                 } else {
                     Span::styled(
                         format!("Due: {}", card.date_due),
-                        CARD_DUE_DATE_DEFAULT_STYLE,
+                        app.theme.card_due_default_style,
                     )
                 }
             } else {
                 Span::styled(
                     format!("Due: {}", card.date_due),
-                    CARD_DUE_DATE_DEFAULT_STYLE,
+                    app.theme.card_due_default_style,
                 )
             };
             let card_priority_styled = if card.priority == CardPriority::High {
-                Span::styled(card_priority, CARD_PRIORITY_HIGH_STYLE)
+                Span::styled(card_priority, app.theme.card_priority_high_style)
             } else if card.priority == CardPriority::Medium {
-                Span::styled(card_priority, CARD_PRIORITY_MEDIUM_STYLE)
+                Span::styled(card_priority, app.theme.card_priority_medium_style)
             } else if card.priority == CardPriority::Low {
-                Span::styled(card_priority, CARD_PRIORITY_LOW_STYLE)
+                Span::styled(card_priority, app.theme.card_priority_low_style)
             } else {
                 Span::raw(card_priority)
             };
             let card_status_styled = if card.card_status == CardStatus::Complete {
-                Span::styled(card_status, CARD_COMPLETED_STATUS_STYLE)
+                Span::styled(card_status, app.theme.card_status_completed_style)
             } else if card.card_status == CardStatus::Active {
-                Span::styled(card_status, CARD_ACTIVE_STATUS_STYLE)
+                Span::styled(card_status, app.theme.card_status_active_style)
             } else if card.card_status == CardStatus::Stale {
-                Span::styled(card_status, CARD_STALE_STATUS_STYLE)
+                Span::styled(card_status, app.theme.card_status_stale_style)
             } else {
                 Span::raw(card_status)
             };
@@ -3094,7 +3167,7 @@ where
                             .title("Card Info")
                             .borders(Borders::ALL)
                             .border_type(BorderType::Rounded)
-                            .style(ERROR_TEXT_STYLE),
+                            .style(app.theme.error_text_style),
                     )
                     .alignment(Alignment::Center)
                     .wrap(Wrap { trim: true });
@@ -3136,9 +3209,9 @@ where
                     .to_lowercase()
                     .contains(c.to_string().to_lowercase().as_str())
                 {
-                    spans.push(Span::styled(c.to_string(), FOCUSED_ELEMENT_STYLE));
+                    spans.push(Span::styled(c.to_string(), app.theme.keyboard_focus_style));
                 } else {
-                    spans.push(Span::styled(c.to_string(), DEFAULT_STYLE));
+                    spans.push(Span::styled(c.to_string(), app.theme.general_style));
                 }
             }
             list_items.push(ListItem::new(vec![Spans::from(spans)]));
@@ -3202,6 +3275,7 @@ where
         )
         .wrap(Wrap { trim: false });
     rect.render_widget(Clear, vertical_chunks[1]);
+    render_blank_styled_canvas(rect, app, vertical_chunks[1], false);
     rect.render_widget(search_bar, vertical_chunks[1]);
 
     let search_results = List::new(search_results)
@@ -3210,10 +3284,11 @@ where
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(LIST_SELECT_STYLE)
-        .highlight_symbol(">>");
+        .highlight_style(app.theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     rect.render_widget(Clear, vertical_chunks[2]);
+    render_blank_styled_canvas(rect, app, vertical_chunks[2], false);
     rect.render_stateful_widget(
         search_results,
         vertical_chunks[2],
@@ -3222,6 +3297,7 @@ where
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, vertical_chunks[2]) {
         app.state.mouse_focus = Some(Focus::CommandPalette);
+        app.state.focus = Focus::CommandPalette;
         let top_of_list = vertical_chunks[2].y + 1;
         let mut bottom_of_list = vertical_chunks[2].y + search_results_length;
         if bottom_of_list > vertical_chunks[2].bottom() {
@@ -3256,6 +3332,7 @@ where
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeUiModePopup);
+        app.state.focus = Focus::ChangeUiModePopup;
         let top_of_list = popup_area.y + 1;
         let mut bottom_of_list = popup_area.y + all_ui_modes.len() as u16;
         if bottom_of_list > popup_area.bottom() {
@@ -3275,10 +3352,11 @@ where
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(LIST_SELECT_STYLE)
-        .highlight_symbol(">>");
+        .highlight_style(app.theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     rect.render_widget(Clear, popup_area);
+    render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(ui_modes, popup_area, &mut app.state.default_view_state);
 
     if app.config.enable_mouse_support {
@@ -3313,6 +3391,7 @@ where
     let popup_area = centered_rect(50, percent_height, rect.size());
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeCardStatusPopup);
+        app.state.focus = Focus::ChangeCardStatusPopup;
         let top_of_list = popup_area.y + 1;
         let mut bottom_of_list = popup_area.y + all_statuses.len() as u16;
         if bottom_of_list > popup_area.bottom() {
@@ -3335,10 +3414,11 @@ where
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(LIST_SELECT_STYLE)
-        .highlight_symbol(">>");
+        .highlight_style(app.theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     rect.render_widget(Clear, popup_area);
+    render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(
         statuses,
         popup_area,
@@ -3350,7 +3430,7 @@ where
     }
 }
 
-pub fn render_debug_panel<B>(rect: &mut Frame<B>, app: &App)
+pub fn render_debug_panel<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
@@ -3360,7 +3440,6 @@ where
     } else {
         "None".to_string()
     };
-    let tickrate = app.config.tickrate;
     let ui_render_time = if app.state.ui_render_time.is_some() {
         let render_time = app.state.ui_render_time.unwrap();
         // render time is in microseconds, so we convert it to milliseconds if render time is greater than 1 millisecond
@@ -3378,22 +3457,26 @@ where
     let menu_area = top_left_rect(30, 30, rect.size());
     let debug_panel = Paragraph::new(vec![
         Spans::from(format!("UI Mode: {}", current_ui_mode)),
-        Spans::from(format!("Current Mouse position: {:?}", app.state.current_mouse_coordinates)),
+        Spans::from(format!("Focus: {:?}", app.state.focus)),
+        Spans::from(format!(
+            "CMousePos: {:?}",
+            app.state.current_mouse_coordinates
+        )),
         Spans::from(format!("Popup Mode: {}", popup_mode)),
-        Spans::from(format!("Tickrate: {}ms", tickrate)),
-        Spans::from(format!("UI Render Time: {}", ui_render_time)),
-        Spans::from(format!("Current Board ID: {:?}", current_board_id)),
-        Spans::from(format!("Current Card ID: {:?}", current_card_id)),
+        Spans::from(format!("Render Time: {}", ui_render_time)),
+        Spans::from(format!("CB-ID: {:?}", current_board_id)),
+        Spans::from(format!("CC-ID: {:?}", current_card_id)),
     ])
     .block(
         Block::default()
             .title("Debug Panel")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(LOG_DEBUG_STYLE),
+            .border_style(app.theme.log_debug_style),
     )
     .wrap(Wrap { trim: false });
     rect.render_widget(Clear, menu_area);
+    render_blank_styled_canvas(rect, app, menu_area, false);
     rect.render_widget(debug_panel, menu_area);
 }
 
@@ -3419,9 +3502,10 @@ where
     let close_btn_style =
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, close_btn_area) {
             app.state.mouse_focus = Some(Focus::CloseButton);
-            MOUSE_HIGHLIGHT_STYLE
+            app.state.focus = Focus::CloseButton;
+            app.theme.mouse_focus_style
         } else {
-            ERROR_TEXT_STYLE
+            app.theme.error_text_style
         };
     // render a X in the top right corner of the rect
     let close_btn = Paragraph::new(vec![Spans::from("X")])
@@ -3432,4 +3516,541 @@ where
         )
         .alignment(Alignment::Right);
     rect.render_widget(close_btn, close_btn_area);
+}
+
+pub fn render_change_theme_popup<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    let popup_area = centered_rect(50, 50, rect.size());
+    let theme_list = app
+        .all_themes
+        .iter()
+        .map(|t| ListItem::new(vec![Spans::from(t.name.clone())]))
+        .collect::<Vec<ListItem>>();
+    let highlight_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+            app.state.mouse_focus = Some(Focus::ThemeSelector);
+            app.state.focus = Focus::ThemeSelector;
+            let top_of_list = popup_area.y + 1;
+            let mut bottom_of_list = popup_area.y + theme_list.len() as u16;
+            if bottom_of_list > popup_area.bottom() {
+                bottom_of_list = popup_area.bottom();
+            }
+            let mouse_y = app.state.current_mouse_coordinates.1;
+            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+                app.state
+                    .theme_selector_state
+                    .select(Some((mouse_y - top_of_list) as usize));
+            } else {
+                app.state.theme_selector_state.select(None);
+            }
+            app.theme.mouse_focus_style
+        } else {
+            app.theme.list_select_style
+        };
+    let themes = List::new(theme_list)
+        .block(
+            Block::default()
+                .title("Change Theme")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(highlight_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    rect.render_widget(Clear, popup_area);
+    render_blank_styled_canvas(rect, app, popup_area, false);
+    rect.render_stateful_widget(themes, popup_area, &mut app.state.theme_selector_state);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
+}
+
+pub fn render_create_theme<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    // use serde to iterate over the theme struct and create a list of items to render
+    let render_area = rect.size();
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(3)].as_ref())
+        .split(render_area);
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .margin(1)
+        .split(main_chunks[0]);
+    let theme_table_rows = app.state.theme_being_edited.to_rows(app);
+    let list_highlight_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, main_chunks[0]) {
+            app.state.mouse_focus = Some(Focus::ThemeEditor);
+            app.state.focus = Focus::ThemeEditor;
+            let top_of_list = main_chunks[0].y + 1;
+            let mut bottom_of_list = main_chunks[0].y + theme_table_rows.0.len() as u16;
+            if bottom_of_list > main_chunks[0].bottom() {
+                bottom_of_list = main_chunks[0].bottom();
+            }
+            let mouse_y = app.state.current_mouse_coordinates.1;
+            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+                app.state
+                    .theme_editor_state
+                    .select(Some((mouse_y - top_of_list) as usize));
+            } else {
+                app.state.theme_editor_state.select(None);
+            }
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.theme_editor_state.selected().is_some() {
+                app.theme.list_select_style
+            } else {
+                app.theme.general_style
+            }
+        }
+    };
+    let theme_block_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        if app.state.focus == Focus::ThemeEditor {
+            app.theme.keyboard_focus_style
+        } else {
+            app.theme.general_style
+        }
+    };
+    let submit_button_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, main_chunks[1]) {
+            app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.focus = Focus::SubmitButton;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::SubmitButton {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        }
+    };
+    let theme_title_list = Table::new(theme_table_rows.0)
+        .block(Block::default())
+        .widths(&[Constraint::Percentage(100)])
+        .highlight_style(list_highlight_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    rect.render_stateful_widget(
+        theme_title_list,
+        chunks[0],
+        &mut app.state.theme_editor_state,
+    );
+    let theme_element_list = Table::new(theme_table_rows.1)
+        .block(Block::default())
+        .widths(&[Constraint::Percentage(100)]);
+    rect.render_stateful_widget(
+        theme_element_list,
+        chunks[1],
+        &mut app.state.theme_editor_state,
+    );
+    let submit_button = Paragraph::new(vec![Spans::from("Create Theme")])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(submit_button_style),
+        )
+        .alignment(Alignment::Center);
+    rect.render_widget(submit_button, main_chunks[1]);
+
+    let border_block = Block::default()
+        .title("Create a new Theme")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(theme_block_style);
+    rect.render_widget(border_block, main_chunks[0]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
+}
+
+pub fn render_edit_specific_style_popup<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    let popup_area = centered_rect(90, 80, rect.size());
+    // show the fg , bg, and modifiers in a table to be selected by the user
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(3)].as_ref())
+        .margin(2)
+        .split(popup_area);
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+            ]
+            .as_ref(),
+        )
+        .split(main_chunks[0]);
+    let fg_list_border_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
+            if app.state.edit_specific_style_state.0.selected().is_none() {
+                app.state.edit_specific_style_state.0.select(Some(0));
+            }
+            app.state.mouse_focus = Some(Focus::StyleEditorFG);
+            app.state.focus = Focus::StyleEditorFG;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::StyleEditorFG {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let bg_list_border_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
+            if app.state.edit_specific_style_state.1.selected().is_none() {
+                app.state.edit_specific_style_state.1.select(Some(0));
+            }
+            app.state.mouse_focus = Some(Focus::StyleEditorBG);
+            app.state.focus = Focus::StyleEditorBG;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::StyleEditorBG {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let modifiers_list_border_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
+            if app.state.edit_specific_style_state.2.selected().is_none() {
+                app.state.edit_specific_style_state.2.select(Some(0));
+            }
+            app.state.mouse_focus = Some(Focus::StyleEditorModifier);
+            app.state.focus = Focus::StyleEditorModifier;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::StyleEditorModifier {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let submit_button_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, main_chunks[1]) {
+            app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.focus = Focus::SubmitButton;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::SubmitButton {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let fg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
+        .map(|color| {
+            let mut fg_style = Style::default();
+            fg_style.fg = Some(color.to_color());
+            ListItem::new(vec![Spans::from(vec![
+                Span::styled("Sample Text", fg_style),
+                Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
+            ])])
+        })
+        .collect();
+    let fg_list = List::new(fg_list_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Foreground")
+                .border_style(fg_list_border_style),
+        )
+        .highlight_style(app.theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    let bg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
+        .map(|color| {
+            let mut bg_style = Style::default();
+            bg_style.bg = Some(color.to_color());
+            ListItem::new(vec![Spans::from(vec![
+                Span::styled("Sample Text", bg_style),
+                Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
+            ])])
+        })
+        .collect();
+    let bg_list = List::new(bg_list_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Background")
+                .border_style(bg_list_border_style),
+        )
+        .highlight_style(app.theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    let modifier_list_items: Vec<ListItem> = TextModifierOptions::to_iter()
+        .map(|modifier| {
+            let mut modifier_style = Style::default();
+            modifier_style.add_modifier = modifier.to_modifier();
+            ListItem::new(vec![Spans::from(vec![
+                Span::styled("Sample Text", modifier_style),
+                Span::styled(
+                    format!(" - {}", modifier.to_string()),
+                    app.theme.general_style,
+                ),
+            ])])
+        })
+        .collect();
+    let modifier_list = List::new(modifier_list_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Modifier")
+                .border_style(modifiers_list_border_style),
+        )
+        .highlight_style(app.theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    let theme_style_being_edited_index = app.state.theme_editor_state.selected();
+    let theme_style_being_edited = if theme_style_being_edited_index.is_some() {
+        let index = theme_style_being_edited_index.unwrap();
+        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str();
+        if index < theme_style_being_edited.len() {
+            theme_style_being_edited[index]
+        } else {
+            debug!("Index is out of bounds for theme_style_being_edited");
+            "None"
+        }
+    } else {
+        "None"
+    };
+    let border_block = Block::default()
+        .title(format!("Editing Style: {}", theme_style_being_edited))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(app.theme.general_style);
+
+    let submit_button = Paragraph::new("Confirm Changes")
+        .style(submit_button_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(submit_button_style),
+        )
+        .alignment(Alignment::Center);
+    rect.render_widget(Clear, popup_area);
+    render_blank_styled_canvas(rect, app, popup_area, false);
+    rect.render_stateful_widget(
+        fg_list,
+        chunks[0],
+        &mut app.state.edit_specific_style_state.0,
+    );
+    rect.render_stateful_widget(
+        bg_list,
+        chunks[1],
+        &mut app.state.edit_specific_style_state.1,
+    );
+    rect.render_stateful_widget(
+        modifier_list,
+        chunks[2],
+        &mut app.state.edit_specific_style_state.2,
+    );
+    rect.render_widget(submit_button, main_chunks[1]);
+    rect.render_widget(border_block, popup_area);
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
+}
+
+pub fn render_save_theme_prompt<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    let popup_area = centered_rect(50, 50, rect.size());
+    // make two buttons save theme to file and only save for current session
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .margin(2)
+        .split(popup_area);
+    let save_theme_button_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
+            app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.focus = Focus::SubmitButton;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::SubmitButton {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let dont_save_theme_button_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
+            app.state.mouse_focus = Some(Focus::ExtraFocus);
+            app.state.focus = Focus::ExtraFocus;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::ExtraFocus {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let save_theme_button = Paragraph::new("Save Theme to File")
+        .style(save_theme_button_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(save_theme_button_style),
+        )
+        .alignment(Alignment::Center);
+    let dont_save_theme_button = Paragraph::new("Don't Save Theme to File")
+        .style(dont_save_theme_button_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(dont_save_theme_button_style),
+        )
+        .alignment(Alignment::Center);
+    let border_block = Block::default()
+        .title("Save Theme?")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(app.theme.general_style);
+    rect.render_widget(Clear, popup_area);
+    render_blank_styled_canvas(rect, app, popup_area, true);
+    rect.render_widget(save_theme_button, chunks[0]);
+    rect.render_widget(dont_save_theme_button, chunks[1]);
+    rect.render_widget(border_block, popup_area);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
+}
+
+pub fn render_blank_styled_canvas<B>(
+    rect: &mut Frame<B>,
+    app: &mut App,
+    render_area: Rect,
+    popup_mode: bool,
+) where
+    B: Backend,
+{
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(100), Constraint::Percentage(100)].as_ref())
+        .split(render_area);
+    let mut styled_text = vec![];
+    for _ in 0..chunks[0].width + 1 {
+        styled_text.push(" ".to_string());
+    }
+    let mut render_text = vec![];
+    for _ in 0..chunks[0].height {
+        render_text.push(format!("{}\n", styled_text.join("")));
+    }
+    let styled_text = if popup_mode {
+        Paragraph::new(render_text.join(""))
+            .style(app.theme.inactive_text_style)
+            .block(Block::default())
+    } else {
+        Paragraph::new(render_text.join(""))
+            .style(app.theme.general_style)
+            .block(Block::default())
+    };
+    rect.render_widget(styled_text, render_area);
+}
+
+pub fn render_custom_rgb_color_prompt<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    // make a small popup with a text input field and a submit button
+    let popup_area = centered_rect(50, 50, rect.size());
+    let prompt_text = "Enter a custom RGB color in the format: r,g,b";
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Min(5),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
+        .margin(2)
+        .split(popup_area);
+    let border_block = Block::default()
+        .title("Custom RGB Color")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(app.theme.general_style);
+
+    let text_input_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
+            app.state.mouse_focus = Some(Focus::TextInput);
+            app.state.focus = Focus::TextInput;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::TextInput {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let submit_button_style =
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
+            app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.focus = Focus::SubmitButton;
+            app.state.app_status = AppStatus::Initialized;
+            app.theme.mouse_focus_style
+        } else {
+            if app.state.focus == Focus::SubmitButton {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
+        };
+    let prompt_text = Paragraph::new(prompt_text)
+        .style(app.theme.general_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+    let text_input = Paragraph::new(app.state.current_user_input.clone())
+        .style(app.theme.general_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(text_input_style),
+        );
+    let submit_button = Paragraph::new("Submit")
+        .style(app.theme.general_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(submit_button_style),
+        )
+        .alignment(Alignment::Center);
+
+    rect.render_widget(Clear, popup_area);
+    render_blank_styled_canvas(rect, app, popup_area, true);
+    rect.render_widget(prompt_text, chunks[0]);
+    rect.render_widget(text_input, chunks[1]);
+    rect.render_widget(submit_button, chunks[2]);
+    rect.render_widget(border_block, popup_area);
+
+    if app.state.app_status == AppStatus::UserInput {
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            app.state.current_user_input.len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[1].width - 2);
+        let y_offset = current_cursor_position / (chunks[1].width - 2);
+        let x_cursor_position = chunks[1].x + x_offset + 1;
+        let y_cursor_position = chunks[1].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
+    }
 }

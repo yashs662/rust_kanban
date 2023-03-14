@@ -22,6 +22,7 @@ pub enum UiMode {
     NewBoard,
     NewCard,
     LoadSave,
+    CreateTheme,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -57,6 +58,12 @@ pub enum Focus {
     ChangeCardStatusPopup,
     EditGeneralConfigPopup,
     EditSpecificKeyBindingPopup,
+    ThemeSelector,
+    ThemeEditor,
+    StyleEditorFG,
+    StyleEditorBG,
+    StyleEditorModifier,
+    TextInput,
     NoFocus,
     ExtraFocus, // Used in cases where defining a new focus is not necessary
 }
@@ -110,6 +117,7 @@ impl UiMode {
             UiMode::NewBoard => "New Board".to_string(),
             UiMode::NewCard => "New Card".to_string(),
             UiMode::LoadSave => "Load a Save".to_string(),
+            UiMode::CreateTheme => "Create Theme".to_string(),
         }
     }
 
@@ -131,6 +139,7 @@ impl UiMode {
             "New Board" => Some(UiMode::NewBoard),
             "New Card" => Some(UiMode::NewCard),
             "Load a Save" => Some(UiMode::LoadSave),
+            "Create Theme" => Some(UiMode::CreateTheme),
             _ => None,
         }
     }
@@ -184,6 +193,10 @@ impl UiMode {
                 Focus::SubmitButton,
             ],
             UiMode::LoadSave => vec![Focus::Body],
+            UiMode::CreateTheme => vec![
+                Focus::ThemeEditor,
+                Focus::SubmitButton,
+            ],
         }
     }
 
@@ -253,41 +266,41 @@ impl Focus {
             Self::ChangeCardStatusPopup => "Change Card Status Popup",
             Self::EditGeneralConfigPopup => "Edit General Config Popup",
             Self::EditSpecificKeyBindingPopup => "Edit Specific Key Binding Popup",
+            Self::ThemeSelector => "Theme Selector",
+            Self::ThemeEditor => "Theme Editor",
+            Self::StyleEditorFG => "Theme Editor FG",
+            Self::StyleEditorBG => "Theme Editor BG",
+            Self::StyleEditorModifier => "Theme Editor Modifier",
+            Self::TextInput => "Text Input",
             Self::NoFocus => "No Focus",
             Self::ExtraFocus => "Extra Focus",
         }
     }
     pub fn next(&self, available_tabs: &Vec<Focus>) -> Self {
-        let index = available_tabs.iter().position(|x| x == self);
-        // check if index is None
-        let index = match index {
-            Some(i) => i,
-            None => 0,
-        };
-        if available_tabs.len() <= 1 {
-            return Self::NoFocus;
-        }
-        let next_index = (index + 1) % available_tabs.len();
-        available_tabs[next_index]
-    }
-
-    pub fn prev(&self, available_tabs: &Vec<Focus>) -> Self {
-        let current_focus = self.clone();
-        let index = available_tabs.iter().position(|x| x == self);
-        // check if index is None
-        let index = match index {
-            Some(i) => i,
-            None => 0,
-        };
-        if available_tabs.is_empty() {
-            return current_focus;
-        }
-        let prev_index = if index == 0 {
-            available_tabs.len() - 1
+        // check if current_focus is in available_tabs if not set to first available tab other wise find next tab
+        if available_tabs.contains(self) {
+            let index = available_tabs.iter().position(|x| x == self).unwrap();
+            if index == available_tabs.len() - 1 {
+                available_tabs[0]
+            } else {
+                available_tabs[index + 1]
+            }
         } else {
-            index - 1
-        };
-        available_tabs[prev_index]
+            available_tabs[0]
+        }
+    }
+    pub fn prev(&self, available_tabs: &Vec<Focus>) -> Self {
+        // check if current_focus is in available_tabs if not set to first available tab other wise find next tab
+        if available_tabs.contains(self) {
+            let index = available_tabs.iter().position(|x| x == self).unwrap();
+            if index == 0 {
+                available_tabs[available_tabs.len() - 1]
+            } else {
+                available_tabs[index - 1]
+            }
+        } else {
+            available_tabs[0]
+        }
     }
 
     pub fn from_str(s: &str) -> Self {
@@ -315,6 +328,12 @@ impl Focus {
             "Change Card Status Popup" => Self::ChangeCardStatusPopup,
             "Edit General Config Popup" => Self::EditGeneralConfigPopup,
             "Edit Specific Key Binding Popup" => Self::EditSpecificKeyBindingPopup,
+            "Theme Selector" => Self::ThemeSelector,
+            "Theme Editor" => Self::ThemeEditor,
+            "Theme Editor FG" => Self::StyleEditorFG,
+            "Theme Editor BG" => Self::StyleEditorBG,
+            "Theme Editor Modifier" => Self::StyleEditorModifier,
+            "Text Input" => Self::TextInput,
             "Submit Button" => Self::SubmitButton,
             "Extra Focus" => Self::ExtraFocus,
             _ => Self::NoFocus,

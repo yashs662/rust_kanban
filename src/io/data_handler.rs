@@ -6,8 +6,9 @@ use regex::Regex;
 use savefile::prelude::*;
 use serde::Serialize;
 
-use super::handler::get_config_dir;
-use crate::constants::CONFIG_FILE_NAME;
+use super::handler::{get_config_dir, make_file_system_safe_name};
+use crate::constants::{CONFIG_FILE_NAME, THEME_DIR_NAME, THEME_FILE_NAME, CONFIG_DIR_NAME};
+use crate::ui::Theme;
 use crate::{
     app::{kanban::Board, state::UiMode, AppConfig},
     constants::{SAVE_DIR_NAME, SAVE_FILE_NAME},
@@ -76,7 +77,7 @@ pub fn get_config(ignore_overlapped_keybinds: bool) -> Result<AppConfig, String>
 }
 
 pub fn write_config(config: &AppConfig) -> Result<(), String> {
-    let config_str = serde_json::to_string(&config).unwrap();
+    let config_str = serde_json::to_string_pretty(&config).unwrap();
     let prepare_config_dir_status = prepare_config_dir();
     if prepare_config_dir_status.is_err() {
         return Err(prepare_config_dir_status.unwrap_err());
@@ -307,4 +308,76 @@ pub fn get_default_save_directory() -> PathBuf {
     let mut default_save_path = env::temp_dir();
     default_save_path.push(SAVE_DIR_NAME);
     default_save_path
+}
+
+fn get_theme_dir() -> Result<PathBuf, String> {
+    let home_dir = home::home_dir();
+    if home_dir.is_none() {
+        return Err(String::from("Error getting home directory"));
+    }
+    let mut theme_dir = home_dir.unwrap();
+    // check if windows or unix
+    if cfg!(windows) {
+        theme_dir.push("AppData");
+        theme_dir.push("Roaming");
+    } else {
+        theme_dir.push(".config");
+    }
+    theme_dir.push(CONFIG_DIR_NAME);
+    theme_dir.push(THEME_DIR_NAME);
+    Ok(theme_dir)
+}
+
+pub fn get_saved_themes() -> Option<Vec<Theme>> {
+    let theme_dir = get_theme_dir();
+    if theme_dir.is_err() {
+        return None;
+    }
+    let theme_dir = theme_dir.unwrap();
+    let read_dir_status = fs::read_dir(&theme_dir);
+    // we are looking for .json files with THEME_FILE_NAME as prefix
+    let file_prefix = format!("{}_", THEME_FILE_NAME);
+    let regex_str = format!("^{}.*\\.json$", file_prefix);
+    let re = Regex::new(&regex_str).unwrap();
+    match read_dir_status {
+        Ok(files) => {
+            let mut themes = Vec::new();
+            for file in files {
+                let file = file.unwrap();
+                let file_name = file.file_name().into_string().unwrap();
+                if re.is_match(&file_name) {
+                    let file_path = theme_dir.join(file_name);
+                    let read_status = fs::read_to_string(file_path);
+                    if read_status.is_err() {
+                        continue;
+                    }
+                    let read_status = read_status.unwrap();
+                    let theme: Theme = serde_json::from_str(&read_status).unwrap();
+                    themes.push(theme);
+                }
+            }
+            Some(themes)
+        }
+        Err(_) => None,
+    }
+}
+
+pub fn save_theme(theme: Theme) -> Result<String, String> {
+    let theme_dir = get_theme_dir();
+    if theme_dir.is_err() {
+        return Err(theme_dir.unwrap_err());
+    }
+    let theme_dir = theme_dir.unwrap();
+    let create_dir_status = fs::create_dir_all(&theme_dir);
+    if create_dir_status.is_err() {
+        return Err(create_dir_status.unwrap_err().to_string());
+    }
+    // export the theme to json using serde prefix the file name with THEME_FILE_NAME and put the theme.name next then .json
+    let theme_name = format!("{}_{}.json",THEME_FILE_NAME,make_file_system_safe_name(&theme.name));
+    let theme_path = theme_dir.join(theme_name);
+    let write_status = fs::write(theme_path.clone(), serde_json::to_string_pretty(&theme).unwrap());
+    if write_status.is_err() {
+        return Err(write_status.unwrap_err().to_string());
+    }
+    Ok(theme_path.to_str().unwrap().to_string())
 }

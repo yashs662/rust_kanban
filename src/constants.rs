@@ -29,9 +29,12 @@ pub const IO_EVENT_WAIT_TIME: u64 = 5; // ms
 pub const MOUSE_OUT_OF_BOUNDS_COORDINATES: (u16, u16) = (9999, 9999);
 pub const NEW_CARD_FORM_DEFAULT_STATE: [&'static str; 3] = ["", "", ""];
 pub const NEW_BOARD_FORM_DEFAULT_STATE: [&'static str; 2] = ["", ""];
+pub const SAMPLE_TEXT: &str = "Sample Text";
+pub const THEME_DIR_NAME: &str = "themes";
+pub const THEME_FILE_NAME: &str = "kanban_theme";
 
 // Style
-pub const DEFAULT_STYLE: Style = Style {
+pub const GENERAL_STYLE: Style = Style {
     fg: Some(Color::White),
     bg: Some(Color::Reset),
     add_modifier: Modifier::empty(),
@@ -79,7 +82,7 @@ pub const CARD_STALE_STATUS_STYLE: Style = Style {
     add_modifier: Modifier::BOLD,
     sub_modifier: Modifier::empty(),
 };
-pub const FOCUSED_ELEMENT_STYLE: Style = Style {
+pub const KEYBOARD_FOCUS_STYLE: Style = Style {
     fg: Some(Color::LightCyan),
     bg: Some(Color::Reset),
     add_modifier: Modifier::BOLD,

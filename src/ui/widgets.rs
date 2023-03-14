@@ -13,6 +13,8 @@ use crate::{
     lerp_between,
 };
 
+use super::TextColorOptions;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToastWidget {
     pub title: String,
@@ -89,7 +91,11 @@ impl WidgetManager {
 
     pub async fn update(&mut self) {
         let mut app = self.app.lock().await;
-        let term_background_color = app.state.term_background_color;
+        let term_background_color = if app.theme.general_style.bg.is_some() {
+            TextColorOptions::from(app.theme.general_style.bg.unwrap()).to_rgb()
+        } else {
+            app.state.term_background_color
+        };
         let toasts = &mut app.state.toasts;
         // remove all inactive toasts
         for i in (0..toasts.len()).rev() {
@@ -322,6 +328,14 @@ impl CommandPalette {
                         app.state.debug_menu_toggled = !app.state.debug_menu_toggled;
                         app.state.popup_mode = None;
                     }
+                    CommandPaletteActions::ChangeTheme => {
+                        app.state.popup_mode = Some(PopupMode::ChangeTheme);
+                    }
+                    CommandPaletteActions::CreateATheme => {
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.ui_mode = UiMode::CreateTheme;
+                        app.state.popup_mode = None;
+                    }
                 }
                 app.state.current_user_input = "".to_string();
             }
@@ -345,6 +359,8 @@ pub enum CommandPaletteActions {
     ChangeUIMode,
     ChangeCurrentCardStatus,
     DebugMenu,
+    ChangeTheme,
+    CreateATheme,
     Quit,
 }
 
@@ -362,6 +378,8 @@ impl CommandPaletteActions {
             Self::OpenHelpMenu,
             Self::ChangeUIMode,
             Self::ChangeCurrentCardStatus,
+            Self::ChangeTheme,
+            Self::CreateATheme,
             Self::Quit,
         ];
 
@@ -388,6 +406,8 @@ impl CommandPaletteActions {
             Self::ChangeUIMode => "Change UI Mode",
             Self::ChangeCurrentCardStatus => "Change Current Card Status",
             Self::DebugMenu => "Toggle Debug Panel",
+            Self::ChangeTheme => "Change Theme",
+            Self::CreateATheme => "Create a Theme",
             Self::Quit => "Quit",
         }
     }
@@ -411,6 +431,8 @@ impl CommandPaletteActions {
                 "change ui mode" => Some(Self::ChangeUIMode),
                 "change current card status" => Some(Self::ChangeCurrentCardStatus),
                 "toggle debug panel" => Some(Self::DebugMenu),
+                "change theme" => Some(Self::ChangeTheme),
+                "create a theme" => Some(Self::CreateATheme),
                 "quit" => Some(Self::Quit),
                 _ => None,
             };
@@ -428,6 +450,8 @@ impl CommandPaletteActions {
                 "Change UI Mode" => Some(Self::ChangeUIMode),
                 "Change Current Card Status" => Some(Self::ChangeCurrentCardStatus),
                 "Toggle Debug Panel" => Some(Self::DebugMenu),
+                "Change Theme" => Some(Self::ChangeTheme),
+                "Create a Theme" => Some(Self::CreateATheme),
                 "Quit" => Some(Self::Quit),
                 _ => None,
             };

@@ -31,6 +31,7 @@ use crate::io::data_handler::{
 use crate::io::handler::refresh_visible_boards_and_cards;
 use crate::io::{data_handler, IoEvent};
 use crate::ui::widgets::{CommandPalette, ToastType, ToastWidget};
+use crate::ui::{TextColorOptions, Theme, TextModifierOptions};
 
 pub mod actions;
 pub mod app_helper;
@@ -55,6 +56,8 @@ pub struct App {
     pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
     pub command_palette: CommandPalette,
     pub last_io_event_time: Option<Instant>,
+    pub all_themes: Vec<Theme>,
+    pub theme: Theme,
 }
 
 impl App {
@@ -76,6 +79,8 @@ impl App {
             visible_boards_and_cards: LinkedHashMap::new(),
             command_palette: CommandPalette::new(),
             last_io_event_time: None,
+            all_themes: vec![Theme::default()],
+            theme: Theme::default(),
         }
     }
 
@@ -426,7 +431,6 @@ impl App {
         }
         self.state.keybind_store = keybind_action_list;
     }
-
     pub fn send_info_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
             self.state.toasts.push(ToastWidget::new(
@@ -442,7 +446,6 @@ impl App {
             ));
         }
     }
-
     pub fn send_error_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
             self.state.toasts.push(ToastWidget::new(
@@ -458,7 +461,6 @@ impl App {
             ));
         }
     }
-
     pub fn send_warning_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
             self.state.toasts.push(ToastWidget::new(
@@ -474,7 +476,6 @@ impl App {
             ));
         }
     }
-
     pub fn send_loading_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
             self.state.toasts.push(ToastWidget::new(
@@ -490,7 +491,6 @@ impl App {
             ));
         }
     }
-
     pub fn select_current_card_status_prev(&mut self) {
         let i = match self.state.card_status_selector_state.selected() {
             Some(i) => {
@@ -504,7 +504,6 @@ impl App {
         };
         self.state.card_status_selector_state.select(Some(i));
     }
-
     pub fn select_current_card_status_next(&mut self) {
         let i = match self.state.card_status_selector_state.selected() {
             Some(i) => {
@@ -518,7 +517,6 @@ impl App {
         };
         self.state.card_status_selector_state.select(Some(i));
     }
-
     pub fn increase_loading_toast_time(&mut self, msg: &str, increase_by: Duration) {
         let toast = self.state.toasts.iter_mut().find(|x| x.message == msg);
         if toast.is_none() {
@@ -527,6 +525,138 @@ impl App {
         }
         let toast = toast.unwrap();
         toast.duration += increase_by;
+    }
+    pub fn select_change_theme_next(&mut self) {
+        let i = match self.state.theme_selector_state.selected() {
+            Some(i) => {
+                if i >= self.all_themes.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.theme_selector_state.select(Some(i));
+    }
+    pub fn select_change_theme_prev(&mut self) {
+        let i = match self.state.theme_selector_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.all_themes.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.theme_selector_state.select(Some(i));
+    }
+    pub fn select_create_theme_next(&mut self) {
+        let theme_rows_len = Theme::default().to_rows(self).1.len();
+        let i = match self.state.theme_editor_state.selected() {
+            Some(i) => {
+                if i >= theme_rows_len - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.theme_editor_state.select(Some(i));
+    }
+    pub fn select_create_theme_prev(&mut self) {
+        let theme_rows_len = Theme::default().to_rows(self).1.len();
+        let i = match self.state.theme_editor_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    theme_rows_len - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.theme_editor_state.select(Some(i));
+    }
+    pub fn select_edit_style_fg_next(&mut self) {
+        let i = match self.state.edit_specific_style_state.0.selected() {
+            Some(i) => {
+                if i >= TextColorOptions::to_iter().count() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_specific_style_state.0.select(Some(i));
+    }
+    pub fn select_edit_style_fg_prev(&mut self) {
+        let i = match self.state.edit_specific_style_state.0.selected() {
+            Some(i) => {
+                if i == 0 {
+                    TextColorOptions::to_iter().count() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_specific_style_state.0.select(Some(i));
+    }
+    pub fn select_edit_style_bg_next(&mut self) {
+        let i = match self.state.edit_specific_style_state.1.selected() {
+            Some(i) => {
+                if i >= TextColorOptions::to_iter().count() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_specific_style_state.1.select(Some(i));
+    }
+    pub fn select_edit_style_bg_prev(&mut self) {
+        let i = match self.state.edit_specific_style_state.1.selected() {
+            Some(i) => {
+                if i == 0 {
+                    TextColorOptions::to_iter().count() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_specific_style_state.1.select(Some(i));
+    }
+    pub fn select_edit_style_modifier_next(&mut self) {
+        let i = match self.state.edit_specific_style_state.2.selected() {
+            Some(i) => {
+                if i >= TextModifierOptions::to_iter().count() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_specific_style_state.2.select(Some(i));
+    }
+    pub fn select_edit_style_modifier_prev(&mut self) {
+        let i = match self.state.edit_specific_style_state.2.selected() {
+            Some(i) => {
+                if i == 0 {
+                    TextModifierOptions::to_iter().count() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.edit_specific_style_state.2.select(Some(i));
     }
 }
 
@@ -587,6 +717,11 @@ pub enum PopupMode {
     ChangeCurrentCardStatus,
     EditGeneralConfig,
     SelectDefaultView,
+    ChangeTheme,
+    ThemeEditor,
+    SaveThemePrompt,
+    CustomRGBPromptFG,
+    CustomRGBPromptBG,
 }
 
 impl Display for PopupMode {
@@ -599,6 +734,35 @@ impl Display for PopupMode {
             PopupMode::ChangeCurrentCardStatus => write!(f, "Change Current Card Status"),
             PopupMode::EditGeneralConfig => write!(f, "Edit General Config"),
             PopupMode::SelectDefaultView => write!(f, "Select Default View"),
+            PopupMode::ChangeTheme => write!(f, "Change Theme"),
+            PopupMode::ThemeEditor => write!(f, "Edit Theme Style"),
+            PopupMode::SaveThemePrompt => write!(f, "Save Theme Prompt"),
+            PopupMode::CustomRGBPromptFG => write!(f, "Custom RGB Prompt"),
+            PopupMode::CustomRGBPromptBG => write!(f, "Custom RGB Prompt"),
+        }
+    }
+}
+
+impl PopupMode {
+    fn get_available_targets(&self) -> Vec<Focus> {
+        match self {
+            PopupMode::CardView => vec![],
+            PopupMode::CommandPalette => vec![],
+            PopupMode::EditSpecificKeyBinding => vec![],
+            PopupMode::ChangeUIMode => vec![],
+            PopupMode::ChangeCurrentCardStatus => vec![],
+            PopupMode::EditGeneralConfig => vec![],
+            PopupMode::SelectDefaultView => vec![],
+            PopupMode::ChangeTheme => vec![],
+            PopupMode::ThemeEditor => vec![
+                Focus::StyleEditorFG,
+                Focus::StyleEditorBG,
+                Focus::StyleEditorModifier,
+                Focus::SubmitButton,
+            ],
+            PopupMode::SaveThemePrompt => vec![Focus::SubmitButton, Focus::ExtraFocus],
+            PopupMode::CustomRGBPromptFG => vec![Focus::TextInput, Focus::SubmitButton],
+            PopupMode::CustomRGBPromptBG => vec![Focus::TextInput, Focus::SubmitButton],
         }
     }
 }
@@ -640,6 +804,11 @@ pub struct AppState {
     pub mouse_list_index: Option<u16>,
     pub last_mouse_action: Option<Mouse>,
     pub last_mouse_action_time: Option<Instant>,
+    pub theme_selector_state: ListState,
+    pub theme_being_edited: Theme,
+    pub theme_editor_state: TableState,
+    pub edit_specific_style_state: (ListState, ListState, ListState),
+    pub defualt_theme_mode: bool
 }
 
 impl Default for AppState {
@@ -680,6 +849,15 @@ impl Default for AppState {
             mouse_list_index: None,
             last_mouse_action: None,
             last_mouse_action_time: None,
+            theme_selector_state: ListState::default(),
+            theme_being_edited: Theme::default(),
+            theme_editor_state: TableState::default(),
+            edit_specific_style_state: (
+                ListState::default(),
+                ListState::default(),
+                ListState::default(),
+            ),
+            defualt_theme_mode: false
         }
     }
 }
@@ -697,11 +875,13 @@ pub struct AppConfig {
     pub no_of_cards_to_show: u16,
     pub no_of_boards_to_show: u16,
     pub enable_mouse_support: bool,
+    pub default_theme: String,
 }
 
 impl AppConfig {
     pub fn default() -> Self {
         let default_view = UiMode::TitleBodyHelpLog;
+        let default_theme = Theme::default();
         Self {
             save_directory: get_default_save_directory(),
             default_view,
@@ -714,6 +894,7 @@ impl AppConfig {
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
             no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
             enable_mouse_support: true,
+            default_theme: default_theme.name
         }
     }
 
@@ -756,6 +937,7 @@ impl AppConfig {
                 String::from("Enable Mouse Support"),
                 self.enable_mouse_support.to_string(),
             ],
+            vec![String::from("Default Theme"), self.default_theme.to_string()],
             vec![String::from("Edit Keybindings")],
         ]
     }
@@ -963,6 +1145,9 @@ impl AppConfig {
                             None,
                         );
                     }
+                }
+                "default_theme" => {
+                    // TODO: check if theme exists
                 }
                 _ => {
                     debug!("Invalid key: {}", key);

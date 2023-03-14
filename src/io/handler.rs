@@ -3,8 +3,9 @@ use crate::app::state::UiMode;
 use crate::app::{App, AppConfig};
 use crate::constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME};
 use crate::io::data_handler::{
-    get_config, get_default_save_directory, reset_config, save_kanban_state_locally,
+    get_config, get_default_save_directory, reset_config, save_kanban_state_locally, get_saved_themes,
 };
+use crate::ui::TextColorOptions;
 use chrono::NaiveDate;
 use eyre::{anyhow, Result};
 use linked_hash_map::LinkedHashMap;
@@ -68,6 +69,23 @@ impl IoAsyncHandler {
         app.keybind_list_maker();
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         app.initialized(); // we could update the app state
+        let saved_themes = get_saved_themes();
+        if saved_themes.is_some() {
+            app.all_themes.extend(saved_themes.unwrap());
+        }
+        let default_theme = app.config.default_theme.clone();
+        for theme in &app.all_themes {
+            if theme.name == default_theme {
+                app.theme = theme.clone();
+                break;
+            }
+        }
+        let bg = app.theme.general_style.bg;
+        if bg.is_some() {
+            app.state.term_background_color = TextColorOptions::from(bg.unwrap()).to_rgb();
+        } else {
+            app.state.term_background_color = (0,0,0)
+        }
         info!("👍 Application initialized");
         if app.config.save_directory == get_default_save_directory() {
             app.send_warning_toast(
@@ -618,4 +636,13 @@ pub fn refresh_visible_boards_and_cards(app: &mut App) {
                 Some(app.visible_boards_and_cards.values().next().unwrap()[0]);
         }
     }
+}
+
+pub fn make_file_system_safe_name(name: &str) -> String {
+    let mut safe_name = name.to_string();
+    let unsafe_chars = vec!["/", "\\", ":", "*", "?", "\"", "<", ">", "|", " "];
+    for unsafe_char in unsafe_chars {
+        safe_name = safe_name.replace(unsafe_char, "");
+    }
+    safe_name
 }

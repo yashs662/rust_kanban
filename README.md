@@ -10,12 +10,12 @@
 - [ ] Allow for more mouse Interactions (Dragging cards maybe?)
 - [ ] Allow Card to be modified in Card View
 - [ ] Implement Cloud saves (Google drive maybe? as I am not going to host a server)
-- [ ] Implement a way to add custom colors (Theme support)
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Implement a way to add custom colors (Theme support)
 - [x] Implement a way to interact with the kanban board using the mouse (Clicking, Scrolling are supported as of now)
 - [x] Added ability to export kanban data to JSON
 - [x] Implement a Command Palette (like in vs code (Ctrl + Shift + P)) as a way to interact with the app instead of using keybindings

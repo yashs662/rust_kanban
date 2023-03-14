@@ -1,6 +1,6 @@
 [package]
 name = "rust-kanban"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -10,16 +10,19 @@ keywords = ["TUI", "Kanban", "CLI", "Terminal"]
 categories = ["command-line-utilities", "text-editors"]
 
 [dependencies]
-log = { version = "0.4.17", features = ["max_level_debug", "release_max_level_info"] }
+log = { version = "0.4.17", features = [
+    "max_level_debug",
+    "release_max_level_info"
+] }
 tui-logger = "0.8.1"
-tui = "0.19.0"
+tui = { version = "0.19.0", features = ["serde"] }
 crossterm = "0.26.0"
 tokio = { version = "1.25.0", features = ["full"] }
 chrono = "0.4.23"
 textwrap = "0.16"
 eyre = "0.6.8"
 home = "0.5.4"
-serde = { version = "1.0.152", features = ["derive"]}
+serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
 clap = { version = "4.1.4", features = ["derive"] }
 savefile-derive = "0.12.0"
