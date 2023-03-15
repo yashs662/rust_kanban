@@ -13,7 +13,7 @@ use crate::{
     lerp_between,
 };
 
-use super::TextColorOptions;
+use super::{TextColorOptions, Theme};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToastWidget {
@@ -26,14 +26,14 @@ pub struct ToastWidget {
 }
 
 impl ToastWidget {
-    pub fn new(message: String, duration: Duration, toast_type: ToastType) -> Self {
+    pub fn new(message: String, duration: Duration, toast_type: ToastType, theme: Theme) -> Self {
         Self {
             title: toast_type.as_str().to_string(),
             message,
             duration,
             start_time: Instant::now(),
             toast_type: toast_type.clone(),
-            toast_color: toast_type.as_color(),
+            toast_color: toast_type.as_color(theme),
         }
     }
     pub fn new_with_title(
@@ -41,6 +41,7 @@ impl ToastWidget {
         message: String,
         duration: Duration,
         toast_type: ToastType,
+        theme: Theme,
     ) -> Self {
         Self {
             title,
@@ -48,7 +49,7 @@ impl ToastWidget {
             duration,
             start_time: Instant::now(),
             toast_type: toast_type.clone(),
-            toast_color: toast_type.as_color(),
+            toast_color: toast_type.as_color(theme),
         }
     }
 }
@@ -70,12 +71,36 @@ impl ToastType {
             Self::Loading => "Loading",
         }
     }
-    pub fn as_color(&self) -> (u8, u8, u8) {
+    pub fn as_color(&self, theme: Theme) -> (u8, u8, u8) {
         match self {
-            Self::Error => (255, 0, 0),
-            Self::Warning => (255, 255, 0),
-            Self::Info => (0, 255, 255),
-            Self::Loading => (0, 255, 0),
+            Self::Error => TextColorOptions::from(
+                theme
+                    .log_error_style
+                    .fg
+                    .unwrap_or(tui::style::Color::LightRed),
+            )
+            .to_rgb(),
+            Self::Warning => TextColorOptions::from(
+                theme
+                    .log_warn_style
+                    .fg
+                    .unwrap_or(tui::style::Color::LightYellow),
+            )
+            .to_rgb(),
+            Self::Info => TextColorOptions::from(
+                theme
+                    .log_info_style
+                    .fg
+                    .unwrap_or(tui::style::Color::LightCyan),
+            )
+            .to_rgb(),
+            Self::Loading => TextColorOptions::from(
+                theme
+                    .log_debug_style
+                    .fg
+                    .unwrap_or(tui::style::Color::LightGreen),
+            )
+            .to_rgb(),
         }
     }
 }
@@ -91,6 +116,7 @@ impl WidgetManager {
 
     pub async fn update(&mut self) {
         let mut app = self.app.lock().await;
+        let theme = app.theme.clone();
         let term_background_color = if app.theme.general_style.bg.is_some() {
             TextColorOptions::from(app.theme.general_style.bg.unwrap()).to_rgb()
         } else {
@@ -104,21 +130,27 @@ impl WidgetManager {
                 // make the toast fade in use fade in time lerp from 0,0,0 to toast_type color
                 let t =
                     toasts[i].start_time.elapsed().as_millis() as f32 / TOAST_FADE_IN_TIME as f32;
-                toasts[i].toast_color =
-                    lerp_between(term_background_color, toasts[i].toast_type.as_color(), t);
+                toasts[i].toast_color = lerp_between(
+                    term_background_color,
+                    toasts[i].toast_type.as_color(theme.clone()),
+                    t,
+                );
             } else if toasts[i].start_time.elapsed()
                 < toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME)
             {
                 // make the toast stay at the toast_type color
-                toasts[i].toast_color = toasts[i].toast_type.as_color();
+                toasts[i].toast_color = toasts[i].toast_type.as_color(theme.clone());
             } else {
                 // make the toast fade out use fade out time lerp from toast_type color to 0,0,0
                 let t = (toasts[i].start_time.elapsed()
                     - (toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME)))
                 .as_millis() as f32
                     / TOAST_FADE_OUT_TIME as f32;
-                toasts[i].toast_color =
-                    lerp_between(toasts[i].toast_type.as_color(), term_background_color, t);
+                toasts[i].toast_color = lerp_between(
+                    toasts[i].toast_type.as_color(theme.clone()),
+                    term_background_color,
+                    t,
+                );
             }
             if toasts[i].start_time.elapsed() > toasts[i].duration {
                 toasts.remove(i);

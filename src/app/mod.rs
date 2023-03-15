@@ -31,7 +31,7 @@ use crate::io::data_handler::{
 use crate::io::handler::refresh_visible_boards_and_cards;
 use crate::io::{data_handler, IoEvent};
 use crate::ui::widgets::{CommandPalette, ToastType, ToastWidget};
-use crate::ui::{TextColorOptions, Theme, TextModifierOptions};
+use crate::ui::{TextColorOptions, TextModifierOptions, Theme};
 
 pub mod actions;
 pub mod app_helper;
@@ -66,7 +66,16 @@ impl App {
         let is_loading = false;
         let mut state = AppState::default();
         let boards = vec![];
-        let config = prepare_config_for_new_app(&mut state);
+        let all_themes = Theme::all_default_themes();
+        let mut theme = Theme::default();
+        let config = prepare_config_for_new_app(&mut state, theme.clone());
+        let default_theme = config.default_theme.clone();
+        for loop_theme in all_themes.clone() {
+            if loop_theme.name == default_theme {
+                theme = loop_theme.clone();
+                break;
+            }
+        }
 
         Self {
             io_tx,
@@ -79,8 +88,8 @@ impl App {
             visible_boards_and_cards: LinkedHashMap::new(),
             command_palette: CommandPalette::new(),
             last_io_event_time: None,
-            all_themes: vec![Theme::default()],
-            theme: Theme::default(),
+            all_themes,
+            theme,
         }
     }
 
@@ -437,12 +446,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Info,
+                self.theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Info,
+                self.theme.clone(),
             ));
         }
     }
@@ -452,12 +463,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Error,
+                self.theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Error,
+                self.theme.clone(),
             ));
         }
     }
@@ -467,12 +480,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Warning,
+                self.theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Warning,
+                self.theme.clone(),
             ));
         }
     }
@@ -482,12 +497,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Loading,
+                self.theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Loading,
+                self.theme.clone(),
             ));
         }
     }
@@ -808,7 +825,7 @@ pub struct AppState {
     pub theme_being_edited: Theme,
     pub theme_editor_state: TableState,
     pub edit_specific_style_state: (ListState, ListState, ListState),
-    pub defualt_theme_mode: bool
+    pub defualt_theme_mode: bool,
 }
 
 impl Default for AppState {
@@ -857,7 +874,7 @@ impl Default for AppState {
                 ListState::default(),
                 ListState::default(),
             ),
-            defualt_theme_mode: false
+            defualt_theme_mode: false,
         }
     }
 }
@@ -894,7 +911,7 @@ impl AppConfig {
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
             no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
             enable_mouse_support: true,
-            default_theme: default_theme.name
+            default_theme: default_theme.name,
         }
     }
 
@@ -937,7 +954,10 @@ impl AppConfig {
                 String::from("Enable Mouse Support"),
                 self.enable_mouse_support.to_string(),
             ],
-            vec![String::from("Default Theme"), self.default_theme.to_string()],
+            vec![
+                String::from("Default Theme"),
+                self.default_theme.to_string(),
+            ],
             vec![String::from("Edit Keybindings")],
         ]
     }

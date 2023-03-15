@@ -3,15 +3,15 @@ use tui::{backend::Backend, Frame};
 use super::super::app::state::{AppStatus, UiMode};
 
 use super::ui_helper::{
-    check_size, draw_loading_screen, draw_size_error, render_body_help, render_body_help_log,
-    render_body_log, render_change_current_card_status_popup, render_change_theme_popup,
-    render_change_ui_mode_popup, render_command_palette, render_config, render_create_theme,
-    render_debug_panel, render_edit_config, render_edit_keybindings,
-    render_edit_specific_keybinding, render_edit_specific_style_popup, render_help_menu,
-    render_load_save, render_logs_only, render_main_menu, render_new_board_form,
-    render_new_card_form, render_select_default_view, render_title_body, render_title_body_help,
-    render_title_body_help_log, render_title_body_log, render_toast, render_view_card,
-    render_zen_mode, render_save_theme_prompt, render_blank_styled_canvas, render_custom_rgb_color_prompt,
+    check_size, draw_loading_screen, draw_size_error, render_blank_styled_canvas, render_body_help,
+    render_body_help_log, render_body_log, render_change_current_card_status_popup,
+    render_change_theme_popup, render_change_ui_mode_popup, render_command_palette, render_config,
+    render_create_theme, render_custom_rgb_color_prompt, render_debug_panel, render_edit_config,
+    render_edit_keybindings, render_edit_specific_keybinding, render_edit_specific_style_popup,
+    render_help_menu, render_load_save, render_logs_only, render_main_menu, render_new_board_form,
+    render_new_card_form, render_save_theme_prompt, render_select_default_view, render_title_body,
+    render_title_body_help, render_title_body_help_log, render_title_body_log, render_toast,
+    render_view_card, render_zen_mode,
 };
 use crate::app::{App, PopupMode};
 

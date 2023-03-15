@@ -1244,6 +1244,11 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
     let default_style = if popup_mode {
         app.theme.inactive_text_style
     } else {
+        app.theme.general_style
+    };
+    let border_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
         if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
             app.state.mouse_focus = Some(Focus::Help);
             app.state.focus = Focus::Help;
@@ -1279,23 +1284,24 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
     let right_rows = rows.clone().skip(rows.clone().count() / 2);
 
     let left_table = Table::new(left_rows)
-        .block(Block::default())
+        .block(Block::default().style(default_style))
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
         .widths(&[Constraint::Percentage(30), Constraint::Percentage(70)])
-        .style(default_style);
+        .style(border_style);
 
     let right_table = Table::new(right_rows)
-        .block(Block::default())
+        .block(Block::default().style(default_style))
         .highlight_style(current_element_style)
         .highlight_symbol(">> ")
         .widths(&[Constraint::Percentage(30), Constraint::Percentage(70)])
-        .style(default_style);
+        .style(border_style);
 
     let border_block = Block::default()
         .title("Help")
         .borders(Borders::ALL)
-        .border_style(default_style)
+        .style(default_style)
+        .border_style(border_style)
         .border_type(BorderType::Rounded);
 
     (border_block, left_table, right_table)
@@ -1397,17 +1403,24 @@ fn draw_logs<'a>(
 ) -> TuiLoggerWidget<'a> {
     let focus = app.state.focus;
     let mouse_coordinates = app.state.current_mouse_coordinates;
-    let logbox_style = if check_if_mouse_is_in_area(mouse_coordinates, render_area)
-        && app.state.popup_mode.is_none()
-    {
-        app.state.mouse_focus = Some(Focus::Log);
-        app.state.focus = Focus::Log;
-        app.theme.mouse_focus_style
+    let logbox_style = if popup_mode {
+        app.theme.inactive_text_style
     } else {
-        if matches!(focus, Focus::Log) && enable_focus_highlight {
-            app.theme.keyboard_focus_style
+        app.theme.general_style
+    };
+    let logbox_border_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
+            app.state.mouse_focus = Some(Focus::Log);
+            app.state.focus = Focus::Log;
+            app.theme.mouse_focus_style
         } else {
-            app.theme.general_style
+            if matches!(focus, Focus::Log) && enable_focus_highlight {
+                app.theme.keyboard_focus_style
+            } else {
+                app.theme.general_style
+            }
         }
     };
     if popup_mode {
@@ -1423,7 +1436,8 @@ fn draw_logs<'a>(
             .block(
                 Block::default()
                     .title("Logs")
-                    .border_style(app.theme.inactive_text_style)
+                    .style(logbox_style)
+                    .border_style(logbox_border_style)
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
@@ -1440,7 +1454,8 @@ fn draw_logs<'a>(
             .block(
                 Block::default()
                     .title("Logs")
-                    .border_style(logbox_style)
+                    .style(logbox_style)
+                    .border_style(logbox_border_style)
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
@@ -2096,6 +2111,11 @@ pub fn draw_title<'a>(app: &mut App, render_area: Rect) -> Paragraph<'a> {
     let title_style = if popup_mode {
         app.theme.inactive_text_style
     } else {
+        app.theme.general_style
+    };
+    let border_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
         if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
             app.state.mouse_focus = Some(Focus::Title);
             app.state.focus = Focus::Title;
@@ -2113,8 +2133,9 @@ pub fn draw_title<'a>(app: &mut App, render_area: Rect) -> Paragraph<'a> {
         .alignment(Alignment::Center)
         .block(
             Block::default()
-                .borders(Borders::ALL)
                 .style(title_style)
+                .borders(Borders::ALL)
+                .border_style(border_style)
                 .border_type(BorderType::Rounded),
         )
 }
@@ -3545,7 +3566,7 @@ where
             } else {
                 app.state.theme_selector_state.select(None);
             }
-            app.theme.mouse_focus_style
+            app.theme.list_select_style
         } else {
             app.theme.list_select_style
         };
@@ -3602,7 +3623,7 @@ where
             } else {
                 app.state.theme_editor_state.select(None);
             }
-            app.theme.mouse_focus_style
+            app.theme.list_select_style
         } else {
             if app.state.theme_editor_state.selected().is_some() {
                 app.theme.list_select_style
@@ -3756,11 +3777,18 @@ where
     let fg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
         .map(|color| {
             let mut fg_style = Style::default();
-            fg_style.fg = Some(color.to_color());
-            ListItem::new(vec![Spans::from(vec![
-                Span::styled("Sample Text", fg_style),
-                Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
-            ])])
+            if color.to_color().is_some() {
+                fg_style.fg = Some(color.to_color().unwrap());
+                ListItem::new(vec![Spans::from(vec![
+                    Span::styled("Sample Text", fg_style),
+                    Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
+                ])])
+            } else {
+                ListItem::new(vec![Spans::from(vec![
+                    Span::raw("Sample Text"),
+                    Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
+                ])])
+            }
         })
         .collect();
     let fg_list = List::new(fg_list_items)
@@ -3775,11 +3803,18 @@ where
     let bg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
         .map(|color| {
             let mut bg_style = Style::default();
-            bg_style.bg = Some(color.to_color());
-            ListItem::new(vec![Spans::from(vec![
-                Span::styled("Sample Text", bg_style),
-                Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
-            ])])
+            if color.to_color().is_some() {
+                bg_style.bg = Some(color.to_color().unwrap());
+                ListItem::new(vec![Spans::from(vec![
+                    Span::styled("Sample Text", bg_style),
+                    Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
+                ])])
+            } else {
+                ListItem::new(vec![Spans::from(vec![
+                    Span::raw("Sample Text"),
+                    Span::styled(format!(" - {}", color.to_string()), app.theme.general_style),
+                ])])
+            }
         })
         .collect();
     let bg_list = List::new(bg_list_items)

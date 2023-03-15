@@ -3,7 +3,8 @@ use crate::app::state::UiMode;
 use crate::app::{App, AppConfig};
 use crate::constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME};
 use crate::io::data_handler::{
-    get_config, get_default_save_directory, reset_config, save_kanban_state_locally, get_saved_themes,
+    get_config, get_default_save_directory, get_saved_themes, reset_config,
+    save_kanban_state_locally,
 };
 use crate::ui::TextColorOptions;
 use chrono::NaiveDate;
@@ -84,7 +85,7 @@ impl IoAsyncHandler {
         if bg.is_some() {
             app.state.term_background_color = TextColorOptions::from(bg.unwrap()).to_rgb();
         } else {
-            app.state.term_background_color = (0,0,0)
+            app.state.term_background_color = (0, 0, 0)
         }
         info!("👍 Application initialized");
         if app.config.save_directory == get_default_save_directory() {

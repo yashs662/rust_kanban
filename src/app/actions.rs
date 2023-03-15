@@ -39,7 +39,7 @@ pub enum Action {
     ResetUI,
     GoToMainMenu,
     ToggleCommandPalette,
-    ClearAllToasts
+    ClearAllToasts,
 }
 
 impl Action {
@@ -73,7 +73,7 @@ impl Action {
             Action::ResetUI,
             Action::GoToMainMenu,
             Action::ToggleCommandPalette,
-            Action::ClearAllToasts
+            Action::ClearAllToasts,
         ];
         ACTIONS.iter()
     }
@@ -108,7 +108,7 @@ impl Action {
             Action::ResetUI => &[Key::Char('r')],
             Action::GoToMainMenu => &[Key::Char('m')],
             Action::ToggleCommandPalette => &[Key::Ctrl('p')],
-            Action::ClearAllToasts => &[Key::Char('t')]
+            Action::ClearAllToasts => &[Key::Char('t')],
         }
     }
 
@@ -148,7 +148,7 @@ impl Display for Action {
             Action::ResetUI => "Reset UI",
             Action::GoToMainMenu => "Go to main menu",
             Action::ToggleCommandPalette => "Open command palette",
-            Action::ClearAllToasts => "Clear all toasts"
+            Action::ClearAllToasts => "Clear all toasts",
         };
         write!(f, "{}", str)
     }

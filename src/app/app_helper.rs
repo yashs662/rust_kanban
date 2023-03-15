@@ -507,7 +507,7 @@ pub fn go_down(app: &mut App) {
     }
 }
 
-pub fn prepare_config_for_new_app(state: &mut AppState) -> AppConfig {
+pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConfig {
     let get_config_status = get_config(false);
     if get_config_status.is_err() {
         let config_error_msg = get_config_status.unwrap_err();
@@ -517,9 +517,10 @@ pub fn prepare_config_for_new_app(state: &mut AppState) -> AppConfig {
                 config_error_msg,
                 Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                 ToastType::Error,
+                theme.clone(),
             ));
             state.toasts.push(ToastWidget::new("Please check your config file and fix the keybinds. Using default keybinds for now.".to_owned(),
-                Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning));
+                Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning, theme.clone()));
             let new_config = get_config(true);
             if new_config.is_err() {
                 error!("Unable to fix keybinds. Please check your config file. Using default config for now.");
@@ -527,11 +528,13 @@ pub fn prepare_config_for_new_app(state: &mut AppState) -> AppConfig {
                     new_config.unwrap_err(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                     ToastType::Error,
+                    theme.clone(),
                 ));
                 state.toasts.push(ToastWidget::new(
                     "Using default config for now.".to_owned(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION),
                     ToastType::Warning,
+                    theme.clone(),
                 ));
                 AppConfig::default()
             } else {
@@ -544,11 +547,13 @@ pub fn prepare_config_for_new_app(state: &mut AppState) -> AppConfig {
                 config_error_msg,
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Error,
+                theme.clone(),
             ));
             state.toasts.push(ToastWidget::new(
                 "Using default config for now.".to_owned(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Info,
+                theme.clone(),
             ));
             AppConfig::default()
         }
@@ -1186,6 +1191,22 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     UiMode::CreateTheme => {
                         if app.state.focus == Focus::ThemeEditor {
                             app.select_create_theme_prev();
+                        } else if app.state.focus == Focus::SubmitButton {
+                            let next_focus_key = app
+                                .config
+                                .keybindings
+                                .next_focus
+                                .get(0)
+                                .unwrap_or_else(|| &Key::Tab);
+                            let prev_focus_key = app
+                                .config
+                                .keybindings
+                                .prev_focus
+                                .get(0)
+                                .unwrap_or_else(|| &Key::BackTab);
+                            app.send_warning_toast(&format!(
+                                "Move Focus to the Submit Button with {} or {}, to create the theme",
+                                next_focus_key, prev_focus_key), None);
                         }
                     }
                     _ => {
@@ -1283,6 +1304,22 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     UiMode::CreateTheme => {
                         if app.state.focus == Focus::ThemeEditor {
                             app.select_create_theme_next();
+                        } else if app.state.focus == Focus::SubmitButton {
+                            let next_focus_key = app
+                                .config
+                                .keybindings
+                                .next_focus
+                                .get(0)
+                                .unwrap_or_else(|| &Key::Tab);
+                            let prev_focus_key = app
+                                .config
+                                .keybindings
+                                .prev_focus
+                                .get(0)
+                                .unwrap_or_else(|| &Key::BackTab);
+                            app.send_warning_toast(&format!(
+                                "Move Focus to the Submit Button with {} or {}, to create the theme",
+                                next_focus_key, prev_focus_key), None);
                         }
                     }
                     _ => {
@@ -3968,12 +4005,21 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                     app.state.current_cursor_position = None;
                     return AppReturn::Continue;
                 }
-                app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                    theme_style_being_edited,
-                    Some(selected_color_option.to_color()),
-                    None,
-                    None,
-                );
+                if selected_color_option.to_color().is_some() {
+                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                        theme_style_being_edited,
+                        Some(selected_color_option.to_color().unwrap()),
+                        None,
+                        None,
+                    );
+                } else {
+                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                        theme_style_being_edited,
+                        None,
+                        None,
+                        None,
+                    );
+                }
                 handle_next_focus(app);
             } else if app.state.focus == Focus::StyleEditorBG {
                 let all_color_options =
@@ -4020,12 +4066,21 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                     app.state.current_cursor_position = None;
                     return AppReturn::Continue;
                 }
-                app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                    theme_style_being_edited,
-                    None,
-                    Some(selected_color_option.to_color()),
-                    None,
-                );
+                if selected_color_option.to_color().is_some() {
+                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                        theme_style_being_edited,
+                        None,
+                        Some(selected_color_option.to_color().unwrap()),
+                        None,
+                    );
+                } else {
+                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                        theme_style_being_edited,
+                        None,
+                        None,
+                        None,
+                    );
+                }
                 handle_next_focus(app);
             } else if app.state.focus == Focus::StyleEditorModifier {
                 let all_modifiers =

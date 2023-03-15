@@ -7,7 +7,7 @@ use savefile::prelude::*;
 use serde::Serialize;
 
 use super::handler::{get_config_dir, make_file_system_safe_name};
-use crate::constants::{CONFIG_FILE_NAME, THEME_DIR_NAME, THEME_FILE_NAME, CONFIG_DIR_NAME};
+use crate::constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, THEME_DIR_NAME, THEME_FILE_NAME};
 use crate::ui::Theme;
 use crate::{
     app::{kanban::Board, state::UiMode, AppConfig},
@@ -373,9 +373,16 @@ pub fn save_theme(theme: Theme) -> Result<String, String> {
         return Err(create_dir_status.unwrap_err().to_string());
     }
     // export the theme to json using serde prefix the file name with THEME_FILE_NAME and put the theme.name next then .json
-    let theme_name = format!("{}_{}.json",THEME_FILE_NAME,make_file_system_safe_name(&theme.name));
+    let theme_name = format!(
+        "{}_{}.json",
+        THEME_FILE_NAME,
+        make_file_system_safe_name(&theme.name)
+    );
     let theme_path = theme_dir.join(theme_name);
-    let write_status = fs::write(theme_path.clone(), serde_json::to_string_pretty(&theme).unwrap());
+    let write_status = fs::write(
+        theme_path.clone(),
+        serde_json::to_string_pretty(&theme).unwrap(),
+    );
     if write_status.is_err() {
         return Err(write_status.unwrap_err().to_string());
     }

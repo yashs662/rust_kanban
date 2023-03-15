@@ -79,6 +79,290 @@ impl Theme {
             card_priority_high_style: CARD_PRIORITY_HIGH_STYLE,
         }
     }
+    fn midnight_blue() -> Theme {
+        Theme {
+            name: "Midnight Blue".to_string(),
+            general_style: Style::default().fg(Color::Gray).bg(Color::Rgb(25, 25, 112)),
+            list_select_style: Style::default()
+                .fg(Color::Gray)
+                .bg(Color::Rgb(70, 130, 180)),
+            card_due_default_style: Style::default().fg(Color::Gray).bg(Color::Rgb(25, 25, 112)),
+            card_due_warning_style: Style::default()
+                .fg(Color::LightYellow)
+                .bg(Color::Rgb(25, 25, 112)),
+            card_due_overdue_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(25, 25, 112)),
+            card_status_active_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(25, 25, 112)),
+            card_status_completed_style: Style::default()
+                .fg(Color::Gray)
+                .bg(Color::Rgb(25, 25, 112)),
+            card_status_stale_style: Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Rgb(25, 25, 112)),
+            keyboard_focus_style: Style::default()
+                .fg(Color::LightBlue)
+                .bg(Color::Rgb(25, 25, 112))
+                .add_modifier(Modifier::BOLD),
+            mouse_focus_style: Style::default()
+                .fg(Color::LightBlue)
+                .bg(Color::Rgb(25, 25, 112))
+                .add_modifier(Modifier::BOLD),
+            help_key_style: Style::default().fg(Color::Gray).bg(Color::Rgb(25, 25, 112)),
+            help_text_style: Style::default()
+                .fg(Color::DarkGray)
+                .bg(Color::Rgb(25, 25, 112)),
+            log_error_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(25, 25, 112)),
+            log_debug_style: Style::default()
+                .fg(Color::LightBlue)
+                .bg(Color::Rgb(25, 25, 112)),
+            log_warn_style: Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Rgb(25, 25, 112)),
+            log_trace_style: Style::default()
+                .fg(Color::LightCyan)
+                .bg(Color::Rgb(25, 25, 112)),
+            log_info_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(25, 25, 112)),
+            progress_bar_style: Style::default().fg(Color::LightGreen),
+            error_text_style: Style::default().fg(Color::Black).bg(Color::LightRed),
+            inactive_text_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
+            card_priority_low_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(25, 25, 112)),
+            card_priority_medium_style: Style::default()
+                .fg(Color::LightYellow)
+                .bg(Color::Rgb(25, 25, 112)),
+            card_priority_high_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(25, 25, 112)),
+        }
+    }
+    fn dark_slate() -> Theme {
+        Theme {
+            name: "Dark Slate".to_string(),
+            general_style: Style::default().fg(Color::Gray).bg(Color::Rgb(47, 79, 79)),
+            list_select_style: Style::default()
+                .fg(Color::Gray)
+                .bg(Color::Rgb(70, 130, 180)),
+            card_due_default_style: Style::default().fg(Color::Gray).bg(Color::Rgb(47, 79, 79)),
+            card_due_warning_style: Style::default()
+                .fg(Color::LightYellow)
+                .bg(Color::Rgb(47, 79, 79)),
+            card_due_overdue_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(47, 79, 79)),
+            card_status_active_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(47, 79, 79)),
+            card_status_completed_style: Style::default()
+                .fg(Color::Gray)
+                .bg(Color::Rgb(47, 79, 79)),
+            card_status_stale_style: Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Rgb(47, 79, 79)),
+            keyboard_focus_style: Style::default()
+                .fg(Color::LightCyan)
+                .bg(Color::Rgb(47, 79, 79))
+                .add_modifier(Modifier::BOLD),
+            mouse_focus_style: Style::default()
+                .fg(Color::LightCyan)
+                .bg(Color::Rgb(47, 79, 79))
+                .add_modifier(Modifier::BOLD),
+            help_key_style: Style::default().fg(Color::Gray).bg(Color::Rgb(47, 79, 79)),
+            help_text_style: Style::default()
+                .fg(Color::DarkGray)
+                .bg(Color::Rgb(47, 79, 79)),
+            log_error_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(47, 79, 79)),
+            log_debug_style: Style::default()
+                .fg(Color::LightBlue)
+                .bg(Color::Rgb(47, 79, 79)),
+            log_warn_style: Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Rgb(47, 79, 79)),
+            log_trace_style: Style::default()
+                .fg(Color::LightCyan)
+                .bg(Color::Rgb(47, 79, 79)),
+            log_info_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(47, 79, 79)),
+            progress_bar_style: Style::default().fg(Color::LightGreen),
+            error_text_style: Style::default().fg(Color::Black).bg(Color::LightRed),
+            inactive_text_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
+            card_priority_low_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(47, 79, 79)),
+            card_priority_medium_style: Style::default()
+                .fg(Color::LightYellow)
+                .bg(Color::Rgb(47, 79, 79)),
+            card_priority_high_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(47, 79, 79)),
+        }
+    }
+    fn metro() -> Theme {
+        Theme {
+            name: "Metro".to_string(),
+            general_style: Style::default().fg(Color::Gray).bg(Color::Rgb(20, 20, 20)),
+            list_select_style: Style::default()
+                .fg(Color::Black)
+                .bg(Color::Rgb(124, 252, 0)),
+            card_due_default_style: Style::default().fg(Color::White).bg(Color::Rgb(25, 25, 25)),
+            card_due_warning_style: Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Rgb(25, 25, 25)),
+            card_due_overdue_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(25, 25, 25)),
+            card_status_active_style: Style::default().fg(Color::Cyan).bg(Color::Rgb(25, 25, 25)),
+            card_status_completed_style: Style::default()
+                .fg(Color::DarkGray)
+                .bg(Color::Rgb(25, 25, 25)),
+            card_status_stale_style: Style::default()
+                .fg(Color::LightYellow)
+                .bg(Color::Rgb(25, 25, 25)),
+            keyboard_focus_style: Style::default()
+                .fg(Color::Green)
+                .bg(Color::Rgb(25, 25, 25))
+                .add_modifier(Modifier::BOLD),
+            mouse_focus_style: Style::default()
+                .fg(Color::Green)
+                .bg(Color::Rgb(25, 25, 25))
+                .add_modifier(Modifier::BOLD),
+            help_key_style: Style::default()
+                .fg(Color::DarkGray)
+                .bg(Color::Rgb(25, 25, 25)),
+            help_text_style: Style::default().fg(Color::Gray).bg(Color::Rgb(25, 25, 25)),
+            log_error_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(25, 25, 25)),
+            log_debug_style: Style::default().fg(Color::Cyan).bg(Color::Rgb(25, 25, 25)),
+            log_warn_style: Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Rgb(25, 25, 25)),
+            log_trace_style: Style::default().fg(Color::Green).bg(Color::Rgb(25, 25, 25)),
+            log_info_style: Style::default().fg(Color::White).bg(Color::Rgb(25, 25, 25)),
+            progress_bar_style: Style::default().fg(Color::Green),
+            error_text_style: Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(25, 25, 25)),
+            inactive_text_style: Style::default()
+                .fg(Color::DarkGray)
+                .bg(Color::Rgb(25, 25, 25)),
+            card_priority_low_style: Style::default().fg(Color::Green).bg(Color::Rgb(25, 25, 25)),
+            card_priority_medium_style: Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Rgb(25, 25, 25)),
+            card_priority_high_style: Style::default().fg(Color::Red).bg(Color::Rgb(25, 25, 25)),
+        }
+    }
+    fn matrix() -> Theme {
+        Theme {
+            name: "Matrix".to_string(),
+            general_style: Style::default().fg(Color::LightGreen).bg(Color::Black),
+            list_select_style: Style::default().fg(Color::Black).bg(Color::LightGreen),
+            card_due_default_style: Style::default().fg(Color::LightGreen).bg(Color::Black),
+            card_due_warning_style: Style::default().fg(Color::Yellow).bg(Color::Black),
+            card_due_overdue_style: Style::default().fg(Color::LightRed).bg(Color::Black),
+            card_status_active_style: Style::default().fg(Color::LightGreen).bg(Color::Black),
+            card_status_completed_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
+            card_status_stale_style: Style::default().fg(Color::Yellow).bg(Color::Black),
+            keyboard_focus_style: Style::default()
+                .fg(Color::Black)
+                .bg(Color::LightGreen)
+                .add_modifier(Modifier::BOLD),
+            mouse_focus_style: Style::default()
+                .fg(Color::Black)
+                .bg(Color::LightGreen)
+                .add_modifier(Modifier::BOLD),
+            help_key_style: Style::default().fg(Color::LightGreen).bg(Color::Black),
+            help_text_style: Style::default().fg(Color::Green).bg(Color::Black),
+            log_error_style: Style::default().fg(Color::LightRed).bg(Color::Black),
+            log_debug_style: Style::default().fg(Color::LightGreen).bg(Color::Black),
+            log_warn_style: Style::default().fg(Color::Yellow).bg(Color::Black),
+            log_trace_style: Style::default().fg(Color::LightCyan).bg(Color::Black),
+            log_info_style: Style::default().fg(Color::LightGreen).bg(Color::Black),
+            progress_bar_style: Style::default().fg(Color::LightGreen),
+            error_text_style: Style::default().fg(Color::Black).bg(Color::LightRed),
+            inactive_text_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
+            card_priority_low_style: Style::default().fg(Color::LightGreen).bg(Color::Black),
+            card_priority_medium_style: Style::default().fg(Color::Yellow).bg(Color::Black),
+            card_priority_high_style: Style::default().fg(Color::LightRed).bg(Color::Black),
+        }
+    }
+    fn cyberpunk() -> Theme {
+        Theme {
+            name: "Cyberpunk".to_string(),
+            general_style: Style::default()
+                .fg(Color::Rgb(248, 12, 228))
+                .bg(Color::Black),
+            list_select_style: Style::default()
+                .fg(Color::Black)
+                .bg(Color::Rgb(253, 248, 0)),
+            card_due_default_style: Style::default().fg(Color::Rgb(24, 252, 4)).bg(Color::Black),
+            card_due_warning_style: Style::default()
+                .fg(Color::Rgb(253, 248, 0))
+                .bg(Color::Black),
+            card_due_overdue_style: Style::default()
+                .fg(Color::Rgb(255, 28, 92))
+                .bg(Color::Black),
+            card_status_active_style: Style::default().fg(Color::Rgb(24, 252, 4)).bg(Color::Black),
+            card_status_completed_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
+            card_status_stale_style: Style::default()
+                .fg(Color::Rgb(253, 248, 0))
+                .bg(Color::Black),
+            keyboard_focus_style: Style::default()
+                .fg(Color::Rgb(253, 248, 0))
+                .bg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+            mouse_focus_style: Style::default()
+                .fg(Color::Rgb(253, 248, 0))
+                .bg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+            help_key_style: Style::default().fg(Color::Rgb(24, 252, 4)).bg(Color::Black),
+            help_text_style: Style::default()
+                .fg(Color::Rgb(253, 248, 0))
+                .bg(Color::Black),
+            log_error_style: Style::default()
+                .fg(Color::Rgb(255, 28, 92))
+                .bg(Color::Black),
+            log_debug_style: Style::default().fg(Color::Rgb(24, 252, 4)).bg(Color::Black),
+            log_warn_style: Style::default()
+                .fg(Color::Rgb(253, 248, 0))
+                .bg(Color::Black),
+            log_trace_style: Style::default().fg(Color::LightCyan).bg(Color::Black),
+            log_info_style: Style::default().fg(Color::Rgb(24, 252, 4)).bg(Color::Black),
+            progress_bar_style: Style::default().fg(Color::Rgb(248, 12, 228)),
+            error_text_style: Style::default()
+                .fg(Color::Black)
+                .bg(Color::Rgb(255, 28, 92)),
+            inactive_text_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
+            card_priority_low_style: Style::default().fg(Color::Rgb(24, 252, 4)).bg(Color::Black),
+            card_priority_medium_style: Style::default()
+                .fg(Color::Rgb(253, 248, 0))
+                .bg(Color::Black),
+            card_priority_high_style: Style::default()
+                .fg(Color::Rgb(255, 28, 92))
+                .bg(Color::Black),
+        }
+    }
+    pub fn all_default_themes() -> Vec<Theme> {
+        vec![
+            Theme::default(),
+            Theme::midnight_blue(),
+            Theme::dark_slate(),
+            Theme::metro(),
+            Theme::matrix(),
+            Theme::cyberpunk(),
+        ]
+    }
 
     pub fn to_rows(&self, app: &App) -> (Vec<Row>, Vec<Row>) {
         let popup_mode = app.state.popup_mode.is_some();
@@ -221,271 +505,453 @@ impl Theme {
             "general_style" => {
                 if fg_color.is_some() {
                     theme.general_style = theme.general_style.fg(fg_color.unwrap());
+                } else {
+                    theme.general_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.general_style = theme.general_style.bg(bg_color.unwrap());
+                } else {
+                    theme.general_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.general_style = theme.general_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.general_style.sub_modifier = Modifier::empty();
+                    theme.general_style.add_modifier = Modifier::empty();
                 }
             }
             "list_select_style" => {
                 if fg_color.is_some() {
                     theme.list_select_style = theme.list_select_style.fg(fg_color.unwrap());
+                } else {
+                    theme.list_select_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.list_select_style = theme.list_select_style.bg(bg_color.unwrap());
+                } else {
+                    theme.list_select_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.list_select_style = theme.list_select_style.add_modifier(modifier.unwrap());
+                    theme.list_select_style =
+                        theme.list_select_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.list_select_style.sub_modifier = Modifier::empty();
+                    theme.list_select_style.add_modifier = Modifier::empty();
                 }
             }
             "card_due_default_style" => {
                 if fg_color.is_some() {
-                    theme.card_due_default_style = theme.card_due_default_style.fg(fg_color.unwrap());
+                    theme.card_due_default_style =
+                        theme.card_due_default_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_due_default_style.fg = None;
                 }
                 if bg_color.is_some() {
-                    theme.card_due_default_style = theme.card_due_default_style.bg(bg_color.unwrap());
+                    theme.card_due_default_style =
+                        theme.card_due_default_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_due_default_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.card_due_default_style =
                         theme.card_due_default_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_due_default_style.sub_modifier = Modifier::empty();
+                    theme.card_due_default_style.add_modifier = Modifier::empty();
                 }
             }
             "card_due_warning_style" => {
                 if fg_color.is_some() {
-                    theme.card_due_warning_style = theme.card_due_warning_style.fg(fg_color.unwrap());
+                    theme.card_due_warning_style =
+                        theme.card_due_warning_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_due_warning_style.fg = None;
                 }
                 if bg_color.is_some() {
-                    theme.card_due_warning_style = theme.card_due_warning_style.bg(bg_color.unwrap());
+                    theme.card_due_warning_style =
+                        theme.card_due_warning_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_due_warning_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.card_due_warning_style =
                         theme.card_due_warning_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_due_warning_style.sub_modifier = Modifier::empty();
+                    theme.card_due_warning_style.add_modifier = Modifier::empty();
                 }
             }
             "card_due_overdue_style" => {
                 if fg_color.is_some() {
-                    theme.card_due_overdue_style = theme.card_due_overdue_style.fg(fg_color.unwrap());
+                    theme.card_due_overdue_style =
+                        theme.card_due_overdue_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_due_overdue_style.fg = None;
                 }
                 if bg_color.is_some() {
-                    theme.card_due_overdue_style = theme.card_due_overdue_style.bg(bg_color.unwrap());
+                    theme.card_due_overdue_style =
+                        theme.card_due_overdue_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_due_overdue_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.card_due_overdue_style =
                         theme.card_due_overdue_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_due_overdue_style.sub_modifier = Modifier::empty();
+                    theme.card_due_overdue_style.add_modifier = Modifier::empty();
                 }
             }
             "card_status_active_style" => {
                 if fg_color.is_some() {
-                    theme.card_status_active_style = theme.card_status_active_style.fg(fg_color.unwrap());
+                    theme.card_status_active_style =
+                        theme.card_status_active_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_status_active_style.fg = None;
                 }
                 if bg_color.is_some() {
-                    theme.card_status_active_style = theme.card_status_active_style.bg(bg_color.unwrap());
+                    theme.card_status_active_style =
+                        theme.card_status_active_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_status_active_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.card_status_active_style =
-                        theme.card_status_active_style.add_modifier(modifier.unwrap());
+                    theme.card_status_active_style = theme
+                        .card_status_active_style
+                        .add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_status_active_style.sub_modifier = Modifier::empty();
+                    theme.card_status_active_style.add_modifier = Modifier::empty();
                 }
             }
             "card_status_completed_style" => {
                 if fg_color.is_some() {
                     theme.card_status_completed_style =
                         theme.card_status_completed_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_status_completed_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.card_status_completed_style =
                         theme.card_status_completed_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_status_completed_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.card_status_completed_style =
-                        theme.card_status_completed_style.add_modifier(modifier.unwrap());
+                    theme.card_status_completed_style = theme
+                        .card_status_completed_style
+                        .add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_status_completed_style.sub_modifier = Modifier::empty();
+                    theme.card_status_completed_style.add_modifier = Modifier::empty();
                 }
             }
             "card_status_stale_style" => {
                 if fg_color.is_some() {
-                    theme.card_status_stale_style = theme.card_status_stale_style.fg(fg_color.unwrap());
+                    theme.card_status_stale_style =
+                        theme.card_status_stale_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_status_stale_style.fg = None;
                 }
                 if bg_color.is_some() {
-                    theme.card_status_stale_style = theme.card_status_stale_style.bg(bg_color.unwrap());
+                    theme.card_status_stale_style =
+                        theme.card_status_stale_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_status_stale_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.card_status_stale_style =
-                        theme.card_status_stale_style.add_modifier(modifier.unwrap());
+                    theme.card_status_stale_style = theme
+                        .card_status_stale_style
+                        .add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_status_stale_style.sub_modifier = Modifier::empty();
+                    theme.card_status_stale_style.add_modifier = Modifier::empty();
                 }
             }
             "keyboard_focus_style" => {
                 if fg_color.is_some() {
                     theme.keyboard_focus_style = theme.keyboard_focus_style.fg(fg_color.unwrap());
+                } else {
+                    theme.keyboard_focus_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.keyboard_focus_style = theme.keyboard_focus_style.bg(bg_color.unwrap());
+                } else {
+                    theme.keyboard_focus_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.keyboard_focus_style =
                         theme.keyboard_focus_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.keyboard_focus_style.sub_modifier = Modifier::empty();
+                    theme.keyboard_focus_style.add_modifier = Modifier::empty();
                 }
             }
             "mouse_focus_style" => {
                 if fg_color.is_some() {
                     theme.mouse_focus_style = theme.mouse_focus_style.fg(fg_color.unwrap());
+                } else {
+                    theme.mouse_focus_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.mouse_focus_style = theme.mouse_focus_style.bg(bg_color.unwrap());
+                } else {
+                    theme.mouse_focus_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.mouse_focus_style = theme.mouse_focus_style.add_modifier(modifier.unwrap());
+                    theme.mouse_focus_style =
+                        theme.mouse_focus_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.mouse_focus_style.sub_modifier = Modifier::empty();
+                    theme.mouse_focus_style.add_modifier = Modifier::empty();
                 }
             }
             "help_key_style" => {
                 if fg_color.is_some() {
                     theme.help_key_style = theme.help_key_style.fg(fg_color.unwrap());
+                } else {
+                    theme.help_key_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.help_key_style = theme.help_key_style.bg(bg_color.unwrap());
+                } else {
+                    theme.help_key_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.help_key_style = theme.help_key_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.help_key_style.sub_modifier = Modifier::empty();
+                    theme.help_key_style.add_modifier = Modifier::empty();
                 }
             }
             "help_text_style" => {
                 if fg_color.is_some() {
                     theme.help_text_style = theme.help_text_style.fg(fg_color.unwrap());
+                } else {
+                    theme.help_text_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.help_text_style = theme.help_text_style.bg(bg_color.unwrap());
+                } else {
+                    theme.help_text_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.help_text_style = theme.help_text_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.help_text_style.sub_modifier = Modifier::empty();
+                    theme.help_text_style.add_modifier = Modifier::empty();
                 }
             }
             "log_error_style" => {
                 if fg_color.is_some() {
                     theme.log_error_style = theme.log_error_style.fg(fg_color.unwrap());
+                } else {
+                    theme.log_error_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.log_error_style = theme.log_error_style.bg(bg_color.unwrap());
+                } else {
+                    theme.log_error_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.log_error_style = theme.log_error_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.log_error_style.sub_modifier = Modifier::empty();
+                    theme.log_error_style.add_modifier = Modifier::empty();
                 }
             }
             "log_debug_style" => {
                 if fg_color.is_some() {
                     theme.log_debug_style = theme.log_debug_style.fg(fg_color.unwrap());
+                } else {
+                    theme.log_debug_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.log_debug_style = theme.log_debug_style.bg(bg_color.unwrap());
+                } else {
+                    theme.log_debug_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.log_debug_style = theme.log_debug_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.log_debug_style.sub_modifier = Modifier::empty();
+                    theme.log_debug_style.add_modifier = Modifier::empty();
                 }
             }
             "log_warn_style" => {
                 if fg_color.is_some() {
                     theme.log_warn_style = theme.log_warn_style.fg(fg_color.unwrap());
+                } else {
+                    theme.log_warn_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.log_warn_style = theme.log_warn_style.bg(bg_color.unwrap());
+                } else {
+                    theme.log_warn_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.log_warn_style = theme.log_warn_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.log_warn_style.sub_modifier = Modifier::empty();
+                    theme.log_warn_style.add_modifier = Modifier::empty();
                 }
             }
             "log_trace_style" => {
                 if fg_color.is_some() {
                     theme.log_trace_style = theme.log_trace_style.fg(fg_color.unwrap());
+                } else {
+                    theme.log_trace_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.log_trace_style = theme.log_trace_style.bg(bg_color.unwrap());
+                } else {
+                    theme.log_trace_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.log_trace_style = theme.log_trace_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.log_trace_style.sub_modifier = Modifier::empty();
+                    theme.log_trace_style.add_modifier = Modifier::empty();
                 }
             }
             "log_info_style" => {
                 if fg_color.is_some() {
                     theme.log_info_style = theme.log_info_style.fg(fg_color.unwrap());
+                } else {
+                    theme.log_info_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.log_info_style = theme.log_info_style.bg(bg_color.unwrap());
+                } else {
+                    theme.log_info_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.log_info_style = theme.log_info_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.log_info_style.sub_modifier = Modifier::empty();
+                    theme.log_info_style.add_modifier = Modifier::empty();
                 }
             }
             "progress_bar_style" => {
                 if fg_color.is_some() {
                     theme.progress_bar_style = theme.progress_bar_style.fg(fg_color.unwrap());
+                } else {
+                    theme.progress_bar_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.progress_bar_style = theme.progress_bar_style.bg(bg_color.unwrap());
+                } else {
+                    theme.progress_bar_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.progress_bar_style =
                         theme.progress_bar_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.progress_bar_style.sub_modifier = Modifier::empty();
+                    theme.progress_bar_style.add_modifier = Modifier::empty();
                 }
             }
             "error_text_style" => {
                 if fg_color.is_some() {
                     theme.error_text_style = theme.error_text_style.fg(fg_color.unwrap());
+                } else {
+                    theme.error_text_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.error_text_style = theme.error_text_style.bg(bg_color.unwrap());
+                } else {
+                    theme.error_text_style.bg = None;
                 }
                 if modifier.is_some() {
                     theme.error_text_style = theme.error_text_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.error_text_style.sub_modifier = Modifier::empty();
+                    theme.error_text_style.add_modifier = Modifier::empty();
                 }
             }
             "inactive_text_style" => {
                 if fg_color.is_some() {
                     theme.inactive_text_style = theme.inactive_text_style.fg(fg_color.unwrap());
+                } else {
+                    theme.inactive_text_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.inactive_text_style = theme.inactive_text_style.bg(bg_color.unwrap());
+                } else {
+                    theme.inactive_text_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.inactive_text_style = theme.inactive_text_style.add_modifier(modifier.unwrap());
+                    theme.inactive_text_style =
+                        theme.inactive_text_style.add_modifier(modifier.unwrap());
+                } else {
+                    theme.inactive_text_style.sub_modifier = Modifier::empty();
+                    theme.inactive_text_style.add_modifier = Modifier::empty();
                 }
             }
             "card_priority_low_style" => {
                 if fg_color.is_some() {
-                    theme.card_priority_low_style = theme.card_priority_low_style.fg(fg_color.unwrap());
+                    theme.card_priority_low_style =
+                        theme.card_priority_low_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_priority_low_style.fg = None;
                 }
                 if bg_color.is_some() {
-                    theme.card_priority_low_style = theme.card_priority_low_style.bg(bg_color.unwrap());
+                    theme.card_priority_low_style =
+                        theme.card_priority_low_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_priority_low_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.card_priority_low_style =
-                        theme.card_priority_low_style.add_modifier(modifier.unwrap());
+                    theme.card_priority_low_style = theme
+                        .card_priority_low_style
+                        .add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_priority_low_style.sub_modifier = Modifier::empty();
+                    theme.card_priority_low_style.add_modifier = Modifier::empty();
                 }
             }
             "card_priority_medium_style" => {
                 if fg_color.is_some() {
                     theme.card_priority_medium_style =
                         theme.card_priority_medium_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_priority_medium_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.card_priority_medium_style =
                         theme.card_priority_medium_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_priority_medium_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.card_priority_medium_style =
-                        theme.card_priority_medium_style.add_modifier(modifier.unwrap());
+                    theme.card_priority_medium_style = theme
+                        .card_priority_medium_style
+                        .add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_priority_medium_style.sub_modifier = Modifier::empty();
+                    theme.card_priority_medium_style.add_modifier = Modifier::empty();
                 }
             }
             "card_priority_high_style" => {
                 if fg_color.is_some() {
                     theme.card_priority_high_style =
                         theme.card_priority_high_style.fg(fg_color.unwrap());
+                } else {
+                    theme.card_priority_high_style.fg = None;
                 }
                 if bg_color.is_some() {
                     theme.card_priority_high_style =
                         theme.card_priority_high_style.bg(bg_color.unwrap());
+                } else {
+                    theme.card_priority_high_style.bg = None;
                 }
                 if modifier.is_some() {
-                    theme.card_priority_high_style =
-                        theme.card_priority_high_style.add_modifier(modifier.unwrap());
+                    theme.card_priority_high_style = theme
+                        .card_priority_high_style
+                        .add_modifier(modifier.unwrap());
+                } else {
+                    theme.card_priority_high_style.sub_modifier = Modifier::empty();
+                    theme.card_priority_high_style.add_modifier = Modifier::empty();
                 }
             }
             _ => {
@@ -498,7 +964,6 @@ impl Theme {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TextColorOptions {
-    Reset,
     Black,
     Red,
     Green,
@@ -516,6 +981,7 @@ pub enum TextColorOptions {
     LightCyan,
     White,
     RGB(u8, u8, u8),
+    None,
 }
 
 impl TextColorOptions {
@@ -537,30 +1003,30 @@ impl TextColorOptions {
             TextColorOptions::LightBlue => "LightBlue".to_string(),
             TextColorOptions::LightMagenta => "LightMagenta".to_string(),
             TextColorOptions::LightCyan => "LightCyan".to_string(),
-            TextColorOptions::Reset => "Reset".to_string(),
             TextColorOptions::RGB(r, g, b) => format!("RGB({}, {}, {})", r, g, b),
+            TextColorOptions::None => "None".to_string(),
         }
     }
-    pub fn to_color(&self) -> Color {
+    pub fn to_color(&self) -> Option<Color> {
         match self {
-            TextColorOptions::White => Color::White,
-            TextColorOptions::Black => Color::Black,
-            TextColorOptions::Red => Color::Red,
-            TextColorOptions::Green => Color::Green,
-            TextColorOptions::Yellow => Color::Yellow,
-            TextColorOptions::Blue => Color::Blue,
-            TextColorOptions::Magenta => Color::Magenta,
-            TextColorOptions::Cyan => Color::Cyan,
-            TextColorOptions::Gray => Color::Gray,
-            TextColorOptions::DarkGray => Color::DarkGray,
-            TextColorOptions::LightRed => Color::LightRed,
-            TextColorOptions::LightGreen => Color::LightGreen,
-            TextColorOptions::LightYellow => Color::LightYellow,
-            TextColorOptions::LightBlue => Color::LightBlue,
-            TextColorOptions::LightMagenta => Color::LightMagenta,
-            TextColorOptions::LightCyan => Color::LightCyan,
-            TextColorOptions::Reset => Color::Reset,
-            TextColorOptions::RGB(r, g, b) => Color::Rgb(*r, *g, *b),
+            TextColorOptions::White => Some(Color::White),
+            TextColorOptions::Black => Some(Color::Black),
+            TextColorOptions::Red => Some(Color::Red),
+            TextColorOptions::Green => Some(Color::Green),
+            TextColorOptions::Yellow => Some(Color::Yellow),
+            TextColorOptions::Blue => Some(Color::Blue),
+            TextColorOptions::Magenta => Some(Color::Magenta),
+            TextColorOptions::Cyan => Some(Color::Cyan),
+            TextColorOptions::Gray => Some(Color::Gray),
+            TextColorOptions::DarkGray => Some(Color::DarkGray),
+            TextColorOptions::LightRed => Some(Color::LightRed),
+            TextColorOptions::LightGreen => Some(Color::LightGreen),
+            TextColorOptions::LightYellow => Some(Color::LightYellow),
+            TextColorOptions::LightBlue => Some(Color::LightBlue),
+            TextColorOptions::LightMagenta => Some(Color::LightMagenta),
+            TextColorOptions::LightCyan => Some(Color::LightCyan),
+            TextColorOptions::RGB(r, g, b) => Some(Color::Rgb(*r, *g, *b)),
+            TextColorOptions::None => None,
         }
     }
     pub fn to_iter() -> impl Iterator<Item = TextColorOptions> {
@@ -581,9 +1047,10 @@ impl TextColorOptions {
             TextColorOptions::LightBlue,
             TextColorOptions::LightMagenta,
             TextColorOptions::LightCyan,
-            TextColorOptions::Reset,
-            TextColorOptions::RGB(0, 0, 0),
-            ]
+            TextColorOptions::Black,
+            TextColorOptions::RGB(255, 255, 255),
+            TextColorOptions::None,
+        ]
         .into_iter()
     }
     pub fn from(color: Color) -> TextColorOptions {
@@ -604,32 +1071,32 @@ impl TextColorOptions {
             Color::LightBlue => TextColorOptions::LightBlue,
             Color::LightMagenta => TextColorOptions::LightMagenta,
             Color::LightCyan => TextColorOptions::LightCyan,
-            Color::Reset => TextColorOptions::Reset,
             Color::Rgb(r, g, b) => TextColorOptions::RGB(r, g, b),
-            _ => TextColorOptions::Reset,            
+            Color::Reset => TextColorOptions::None,
+            _ => TextColorOptions::None,
         }
     }
     // TODO: This is a hack to get around the fact that the Color struct doesn't have a way to get the RGB values
-    pub fn to_rgb(&self) -> (u8,u8,u8) {
+    pub fn to_rgb(&self) -> (u8, u8, u8) {
         match self {
-            TextColorOptions::White => (255,255,255),
-            TextColorOptions::Black => (0,0,0),
-            TextColorOptions::Red => (128,0,0),
-            TextColorOptions::Green => (0,128,0),
-            TextColorOptions::Yellow => (128,128,0),
-            TextColorOptions::Blue => (0,0,128),
-            TextColorOptions::Magenta => (128,0,128),
-            TextColorOptions::Cyan => (0,128,128),
-            TextColorOptions::Gray => (192,192,192),
-            TextColorOptions::DarkGray => (128,128,128),
-            TextColorOptions::LightRed => (255,0,0),
-            TextColorOptions::LightGreen => (255,255,0),
-            TextColorOptions::LightYellow => (0,255,0),
-            TextColorOptions::LightBlue => (0,0,255),
-            TextColorOptions::LightMagenta => (255,0,255),
-            TextColorOptions::LightCyan => (0,255,255),
-            TextColorOptions::Reset => (0,0,0),
+            TextColorOptions::White => (255, 255, 255),
+            TextColorOptions::Black => (0, 0, 0),
+            TextColorOptions::Red => (128, 0, 0),
+            TextColorOptions::Green => (0, 128, 0),
+            TextColorOptions::Yellow => (128, 128, 0),
+            TextColorOptions::Blue => (0, 0, 128),
+            TextColorOptions::Magenta => (128, 0, 128),
+            TextColorOptions::Cyan => (0, 128, 128),
+            TextColorOptions::Gray => (192, 192, 192),
+            TextColorOptions::DarkGray => (128, 128, 128),
+            TextColorOptions::LightRed => (255, 0, 0),
+            TextColorOptions::LightGreen => (255, 255, 0),
+            TextColorOptions::LightYellow => (0, 255, 0),
+            TextColorOptions::LightBlue => (0, 0, 255),
+            TextColorOptions::LightMagenta => (255, 0, 255),
+            TextColorOptions::LightCyan => (0, 255, 255),
             TextColorOptions::RGB(r, g, b) => (*r, *g, *b),
+            TextColorOptions::None => (0, 0, 0),
         }
     }
 }
@@ -645,7 +1112,7 @@ pub enum TextModifierOptions {
     Reversed,
     Hidden,
     CrossedOut,
-    None
+    None,
 }
 
 impl TextModifierOptions {
@@ -674,7 +1141,7 @@ impl TextModifierOptions {
             TextModifierOptions::Reversed => Modifier::REVERSED,
             TextModifierOptions::Hidden => Modifier::HIDDEN,
             TextModifierOptions::CrossedOut => Modifier::CROSSED_OUT,
-            TextModifierOptions::None => Modifier::empty()
+            TextModifierOptions::None => Modifier::empty(),
         }
     }
     pub fn to_iter() -> impl Iterator<Item = TextModifierOptions> {

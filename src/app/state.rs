@@ -193,10 +193,7 @@ impl UiMode {
                 Focus::SubmitButton,
             ],
             UiMode::LoadSave => vec![Focus::Body],
-            UiMode::CreateTheme => vec![
-                Focus::ThemeEditor,
-                Focus::SubmitButton,
-            ],
+            UiMode::CreateTheme => vec![Focus::ThemeEditor, Focus::SubmitButton],
         }
     }
 
