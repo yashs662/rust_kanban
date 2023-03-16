@@ -30,7 +30,7 @@ use crate::io::data_handler::{
 };
 use crate::io::handler::refresh_visible_boards_and_cards;
 use crate::io::{data_handler, IoEvent};
-use crate::ui::widgets::{CommandPalette, ToastType, ToastWidget};
+use crate::ui::widgets::{CommandPaletteWidget, ToastType, ToastWidget};
 use crate::ui::{TextColorOptions, TextModifierOptions, Theme};
 
 pub mod actions;
@@ -54,7 +54,7 @@ pub struct App {
     pub config: AppConfig,
     pub config_item_being_edited: Option<usize>,
     pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
-    pub command_palette: CommandPalette,
+    pub command_palette: CommandPaletteWidget,
     pub last_io_event_time: Option<Instant>,
     pub all_themes: Vec<Theme>,
     pub theme: Theme,
@@ -86,7 +86,7 @@ impl App {
             config: config,
             config_item_being_edited: None,
             visible_boards_and_cards: LinkedHashMap::new(),
-            command_palette: CommandPalette::new(),
+            command_palette: CommandPaletteWidget::new(),
             last_io_event_time: None,
             all_themes,
             theme,
@@ -825,7 +825,7 @@ pub struct AppState {
     pub theme_being_edited: Theme,
     pub theme_editor_state: TableState,
     pub edit_specific_style_state: (ListState, ListState, ListState),
-    pub defualt_theme_mode: bool,
+    pub default_theme_mode: bool,
 }
 
 impl Default for AppState {
@@ -874,7 +874,7 @@ impl Default for AppState {
                 ListState::default(),
                 ListState::default(),
             ),
-            defualt_theme_mode: false,
+            default_theme_mode: false,
         }
     }
 }

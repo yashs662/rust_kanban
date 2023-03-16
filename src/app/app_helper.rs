@@ -19,7 +19,7 @@ use crate::{
     },
     ui::{
         ui_helper::get_config_items,
-        widgets::{CommandPalette, ToastType, ToastWidget},
+        widgets::{CommandPaletteWidget, ToastType, ToastWidget},
         TextColorOptions, TextModifierOptions, Theme,
     },
 };
@@ -965,7 +965,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
             && app.state.popup_mode.is_some()
             && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
         {
-            return CommandPalette::handle_command(app).await;
+            return CommandPaletteWidget::handle_command(app).await;
         }
         app.state.app_status = AppStatus::Initialized;
         app.state.current_cursor_position = None;
@@ -1396,7 +1396,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         PopupMode::EditSpecificKeyBinding => handle_edit_specific_keybinding(app),
                         PopupMode::SelectDefaultView => handle_default_view_selection(app),
                         PopupMode::ChangeTheme => {
-                            return handle_change_theme(app, app.state.defualt_theme_mode)
+                            return handle_change_theme(app, app.state.default_theme_mode)
                         }
                         PopupMode::ThemeEditor => return handle_create_theme_action(app),
                         PopupMode::SaveThemePrompt => handle_save_theme_prompt(app),
@@ -2404,7 +2404,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::CommandPalette) {
                         app.state.popup_mode = None;
-                        return CommandPalette::handle_command(app).await;
+                        return CommandPaletteWidget::handle_command(app).await;
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         app.state.popup_mode = None;
                     }
@@ -2474,7 +2474,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
             PopupMode::ChangeTheme => {
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::ThemeSelector) {
-                        handle_change_theme(app, app.state.defualt_theme_mode);
+                        handle_change_theme(app, app.state.default_theme_mode);
                         app.state.popup_mode = None;
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         app.state.popup_mode = None;
@@ -3116,7 +3116,7 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
                 app.send_warning_toast("Please restart the app to apply the changes", None);
             }
         } else if *config_item == "Default Theme" {
-            app.state.defualt_theme_mode = true;
+            app.state.default_theme_mode = true;
             app.state.popup_mode = Some(PopupMode::ChangeTheme);
         } else {
             app.state.popup_mode = Some(PopupMode::EditGeneralConfig);
@@ -3862,7 +3862,7 @@ fn reset_mouse(app: &mut App) {
 
 fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
     if default_theme_mode {
-        app.state.defualt_theme_mode = false;
+        app.state.default_theme_mode = false;
         let config_index = app.state.config_state.selected();
         if config_index.is_some() {
             let config_item_index = &app.config_item_being_edited;

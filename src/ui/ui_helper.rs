@@ -511,6 +511,7 @@ where
     let clear_area = centered_rect(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Config Editor")
+        .style(app.theme.general_style)
         .borders(Borders::ALL)
         .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
@@ -583,6 +584,7 @@ where
         .block(
             Block::default()
                 .title(paragraph_title)
+                .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -591,6 +593,7 @@ where
         .block(
             Block::default()
                 .title("Edit")
+                .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_style(edit_box_style)
                 .border_type(BorderType::Rounded),
@@ -631,6 +634,7 @@ where
         let submit_button = Paragraph::new("Submit")
             .block(
                 Block::default()
+                .style(app.theme.general_style)
                     .borders(Borders::ALL)
                     .border_style(submit_button_style)
                     .border_type(BorderType::Rounded),
@@ -650,6 +654,7 @@ where
     let clear_area = centered_rect(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Default HomeScreen Editor")
+        .style(app.theme.general_style)
         .borders(Borders::ALL)
         .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
@@ -3292,6 +3297,7 @@ where
             Block::default()
                 .title("Command Palette")
                 .borders(Borders::ALL)
+                .style(app.theme.general_style)
                 .border_type(BorderType::Rounded),
         )
         .wrap(Wrap { trim: false });
@@ -3302,6 +3308,7 @@ where
     let search_results = List::new(search_results)
         .block(
             Block::default()
+            .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -3370,6 +3377,7 @@ where
         .block(
             Block::default()
                 .title("Change UI Mode")
+                .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -3432,6 +3440,7 @@ where
                     "Changing Status of \"{}\" in {}",
                     card_name, board_name
                 ))
+                .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -3493,6 +3502,7 @@ where
             .title("Debug Panel")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
+            .style(app.theme.general_style)
             .border_style(app.theme.log_debug_style),
     )
     .wrap(Wrap { trim: false });
@@ -3549,35 +3559,32 @@ where
         .iter()
         .map(|t| ListItem::new(vec![Spans::from(t.name.clone())]))
         .collect::<Vec<ListItem>>();
-    let highlight_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
-            app.state.mouse_focus = Some(Focus::ThemeSelector);
-            app.state.focus = Focus::ThemeSelector;
-            let top_of_list = popup_area.y + 1;
-            let mut bottom_of_list = popup_area.y + theme_list.len() as u16;
-            if bottom_of_list > popup_area.bottom() {
-                bottom_of_list = popup_area.bottom();
-            }
-            let mouse_y = app.state.current_mouse_coordinates.1;
-            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-                app.state
-                    .theme_selector_state
-                    .select(Some((mouse_y - top_of_list) as usize));
-            } else {
-                app.state.theme_selector_state.select(None);
-            }
-            app.theme.list_select_style
+    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+        app.state.mouse_focus = Some(Focus::ThemeSelector);
+        app.state.focus = Focus::ThemeSelector;
+        let top_of_list = popup_area.y + 1;
+        let mut bottom_of_list = popup_area.y + theme_list.len() as u16;
+        if bottom_of_list > popup_area.bottom() {
+            bottom_of_list = popup_area.bottom();
+        }
+        let mouse_y = app.state.current_mouse_coordinates.1;
+        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+            app.state
+                .theme_selector_state
+                .select(Some((mouse_y - top_of_list) as usize));
         } else {
-            app.theme.list_select_style
-        };
+            app.state.theme_selector_state.select(None);
+        }
+    };
     let themes = List::new(theme_list)
         .block(
             Block::default()
                 .title("Change Theme")
+                .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(highlight_style)
+        .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
     rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, false);
@@ -3657,7 +3664,7 @@ where
         }
     };
     let theme_title_list = Table::new(theme_table_rows.0)
-        .block(Block::default())
+        .block(Block::default().style(app.theme.general_style))
         .widths(&[Constraint::Percentage(100)])
         .highlight_style(list_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
