@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, Utc};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info, warn};
 use tui::{style::Color, widgets::ListState};
@@ -564,412 +564,450 @@ pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConf
 
 pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
     // append to current user input if key is not enter else change state to Initialized
-    if key != Key::Enter && key != Key::Esc {
-        if app.config.keybindings.toggle_command_palette.contains(&key) {
+    match key {
+        Key::Esc => {
+            match app.state.focus {
+                Focus::NewBoardName => app.state.new_board_form[0] = "".to_string(),
+                Focus::NewBoardDescription => app.state.new_board_form[1] = "".to_string(),
+                Focus::NewCardName => app.state.new_card_form[0] = "".to_string(),
+                Focus::CardDescription => app.state.new_card_form[1] = "".to_string(),
+                Focus::CardDueDate => app.state.new_card_form[2] = "".to_string(),
+                _ => app.state.current_user_input = "".to_string(),
+            }
+            if app.state.popup_mode.is_some()
+                && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
+            {
+                app.state.popup_mode = None;
+            }
             app.state.app_status = AppStatus::Initialized;
-            app.state.popup_mode = None;
+            app.state.current_cursor_position = None;
+            info!("Exiting user input mode");
         }
-        if app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-        {
-            if key == Key::Up {
-                app.command_palette_up();
-                return AppReturn::Continue;
-            } else if key == Key::Down {
-                app.command_palette_down();
+        Key::Enter => {
+            if app.state.popup_mode.is_some()
+                && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
+            {
+                return CommandPaletteWidget::handle_command(app).await;
+            }
+            app.state.app_status = AppStatus::Initialized;
+            app.state.current_cursor_position = None;
+            info!("Exiting user input mode");
+        }
+        _ => {
+            if app.config.keybindings.toggle_command_palette.contains(&key) {
+                app.state.app_status = AppStatus::Initialized;
+                app.state.popup_mode = None;
                 return AppReturn::Continue;
             }
-        }
-        let mut current_key = key.to_string();
-        if key == Key::Char(' ') {
-            current_key = " ".to_string();
-        } else if key == Key::Ctrl('n') {
-            current_key = "\n".to_string();
-        } else if key == Key::Tab {
-            current_key = "  ".to_string();
-        } else if key == Key::Backspace {
-            match app.state.ui_mode {
-                UiMode::NewBoard => match app.state.focus {
-                    Focus::NewBoardName => {
-                        if app.state.current_cursor_position.is_some() {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap();
-                            if current_cursor_position > 0 {
-                                app.state.new_board_form[0].remove(current_cursor_position - 1);
-                                app.state.current_cursor_position =
-                                    Some(current_cursor_position - 1);
+            if app.state.popup_mode.is_some()
+                && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
+            {
+                if key == Key::Up {
+                    app.command_palette_up();
+                    return AppReturn::Continue;
+                } else if key == Key::Down {
+                    app.command_palette_down();
+                    return AppReturn::Continue;
+                }
+            }
+            let mut current_key = key.to_string();
+            match key {
+                Key::Char(' ') => current_key = " ".to_string(),
+                Key::Ctrl('n') => current_key = "\n".to_string(),
+                Key::Tab => current_key = "  ".to_string(),
+                Key::Backspace => {
+                    match app.state.ui_mode {
+                        UiMode::NewBoard => match app.state.focus {
+                            Focus::NewBoardName => {
+                                if app.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        app.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        app.state.new_board_form[0]
+                                            .remove(current_cursor_position - 1);
+                                        app.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    app.state.new_board_form[0].pop();
+                                }
                             }
-                        } else {
-                            app.state.new_board_form[0].pop();
+                            Focus::NewBoardDescription => {
+                                if app.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        app.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        app.state.new_board_form[1]
+                                            .remove(current_cursor_position - 1);
+                                        app.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    app.state.new_board_form[1].pop();
+                                }
+                            }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match app.state.focus {
+                            Focus::NewCardName => {
+                                if app.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        app.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        app.state.new_card_form[0]
+                                            .remove(current_cursor_position - 1);
+                                        app.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    app.state.new_card_form[0].pop();
+                                }
+                            }
+                            Focus::CardDescription => {
+                                if app.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        app.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        app.state.new_card_form[1]
+                                            .remove(current_cursor_position - 1);
+                                        app.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    app.state.new_card_form[1].pop();
+                                }
+                            }
+                            Focus::CardDueDate => {
+                                if app.state.current_cursor_position.is_some() {
+                                    let current_cursor_position =
+                                        app.state.current_cursor_position.unwrap();
+                                    if current_cursor_position > 0 {
+                                        app.state.new_card_form[2]
+                                            .remove(current_cursor_position - 1);
+                                        app.state.current_cursor_position =
+                                            Some(current_cursor_position - 1);
+                                    }
+                                } else {
+                                    app.state.new_card_form[2].pop();
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {
+                            if app.state.current_cursor_position.is_some() {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    app.state
+                                        .current_user_input
+                                        .remove(current_cursor_position - 1);
+                                    app.state.current_cursor_position =
+                                        Some(current_cursor_position - 1);
+                                }
+                            } else {
+                                app.state.current_user_input.pop();
+                            }
                         }
+                    };
+                    current_key = "".to_string();
+                }
+                Key::Left => {
+                    match app.state.ui_mode {
+                        UiMode::NewBoard => match app.state.focus {
+                            Focus::NewBoardName => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_board_form[0].len());
+                                } else if app.state.current_cursor_position.unwrap() > 0 {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    app.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            Focus::NewBoardDescription => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_board_form[1].len());
+                                } else if app.state.current_cursor_position.unwrap() > 0 {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    app.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match app.state.focus {
+                            Focus::NewCardName => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[0].len());
+                                } else if app.state.current_cursor_position.unwrap() > 0 {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    app.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            Focus::CardDescription => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[1].len());
+                                } else if app.state.current_cursor_position.unwrap() > 0 {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    app.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            Focus::CardDueDate => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[2].len());
+                                } else if app.state.current_cursor_position.unwrap() > 0 {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() - 1);
+                                } else {
+                                    app.state.current_cursor_position = Some(0);
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_user_input.len());
+                            } else if app.state.current_cursor_position.unwrap() > 0 {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() - 1);
+                            } else {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                        }
+                    };
+                    current_key = "".to_string();
+                }
+                Key::Right => {
+                    match app.state.ui_mode {
+                        UiMode::NewBoard => match app.state.focus {
+                            Focus::NewBoardName => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_board_form[0].len());
+                                } else if app.state.current_cursor_position.unwrap()
+                                    < app.state.new_board_form[0].len()
+                                {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_board_form[0].len());
+                                }
+                            }
+                            Focus::NewBoardDescription => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_board_form[1].len());
+                                } else if app.state.current_cursor_position.unwrap()
+                                    < app.state.new_board_form[1].len()
+                                {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_board_form[1].len());
+                                }
+                            }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match app.state.focus {
+                            Focus::NewCardName => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[0].len());
+                                } else if app.state.current_cursor_position.unwrap()
+                                    < app.state.new_card_form[0].len()
+                                {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[0].len());
+                                }
+                            }
+                            Focus::CardDescription => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[1].len());
+                                } else if app.state.current_cursor_position.unwrap()
+                                    < app.state.new_card_form[1].len()
+                                {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[1].len());
+                                }
+                            }
+                            Focus::CardDueDate => {
+                                if app.state.current_cursor_position.is_none() {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[2].len());
+                                } else if app.state.current_cursor_position.unwrap()
+                                    < app.state.new_card_form[2].len()
+                                {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.current_cursor_position.unwrap() + 1);
+                                } else {
+                                    app.state.current_cursor_position =
+                                        Some(app.state.new_card_form[2].len());
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_user_input.len());
+                            } else if app.state.current_cursor_position.unwrap()
+                                < app.state.current_user_input.len()
+                            {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() + 1);
+                            } else {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_user_input.len());
+                            }
+                        }
+                    };
+                    current_key = "".to_string();
+                }
+                Key::Home => {
+                    match app.state.ui_mode {
+                        UiMode::NewBoard => match app.state.focus {
+                            Focus::NewBoardName => {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                            Focus::NewBoardDescription => {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match app.state.focus {
+                            Focus::NewCardName => {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                            Focus::CardDescription => {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                            Focus::CardDueDate => {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                            _ => {}
+                        },
+                        _ => {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                    };
+                    current_key = "".to_string();
+                }
+                Key::End => {
+                    match app.state.ui_mode {
+                        UiMode::NewBoard => match app.state.focus {
+                            Focus::NewBoardName => {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_board_form[0].len());
+                            }
+                            Focus::NewBoardDescription => {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_board_form[1].len());
+                            }
+                            _ => {}
+                        },
+                        UiMode::NewCard => match app.state.focus {
+                            Focus::NewCardName => {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_card_form[0].len());
+                            }
+                            Focus::CardDescription => {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_card_form[1].len());
+                            }
+                            Focus::CardDueDate => {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_card_form[2].len());
+                            }
+                            _ => {}
+                        },
+                        _ => {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_user_input.len());
+                        }
+                    };
+                    current_key = "".to_string();
+                }
+                _ => {
+                    if current_key.starts_with("<") && current_key.ends_with(">") {
+                        current_key = current_key[1..current_key.len() - 1].to_string();
+                    }
+                    if current_key == "" {
+                        return AppReturn::Continue;
+                    }
+                }
+            }
+            if current_key.chars().next().is_some() {
+                match app.state.focus {
+                    Focus::NewBoardName => {
+                        let cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                        for (i, char) in current_key.chars().enumerate() {
+                            app.state.new_board_form[0].insert(cursor_position + i, char);
+                        }
+                        app.state.current_cursor_position = Some(cursor_position + 1);
                     }
                     Focus::NewBoardDescription => {
-                        if app.state.current_cursor_position.is_some() {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap();
-                            if current_cursor_position > 0 {
-                                app.state.new_board_form[1].remove(current_cursor_position - 1);
-                                app.state.current_cursor_position =
-                                    Some(current_cursor_position - 1);
-                            }
-                        } else {
-                            app.state.new_board_form[1].pop();
+                        let cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                        for (i, char) in current_key.chars().enumerate() {
+                            app.state.new_board_form[1].insert(cursor_position + i, char);
                         }
+                        app.state.current_cursor_position = Some(cursor_position + 1);
                     }
-                    _ => {}
-                },
-                UiMode::NewCard => match app.state.focus {
                     Focus::NewCardName => {
-                        if app.state.current_cursor_position.is_some() {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap();
-                            if current_cursor_position > 0 {
-                                app.state.new_card_form[0].remove(current_cursor_position - 1);
-                                app.state.current_cursor_position =
-                                    Some(current_cursor_position - 1);
-                            }
-                        } else {
-                            app.state.new_card_form[0].pop();
+                        let cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                        for (i, char) in current_key.chars().enumerate() {
+                            app.state.new_card_form[0].insert(cursor_position + i, char);
                         }
+                        app.state.current_cursor_position = Some(cursor_position + 1);
                     }
-                    Focus::NewCardDescription => {
-                        if app.state.current_cursor_position.is_some() {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap();
-                            if current_cursor_position > 0 {
-                                app.state.new_card_form[1].remove(current_cursor_position - 1);
-                                app.state.current_cursor_position =
-                                    Some(current_cursor_position - 1);
-                            }
-                        } else {
-                            app.state.new_card_form[1].pop();
+                    Focus::CardDescription => {
+                        let current_cursor_position =
+                            app.state.current_cursor_position.unwrap_or(0);
+                        for (i, char) in current_key.chars().enumerate() {
+                            app.state.new_card_form[1].insert(current_cursor_position + i, char);
                         }
+                        app.state.current_cursor_position = Some(current_cursor_position + 1);
                     }
-                    Focus::NewCardDueDate => {
-                        if app.state.current_cursor_position.is_some() {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap();
-                            if current_cursor_position > 0 {
-                                app.state.new_card_form[2].remove(current_cursor_position - 1);
-                                app.state.current_cursor_position =
-                                    Some(current_cursor_position - 1);
-                            }
-                        } else {
-                            app.state.new_card_form[2].pop();
+                    Focus::CardDueDate => {
+                        let current_cursor_position =
+                            app.state.current_cursor_position.unwrap_or(0);
+                        for (i, char) in current_key.chars().enumerate() {
+                            app.state.new_card_form[2].insert(current_cursor_position + i, char);
                         }
+                        app.state.current_cursor_position = Some(current_cursor_position + 1);
                     }
-                    _ => {}
-                },
-                _ => {
-                    if app.state.current_cursor_position.is_some() {
-                        let current_cursor_position = app.state.current_cursor_position.unwrap();
-                        if current_cursor_position > 0 {
+                    _ => {
+                        let current_cursor_position =
+                            app.state.current_cursor_position.unwrap_or(0);
+                        for (i, char) in current_key.chars().enumerate() {
                             app.state
                                 .current_user_input
-                                .remove(current_cursor_position - 1);
-                            app.state.current_cursor_position = Some(current_cursor_position - 1);
+                                .insert(current_cursor_position + i, char);
                         }
-                    } else {
-                        app.state.current_user_input.pop();
+                        app.state.current_cursor_position = Some(current_cursor_position + 1);
                     }
                 }
-            };
-            current_key = "".to_string();
-        } else if key == Key::Left {
-            match app.state.ui_mode {
-                UiMode::NewBoard => match app.state.focus {
-                    Focus::NewBoardName => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_board_form[0].len());
-                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() - 1);
-                        } else {
-                            app.state.current_cursor_position = Some(0);
-                        }
-                    }
-                    Focus::NewBoardDescription => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_board_form[1].len());
-                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() - 1);
-                        } else {
-                            app.state.current_cursor_position = Some(0);
-                        }
-                    }
-                    _ => {}
-                },
-                UiMode::NewCard => match app.state.focus {
-                    Focus::NewCardName => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[0].len());
-                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() - 1);
-                        } else {
-                            app.state.current_cursor_position = Some(0);
-                        }
-                    }
-                    Focus::NewCardDescription => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[1].len());
-                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() - 1);
-                        } else {
-                            app.state.current_cursor_position = Some(0);
-                        }
-                    }
-                    Focus::NewCardDueDate => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[2].len());
-                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() - 1);
-                        } else {
-                            app.state.current_cursor_position = Some(0);
-                        }
-                    }
-                    _ => {}
-                },
-                _ => {
-                    if app.state.current_cursor_position.is_none() {
-                        app.state.current_cursor_position =
-                            Some(app.state.current_user_input.len());
-                    } else if app.state.current_cursor_position.unwrap() > 0 {
-                        app.state.current_cursor_position =
-                            Some(app.state.current_cursor_position.unwrap() - 1);
-                    } else {
-                        app.state.current_cursor_position = Some(0);
-                    }
-                }
-            };
-            current_key = "".to_string();
-        } else if key == Key::Right {
-            match app.state.ui_mode {
-                UiMode::NewBoard => match app.state.focus {
-                    Focus::NewBoardName => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_board_form[0].len());
-                        } else if app.state.current_cursor_position.unwrap()
-                            < app.state.new_board_form[0].len()
-                        {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() + 1);
-                        } else {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_board_form[0].len());
-                        }
-                    }
-                    Focus::NewBoardDescription => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_board_form[1].len());
-                        } else if app.state.current_cursor_position.unwrap()
-                            < app.state.new_board_form[1].len()
-                        {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() + 1);
-                        } else {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_board_form[1].len());
-                        }
-                    }
-                    _ => {}
-                },
-                UiMode::NewCard => match app.state.focus {
-                    Focus::NewCardName => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[0].len());
-                        } else if app.state.current_cursor_position.unwrap()
-                            < app.state.new_card_form[0].len()
-                        {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() + 1);
-                        } else {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[0].len());
-                        }
-                    }
-                    Focus::NewCardDescription => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[1].len());
-                        } else if app.state.current_cursor_position.unwrap()
-                            < app.state.new_card_form[1].len()
-                        {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() + 1);
-                        } else {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[1].len());
-                        }
-                    }
-                    Focus::NewCardDueDate => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[2].len());
-                        } else if app.state.current_cursor_position.unwrap()
-                            < app.state.new_card_form[2].len()
-                        {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() + 1);
-                        } else {
-                            app.state.current_cursor_position =
-                                Some(app.state.new_card_form[2].len());
-                        }
-                    }
-                    _ => {}
-                },
-                _ => {
-                    if app.state.current_cursor_position.is_none() {
-                        app.state.current_cursor_position =
-                            Some(app.state.current_user_input.len());
-                    } else if app.state.current_cursor_position.unwrap()
-                        < app.state.current_user_input.len()
-                    {
-                        app.state.current_cursor_position =
-                            Some(app.state.current_cursor_position.unwrap() + 1);
-                    } else {
-                        app.state.current_cursor_position =
-                            Some(app.state.current_user_input.len());
-                    }
-                }
-            };
-            current_key = "".to_string();
-        } else if key == Key::Home {
-            match app.state.ui_mode {
-                UiMode::NewBoard => match app.state.focus {
-                    Focus::NewBoardName => {
-                        app.state.current_cursor_position = Some(0);
-                    }
-                    Focus::NewBoardDescription => {
-                        app.state.current_cursor_position = Some(0);
-                    }
-                    _ => {}
-                },
-                UiMode::NewCard => match app.state.focus {
-                    Focus::NewCardName => {
-                        app.state.current_cursor_position = Some(0);
-                    }
-                    Focus::NewCardDescription => {
-                        app.state.current_cursor_position = Some(0);
-                    }
-                    Focus::NewCardDueDate => {
-                        app.state.current_cursor_position = Some(0);
-                    }
-                    _ => {}
-                },
-                _ => {
-                    app.state.current_cursor_position = Some(0);
-                }
-            };
-            current_key = "".to_string();
-        } else if key == Key::End {
-            match app.state.ui_mode {
-                UiMode::NewBoard => match app.state.focus {
-                    Focus::NewBoardName => {
-                        app.state.current_cursor_position = Some(app.state.new_board_form[0].len());
-                    }
-                    Focus::NewBoardDescription => {
-                        app.state.current_cursor_position = Some(app.state.new_board_form[1].len());
-                    }
-                    _ => {}
-                },
-                UiMode::NewCard => match app.state.focus {
-                    Focus::NewCardName => {
-                        app.state.current_cursor_position = Some(app.state.new_card_form[0].len());
-                    }
-                    Focus::NewCardDescription => {
-                        app.state.current_cursor_position = Some(app.state.new_card_form[1].len());
-                    }
-                    Focus::NewCardDueDate => {
-                        app.state.current_cursor_position = Some(app.state.new_card_form[2].len());
-                    }
-                    _ => {}
-                },
-                _ => {
-                    app.state.current_cursor_position = Some(app.state.current_user_input.len());
-                }
-            };
-            current_key = "".to_string();
-        } else if current_key.starts_with("<") && current_key.ends_with(">") {
-            current_key = current_key[1..current_key.len() - 1].to_string();
+            }
         }
-        if current_key == "" {
-            return AppReturn::Continue;
-        }
-        if app.state.focus == Focus::NewBoardName {
-            let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-            app.state.new_board_form[0]
-                .insert(cursor_position, current_key.chars().next().unwrap());
-            app.state.current_cursor_position = Some(cursor_position + 1);
-        } else if app.state.focus == Focus::NewBoardDescription {
-            let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-            app.state.new_board_form[1]
-                .insert(cursor_position, current_key.chars().next().unwrap());
-            app.state.current_cursor_position = Some(cursor_position + 1);
-        } else if app.state.focus == Focus::NewCardName {
-            let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-            app.state.new_card_form[0].insert(cursor_position, current_key.chars().next().unwrap());
-            app.state.current_cursor_position = Some(cursor_position + 1);
-        } else if app.state.focus == Focus::NewCardDescription {
-            let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
-            app.state.new_card_form[1]
-                .insert(current_cursor_position, current_key.chars().next().unwrap());
-            app.state.current_cursor_position = Some(current_cursor_position + 1);
-        } else if app.state.focus == Focus::NewCardDueDate {
-            let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
-            app.state.new_card_form[2]
-                .insert(current_cursor_position, current_key.chars().next().unwrap());
-            app.state.current_cursor_position = Some(current_cursor_position + 1);
-        } else {
-            let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
-            app.state
-                .current_user_input
-                .insert(current_cursor_position, current_key.chars().next().unwrap());
-            app.state.current_cursor_position = Some(current_cursor_position + 1);
-        }
-    } else if key == Key::Esc {
-        if app.state.focus == Focus::NewBoardName {
-            app.state.new_board_form[0] = "".to_string();
-        } else if app.state.focus == Focus::NewBoardDescription {
-            app.state.new_board_form[1] = "".to_string();
-        } else if app.state.focus == Focus::NewCardName {
-            app.state.new_card_form[0] = "".to_string();
-        } else if app.state.focus == Focus::NewCardDescription {
-            app.state.new_card_form[1] = "".to_string();
-        } else if app.state.focus == Focus::NewCardDueDate {
-            app.state.new_card_form[2] = "".to_string();
-        } else {
-            app.state.current_user_input = "".to_string();
-        }
-        if app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-        {
-            app.state.popup_mode = None;
-        }
-        app.state.app_status = AppStatus::Initialized;
-        app.state.current_cursor_position = None;
-        info!("Exiting user input mode");
-    } else {
-        if key == Key::Enter
-            && app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-        {
-            return CommandPaletteWidget::handle_command(app).await;
-        }
-        app.state.app_status = AppStatus::Initialized;
-        app.state.current_cursor_position = None;
-        info!("Exiting user input mode");
     }
     AppReturn::Continue
 }
@@ -1779,6 +1817,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         if let Some(card_index) = card_index {
                             app.boards[index.unwrap()].cards[card_index].card_status =
                                 CardStatus::Complete;
+                            app.boards[index.unwrap()].cards[card_index].date_completed =
+                                Utc::now().to_string();
                             info!(
                                 "Changed status to Completed for card {}",
                                 app.boards[index.unwrap()].cards[card_index].name
@@ -1818,6 +1858,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         if let Some(card_index) = card_index {
                             app.boards[index.unwrap()].cards[card_index].card_status =
                                 CardStatus::Active;
+                            app.boards[index.unwrap()].cards[card_index].date_completed =
+                                "N/A".to_string();
                             info!(
                                 "Changed status to Active for card {}",
                                 app.boards[index.unwrap()].cards[card_index].name
@@ -1857,6 +1899,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         if let Some(card_index) = card_index {
                             app.boards[index.unwrap()].cards[card_index].card_status =
                                 CardStatus::Stale;
+                            app.boards[index.unwrap()].cards[card_index].date_completed =
+                                "N/A".to_string();
                             info!(
                                 "Changed status to Stale for card {}",
                                 app.boards[index.unwrap()].cards[card_index].name
@@ -2365,6 +2409,9 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
     match mouse_action {
         Mouse::Move(x, y) => {
             app.state.current_mouse_coordinates = (x, y);
+        }
+        Mouse::Drag(x, y) => {
+            info!("Mouse drag at {}, {}", x, y);
         }
         Mouse::LeftPress => left_button_pressed = true,
         Mouse::RightPress => right_button_pressed = true,
@@ -2913,9 +2960,9 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                             .collect();
                     } else if app.state.mouse_focus == Some(Focus::NewCardName) {
                         app.state.app_status = AppStatus::UserInput
-                    } else if app.state.mouse_focus == Some(Focus::NewCardDescription) {
+                    } else if app.state.mouse_focus == Some(Focus::CardDescription) {
                         app.state.app_status = AppStatus::UserInput
-                    } else if app.state.mouse_focus == Some(Focus::NewCardDueDate) {
+                    } else if app.state.mouse_focus == Some(Focus::CardDueDate) {
                         app.state.app_status = AppStatus::UserInput
                     } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
                         handle_new_card_action(app);
@@ -4172,7 +4219,11 @@ fn handle_next_focus(app: &mut App) {
         UiMode::get_available_targets(&app.state.ui_mode)
     };
     if !available_targets.contains(&app.state.focus) {
-        app.state.focus = available_targets[0];
+        if available_targets.len() > 0 {
+            app.state.focus = available_targets[0];
+        } else {
+            app.state.focus = Focus::NoFocus;
+        }
         return;
     }
     let next_focus = app.state.focus.next(&available_targets);
@@ -4191,7 +4242,11 @@ fn handle_prv_focus(app: &mut App) {
         UiMode::get_available_targets(&app.state.ui_mode)
     };
     if !available_targets.contains(&app.state.focus) {
-        app.state.focus = available_targets[available_targets.len() - 1];
+        if available_targets.len() > 0 {
+            app.state.focus = available_targets[available_targets.len() - 1];
+        } else {
+            app.state.focus = Focus::NoFocus;
+        }
         return;
     }
     let prv_focus = app.state.focus.prev(&available_targets);

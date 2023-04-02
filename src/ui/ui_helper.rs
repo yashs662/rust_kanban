@@ -466,7 +466,7 @@ fn draw_config_table_selector(app: &mut App, render_area: Rect) -> Table<'static
         let current_selected_row_in_terminal_area =
             current_selected_row + render_area.y as usize + 1; // +1 for border
         if mouse_row == current_selected_row_in_terminal_area {
-            app.theme.mouse_focus_style
+            app.theme.list_select_style
         } else {
             if focus == Focus::ConfigTable {
                 app.theme.list_select_style
@@ -634,7 +634,7 @@ where
         let submit_button = Paragraph::new("Submit")
             .block(
                 Block::default()
-                .style(app.theme.general_style)
+                    .style(app.theme.general_style)
                     .borders(Borders::ALL)
                     .border_style(submit_button_style)
                     .border_type(BorderType::Rounded),
@@ -2441,15 +2441,15 @@ where
         app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
-            if app.state.mouse_focus != Some(Focus::NewCardDescription) {
+            if app.state.mouse_focus != Some(Focus::CardDescription) {
                 app.state.current_cursor_position = None;
                 app.state.app_status = AppStatus::Initialized;
             }
-            app.state.mouse_focus = Some(Focus::NewCardDescription);
-            app.state.focus = Focus::NewCardDescription;
+            app.state.mouse_focus = Some(Focus::CardDescription);
+            app.state.focus = Focus::CardDescription;
             app.theme.mouse_focus_style
         } else {
-            if matches!(app.state.focus, Focus::NewCardDescription) {
+            if matches!(app.state.focus, Focus::CardDescription) {
                 app.theme.keyboard_focus_style
             } else {
                 app.theme.general_style
@@ -2460,15 +2460,15 @@ where
         app.theme.inactive_text_style
     } else {
         if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
-            if app.state.mouse_focus != Some(Focus::NewCardDueDate) {
+            if app.state.mouse_focus != Some(Focus::CardDueDate) {
                 app.state.current_cursor_position = None;
                 app.state.app_status = AppStatus::Initialized;
             }
-            app.state.mouse_focus = Some(Focus::NewCardDueDate);
-            app.state.focus = Focus::NewCardDueDate;
+            app.state.mouse_focus = Some(Focus::CardDueDate);
+            app.state.focus = Focus::CardDueDate;
             app.theme.mouse_focus_style
         } else {
-            if matches!(app.state.focus, Focus::NewCardDueDate) {
+            if matches!(app.state.focus, Focus::CardDueDate) {
                 app.theme.keyboard_focus_style
             } else {
                 app.theme.general_style
@@ -2635,7 +2635,7 @@ where
         } else {
             rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
         }
-    } else if app.state.focus == Focus::NewCardDescription
+    } else if app.state.focus == Focus::CardDescription
         && app.state.app_status == AppStatus::UserInput
     {
         if app.state.current_cursor_position.is_some() {
@@ -2650,8 +2650,7 @@ where
         } else {
             rect.set_cursor(chunks[2].x + 1, chunks[2].y + 1);
         }
-    } else if app.state.focus == Focus::NewCardDueDate
-        && app.state.app_status == AppStatus::UserInput
+    } else if app.state.focus == Focus::CardDueDate && app.state.app_status == AppStatus::UserInput
     {
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
@@ -3075,11 +3074,6 @@ where
         .margin(1)
         .split(popup_area);
 
-    // get the current board id from app.state.current_board_id
-    // get the board with the id
-    // get the current card id from app.state.current_card_id
-    // get the current card From the board
-
     if let Some(board) = app
         .boards
         .iter()
@@ -3100,12 +3094,19 @@ where
                 .border_type(BorderType::Rounded);
             rect.render_widget(main_block, popup_area);
 
+            let description_style = if app.state.focus == Focus::CardDescription {
+                app.theme.list_select_style
+            } else {
+                app.theme.general_style
+            };
+
             let description_paragraph = Paragraph::new(card_description)
                 .block(
                     Block::default()
                         .title("Description")
                         .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded),
+                        .border_type(BorderType::Rounded)
+                        .border_style(description_style),
                 )
                 .wrap(Wrap { trim: false });
             rect.render_widget(description_paragraph, card_chunks[0]);
@@ -3124,15 +3125,34 @@ where
                 let parsed_due_date = parsed_due_date.unwrap();
                 let today = Local::now().naive_local();
                 let days_left = parsed_due_date.signed_duration_since(today).num_days();
-                if days_left <= app.config.warning_delta.into() && days_left >= 0 {
+                if app.state.focus == Focus::CardDueDate {
                     Span::styled(
                         format!("Due: {}", card.date_due),
-                        app.theme.card_due_warning_style,
+                        app.theme.list_select_style,
                     )
-                } else if days_left < 0 {
+                } else {
+                    if days_left <= app.config.warning_delta.into() && days_left >= 0 {
+                        Span::styled(
+                            format!("Due: {}", card.date_due),
+                            app.theme.card_due_warning_style,
+                        )
+                    } else if days_left < 0 {
+                        Span::styled(
+                            format!("Due: {}", card.date_due),
+                            app.theme.card_due_overdue_style,
+                        )
+                    } else {
+                        Span::styled(
+                            format!("Due: {}", card.date_due),
+                            app.theme.card_due_default_style,
+                        )
+                    }
+                }
+            } else {
+                if app.state.focus == Focus::CardDueDate {
                     Span::styled(
                         format!("Due: {}", card.date_due),
-                        app.theme.card_due_overdue_style,
+                        app.theme.list_select_style,
                     )
                 } else {
                     Span::styled(
@@ -3140,48 +3160,83 @@ where
                         app.theme.card_due_default_style,
                     )
                 }
-            } else {
-                Span::styled(
-                    format!("Due: {}", card.date_due),
-                    app.theme.card_due_default_style,
-                )
             };
-            let card_priority_styled = if card.priority == CardPriority::High {
-                Span::styled(card_priority, app.theme.card_priority_high_style)
-            } else if card.priority == CardPriority::Medium {
-                Span::styled(card_priority, app.theme.card_priority_medium_style)
-            } else if card.priority == CardPriority::Low {
-                Span::styled(card_priority, app.theme.card_priority_low_style)
+            let card_priority_styled = if app.state.focus == Focus::CardPriority {
+                Span::styled(card_priority, app.theme.list_select_style)
             } else {
-                Span::raw(card_priority)
+                if card.priority == CardPriority::High {
+                    Span::styled(card_priority, app.theme.card_priority_high_style)
+                } else if card.priority == CardPriority::Medium {
+                    Span::styled(card_priority, app.theme.card_priority_medium_style)
+                } else if card.priority == CardPriority::Low {
+                    Span::styled(card_priority, app.theme.card_priority_low_style)
+                } else {
+                    Span::raw(card_priority)
+                }
             };
-            let card_status_styled = if card.card_status == CardStatus::Complete {
-                Span::styled(card_status, app.theme.card_status_completed_style)
-            } else if card.card_status == CardStatus::Active {
-                Span::styled(card_status, app.theme.card_status_active_style)
-            } else if card.card_status == CardStatus::Stale {
-                Span::styled(card_status, app.theme.card_status_stale_style)
+            let card_status_styled = if app.state.focus == Focus::CardStatus {
+                Span::styled(card_status, app.theme.list_select_style)
             } else {
-                Span::raw(card_status)
+                if card.card_status == CardStatus::Complete {
+                    Span::styled(card_status, app.theme.card_status_completed_style)
+                } else if card.card_status == CardStatus::Active {
+                    Span::styled(card_status, app.theme.card_status_active_style)
+                } else if card.card_status == CardStatus::Stale {
+                    Span::styled(card_status, app.theme.card_status_stale_style)
+                } else {
+                    Span::raw(card_status)
+                }
             };
-            let card_extra_info = Paragraph::new(vec![
-                Spans::from(card_date_created),
-                Spans::from(card_date_modified),
-                Spans::from(card_due_date_styled),
-                Spans::from(card_date_completed),
-                Spans::from(card_priority_styled),
-                Spans::from(card_status_styled),
-                Spans::from(card_tags),
-                Spans::from(card_comments),
-            ])
-            .block(
+            let card_tags_styled = if app.state.focus == Focus::CardTags {
+                Span::styled(card_tags, app.theme.list_select_style)
+            } else {
+                Span::raw(card_tags)
+            };
+            let card_comments_styled = if app.state.focus == Focus::CardComments {
+                Span::styled(card_comments, app.theme.list_select_style)
+            } else {
+                Span::raw(card_comments)
+            };
+            let card_extra_info_items = vec![
+                ListItem::new(vec![Spans::from(card_date_created)]),
+                ListItem::new(vec![Spans::from(card_date_modified)]),
+                ListItem::new(vec![Spans::from(card_due_date_styled)]),
+                ListItem::new(vec![Spans::from(card_date_completed)]),
+                ListItem::new(vec![Spans::from(card_priority_styled)]),
+                ListItem::new(vec![Spans::from(card_status_styled)]),
+                ListItem::new(vec![Spans::from(card_tags_styled)]),
+                ListItem::new(vec![Spans::from(card_comments_styled)]),
+            ];
+            if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[1]) {
+                let top_of_list = card_chunks[1].y + 1;
+                let mut bottom_of_list = card_chunks[1].y + card_extra_info_items.len() as u16;
+                if bottom_of_list > card_chunks[1].bottom() {
+                    bottom_of_list = card_chunks[1].bottom();
+                }
+                let mouse_y = app.state.current_mouse_coordinates.1;
+                if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+                    match mouse_y - top_of_list {
+                        2 => app.state.focus = Focus::CardDueDate,
+                        4 => app.state.focus = Focus::CardPriority,
+                        5 => app.state.focus = Focus::CardStatus,
+                        6 => app.state.focus = Focus::CardTags,
+                        7 => app.state.focus = Focus::CardComments,
+                        _ => app.state.focus = Focus::NoFocus,
+                    }
+                    app.state.card_view_list_state.select(Some((mouse_y - top_of_list) as usize));
+                } else {
+                    app.state.card_view_list_state.select(None);
+                }
+            };
+            if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[0]) {
+                app.state.focus = Focus::CardDescription;
+            }
+            let card_extra_info = List::new(card_extra_info_items).block(
                 Block::default()
                     .title("Card Info")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
-            )
-            .alignment(Alignment::Left)
-            .wrap(Wrap { trim: true });
+            );
             rect.render_widget(card_extra_info, card_chunks[1]);
         } else {
             // render no cards found in <> board
@@ -3199,6 +3254,7 @@ where
                     .wrap(Wrap { trim: true });
             rect.render_widget(no_cards_found, popup_area);
         }
+
         if app.config.enable_mouse_support {
             render_close_button(rect, app);
         }
@@ -3308,7 +3364,7 @@ where
     let search_results = List::new(search_results)
         .block(
             Block::default()
-            .style(app.theme.general_style)
+                .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -3485,27 +3541,39 @@ where
     let current_card_id = app.state.current_card_id;
 
     let menu_area = top_left_rect(30, 30, rect.size());
-    let debug_panel = Paragraph::new(vec![
-        Spans::from(format!("UI Mode: {}", current_ui_mode)),
-        Spans::from(format!("Focus: {:?}", app.state.focus)),
-        Spans::from(format!(
-            "CMousePos: {:?}",
-            app.state.current_mouse_coordinates
-        )),
-        Spans::from(format!("Popup Mode: {}", popup_mode)),
-        Spans::from(format!("Render Time: {}", ui_render_time)),
-        Spans::from(format!("CB-ID: {:?}", current_board_id)),
-        Spans::from(format!("CC-ID: {:?}", current_card_id)),
-    ])
-    .block(
-        Block::default()
-            .title("Debug Panel")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .style(app.theme.general_style)
-            .border_style(app.theme.log_debug_style),
-    )
-    .wrap(Wrap { trim: false });
+    let strings = vec![
+        format!("UI Mode: {}", current_ui_mode),
+        format!("Focus: {:?}", app.state.focus),
+        format!("CMousePos: {:?}", app.state.current_mouse_coordinates),
+        format!("Popup Mode: {}", popup_mode),
+        format!("Render Time: {}", ui_render_time),
+        format!("CB-ID: {:?}", current_board_id),
+        format!("CC-ID: {:?}", current_card_id),
+    ];
+    let strings = strings
+        .iter()
+        .map(|s| {
+            if s.len() > menu_area.width as usize - 2 {
+                Spans::from(format!(
+                    "{}{}",
+                    s[..menu_area.width as usize - 5].to_string(),
+                    "..."
+                ))
+            } else {
+                Spans::from(s.to_string())
+            }
+        })
+        .collect::<Vec<Spans>>();
+    let debug_panel = Paragraph::new(strings)
+        .block(
+            Block::default()
+                .title("Debug Panel")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .style(app.theme.general_style)
+                .border_style(app.theme.log_debug_style),
+        )
+        .wrap(Wrap { trim: false });
     rect.render_widget(Clear, menu_area);
     render_blank_styled_canvas(rect, app, menu_area, false);
     rect.render_widget(debug_panel, menu_area);

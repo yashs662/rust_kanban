@@ -133,7 +133,7 @@ impl Card {
             date_created: Utc::now().to_string(),
             date_modified: Utc::now().to_string(),
             date_due: date_due.to_string(),
-            date_completed: FIELD_NOT_SET.to_string(),
+            date_completed: "N/A".to_string(),
             priority,
             card_status: CardStatus::Active,
             tags,

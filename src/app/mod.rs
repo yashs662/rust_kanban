@@ -70,9 +70,9 @@ impl App {
         let mut theme = Theme::default();
         let config = prepare_config_for_new_app(&mut state, theme.clone());
         let default_theme = config.default_theme.clone();
-        for loop_theme in all_themes.clone() {
-            if loop_theme.name == default_theme {
-                theme = loop_theme.clone();
+        for t in all_themes.iter() {
+            if t.name == default_theme {
+                theme = t.clone();
                 break;
             }
         }
@@ -763,7 +763,14 @@ impl Display for PopupMode {
 impl PopupMode {
     fn get_available_targets(&self) -> Vec<Focus> {
         match self {
-            PopupMode::CardView => vec![],
+            PopupMode::CardView => vec![
+                Focus::CardDescription,
+                Focus::CardDueDate,
+                Focus::CardPriority,
+                Focus::CardStatus,
+                Focus::CardTags,
+                Focus::CardComments,
+            ],
             PopupMode::CommandPalette => vec![],
             PopupMode::EditSpecificKeyBinding => vec![],
             PopupMode::ChangeUIMode => vec![],
@@ -826,6 +833,7 @@ pub struct AppState {
     pub theme_editor_state: TableState,
     pub edit_specific_style_state: (ListState, ListState, ListState),
     pub default_theme_mode: bool,
+    pub card_view_list_state: ListState,
 }
 
 impl Default for AppState {
@@ -875,6 +883,7 @@ impl Default for AppState {
                 ListState::default(),
             ),
             default_theme_mode: false,
+            card_view_list_state: ListState::default(),
         }
     }
 }

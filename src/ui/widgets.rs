@@ -166,6 +166,7 @@ impl WidgetManager {
 #[derive(Debug)]
 pub struct CommandPaletteWidget {
     pub search_results: Option<Vec<CommandPaletteActions>>,
+    pub last_search_string: String,
     pub available_commands: Vec<CommandPaletteActions>,
     pub corpus: Corpus,
 }
@@ -179,6 +180,7 @@ impl CommandPaletteWidget {
         }
         Self {
             search_results: None,
+            last_search_string: String::new(),
             available_commands: CommandPaletteActions::all(),
             corpus,
         }
@@ -327,6 +329,8 @@ impl CommandPaletteWidget {
             }
         }
         app.state.app_status = AppStatus::Initialized;
+        app.state.current_user_input = String::new();
+        app.state.current_cursor_position = None;
         AppReturn::Continue
     }
 
@@ -334,8 +338,10 @@ impl CommandPaletteWidget {
         if app.state.popup_mode.is_some()
             && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
         {
-            let mut search_result_changed = false;
-            let current_search_results = app.command_palette.search_results.clone();
+            // check if last search string is different from app,.state.current_user_input
+            if app.state.current_user_input == app.command_palette.last_search_string {
+                return;
+            }
             let current_search_string = app.state.current_user_input.clone().to_lowercase();
             let result = app
                 .command_palette
@@ -354,27 +360,10 @@ impl CommandPaletteWidget {
                 search_results
             };
             app.command_palette.search_results = Some(search_results);
-            if current_search_results.is_some() {
-                if current_search_results.as_ref().unwrap().len()
-                    != app.command_palette.search_results.clone().unwrap().len()
-                {
-                    search_result_changed = true;
-                } else {
-                    for i in 0..current_search_results.as_ref().unwrap().len() {
-                        if current_search_results.as_ref().unwrap()[i]
-                            != app.command_palette.search_results.clone().unwrap()[i]
-                        {
-                            search_result_changed = true;
-                            break;
-                        }
-                    }
-                }
-            } else {
-                search_result_changed = true;
-            }
-            if search_result_changed && app.command_palette.search_results.is_some() {
-                // if lenght is > 1 select first item
-                if app.command_palette.search_results.as_ref().unwrap().len() > 1 {
+            app.command_palette.last_search_string = current_search_string;
+            if app.command_palette.search_results.is_some() {
+                // if length is > 0 select first item
+                if app.command_palette.search_results.as_ref().unwrap().len() > 0 {
                     app.state.command_palette_list_state.select(Some(0));
                 }
             }
@@ -418,15 +407,17 @@ impl CommandPaletteActions {
             Self::ChangeTheme,
             Self::CreateATheme,
             Self::Quit,
+            Self::DebugMenu,
         ];
+        all
 
-        if cfg!(debug_assertions) {
-            let mut all = all;
-            all.push(Self::DebugMenu);
-            all
-        } else {
-            all
-        }
+        // if cfg!(debug_assertions) {
+        //     let mut all = all;
+        //     all.push(Self::DebugMenu);
+        //     all
+        // } else {
+        //     all
+        // }
     }
 
     pub fn as_str(&self) -> &str {

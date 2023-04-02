@@ -1,6 +1,7 @@
 use clap::Parser;
 use crossterm::event::DisableMouseCapture;
 use crossterm::{execute, terminal};
+use rust_kanban::constants::APP_TITLE;
 use std::io::stdout;
 use std::sync::Arc;
 use tui::backend::CrosstermBackend;
@@ -40,7 +41,11 @@ async fn main() -> Result<()> {
         if terminal.is_ok() {
             let _ = terminal.unwrap().clear();
         }
-        default_panic(info);
+        if cfg!(debug_assertions) {
+            default_panic(info);
+        } else {
+            println!("An error occured 😢, {} has crashed please report this issue on github {}", APP_TITLE, env!("CARGO_PKG_REPOSITORY"));
+        }
     }));
 
     // parse cli args

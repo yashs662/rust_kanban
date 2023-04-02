@@ -13,6 +13,7 @@ pub enum Mouse {
     ScrollLeft,
     ScrollRight,
     Move(u16, u16),
+    Drag(u16, u16),
     Unknown,
 }
 
@@ -27,6 +28,7 @@ impl Display for Mouse {
             Mouse::ScrollLeft => write!(f, "<Mouse::Ctrl + ScrollUp>"),
             Mouse::ScrollRight => write!(f, "<Mouse::Ctrl + ScrollDown>"),
             Mouse::Move(x, y) => write!(f, "<Mouse::Move({}, {})>", x, y),
+            Mouse::Drag(x, y) => write!(f, "<Mouse::Drag({}, {})>", x, y),
             Mouse::Unknown => write!(f, "<Mouse::Unknown>"),
         }
     }
@@ -36,15 +38,15 @@ impl From<event::MouseEvent> for Mouse {
     fn from(mouse_event: event::MouseEvent) -> Self {
         match mouse_event {
             event::MouseEvent {
-                kind: event::MouseEventKind::Down(event::MouseButton::Left),
+                kind: event::MouseEventKind::Up(event::MouseButton::Left),
                 ..
             } => Mouse::LeftPress,
             event::MouseEvent {
-                kind: event::MouseEventKind::Down(event::MouseButton::Right),
+                kind: event::MouseEventKind::Up(event::MouseButton::Right),
                 ..
             } => Mouse::RightPress,
             event::MouseEvent {
-                kind: event::MouseEventKind::Down(event::MouseButton::Middle),
+                kind: event::MouseEventKind::Up(event::MouseButton::Middle),
                 ..
             } => Mouse::MiddlePress,
             event::MouseEvent {
@@ -71,6 +73,12 @@ impl From<event::MouseEvent> for Mouse {
                 row,
                 ..
             } => Mouse::Move(column, row),
+            event::MouseEvent {
+                kind: event::MouseEventKind::Drag(event::MouseButton::Left),
+                column,
+                row,
+                ..
+            } => Mouse::Drag(column, row),
             _ => Mouse::Unknown,
         }
     }
