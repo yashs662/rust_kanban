@@ -3,7 +3,7 @@ use std::time::Duration;
 use chrono::{NaiveDate, NaiveDateTime, Utc};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info, warn};
-use tui::{style::Color, widgets::ListState};
+use ratatui::{style::Color, widgets::ListState};
 
 use crate::{
     app::{state::KeyBindings, AppConfig},
@@ -996,17 +996,6 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
             if current_key.chars().next().is_some() {
                 if app.state.popup_mode.is_some() {
                     match app.state.popup_mode.unwrap() {
-                        PopupMode::CommandPalette => {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap_or(0);
-                            for (i, char) in current_key.chars().enumerate() {
-                                app.state
-                                    .current_user_input
-                                    .insert(current_cursor_position + i, char);
-                            }
-                            app.state.current_cursor_position = Some(current_cursor_position + 1);
-                            return AppReturn::Continue;
-                        }
                         PopupMode::ViewCard => {
                             if app.state.current_board_id.is_none() {
                                 debug!("No board selected for view card edit");
@@ -1070,17 +1059,10 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                                 }
                             }
                         }
-                        PopupMode::CustomRGBPromptFG => {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap_or(0);
-                            for (i, char) in current_key.chars().enumerate() {
-                                app.state
-                                    .current_user_input
-                                    .insert(current_cursor_position + i, char);
-                            }
-                            app.state.current_cursor_position = Some(current_cursor_position + 1);
-                        }
-                        PopupMode::CustomRGBPromptBG => {
+                        PopupMode::CommandPalette
+                        | PopupMode::CustomRGBPromptFG
+                        | PopupMode::CustomRGBPromptBG
+                        | PopupMode::EditGeneralConfig => {
                             let current_cursor_position =
                                 app.state.current_cursor_position.unwrap_or(0);
                             for (i, char) in current_key.chars().enumerate() {

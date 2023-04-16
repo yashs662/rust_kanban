@@ -1,11 +1,11 @@
 use clap::Parser;
 use crossterm::event::DisableMouseCapture;
 use crossterm::{execute, terminal};
+use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 use rust_kanban::constants::APP_TITLE;
 use std::io::stdout;
 use std::sync::Arc;
-use tui::backend::CrosstermBackend;
-use tui::Terminal;
 
 use eyre::Result;
 use log::LevelFilter;
@@ -44,7 +44,11 @@ async fn main() -> Result<()> {
         if cfg!(debug_assertions) {
             default_panic(info);
         } else {
-            println!("An error occured 😢,\n{} has crashed please report this issue on github\n{}", APP_TITLE, env!("CARGO_PKG_REPOSITORY"));
+            println!(
+                "An error occured 😢,\n{} has crashed please report this issue on github\n{}",
+                APP_TITLE,
+                env!("CARGO_PKG_REPOSITORY")
+            );
         }
     }));
 

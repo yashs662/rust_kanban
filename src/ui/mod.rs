@@ -10,12 +10,12 @@ use crate::{
     },
 };
 use log::debug;
-use serde::{Deserialize, Serialize};
-use tui::{
+use ratatui::{
     style::{Color, Modifier, Style},
     text::Span,
     widgets::{Cell, Row},
 };
+use serde::{Deserialize, Serialize};
 
 pub mod ui_helper;
 pub mod ui_main;
@@ -129,7 +129,9 @@ impl Theme {
             log_info_style: Style::default()
                 .fg(Color::LightGreen)
                 .bg(Color::Rgb(25, 25, 112)),
-            progress_bar_style: Style::default().fg(Color::LightGreen).bg(Color::Rgb(25, 25, 112)),
+            progress_bar_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(25, 25, 112)),
             error_text_style: Style::default().fg(Color::Black).bg(Color::LightRed),
             inactive_text_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
             card_priority_low_style: Style::default()
@@ -193,7 +195,9 @@ impl Theme {
             log_info_style: Style::default()
                 .fg(Color::LightGreen)
                 .bg(Color::Rgb(47, 79, 79)),
-            progress_bar_style: Style::default().fg(Color::LightGreen).bg(Color::Rgb(47, 79, 79)),
+            progress_bar_style: Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(47, 79, 79)),
             error_text_style: Style::default().fg(Color::Black).bg(Color::LightRed),
             inactive_text_style: Style::default().fg(Color::DarkGray).bg(Color::Black),
             card_priority_low_style: Style::default()
@@ -339,7 +343,9 @@ impl Theme {
                 .bg(Color::Black),
             log_trace_style: Style::default().fg(Color::LightCyan).bg(Color::Black),
             log_info_style: Style::default().fg(Color::Rgb(24, 252, 4)).bg(Color::Black),
-            progress_bar_style: Style::default().fg(Color::Rgb(248, 12, 228)).bg(Color::Black),
+            progress_bar_style: Style::default()
+                .fg(Color::Rgb(248, 12, 228))
+                .bg(Color::Black),
             error_text_style: Style::default()
                 .fg(Color::Black)
                 .bg(Color::Rgb(255, 28, 92)),

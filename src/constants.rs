@@ -1,4 +1,4 @@
-use tui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 
 pub const FIELD_NOT_SET: &str = "Not Set";
 pub const CONFIG_FILE_NAME: &str = "config.json";

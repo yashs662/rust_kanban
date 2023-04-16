@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 use std::vec;
 
 use log::{debug, error, info};
+use ratatui::widgets::{ListState, TableState};
 use serde::{Deserialize, Serialize};
-use tui::widgets::{ListState, TableState};
 
 use self::actions::Actions;
 use self::app_helper::{

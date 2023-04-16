@@ -120,28 +120,28 @@ impl ToastType {
                 theme
                     .log_error_style
                     .fg
-                    .unwrap_or(tui::style::Color::LightRed),
+                    .unwrap_or(ratatui::style::Color::LightRed),
             )
             .to_rgb(),
             Self::Warning => TextColorOptions::from(
                 theme
                     .log_warn_style
                     .fg
-                    .unwrap_or(tui::style::Color::LightYellow),
+                    .unwrap_or(ratatui::style::Color::LightYellow),
             )
             .to_rgb(),
             Self::Info => TextColorOptions::from(
                 theme
                     .log_info_style
                     .fg
-                    .unwrap_or(tui::style::Color::LightCyan),
+                    .unwrap_or(ratatui::style::Color::LightCyan),
             )
             .to_rgb(),
             Self::Loading => TextColorOptions::from(
                 theme
                     .log_debug_style
                     .fg
-                    .unwrap_or(tui::style::Color::LightGreen),
+                    .unwrap_or(ratatui::style::Color::LightGreen),
             )
             .to_rgb(),
         }

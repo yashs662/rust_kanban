@@ -1,4 +1,6 @@
 [![Crates.io](https://img.shields.io/crates/v/rust-kanban.svg)](https://crates.io/crates/rust-kanban)
+
+![rust_kanban](https://user-images.githubusercontent.com/66156000/232308620-3e96d818-81f3-4229-b58e-c09bc0b067e4.png)
 ## Kanban App for the terminal written in rust
   This kanban app will allow the user to be more productive by prioritizing tasks and achieving goals faster
 ## Why?
@@ -71,5 +73,16 @@ None as of now, please let me know if you find any bugs
 | 'Ctrl + Mouse Scroll Up'    | Scroll to the right (for boards)           |
 | 'Ctrl + Mouse Scroll Down'  | Scroll to the left (for boards)            |
 
-## Screenshots
-![rust_kanban](https://user-images.githubusercontent.com/66156000/206888828-5f9678e6-eaf1-4389-9e85-c65797e2f204.png)
+## Avialable Themes
+- Default Theme
+![Default Theme](https://user-images.githubusercontent.com/66156000/232308319-125e990e-98e0-4960-ba7e-9492a2b4eaa7.png)
+- Midnight Blue
+![Midnight Blue](https://user-images.githubusercontent.com/66156000/232308318-d61a84f3-0108-4572-8421-537c34c2f080.png)
+- Dark Slate
+![Dark Slate](https://user-images.githubusercontent.com/66156000/232308315-ed65cd3f-0b3d-49fa-9e56-2b684191bbdc.png)
+- Metro
+![Metro](https://user-images.githubusercontent.com/66156000/232308314-e735f84b-75f6-4c20-9196-81618040e7b6.png)
+- Matrix
+![Matrix](https://user-images.githubusercontent.com/66156000/232308312-56cebb9f-eb93-4a20-8758-4a1e9db96c35.png)
+- Cyberpunk
+![Cyberpunk](https://user-images.githubusercontent.com/66156000/232308321-4eeec180-6f05-4b49-948a-1166792ad25e.png)

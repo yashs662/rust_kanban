@@ -10,9 +10,9 @@ use eyre::Result;
 use inputs::events::Events;
 use inputs::InputEvent;
 use io::IoEvent;
-use tui::backend::CrosstermBackend;
-use tui::layout::Rect;
-use tui::Terminal;
+use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Rect;
+use ratatui::Terminal;
 use ui::ui_main;
 
 pub mod app;

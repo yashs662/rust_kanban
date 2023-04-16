@@ -1,4 +1,4 @@
-use tui::{backend::Backend, Frame};
+use ratatui::{backend::Backend, Frame};
 
 use super::super::app::state::{AppStatus, UiMode};
 

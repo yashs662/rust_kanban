@@ -296,16 +296,14 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
     // check if file exists if so add a number to the end of the file name with _<number>
     let file_path = if file_path.exists() {
         let mut i = 1;
-        let mut new_file_path = config.save_directory.join(format!(
-            "kanban_export_{}.json",
-            i.to_string()
-        ));
+        let mut new_file_path = config
+            .save_directory
+            .join(format!("kanban_export_{}.json", i.to_string()));
         while new_file_path.exists() {
             i += 1;
-            new_file_path = config.save_directory.join(format!(
-                "kanban_export_{}.json",
-                i.to_string()
-            ));
+            new_file_path = config
+                .save_directory
+                .join(format!("kanban_export_{}.json", i.to_string()));
         }
         new_file_path
     } else {

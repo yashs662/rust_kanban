@@ -7,14 +7,14 @@ use crate::constants::{
 };
 use chrono::{Local, NaiveDateTime};
 use log::debug;
-use tui::backend::Backend;
-use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use tui::style::Style;
-use tui::text::{Span, Spans};
-use tui::widgets::{
+use ratatui::backend::Backend;
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::style::Style;
+use ratatui::text::{Span, Spans};
+use ratatui::widgets::{
     Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table, Wrap,
 };
-use tui::Frame;
+use ratatui::Frame;
 use tui_logger::TuiLoggerWidget;
 
 use crate::app::state::{AppStatus, Focus, UiMode};
@@ -613,7 +613,7 @@ where
         &app.state.theme_being_edited.name
     };
     let paragraph_text = format!("Current Value is {}\n\n{}",config_item_value,
-        "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
+        "Press 'i' to edit, or 'Esc' to cancel, Press 'Ins' to stop editing and press 'Enter' on Submit to save");
     let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
     let config_item = Paragraph::new(paragraph_text)
         .block(
@@ -623,7 +623,7 @@ where
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .wrap(tui::widgets::Wrap { trim: true });
+        .wrap(ratatui::widgets::Wrap { trim: true });
     let edit_item = Paragraph::new(app.state.current_user_input.clone())
         .block(
             Block::default()
@@ -633,7 +633,7 @@ where
                 .border_style(edit_box_style)
                 .border_type(BorderType::Rounded),
         )
-        .wrap(tui::widgets::Wrap { trim: true });
+        .wrap(ratatui::widgets::Wrap { trim: true });
 
     let log = draw_logs(app, true, false, chunks[2]);
 
@@ -773,7 +773,7 @@ where
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
-        .wrap(tui::widgets::Wrap { trim: true });
+        .wrap(ratatui::widgets::Wrap { trim: true });
 
     rect.render_stateful_widget(
         default_view_list,
@@ -999,7 +999,7 @@ where
         )
         .style(default_style)
         .alignment(Alignment::Center)
-        .wrap(tui::widgets::Wrap { trim: true });
+        .wrap(ratatui::widgets::Wrap { trim: true });
 
     let reset_button = Paragraph::new("Reset Keybindings to Default")
         .block(
@@ -1094,7 +1094,7 @@ where
             key_value.push_str(" ");
         }
         let paragraph_text = format!("Current Value is {}\n\n{}",key_value,
-            "Press 'i' to edit, or 'Esc' to cancel, Press 'Enter' to stop editing and press 'Enter' again to save");
+            "Press 'i' to edit, or 'Esc' to cancel, Press 'Ins' to stop editing and press 'Enter' on Submit to save");
         let paragraph_title = key.to_uppercase();
         let config_item = Paragraph::new(paragraph_text)
             .block(
@@ -1103,7 +1103,7 @@ where
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .wrap(tui::widgets::Wrap { trim: true });
+            .wrap(ratatui::widgets::Wrap { trim: true });
         let current_edited_keybinding = app.state.edited_keybinding.clone();
         let mut current_edited_keybinding_string = String::new();
         if current_edited_keybinding.is_some() {
@@ -1120,7 +1120,7 @@ where
                     .border_style(edit_box_style)
                     .border_type(BorderType::Rounded),
             )
-            .wrap(tui::widgets::Wrap { trim: true });
+            .wrap(ratatui::widgets::Wrap { trim: true });
 
         let log = draw_logs(app, true, false, chunks[2]);
 
@@ -1445,7 +1445,7 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
-        .wrap(tui::widgets::Wrap { trim: true })
+        .wrap(ratatui::widgets::Wrap { trim: true })
 }
 
 /// Draws logs
@@ -2019,12 +2019,12 @@ where
             let card_paragraph = Paragraph::new(card_description)
                 .alignment(Alignment::Left)
                 .block(Block::default())
-                .wrap(tui::widgets::Wrap { trim: false });
+                .wrap(ratatui::widgets::Wrap { trim: false });
             rect.render_widget(card_paragraph, inner_card_chunks[0]);
             let card_extra_info = Paragraph::new(card_extra_info)
                 .alignment(Alignment::Left)
                 .block(Block::default())
-                .wrap(tui::widgets::Wrap { trim: false });
+                .wrap(ratatui::widgets::Wrap { trim: false });
             rect.render_widget(card_extra_info, inner_card_chunks[1]);
         }
     }
@@ -2397,7 +2397,7 @@ where
                 .border_type(BorderType::Rounded)
                 .border_style(default_style),
         )
-        .wrap(tui::widgets::Wrap { trim: true });
+        .wrap(ratatui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[3]);
 
     let submit_button = Paragraph::new("Submit").alignment(Alignment::Center).block(
@@ -2693,7 +2693,7 @@ where
                 .border_type(BorderType::Rounded)
                 .border_style(default_style),
         )
-        .wrap(tui::widgets::Wrap { trim: true });
+        .wrap(ratatui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[4]);
 
     let submit_button = Paragraph::new("Submit").alignment(Alignment::Center).block(
@@ -3052,7 +3052,7 @@ where
 
     // loop through the toasts and draw them
     for toast in toasts.iter() {
-        let toast_style = app.theme.general_style.fg(tui::style::Color::Rgb(
+        let toast_style = app.theme.general_style.fg(ratatui::style::Color::Rgb(
             toast.toast_color.0,
             toast.toast_color.1,
             toast.toast_color.2,
@@ -4163,7 +4163,7 @@ where
 {
     // make a small popup with a text input field and a submit button
     let popup_area = centered_rect(50, 50, rect.size());
-    let prompt_text = "Enter a custom RGB color in the format: r,g,b";
+    let prompt_text = "Enter a custom RGB color in the format: r,g,b (0-254)";
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
