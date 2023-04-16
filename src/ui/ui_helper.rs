@@ -15,6 +15,7 @@ use ratatui::widgets::{
     Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table, Wrap,
 };
 use ratatui::Frame;
+use std::cmp::Ordering;
 use tui_logger::TuiLoggerWidget;
 
 use crate::app::state::{AppStatus, Focus, UiMode};
@@ -1872,34 +1873,38 @@ where
                 .margin(1)
                 .split(card_chunks[card_index]);
             // unwrap card if panic skip it and log it
-            let mut card = board.get_card(*card_id);
+            let card = board.get_card(*card_id);
             // check if card is None, if so skip it and log it
             if card.is_none() {
                 continue;
-            } else {
-                card = Some(card.unwrap());
             }
-            let card_title = card.unwrap().name.clone();
-            let card_title = if card_title.len() > DEFAULT_CARD_TITLE_LENGTH.into() {
-                format!("{}...", &card_title[0..DEFAULT_CARD_TITLE_LENGTH as usize])
-            } else {
-                card_title
-            };
+            let card = card.unwrap();
 
+            let card_title = if card.name.len() > DEFAULT_CARD_TITLE_LENGTH.into() {
+                format!("{}...", &card.name[0..DEFAULT_CARD_TITLE_LENGTH as usize])
+            } else {
+                card.name.clone()
+            };
             let card_title = if app.state.current_card_id.unwrap_or(0) == *card_id {
                 format!("{} {}", ">>", card_title)
             } else {
                 card_title
             };
 
-            let card_description = if card.unwrap().description == FIELD_NOT_SET {
+            let card_description = if card.description == FIELD_NOT_SET {
                 "Description: Not Set".to_string()
             } else {
-                card.unwrap().description.clone()
+                card.description.clone()
             };
+
             let mut card_extra_info = vec![Spans::from("")];
-            let card_due_date = card.unwrap().date_due.clone();
-            if !card_due_date.is_empty() {
+            if card.date_due == FIELD_NOT_SET {
+                card_extra_info.push(Spans::from(Span::styled(
+                    "Due: Not Set",
+                    app.theme.card_due_default_style,
+                )));
+            } else {
+                let card_due_date = card.date_due.clone();
                 let parsed_due_date =
                     NaiveDateTime::parse_from_str(&card_due_date, "%Y/%m/%d-%H:%M:%S");
                 // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
@@ -1908,40 +1913,27 @@ where
                     let today = Local::now().naive_local();
                     let days_left = parsed_due_date.signed_duration_since(today).num_days();
                     let parsed_due_date = parsed_due_date.format("%d/%m/%Y-%H:%M:%S").to_string();
-                    if days_left <= app.config.warning_delta.into() && days_left >= 0 {
-                        if app.state.popup_mode.is_some() {
-                            Spans::from(Span::styled(
-                                format!("Due: {}", parsed_due_date),
-                                app.theme.inactive_text_style,
-                            ))
-                        } else {
-                            Spans::from(Span::styled(
-                                format!("Due: {}", parsed_due_date),
-                                app.theme.card_due_warning_style,
-                            ))
-                        }
-                    } else if days_left < 0 {
-                        if app.state.popup_mode.is_some() {
-                            Spans::from(Span::styled(
-                                format!("Due: {}", parsed_due_date),
-                                app.theme.inactive_text_style,
-                            ))
+                    if app.state.popup_mode.is_some() {
+                        Spans::from(Span::styled(
+                            format!("Due: {}", parsed_due_date),
+                            app.theme.inactive_text_style,
+                        ))
+                    } else {
+                        if days_left >= 0 {
+                            match days_left.cmp(&(app.config.warning_delta as i64)) {
+                                Ordering::Less | Ordering::Equal => Spans::from(Span::styled(
+                                    format!("Due: {}", parsed_due_date),
+                                    app.theme.card_due_warning_style,
+                                )),
+                                Ordering::Greater => Spans::from(Span::styled(
+                                    format!("Due: {}", parsed_due_date),
+                                    app.theme.card_due_default_style,
+                                )),
+                            }
                         } else {
                             Spans::from(Span::styled(
                                 format!("Due: {}", parsed_due_date),
                                 app.theme.card_due_overdue_style,
-                            ))
-                        }
-                    } else {
-                        if app.state.popup_mode.is_some() {
-                            Spans::from(Span::styled(
-                                format!("Due: {}", parsed_due_date),
-                                app.theme.inactive_text_style,
-                            ))
-                        } else {
-                            Spans::from(Span::styled(
-                                format!("Due: {}", parsed_due_date),
-                                app.theme.card_due_default_style,
                             ))
                         }
                     }
@@ -1960,30 +1952,23 @@ where
                 };
                 card_extra_info.extend(vec![card_due_date_styled]);
             }
-            let card_status = format!("Status: {}", card.unwrap().card_status.clone().to_string());
-            let card_status = if card_status == "Status: Active" {
-                if app.state.popup_mode.is_some() {
-                    Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
-                } else {
-                    Spans::from(Span::styled(
+
+            let card_status = format!("Status: {}", card.card_status.clone().to_string());
+            let card_status = if app.state.popup_mode.is_some() {
+                Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
+            } else {
+                match card.card_status {
+                    CardStatus::Active => Spans::from(Span::styled(
                         card_status,
                         app.theme.card_status_active_style,
-                    ))
-                }
-            } else if card_status == "Status: Complete" {
-                if app.state.popup_mode.is_some() {
-                    Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
-                } else {
-                    Spans::from(Span::styled(
+                    )),
+                    CardStatus::Complete => Spans::from(Span::styled(
                         card_status,
                         app.theme.card_status_completed_style,
-                    ))
-                }
-            } else {
-                if app.state.popup_mode.is_some() {
-                    Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
-                } else {
-                    Spans::from(Span::styled(card_status, app.theme.card_status_stale_style))
+                    )),
+                    CardStatus::Stale => {
+                        Spans::from(Span::styled(card_status, app.theme.card_status_stale_style))
+                    }
                 }
             };
             card_extra_info.extend(vec![card_status]);
