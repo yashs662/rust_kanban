@@ -83,7 +83,7 @@ where
     // Popups are rendered above ui_mode
     if app.state.popup_mode.is_some() {
         match app.state.popup_mode.unwrap() {
-            PopupMode::CardView => {
+            PopupMode::ViewCard => {
                 render_view_card(rect, app);
             }
             PopupMode::ChangeCurrentCardStatus => {

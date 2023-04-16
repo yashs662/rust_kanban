@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
         if cfg!(debug_assertions) {
             default_panic(info);
         } else {
-            println!("An error occured 😢, {} has crashed please report this issue on github {}", APP_TITLE, env!("CARGO_PKG_REPOSITORY"));
+            println!("An error occured 😢,\n{} has crashed please report this issue on github\n{}", APP_TITLE, env!("CARGO_PKG_REPOSITORY"));
         }
     }));
 

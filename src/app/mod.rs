@@ -727,7 +727,7 @@ impl MainMenu {
 
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum PopupMode {
-    CardView,
+    ViewCard,
     CommandPalette,
     EditSpecificKeyBinding,
     ChangeUIMode,
@@ -744,7 +744,7 @@ pub enum PopupMode {
 impl Display for PopupMode {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            PopupMode::CardView => write!(f, "Card View"),
+            PopupMode::ViewCard => write!(f, "Card View"),
             PopupMode::CommandPalette => write!(f, "Command Palette"),
             PopupMode::EditSpecificKeyBinding => write!(f, "Edit Specific Key Binding"),
             PopupMode::ChangeUIMode => write!(f, "Change UI Mode"),
@@ -763,7 +763,7 @@ impl Display for PopupMode {
 impl PopupMode {
     fn get_available_targets(&self) -> Vec<Focus> {
         match self {
-            PopupMode::CardView => vec![
+            PopupMode::ViewCard => vec![
                 Focus::CardDescription,
                 Focus::CardDueDate,
                 Focus::CardPriority,

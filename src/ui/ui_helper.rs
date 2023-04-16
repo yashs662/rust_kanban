@@ -50,8 +50,15 @@ where
         .constraints([Constraint::Length(3), Constraint::Percentage(80)].as_ref())
         .split(rect.size());
 
-    let title = draw_title(app, chunks[0]);
-    rect.render_widget(title, chunks[0]);
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
+    };
 
     render_body(rect, chunks[1], app, false);
 
@@ -156,8 +163,15 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(app, chunks[0]);
-    rect.render_widget(title, chunks[0]);
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
+    };
 
     render_body(rect, chunks[1], app, false);
 
@@ -191,8 +205,15 @@ where
         )
         .split(rect.size());
 
-    let title = draw_title(app, chunks[0]);
-    rect.render_widget(title, chunks[0]);
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
+    };
 
     render_body(rect, chunks[1], app, false);
 
@@ -292,8 +313,15 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(app, chunks[0]);
-    rect.render_widget(title, chunks[0]);
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
+    };
 
     render_body(rect, chunks[1], app, false);
 
@@ -338,8 +366,15 @@ where
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(chunks[2]);
 
-    let title = draw_title(app, chunks[0]);
-    rect.render_widget(title, chunks[0]);
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
+    };
 
     let config_table = draw_config_table_selector(app, chunks[1]);
     rect.render_stateful_widget(config_table, chunks[1], &mut app.state.config_state);
@@ -805,7 +840,15 @@ where
         app.theme.list_select_style
     };
 
-    let title_bar = draw_title(app, chunks[0]);
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
+    };
 
     let mut table_items: Vec<Vec<String>> = Vec::new();
     // app.config.keybindings
@@ -968,7 +1011,6 @@ where
         .style(reset_style)
         .alignment(Alignment::Center);
 
-    rect.render_widget(title_bar, chunks[0]);
     rect.render_stateful_widget(t, chunks[1], &mut app.state.edit_keybindings_state);
     rect.render_widget(edit_keybind_help, chunks[2]);
     rect.render_widget(reset_button, chunks[3]);
@@ -1160,8 +1202,15 @@ where
         .margin(1)
         .split(chunks[2]);
 
-    let title = draw_title(app, chunks[0]);
-    rect.render_widget(title, chunks[0]);
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
+    };
 
     draw_main_menu(app, chunks[1], rect);
 
@@ -2548,6 +2597,17 @@ where
         );
     rect.render_widget(card_description, chunks[2]);
 
+    // check if &app.state.new_card_form[2] is in the format (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)
+    let parsed_date =
+        match NaiveDateTime::parse_from_str(&app.state.new_card_form[2], "%d/%m/%Y-%H:%M:%S") {
+            Ok(date) => Some(date),
+            Err(_) => {
+                match NaiveDateTime::parse_from_str(&app.state.new_card_form[2], "%d/%m/%Y") {
+                    Ok(date) => Some(date),
+                    Err(_) => None,
+                }
+            }
+        };
     let card_due_date = Paragraph::new(card_due_date_field)
         .alignment(Alignment::Left)
         .block(
@@ -2557,7 +2617,29 @@ where
                 .border_type(BorderType::Rounded)
                 .title("Card Due Date (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)"),
         );
-    rect.render_widget(card_due_date, chunks[3]);
+    if parsed_date.is_some() {
+        rect.render_widget(card_due_date, chunks[3]);
+    } else {
+        if app.state.new_card_form[2].len() > 0 {
+            let new_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(70), Constraint::Length(20)].as_ref())
+                .split(chunks[3]);
+            rect.render_widget(card_due_date, new_chunks[0]);
+            let error_text = Spans::from(vec![Span::raw("Invalid date format")]);
+            let error_paragraph = Paragraph::new(error_text)
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .style(app.theme.error_text_style),
+                );
+            rect.render_widget(error_paragraph, new_chunks[1]);
+        } else {
+            rect.render_widget(card_due_date, chunks[3]);
+        }
+    }
 
     let input_mode_key = app
         .state
@@ -3223,7 +3305,9 @@ where
                         7 => app.state.focus = Focus::CardComments,
                         _ => app.state.focus = Focus::NoFocus,
                     }
-                    app.state.card_view_list_state.select(Some((mouse_y - top_of_list) as usize));
+                    app.state
+                        .card_view_list_state
+                        .select(Some((mouse_y - top_of_list) as usize));
                 } else {
                     app.state.card_view_list_state.select(None);
                 }

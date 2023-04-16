@@ -1,4 +1,4 @@
-use log::{error, info};
+use log::{debug, error, info};
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::MutexGuard, time::Instant};
@@ -180,7 +180,7 @@ impl CommandPaletteWidget {
         }
         Self {
             search_results: None,
-            last_search_string: String::new(),
+            last_search_string: "iibnigivirneiivure".to_string(), // random string that will never be typed as the selected index jumps around when a mouse is used with an empty search string
             available_commands: CommandPaletteActions::all(),
             corpus,
         }
@@ -326,7 +326,11 @@ impl CommandPaletteWidget {
                     }
                 }
                 app.state.current_user_input = "".to_string();
+            } else {
+                debug!("No command found for the command palette");
             }
+        } else {
+            debug!("Tried to handle command but no item was selected");
         }
         app.state.app_status = AppStatus::Initialized;
         app.state.current_user_input = String::new();
@@ -339,7 +343,8 @@ impl CommandPaletteWidget {
             && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
         {
             // check if last search string is different from app,.state.current_user_input
-            if app.state.current_user_input == app.command_palette.last_search_string {
+            if app.state.current_user_input.to_lowercase() == app.command_palette.last_search_string
+            {
                 return;
             }
             let current_search_string = app.state.current_user_input.clone().to_lowercase();
@@ -407,17 +412,15 @@ impl CommandPaletteActions {
             Self::ChangeTheme,
             Self::CreateATheme,
             Self::Quit,
-            Self::DebugMenu,
         ];
-        all
 
-        // if cfg!(debug_assertions) {
-        //     let mut all = all;
-        //     all.push(Self::DebugMenu);
-        //     all
-        // } else {
-        //     all
-        // }
+        if cfg!(debug_assertions) {
+            let mut all = all;
+            all.push(Self::DebugMenu);
+            all
+        } else {
+            all
+        }
     }
 
     pub fn as_str(&self) -> &str {
