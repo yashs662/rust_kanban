@@ -1901,45 +1901,46 @@ where
             let card_due_date = card.unwrap().date_due.clone();
             if !card_due_date.is_empty() {
                 let parsed_due_date =
-                    NaiveDateTime::parse_from_str(&card_due_date, "%d/%m/%Y-%H:%M:%S");
+                    NaiveDateTime::parse_from_str(&card_due_date, "%Y/%m/%d-%H:%M:%S");
                 // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
                 let card_due_date_styled = if parsed_due_date.is_ok() {
                     let parsed_due_date = parsed_due_date.unwrap();
                     let today = Local::now().naive_local();
                     let days_left = parsed_due_date.signed_duration_since(today).num_days();
+                    let parsed_due_date = parsed_due_date.format("%d/%m/%Y-%H:%M:%S").to_string();
                     if days_left <= app.config.warning_delta.into() && days_left >= 0 {
                         if app.state.popup_mode.is_some() {
                             Spans::from(Span::styled(
-                                format!("Due: {}", card_due_date),
+                                format!("Due: {}", parsed_due_date),
                                 app.theme.inactive_text_style,
                             ))
                         } else {
                             Spans::from(Span::styled(
-                                format!("Due: {}", card_due_date),
+                                format!("Due: {}", parsed_due_date),
                                 app.theme.card_due_warning_style,
                             ))
                         }
                     } else if days_left < 0 {
                         if app.state.popup_mode.is_some() {
                             Spans::from(Span::styled(
-                                format!("Due: {}", card_due_date),
+                                format!("Due: {}", parsed_due_date),
                                 app.theme.inactive_text_style,
                             ))
                         } else {
                             Spans::from(Span::styled(
-                                format!("Due: {}", card_due_date),
+                                format!("Due: {}", parsed_due_date),
                                 app.theme.card_due_overdue_style,
                             ))
                         }
                     } else {
                         if app.state.popup_mode.is_some() {
                             Spans::from(Span::styled(
-                                format!("Due: {}", card_due_date),
+                                format!("Due: {}", parsed_due_date),
                                 app.theme.inactive_text_style,
                             ))
                         } else {
                             Spans::from(Span::styled(
-                                format!("Due: {}", card_due_date),
+                                format!("Due: {}", parsed_due_date),
                                 app.theme.card_due_default_style,
                             ))
                         }
