@@ -1,20 +1,22 @@
 use log::{debug, error, info};
-use std::path::PathBuf;
-use std::{collections::HashMap, env, fs};
-extern crate savefile;
 use regex::Regex;
 use savefile::prelude::*;
 use serde::Serialize;
+use std::{collections::HashMap, env, fs, path::PathBuf};
 
 use super::handler::{get_config_dir, make_file_system_safe_name};
-use crate::constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, THEME_DIR_NAME, THEME_FILE_NAME};
-use crate::ui::Theme;
 use crate::{
     app::{kanban::Board, state::UiMode, AppConfig},
-    constants::{SAVE_DIR_NAME, SAVE_FILE_NAME},
+    constants::{
+        CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME, THEME_DIR_NAME,
+        THEME_FILE_NAME,
+    },
     inputs::key::Key,
     io::handler::prepare_config_dir,
+    ui::Theme,
 };
+
+extern crate savefile;
 
 pub fn get_config(ignore_overlapped_keybinds: bool) -> Result<AppConfig, String> {
     let config_dir_status = get_config_dir();

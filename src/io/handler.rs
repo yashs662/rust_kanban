@@ -1,25 +1,27 @@
-use crate::app::kanban::Board;
-use crate::app::state::UiMode;
-use crate::app::{App, AppConfig};
-use crate::constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME};
-use crate::io::data_handler::{
-    get_config, get_default_save_directory, get_saved_themes, reset_config,
-    save_kanban_state_locally,
-};
-use crate::ui::TextColorOptions;
 use chrono::NaiveDate;
 use eyre::{anyhow, Result};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info};
 use ratatui::widgets::ListState;
 use savefile::{load_file, save_file};
-use std::env;
-use std::path::Path;
-use std::time::Duration;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use super::data_handler::{get_available_local_savefiles, get_local_kanban_state};
 use super::IoEvent;
+use crate::{
+    app::{kanban::Board, state::UiMode, App, AppConfig},
+    constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME},
+    io::data_handler::{
+        get_config, get_default_save_directory, get_saved_themes, reset_config,
+        save_kanban_state_locally,
+    },
+    ui::TextColorOptions,
+};
 
 /// In the IO thread, we handle IO event without blocking the UI thread
 pub struct IoAsyncHandler {
@@ -258,6 +260,7 @@ impl IoAsyncHandler {
 
     async fn auto_save(&mut self) -> Result<()> {
         let app = self.app.lock().await;
+        let mut file_version = 0;
         let latest_save_file_info = get_latest_save_file();
         let get_config_status = get_config(false);
         let config = if get_config_status.is_err() {
@@ -266,100 +269,36 @@ impl IoAsyncHandler {
         } else {
             get_config_status.unwrap()
         };
-        if latest_save_file_info.is_ok() {
+        let save_required = if latest_save_file_info.is_ok() {
             let latest_save_file_info = latest_save_file_info.unwrap();
-            let default_board = Board::new(
-                String::from("Board not found"),
-                String::from("Board not found"),
-            );
             let save_file_name = latest_save_file_info.0;
-            let version = latest_save_file_info.1;
+            file_version = latest_save_file_info.1;
             let file_path = config.save_directory.join(save_file_name);
-            let boards: Vec<Board> = load_file(&file_path, version)?;
-
-            // check if boards are the same compare the length of the boards and the length of the cards of each board
-            if boards.len() == app.boards.len() {
-                let mut boards_are_the_same = true;
-                for board in &boards {
-                    let board_id = board.id;
-                    let board_cards = &board.cards;
-                    let app_board = app
-                        .boards
-                        .iter()
-                        .find(|board| board.id == board_id)
-                        .unwrap_or_else(|| {
-                            info!("board with id {} not found", board_id);
-                            &default_board
-                        });
-                    // check if Board not found is returned
-                    if app_board.id == default_board.id {
-                        boards_are_the_same = false;
-                        break;
-                    }
-                    let app_board_cards = &app_board.cards;
-                    // compare the boards to check if the cards are the same by checking the id of the cards
-                    if board_cards.len() != app_board_cards.len() {
-                        boards_are_the_same = false;
-                        break;
-                    }
-                    for card in board_cards {
-                        let card_id = card.id;
-                        if app_board_cards
-                            .iter()
-                            .find(|card| card.id == card_id)
-                            .is_none()
-                        {
-                            boards_are_the_same = false;
-                            break;
-                        }
-                    }
-                }
-                if boards_are_the_same {
-                    return Ok(());
-                } else {
-                    let file_name = format!(
-                        "{}_{}_v{}",
-                        SAVE_FILE_NAME,
-                        chrono::Local::now().format("%d-%m-%Y"),
-                        version + 1
-                    );
-                    let file_path = config.save_directory.join(file_name);
-                    let save_status = save_file(file_path, version, &app.boards);
-                    match save_status {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(anyhow!("Error saving file: {}", e)),
-                    }
-                }
+            let boards: Vec<Board> = load_file(&file_path, file_version)?;
+            if app.boards != boards {
+                true
             } else {
-                // boards are not the same
-                let file_name = format!(
-                    "{}_{}_v{}",
-                    SAVE_FILE_NAME,
-                    chrono::Local::now().format("%d-%m-%Y"),
-                    version + 1
-                );
-                let file_path = config.save_directory.join(file_name);
-                let save_status = save_file(file_path, version, &app.boards);
-                match save_status {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(anyhow!("Error saving file: {}", e)),
-                }
+                false
             }
         } else {
-            // there is no save file
+            true
+        };
+        return if save_required {
             let file_name = format!(
                 "{}_{}_v{}",
                 SAVE_FILE_NAME,
                 chrono::Local::now().format("%d-%m-%Y"),
-                1
+                file_version + 1
             );
             let file_path = config.save_directory.join(file_name);
-            let save_status = save_file(file_path, 1, &app.boards);
+            let save_status = save_file(file_path, file_version, &app.boards);
             match save_status {
                 Ok(_) => Ok(()),
                 Err(e) => Err(anyhow!("Error saving file: {}", e)),
             }
-        }
+        } else {
+            Ok(())
+        };
     }
 
     async fn load_preview(&mut self) -> Result<()> {

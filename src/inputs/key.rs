@@ -1,7 +1,6 @@
+use crossterm::event;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
-
-use crossterm::event;
 
 /// Represents an key.
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]

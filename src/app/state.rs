@@ -1,8 +1,8 @@
-use crate::inputs::key::Key;
 use log::error;
 use serde::{Deserialize, Serialize};
 
 use super::actions::Action;
+use crate::inputs::key::Key;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
 pub enum UiMode {

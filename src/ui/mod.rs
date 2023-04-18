@@ -1,3 +1,11 @@
+use log::debug;
+use ratatui::{
+    style::{Color, Modifier, Style},
+    text::Span,
+    widgets::{Cell, Row},
+};
+use serde::{Deserialize, Serialize};
+
 use crate::{
     app::App,
     constants::{
@@ -9,14 +17,6 @@ use crate::{
         LOG_WARN_STYLE, MOUSE_HIGHLIGHT_STYLE, PROGRESS_BAR_STYLE, SAMPLE_TEXT,
     },
 };
-use log::debug;
-use ratatui::{
-    style::{Color, Modifier, Style},
-    text::Span,
-    widgets::{Cell, Row},
-};
-use serde::{Deserialize, Serialize};
-
 pub mod ui_helper;
 pub mod ui_main;
 pub mod widgets;

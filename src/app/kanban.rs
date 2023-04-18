@@ -1,10 +1,11 @@
-use crate::constants::FIELD_NOT_SET;
 use chrono::Utc;
 use savefile_derive::Savefile;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
+use crate::constants::FIELD_NOT_SET;
+
+#[derive(Serialize, Deserialize, Debug, Savefile, Clone, Eq, PartialEq)]
 pub struct Board {
     pub id: u128,
     pub name: String,
@@ -38,7 +39,7 @@ impl Default for Board {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Savefile, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Savefile, PartialEq, Eq)]
 pub enum CardStatus {
     Active,
     Complete,
@@ -58,7 +59,7 @@ impl CardStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Savefile, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Savefile, PartialEq, Eq)]
 pub enum CardPriority {
     Low,
     Medium,
@@ -75,7 +76,7 @@ impl CardPriority {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Savefile, Clone)]
+#[derive(Serialize, Deserialize, Debug, Savefile, Clone, PartialEq, Eq)]
 pub struct Card {
     pub id: u128,
     pub name: String,

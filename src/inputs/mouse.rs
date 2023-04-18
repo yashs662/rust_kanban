@@ -1,7 +1,6 @@
+use crossterm::event;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
-
-use crossterm::event;
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum Mouse {

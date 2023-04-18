@@ -1,29 +1,37 @@
-use crate::app::kanban::{CardPriority, CardStatus};
-use crate::calculate_cursor_position;
-use crate::constants::{
-    APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
-    LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
-    SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
-};
 use chrono::{Local, NaiveDateTime};
 use log::debug;
-use ratatui::backend::Backend;
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use ratatui::style::Style;
-use ratatui::text::{Span, Spans};
-use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table, Wrap,
+use ratatui::{
+    backend::Backend,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::Style,
+    text::{Span, Spans},
+    widgets::{
+        Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table, Wrap,
+    },
+    Frame,
 };
-use ratatui::Frame;
 use std::cmp::Ordering;
 use tui_logger::TuiLoggerWidget;
 
-use crate::app::state::{AppStatus, Focus, UiMode};
-use crate::app::{App, AppConfig, MainMenu, PopupMode};
-use crate::io::data_handler::{get_available_local_savefiles, get_config};
+use crate::{
+    app::{
+        kanban::{CardPriority, CardStatus},
+        state::{AppStatus, Focus, UiMode},
+        App, AppConfig, MainMenu, PopupMode,
+    },
+    calculate_cursor_position,
+    constants::{
+        APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
+        LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
+        SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
+    },
+    io::data_handler::{get_available_local_savefiles, get_config},
+};
 
-use super::widgets::{ToastType, ToastWidget};
-use super::{TextColorOptions, TextModifierOptions};
+use super::{
+    widgets::{ToastType, ToastWidget},
+    TextColorOptions, TextModifierOptions,
+};
 
 /// Draws main screen with kanban boards
 pub fn render_zen_mode<'a, B>(rect: &mut Frame<B>, app: &mut App)
@@ -1899,10 +1907,17 @@ where
 
             let mut card_extra_info = vec![Spans::from("")];
             if card.date_due == FIELD_NOT_SET {
-                card_extra_info.push(Spans::from(Span::styled(
-                    "Due: Not Set",
-                    app.theme.card_due_default_style,
-                )));
+                if app.state.popup_mode.is_some() {
+                    card_extra_info.push(Spans::from(Span::styled(
+                        "Due: Not Set",
+                        app.theme.inactive_text_style,
+                    )))
+                } else {
+                    card_extra_info.push(Spans::from(Span::styled(
+                        "Due: Not Set",
+                        app.theme.card_due_default_style,
+                    )))
+                }
             } else {
                 let card_due_date = card.date_due.clone();
                 let parsed_due_date =

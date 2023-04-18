@@ -1,18 +1,10 @@
-use std::borrow::Cow;
-use std::io::stdout;
-use std::sync::Arc;
-use std::time::Duration;
-
 use app::{App, AppReturn};
-use crossterm::event::EnableMouseCapture;
-use crossterm::execute;
+use crossterm::{event::EnableMouseCapture, execute};
 use eyre::Result;
-use inputs::events::Events;
-use inputs::InputEvent;
+use inputs::{events::Events, InputEvent};
 use io::IoEvent;
-use ratatui::backend::CrosstermBackend;
-use ratatui::layout::Rect;
-use ratatui::Terminal;
+use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
+use std::{borrow::Cow, io::stdout, sync::Arc, time::Duration};
 use ui::ui_main;
 
 pub mod app;

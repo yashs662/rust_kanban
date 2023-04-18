@@ -1,5 +1,4 @@
-use self::key::Key;
-use self::mouse::Mouse;
+use self::{key::Key, mouse::Mouse};
 
 pub mod events;
 pub mod key;

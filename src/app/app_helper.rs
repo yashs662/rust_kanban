@@ -1,9 +1,8 @@
-use std::time::Duration;
-
 use chrono::{NaiveDate, NaiveDateTime, Utc};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info, warn};
 use ratatui::{style::Color, widgets::ListState};
+use std::time::Duration;
 
 use crate::{
     app::{state::KeyBindings, AppConfig},

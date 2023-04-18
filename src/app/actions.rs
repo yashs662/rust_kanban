@@ -1,13 +1,12 @@
-use std::collections::HashMap;
-use std::fmt::{self, Display};
-use std::slice::Iter;
-
 use log::debug;
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+    slice::Iter,
+};
 
 use super::state::KeyBindings;
-use crate::app::AppConfig;
-use crate::inputs::key::Key;
-use crate::io::data_handler::get_config;
+use crate::{app::AppConfig, inputs::key::Key, io::data_handler::get_config};
 
 /// We define all available action
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

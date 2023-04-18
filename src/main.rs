@@ -1,19 +1,15 @@
 use clap::Parser;
-use crossterm::event::DisableMouseCapture;
-use crossterm::{execute, terminal};
-use ratatui::backend::CrosstermBackend;
-use ratatui::Terminal;
-use rust_kanban::constants::APP_TITLE;
-use std::io::stdout;
-use std::sync::Arc;
-
+use crossterm::{event::DisableMouseCapture, execute, terminal};
 use eyre::Result;
 use log::LevelFilter;
-use rust_kanban::start_ui;
+use ratatui::{backend::CrosstermBackend, Terminal};
+use rust_kanban::constants::APP_TITLE;
 use rust_kanban::{
     app::App,
     io::{handler::IoAsyncHandler, IoEvent},
+    start_ui,
 };
+use std::{io::stdout, sync::Arc};
 
 extern crate savefile_derive;
 #[derive(Parser)]

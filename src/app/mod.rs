@@ -1,37 +1,45 @@
 use linked_hash_map::LinkedHashMap;
-use std::fmt::{self, Display, Formatter};
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
-use std::vec;
-
 use log::{debug, error, info};
 use ratatui::widgets::{ListState, TableState};
 use serde::{Deserialize, Serialize};
+use std::{
+    fmt::{self, Display, Formatter},
+    path::PathBuf,
+    time::{Duration, Instant},
+    vec,
+};
 
-use self::actions::Actions;
-use self::app_helper::{
-    handle_general_actions, handle_keybind_mode, handle_mouse_action, handle_user_input_mode,
-    prepare_config_for_new_app,
+use self::{
+    actions::Actions,
+    app_helper::{
+        handle_general_actions, handle_keybind_mode, handle_mouse_action, handle_user_input_mode,
+        prepare_config_for_new_app,
+    },
+    kanban::Board,
+    state::{AppStatus, Focus, KeyBindings, UiMode},
 };
-use self::kanban::Board;
-use self::state::{AppStatus, Focus, KeyBindings, UiMode};
-use crate::app::actions::Action;
-use crate::app::kanban::CardStatus;
-use crate::constants::{
-    DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
-    IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE,
-    MIN_NO_CARDS_PER_BOARD, MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE,
-    NO_OF_CARDS_PER_BOARD,
+use crate::{
+    app::{actions::Action, kanban::CardStatus},
+    constants::{
+        DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
+        IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE,
+        MIN_NO_CARDS_PER_BOARD, MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE,
+        NO_OF_CARDS_PER_BOARD,
+    },
+    inputs::{key::Key, mouse::Mouse},
+    io::{
+        data_handler::{
+            get_available_local_savefiles, get_config, get_default_save_directory,
+            get_default_ui_mode,
+        },
+        handler::refresh_visible_boards_and_cards,
+        IoEvent,
+    },
+    ui::{
+        widgets::{CommandPaletteWidget, ToastType, ToastWidget},
+        TextColorOptions, TextModifierOptions, Theme,
+    },
 };
-use crate::inputs::key::Key;
-use crate::inputs::mouse::Mouse;
-use crate::io::data_handler::{
-    get_available_local_savefiles, get_config, get_default_save_directory,
-};
-use crate::io::handler::refresh_visible_boards_and_cards;
-use crate::io::{data_handler, IoEvent};
-use crate::ui::widgets::{CommandPaletteWidget, ToastType, ToastWidget};
-use crate::ui::{TextColorOptions, TextModifierOptions, Theme};
 
 pub mod actions;
 pub mod app_helper;
@@ -862,7 +870,7 @@ impl Default for AppState {
             preview_visible_boards_and_cards: LinkedHashMap::new(),
             preview_file_name: None,
             popup_mode: None,
-            ui_mode: data_handler::get_default_ui_mode(),
+            ui_mode: get_default_ui_mode(),
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
             command_palette_list_state: ListState::default(),
             card_status_selector_state: ListState::default(),
