@@ -3,9 +3,9 @@ use crossterm::{event::DisableMouseCapture, execute, terminal};
 use eyre::Result;
 use log::LevelFilter;
 use ratatui::{backend::CrosstermBackend, Terminal};
-use rust_kanban::constants::APP_TITLE;
 use rust_kanban::{
     app::App,
+    constants::APP_TITLE,
     io::{handler::IoAsyncHandler, IoEvent},
     start_ui,
 };
@@ -34,8 +34,8 @@ async fn main() -> Result<()> {
         let stdout = stdout();
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend);
-        if terminal.is_ok() {
-            let _ = terminal.unwrap().clear();
+        if let Ok(mut terminal) = terminal {
+            terminal.clear().unwrap();
         }
         if cfg!(debug_assertions) {
             default_panic(info);

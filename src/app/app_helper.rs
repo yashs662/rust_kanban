@@ -2,13 +2,13 @@ use chrono::{NaiveDate, NaiveDateTime, Utc};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info, warn};
 use ratatui::{style::Color, widgets::ListState};
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 use crate::{
     app::{state::KeyBindings, AppConfig},
     constants::{
-        DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MOUSE_OUT_OF_BOUNDS_COORDINATES,
-        NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
+        DEFAULT_DATE_FORMAT, DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME,
+        MOUSE_OUT_OF_BOUNDS_COORDINATES, NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
@@ -41,10 +41,10 @@ pub fn go_right(app: &mut App) {
         app.send_error_toast("Cannot go right: no boards found", None);
         return;
     }
-    let current_board_id = if current_board_id.is_none() {
-        all_boards[0].id
+    let current_board_id = if let Some(current_board_id) = current_board_id {
+        current_board_id
     } else {
-        current_board_id.unwrap()
+        all_boards[0].id
     };
     // check if the current board is the last one in visible_boards which is a LinkedHashMap of board_id and card_ids
     let current_board_index = current_visible_boards
@@ -57,8 +57,7 @@ pub fn go_right(app: &mut App) {
             app.send_error_toast("Cannot go right: Something went wrong", None);
             return;
         } else {
-            app.state.current_board_id =
-                Some(current_visible_boards.keys().next().unwrap().clone());
+            app.state.current_board_id = Some(*current_visible_boards.keys().next().unwrap());
         }
     }
     let current_board_index = current_board_index.unwrap();
@@ -91,29 +90,22 @@ pub fn go_right(app: &mut App) {
         app.visible_boards_and_cards
             .insert(next_board.id, next_board_card_ids.clone());
         // remove the first board from visible_boards
-        let first_board_id = app
-            .visible_boards_and_cards
-            .iter()
-            .nth(0)
-            .unwrap()
-            .0
-            .clone();
+        let first_board_id = *app.visible_boards_and_cards.iter().next().unwrap().0;
         app.visible_boards_and_cards.remove(&first_board_id);
         app.state.current_board_id = Some(next_board.id);
         // reset the current card id to first card of current board from visible_boards if there is any
-        if next_board_card_ids.len() > 0 {
-            app.state.current_card_id = Some(next_board_card_ids[0]);
-        } else {
+        if next_board_card_ids.is_empty() {
             app.state.current_card_id = None;
+        } else {
+            app.state.current_card_id = Some(next_board_card_ids[0]);
         }
     } else {
         // we are not at the last board, we can go right
-        let next_board_id = current_visible_boards
+        let next_board_id = *current_visible_boards
             .iter()
             .nth(current_board_index + 1)
             .unwrap()
-            .0
-            .clone();
+            .0;
         app.state.current_board_id = Some(next_board_id);
         // reset the current card id to first card of current board from visible_boards if there is any
         let current_board_cards = current_visible_boards
@@ -122,10 +114,10 @@ pub fn go_right(app: &mut App) {
             .unwrap()
             .1
             .clone();
-        if current_board_cards.len() > 0 {
-            app.state.current_card_id = Some(current_board_cards[0]);
-        } else {
+        if current_board_cards.is_empty() {
             app.state.current_card_id = None;
+        } else {
+            app.state.current_card_id = Some(current_board_cards[0]);
         }
     }
 }
@@ -141,10 +133,10 @@ pub fn go_left(app: &mut App) {
         app.send_error_toast("Cannot go left: no boards", None);
         return;
     }
-    let current_board_id = if current_board_id.is_none() {
-        all_boards[0].id
+    let current_board_id = if let Some(current_board_id) = current_board_id {
+        current_board_id
     } else {
-        current_board_id.unwrap()
+        all_boards[0].id
     };
     // check if the current board is the first one in visible_boards which is a LinkedHashMap of board_id and card_ids
     let current_board_index = current_visible_boards
@@ -193,19 +185,18 @@ pub fn go_left(app: &mut App) {
         app.visible_boards_and_cards = new_visible_boards_and_cards;
         app.state.current_board_id = Some(previous_board.id);
         // reset the current card id to first card of current board from visible_boards if there is any
-        if previous_board_card_ids.len() > 0 {
-            app.state.current_card_id = Some(previous_board_card_ids[0]);
-        } else {
+        if previous_board_card_ids.is_empty() {
             app.state.current_card_id = None;
+        } else {
+            app.state.current_card_id = Some(previous_board_card_ids[0]);
         }
     } else {
         // we are not at the first board, we can go left
-        let previous_board_id = current_visible_boards
+        let previous_board_id = *current_visible_boards
             .iter()
             .nth(current_board_index - 1)
             .unwrap()
-            .0
-            .clone();
+            .0;
         app.state.current_board_id = Some(previous_board_id);
         // reset the current card id to first card of current board from visible_boards if there is any
         let current_visible_cards = current_visible_boards
@@ -214,10 +205,10 @@ pub fn go_left(app: &mut App) {
             .unwrap()
             .1
             .clone();
-        if current_visible_cards.len() > 0 {
-            app.state.current_card_id = Some(current_visible_cards[0]);
-        } else {
+        if current_visible_cards.is_empty() {
             app.state.current_card_id = None;
+        } else {
+            app.state.current_card_id = Some(current_visible_cards[0]);
         }
     }
 }
@@ -230,12 +221,14 @@ pub fn go_up(app: &mut App) {
     if current_visible_boards.is_empty() {
         return;
     }
-    let current_board_id = if current_board_id.is_none() {
-        app.boards[0].id
+    let current_board_id = if let Some(current_board_id) = current_board_id {
+        current_board_id
     } else {
-        current_board_id.unwrap()
+        app.boards[0].id
     };
-    let current_card_id = if current_card_id.is_none() {
+    let current_card_id = if let Some(current_card_id) = current_card_id {
+        current_card_id
+    } else {
         // get the first card of the current board
         let current_board = app.boards.iter().find(|board| board.id == current_board_id);
         if current_board.is_none() {
@@ -250,8 +243,6 @@ pub fn go_up(app: &mut App) {
             return;
         }
         current_board.cards[0].id
-    } else {
-        current_card_id.unwrap()
     };
     let current_card_index = current_visible_boards
         .iter()
@@ -318,20 +309,17 @@ pub fn go_up(app: &mut App) {
         app.state.current_card_id = Some(previous_card_id);
     } else {
         // we are not at the first card, we can go up
-        let previous_card_id = current_visible_boards
+        let previous_card_id = *current_visible_boards
             .iter()
             .find(|(board_id, _)| **board_id == current_board_id)
             .unwrap()
             .1
-            .iter()
-            .nth(current_card_index - 1)
-            .unwrap_or(&0)
-            .clone();
+            .get(current_card_index - 1)
+            .unwrap_or(&0);
         // check if previous_card_id is 0
         if previous_card_id == 0 {
             debug!("Cannot go up: previous card not found");
             app.send_error_toast("Cannot go up: Something went wrong", None);
-            return;
         } else {
             app.state.current_card_id = Some(previous_card_id);
         }
@@ -346,12 +334,14 @@ pub fn go_down(app: &mut App) {
     if current_visible_boards.is_empty() {
         return;
     }
-    let current_board_id = if current_board_id.is_none() {
-        app.boards[0].id
+    let current_board_id = if let Some(current_board_id) = current_board_id {
+        current_board_id
     } else {
-        current_board_id.unwrap()
+        app.boards[0].id
     };
-    let current_card_id = if current_card_id.is_none() {
+    let current_card_id = if let Some(current_card_id) = current_card_id {
+        current_card_id
+    } else {
         // get the first card of the current board
         let current_board = app.boards.iter().find(|board| board.id == current_board_id);
         if current_board.is_none() {
@@ -362,10 +352,9 @@ pub fn go_down(app: &mut App) {
                 app.send_error_toast("Cannot go down: Something went wrong", None);
                 return;
             } else {
-                app.state.current_board_id =
-                    Some(current_visible_boards.keys().nth(0).unwrap().clone());
+                app.state.current_board_id = Some(*current_visible_boards.keys().next().unwrap());
                 app.state.current_card_id =
-                    Some(current_visible_boards.values().nth(0).unwrap()[0]);
+                    Some(current_visible_boards.values().next().unwrap()[0]);
                 return;
             }
         }
@@ -376,8 +365,6 @@ pub fn go_down(app: &mut App) {
             return;
         }
         current_board.cards[0].id
-    } else {
-        current_card_id.unwrap()
     };
     let current_card_index = current_visible_boards
         .iter()
@@ -462,7 +449,7 @@ pub fn go_down(app: &mut App) {
             .collect::<Vec<u128>>();
         // if next_card_ids are less tha app.config.no_of_cards_to_show, then add cards before the start index till we have app.config.no_of_cards_to_show cards or we have reached index 0
         let next_card_ids = if next_card_ids.len() < app.config.no_of_cards_to_show as usize {
-            let mut next_card_ids = next_card_ids.clone();
+            let mut next_card_ids = next_card_ids;
             let mut start_index = start_index;
             while next_card_ids.len() < app.config.no_of_cards_to_show as usize && start_index > 0 {
                 start_index -= 1;
@@ -488,19 +475,15 @@ pub fn go_down(app: &mut App) {
         app.state.current_card_id = Some(next_card_id);
     } else {
         // we are not at the last card, we can go down
-        let next_card_id = current_visible_boards
+        let next_card_id = *current_visible_boards
             .iter()
             .find(|(board_id, _)| **board_id == current_board_id)
             .unwrap()
             .1
-            .iter()
-            .nth(current_card_index + 1)
-            .unwrap_or(&0)
-            .clone();
+            .get(current_card_index + 1)
+            .unwrap_or(&0);
         // check if next_card_id is not 0
-        if next_card_id == 0 {
-            return;
-        } else {
+        if next_card_id != 0 {
             app.state.current_card_id = Some(next_card_id);
         }
     }
@@ -508,8 +491,7 @@ pub fn go_down(app: &mut App) {
 
 pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConfig {
     let get_config_status = get_config(false);
-    if get_config_status.is_err() {
-        let config_error_msg = get_config_status.unwrap_err();
+    if let Err(config_error_msg) = get_config_status {
         if config_error_msg.contains("Overlapped keybinds found") {
             error!("Keybinds overlap detected. Please check your config file and fix the keybinds. Using default keybinds for now.");
             state.toasts.push(ToastWidget::new(
@@ -521,10 +503,10 @@ pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConf
             state.toasts.push(ToastWidget::new("Please check your config file and fix the keybinds. Using default keybinds for now.".to_owned(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning, theme.clone()));
             let new_config = get_config(true);
-            if new_config.is_err() {
+            if let Err(new_config_error) = new_config {
                 error!("Unable to fix keybinds. Please check your config file. Using default config for now.");
                 state.toasts.push(ToastWidget::new(
-                    new_config.unwrap_err(),
+                    new_config_error,
                     Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                     ToastType::Error,
                     theme.clone(),
@@ -533,7 +515,7 @@ pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConf
                     "Using default config for now.".to_owned(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION),
                     ToastType::Warning,
-                    theme.clone(),
+                    theme,
                 ));
                 AppConfig::default()
             } else {
@@ -552,7 +534,7 @@ pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConf
                 "Using default config for now.".to_owned(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Info,
-                theme.clone(),
+                theme,
             ));
             AppConfig::default()
         }
@@ -564,35 +546,76 @@ pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConf
 pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
     // append to current user input if key is not enter else change state to Initialized
     reset_mouse(app);
-    match key {
-        Key::Esc => {
-            match app.state.focus {
-                Focus::NewBoardName => app.state.new_board_form[0] = "".to_string(),
-                Focus::NewBoardDescription => app.state.new_board_form[1] = "".to_string(),
-                Focus::NewCardName => app.state.new_card_form[0] = "".to_string(),
-                Focus::CardDescription => app.state.new_card_form[1] = "".to_string(),
-                Focus::CardDueDate => app.state.new_card_form[2] = "".to_string(),
-                _ => app.state.current_user_input = "".to_string(),
-            }
-            if app.state.popup_mode.is_some()
-                && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-            {
-                app.state.popup_mode = None;
-            }
-            app.state.app_status = AppStatus::Initialized;
-            app.state.current_cursor_position = None;
-            info!("Exiting user input mode");
+    if key == Key::Esc {
+        // cancelling changes
+        match app.state.focus {
+            Focus::NewBoardName => app.state.new_board_form[0] = "".to_string(),
+            Focus::NewBoardDescription => app.state.new_board_form[1] = "".to_string(),
+            Focus::NewCardName => app.state.new_card_form[0] = "".to_string(),
+            Focus::CardDescription => app.state.new_card_form[1] = "".to_string(),
+            Focus::CardDueDate => app.state.new_card_form[2] = "".to_string(),
+            _ => app.state.current_user_input = "".to_string(),
         }
-        _ => {
-            if app.config.keybindings.toggle_command_palette.contains(&key) {
-                app.state.app_status = AppStatus::Initialized;
-                app.state.popup_mode = None;
-                return AppReturn::Continue;
+        if app.state.popup_mode.is_some() {
+            match app.state.popup_mode.unwrap() {
+                PopupMode::CommandPalette => {
+                    app.state.popup_mode = None;
+                    app.state.app_status = AppStatus::Initialized;
+                }
+                PopupMode::ConfirmDiscardCardChanges => {
+                    if app.card_being_edited.is_some() {
+                        warn!(
+                            "Discarding changes to card '{}'",
+                            app.card_being_edited.as_ref().unwrap().1.name
+                        );
+                        app.send_warning_toast(
+                            &format!(
+                                "Discarding changes to card '{}'",
+                                app.card_being_edited.as_ref().unwrap().1.name
+                            ),
+                            None,
+                        );
+                    }
+                    app.state.popup_mode = None;
+                    app.card_being_edited = None;
+                    app.state.app_status = AppStatus::Initialized;
+                }
+                PopupMode::ViewCard => {
+                    if app.card_being_edited.is_some() {
+                        app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges)
+                    }
+                }
+                PopupMode::CardPrioritySelector => {
+                    if app.card_being_edited.is_some() {
+                        app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges)
+                    } else {
+                        app.state.popup_mode = None;
+                    }
+                }
+                PopupMode::CardStatusSelector => {
+                    if app.card_being_edited.is_some() {
+                        app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges)
+                    } else {
+                        app.state.popup_mode = None;
+                    }
+                }
+                _ => {}
             }
-            if app.state.popup_mode.is_some()
-                && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-            {
-                match key {
+        }
+        app.state.app_status = AppStatus::Initialized;
+        app.state.current_cursor_position = None;
+        info!("Exiting user input mode");
+    } else {
+        // parsing keys to account for actions
+
+        if app.config.keybindings.toggle_command_palette.contains(&key) {
+            app.state.app_status = AppStatus::Initialized;
+            app.state.popup_mode = None;
+            return AppReturn::Continue;
+        }
+        if app.state.popup_mode.is_some() {
+            match app.state.popup_mode.unwrap() {
+                PopupMode::CommandPalette => match key {
                     Key::Up => {
                         app.command_palette_up();
                         return AppReturn::Continue;
@@ -601,123 +624,793 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         app.command_palette_down();
                         return AppReturn::Continue;
                     }
-                    Key::Enter => {
-                        return CommandPaletteWidget::handle_command(app).await;
+                    Key::Enter => return CommandPaletteWidget::handle_command(app).await,
+                    Key::Ins => {
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
                     }
                     _ => {}
-                }
-            }
-            let mut current_key = key.to_string();
-            match key {
-                Key::Char(' ') => current_key = " ".to_string(),
-                Key::Enter => current_key = "\n".to_string(),
-                Key::Tab => current_key = "  ".to_string(),
-                Key::Backspace => {
-                    match app.state.ui_mode {
-                        UiMode::NewBoard => match app.state.focus {
-                            Focus::NewBoardName => {
-                                if app.state.current_cursor_position.is_some() {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap();
-                                    if current_cursor_position > 0 {
-                                        app.state.new_board_form[0]
-                                            .remove(current_cursor_position - 1);
-                                        app.state.current_cursor_position =
-                                            Some(current_cursor_position - 1);
-                                    }
-                                } else {
-                                    app.state.new_board_form[0].pop();
-                                }
+                },
+                PopupMode::ViewCard => {
+                    if app.card_being_edited.is_none()
+                        && app.state.current_board_id.is_some()
+                        && app.state.current_card_id.is_some()
+                    {
+                        let board = app
+                            .boards
+                            .iter()
+                            .find(|board| board.id == app.state.current_board_id.unwrap());
+                        if board.is_some() {
+                            let card = board
+                                .unwrap()
+                                .cards
+                                .iter()
+                                .find(|card| card.id == app.state.current_card_id.unwrap());
+                            if card.is_some() {
+                                app.card_being_edited = Some((
+                                    app.state.current_board_id.unwrap(),
+                                    card.unwrap().clone(),
+                                ));
                             }
-                            Focus::NewBoardDescription => {
-                                if app.state.current_cursor_position.is_some() {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap();
-                                    if current_cursor_position > 0 {
-                                        app.state.new_board_form[1]
-                                            .remove(current_cursor_position - 1);
-                                        app.state.current_cursor_position =
-                                            Some(current_cursor_position - 1);
-                                    }
-                                } else {
-                                    app.state.new_board_form[1].pop();
-                                }
+                        }
+                    }
+                    if app.card_being_edited.is_none() {
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let card_being_edited = app.card_being_edited.as_mut().unwrap();
+                    match key {
+                        Key::Enter => match app.state.focus {
+                            Focus::CardTags => {
+                                let card_being_edited = app.card_being_edited.as_mut().unwrap();
+                                card_being_edited.1.tags.push(String::new());
+                                app.state.current_cursor_position = Some(0);
+                                app.state
+                                    .card_view_tag_list_state
+                                    .select(Some(card_being_edited.1.tags.len() - 1));
+                                return AppReturn::Continue;
                             }
-                            _ => {
-                                if app.state.current_cursor_position.is_some() {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap();
-                                    if current_cursor_position > 0 {
-                                        app.state
-                                            .current_user_input
-                                            .remove(current_cursor_position - 1);
-                                        app.state.current_cursor_position =
-                                            Some(current_cursor_position - 1);
-                                    }
-                                } else {
-                                    app.state.current_user_input.pop();
-                                }
-                            }
-                        },
-                        UiMode::NewCard => match app.state.focus {
-                            Focus::NewCardName => {
-                                if app.state.current_cursor_position.is_some() {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap();
-                                    if current_cursor_position > 0 {
-                                        app.state.new_card_form[0]
-                                            .remove(current_cursor_position - 1);
-                                        app.state.current_cursor_position =
-                                            Some(current_cursor_position - 1);
-                                    }
-                                } else {
-                                    app.state.new_card_form[0].pop();
-                                }
-                            }
-                            Focus::CardDescription => {
-                                if app.state.current_cursor_position.is_some() {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap();
-                                    if current_cursor_position > 0 {
-                                        app.state.new_card_form[1]
-                                            .remove(current_cursor_position - 1);
-                                        app.state.current_cursor_position =
-                                            Some(current_cursor_position - 1);
-                                    }
-                                } else {
-                                    app.state.new_card_form[1].pop();
-                                }
+                            Focus::CardComments => {
+                                let card_being_edited = app.card_being_edited.as_mut().unwrap();
+                                card_being_edited.1.comments.push(String::new());
+                                app.state.current_cursor_position = Some(0);
+                                app.state
+                                    .card_view_comment_list_state
+                                    .select(Some(card_being_edited.1.comments.len() - 1));
+                                return AppReturn::Continue;
                             }
                             Focus::CardDueDate => {
-                                if app.state.current_cursor_position.is_some() {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap();
-                                    if current_cursor_position > 0 {
-                                        app.state.new_card_form[2]
-                                            .remove(current_cursor_position - 1);
-                                        app.state.current_cursor_position =
-                                            Some(current_cursor_position - 1);
-                                    }
-                                } else {
-                                    app.state.new_card_form[2].pop();
-                                }
+                                return AppReturn::Continue;
                             }
-                            _ => {
-                                if app.state.current_cursor_position.is_some() {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap();
-                                    if current_cursor_position > 0 {
-                                        app.state
-                                            .current_user_input
-                                            .remove(current_cursor_position - 1);
-                                        app.state.current_cursor_position =
-                                            Some(current_cursor_position - 1);
-                                    }
-                                } else {
-                                    app.state.current_user_input.pop();
+                            Focus::CardStatus => {
+                                if app.card_being_edited.is_none() {
+                                    handle_edit_new_card(app);
                                 }
+                                app.state.popup_mode = Some(PopupMode::CardStatusSelector);
+                                return AppReturn::Continue;
                             }
+                            Focus::CardPriority => {
+                                if app.card_being_edited.is_none() {
+                                    handle_edit_new_card(app);
+                                }
+                                app.state.popup_mode = Some(PopupMode::CardPrioritySelector);
+                                return AppReturn::Continue;
+                            }
+                            Focus::SubmitButton => {
+                                return handle_edit_card_submit(app);
+                            }
+                            _ => {}
                         },
+                        Key::Tab => {
+                            handle_next_focus(app);
+                            app.state.card_view_comment_list_state.select(None);
+                            app.state.card_view_tag_list_state.select(None);
+                            app.state.current_cursor_position = None;
+                            return AppReturn::Continue;
+                        }
+                        Key::BackTab => {
+                            handle_prv_focus(app);
+                            app.state.card_view_comment_list_state.select(None);
+                            app.state.card_view_tag_list_state.select(None);
+                            app.state.current_cursor_position = None;
+                            return AppReturn::Continue;
+                        }
+                        Key::Backspace => {
+                            match app.state.focus {
+                                Focus::CardDescription => {
+                                    if app.state.current_cursor_position.is_some() {
+                                        let current_cursor_position =
+                                            app.state.current_cursor_position.unwrap();
+                                        if current_cursor_position > 0 {
+                                            card_being_edited
+                                                .1
+                                                .description
+                                                .remove(current_cursor_position - 1);
+                                            app.state.current_cursor_position =
+                                                Some(current_cursor_position - 1);
+                                        }
+                                    } else {
+                                        card_being_edited
+                                            .1
+                                            .description
+                                            .remove(card_being_edited.1.description.len() - 1);
+                                        app.state.current_cursor_position =
+                                            Some(card_being_edited.1.description.len());
+                                    }
+                                }
+                                Focus::CardDueDate => {
+                                    if app.state.current_cursor_position.is_some() {
+                                        let current_cursor_position =
+                                            app.state.current_cursor_position.unwrap();
+                                        if current_cursor_position > 0 {
+                                            card_being_edited
+                                                .1
+                                                .date_due
+                                                .remove(current_cursor_position - 1);
+                                            app.state.current_cursor_position =
+                                                Some(current_cursor_position - 1);
+                                        }
+                                    } else {
+                                        card_being_edited
+                                            .1
+                                            .date_due
+                                            .remove(card_being_edited.1.date_due.len() - 1);
+                                        app.state.current_cursor_position =
+                                            Some(card_being_edited.1.date_due.len());
+                                    }
+                                }
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let selected_tag_index =
+                                            app.state.card_view_tag_list_state.selected();
+                                        if selected_tag_index.is_some() {
+                                            // check if the card has a tag at the selected index
+                                            if card_being_edited
+                                                .1
+                                                .tags
+                                                .get(selected_tag_index.unwrap())
+                                                .is_none()
+                                            {
+                                                // select the last available tag
+                                                app.state.card_view_tag_list_state.select(Some(
+                                                    card_being_edited.1.tags.len() - 1,
+                                                ));
+                                                return AppReturn::Continue;
+                                            }
+                                        }
+                                        let selected_tag_index = selected_tag_index.unwrap();
+                                        let current_cursor_position =
+                                            if app.state.current_cursor_position.is_some() {
+                                                app.state.current_cursor_position.unwrap()
+                                            } else {
+                                                app.state.current_cursor_position = Some(0);
+                                                0
+                                            };
+                                        if current_cursor_position > 0 {
+                                            // check if selected_tag_index is valid
+                                            if card_being_edited
+                                                .1
+                                                .tags
+                                                .get(selected_tag_index)
+                                                .is_none()
+                                            {
+                                                if card_being_edited.1.tags.is_empty() {
+                                                    app.state.card_view_tag_list_state.select(None);
+                                                    app.send_warning_toast("No tag selected press <Shift+Right> or <Shift+Left> to select a tag", None);
+                                                } else {
+                                                    app.state.card_view_tag_list_state.select(
+                                                        Some(card_being_edited.1.tags.len() - 1),
+                                                    );
+                                                }
+                                                return AppReturn::Continue;
+                                            }
+                                            card_being_edited
+                                                .1
+                                                .tags
+                                                .get_mut(selected_tag_index)
+                                                .unwrap()
+                                                .remove(current_cursor_position - 1);
+                                            app.state.current_cursor_position =
+                                                Some(current_cursor_position - 1);
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No tag selected press <Shift+Right> or <Shift+Left> to select a tag", None);
+                                    }
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let selected_comment_index =
+                                            app.state.card_view_comment_list_state.selected();
+                                        if selected_comment_index.is_some() {
+                                            // check if the card has a comment at the selected index
+                                            if card_being_edited
+                                                .1
+                                                .comments
+                                                .get(selected_comment_index.unwrap())
+                                                .is_none()
+                                            {
+                                                if card_being_edited.1.comments.is_empty() {
+                                                    app.state
+                                                        .card_view_comment_list_state
+                                                        .select(None);
+                                                    app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                                } else {
+                                                    app.state.card_view_comment_list_state.select(
+                                                        Some(
+                                                            card_being_edited.1.comments.len() - 1,
+                                                        ),
+                                                    );
+                                                }
+                                                return AppReturn::Continue;
+                                            }
+                                        }
+                                        let selected_comment_index =
+                                            selected_comment_index.unwrap();
+                                        let current_cursor_position =
+                                            if app.state.current_cursor_position.is_some() {
+                                                app.state.current_cursor_position.unwrap()
+                                            } else {
+                                                app.state.current_cursor_position = Some(0);
+                                                0
+                                            };
+                                        if current_cursor_position > 0 {
+                                            // remove the char from the selected comment
+                                            card_being_edited
+                                                .1
+                                                .comments
+                                                .get_mut(selected_comment_index)
+                                                .unwrap()
+                                                .remove(current_cursor_position - 1);
+                                            app.state.current_cursor_position =
+                                                Some(current_cursor_position - 1);
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                    }
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::Left => {
+                            match app.state.focus {
+                                Focus::CardDescription => {
+                                    if !card_being_edited.1.description.is_empty() {
+                                        if app.state.current_cursor_position.is_none() {
+                                            app.state.current_cursor_position =
+                                                Some(card_being_edited.1.description.len());
+                                        } else if app.state.current_cursor_position.unwrap() > 0 {
+                                            app.state.current_cursor_position = Some(
+                                                app.state.current_cursor_position.unwrap() - 1,
+                                            );
+                                        } else {
+                                            app.state.current_cursor_position = Some(0);
+                                        }
+                                    }
+                                }
+                                Focus::CardDueDate => {
+                                    if !card_being_edited.1.date_due.is_empty() {
+                                        if app.state.current_cursor_position.is_none() {
+                                            app.state.current_cursor_position =
+                                                Some(card_being_edited.1.date_due.len());
+                                        } else if app.state.current_cursor_position.unwrap() > 0 {
+                                            app.state.current_cursor_position = Some(
+                                                app.state.current_cursor_position.unwrap() - 1,
+                                            );
+                                        } else {
+                                            app.state.current_cursor_position = Some(0);
+                                        }
+                                    }
+                                }
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let selected_tag =
+                                            app.state.card_view_tag_list_state.selected().unwrap();
+                                        let tag = card_being_edited.1.tags.get_mut(selected_tag);
+                                        if tag.is_some() {
+                                            let tag = tag.unwrap();
+                                            if app.state.current_cursor_position.is_none() {
+                                                app.state.current_cursor_position = Some(tag.len());
+                                            } else if app.state.current_cursor_position.unwrap() > 0
+                                            {
+                                                if app.state.current_cursor_position.unwrap()
+                                                    > tag.len()
+                                                {
+                                                    app.state.current_cursor_position =
+                                                        Some(tag.len());
+                                                }
+                                                app.state.current_cursor_position = Some(
+                                                    app.state.current_cursor_position.unwrap() - 1,
+                                                );
+                                            } else {
+                                                app.state.current_cursor_position = Some(0);
+                                            }
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No tag selected press <Shift+Right> or <Shift+Left> to select a tag", None);
+                                    }
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let selected_comment = app
+                                            .state
+                                            .card_view_comment_list_state
+                                            .selected()
+                                            .unwrap();
+                                        let comment =
+                                            card_being_edited.1.comments.get_mut(selected_comment);
+                                        if comment.is_some() {
+                                            let comment = comment.unwrap();
+                                            if app.state.current_cursor_position.is_none() {
+                                                app.state.current_cursor_position =
+                                                    Some(comment.len());
+                                            } else if app.state.current_cursor_position.unwrap() > 0
+                                            {
+                                                if app.state.current_cursor_position.unwrap()
+                                                    > comment.len()
+                                                {
+                                                    app.state.current_cursor_position =
+                                                        Some(comment.len());
+                                                }
+                                                app.state.current_cursor_position = Some(
+                                                    app.state.current_cursor_position.unwrap() - 1,
+                                                );
+                                            } else {
+                                                app.state.current_cursor_position = Some(0);
+                                            }
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                    }
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::Right => {
+                            match app.state.focus {
+                                Focus::CardDescription => {
+                                    if !card_being_edited.1.description.is_empty() {
+                                        if app.state.current_cursor_position.is_none() {
+                                            app.state.current_cursor_position = Some(0);
+                                        } else if app.state.current_cursor_position.unwrap()
+                                            < card_being_edited.1.description.len()
+                                        {
+                                            app.state.current_cursor_position = Some(
+                                                app.state.current_cursor_position.unwrap() + 1,
+                                            );
+                                        } else {
+                                            app.state.current_cursor_position =
+                                                Some(card_being_edited.1.description.len());
+                                        }
+                                    }
+                                }
+                                Focus::CardDueDate => {
+                                    if !card_being_edited.1.date_due.is_empty() {
+                                        if app.state.current_cursor_position.is_none() {
+                                            app.state.current_cursor_position = Some(0);
+                                        } else if app.state.current_cursor_position.unwrap()
+                                            < card_being_edited.1.date_due.len()
+                                        {
+                                            app.state.current_cursor_position = Some(
+                                                app.state.current_cursor_position.unwrap() + 1,
+                                            );
+                                        } else {
+                                            app.state.current_cursor_position =
+                                                Some(card_being_edited.1.date_due.len());
+                                        }
+                                    }
+                                }
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let selected_tag =
+                                            app.state.card_view_tag_list_state.selected().unwrap();
+                                        let tag = card_being_edited.1.tags.get_mut(selected_tag);
+                                        if tag.is_some() {
+                                            let tag = tag.unwrap();
+                                            if app.state.current_cursor_position.is_none() {
+                                                app.state.current_cursor_position = Some(0);
+                                            } else if app.state.current_cursor_position.unwrap()
+                                                < tag.len()
+                                            {
+                                                app.state.current_cursor_position = Some(
+                                                    app.state.current_cursor_position.unwrap() + 1,
+                                                );
+                                            } else {
+                                                app.state.current_cursor_position = Some(tag.len());
+                                            }
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No tag selected press <Shift+Right> or <Shift+Left> to select a tag", None);
+                                    }
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let selected_comment = app
+                                            .state
+                                            .card_view_comment_list_state
+                                            .selected()
+                                            .unwrap();
+                                        let comment =
+                                            card_being_edited.1.comments.get_mut(selected_comment);
+                                        if comment.is_some() {
+                                            let comment = comment.unwrap();
+                                            if app.state.current_cursor_position.is_none() {
+                                                app.state.current_cursor_position = Some(0);
+                                            } else if app.state.current_cursor_position.unwrap()
+                                                < comment.len()
+                                            {
+                                                app.state.current_cursor_position = Some(
+                                                    app.state.current_cursor_position.unwrap() + 1,
+                                                );
+                                            } else {
+                                                app.state.current_cursor_position =
+                                                    Some(comment.len());
+                                            }
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                    }
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::Home => {
+                            match app.state.focus {
+                                Focus::CardDescription | Focus::CardDueDate => {
+                                    app.state.current_cursor_position = Some(0);
+                                }
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let selected_tag =
+                                            app.state.card_view_tag_list_state.selected().unwrap();
+                                        let tag = card_being_edited.1.tags.get(selected_tag);
+                                        if tag.is_some() {
+                                            app.state.current_cursor_position = Some(0);
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No tag selected press <Shift+Right> or <Shift+Left> to select a tag", None);
+                                    }
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let selected_comment = app
+                                            .state
+                                            .card_view_comment_list_state
+                                            .selected()
+                                            .unwrap();
+                                        let comment =
+                                            card_being_edited.1.comments.get(selected_comment);
+                                        if comment.is_some() {
+                                            app.state.current_cursor_position = Some(0);
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                    }
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::End => {
+                            match app.state.focus {
+                                Focus::CardDescription => {
+                                    app.state.current_cursor_position =
+                                        Some(card_being_edited.1.description.len());
+                                }
+                                Focus::CardDueDate => {
+                                    app.state.current_cursor_position =
+                                        Some(card_being_edited.1.date_due.len());
+                                }
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let selected_tag =
+                                            app.state.card_view_tag_list_state.selected().unwrap();
+                                        let tag = card_being_edited.1.tags.get(selected_tag);
+                                        if tag.is_some() {
+                                            app.state.current_cursor_position =
+                                                Some(tag.unwrap().len());
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No tag selected press <Shift+Right> or <Shift+Left> to select a tag", None);
+                                    }
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let selected_comment = app
+                                            .state
+                                            .card_view_comment_list_state
+                                            .selected()
+                                            .unwrap();
+                                        let comment =
+                                            card_being_edited.1.comments.get(selected_comment);
+                                        if comment.is_some() {
+                                            app.state.current_cursor_position =
+                                                Some(comment.unwrap().len());
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                    }
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::Ins => {
+                            app.state.current_cursor_position = None;
+                            if app.card_being_edited.is_some() {
+                                app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
+                                app.state.app_status = AppStatus::Initialized;
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::ShiftRight => {
+                            match app.state.focus {
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        if card_being_edited.1.tags.is_empty() {
+                                            return AppReturn::Continue;
+                                        }
+                                        let selected_tag_index =
+                                            app.state.card_view_tag_list_state.selected().unwrap();
+                                        if selected_tag_index < card_being_edited.1.tags.len() - 1 {
+                                            app.state
+                                                .card_view_tag_list_state
+                                                .select(Some(selected_tag_index + 1));
+                                        }
+                                    } else {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        if !card_being_edited.1.tags.is_empty() {
+                                            app.state.card_view_tag_list_state.select(Some(0));
+                                        }
+                                    }
+                                    app.state.current_cursor_position = None;
+                                    return AppReturn::Continue;
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        if card_being_edited.1.comments.is_empty() {
+                                            return AppReturn::Continue;
+                                        }
+                                        let selected_comment_index = app
+                                            .state
+                                            .card_view_comment_list_state
+                                            .selected()
+                                            .unwrap();
+                                        if selected_comment_index
+                                            < card_being_edited.1.comments.len() - 1
+                                        {
+                                            app.state
+                                                .card_view_comment_list_state
+                                                .select(Some(selected_comment_index + 1));
+                                        }
+                                    } else {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        if !card_being_edited.1.comments.is_empty() {
+                                            app.state.card_view_comment_list_state.select(Some(0));
+                                        }
+                                    }
+                                    app.state.current_cursor_position = None;
+                                    return AppReturn::Continue;
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::ShiftLeft => {
+                            match app.state.focus {
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let selected_tag_index =
+                                            app.state.card_view_tag_list_state.selected().unwrap();
+                                        if selected_tag_index > 0 {
+                                            app.state
+                                                .card_view_tag_list_state
+                                                .select(Some(selected_tag_index - 1));
+                                        }
+                                    } else {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        if !card_being_edited.1.tags.is_empty() {
+                                            app.state
+                                                .card_view_tag_list_state
+                                                .select(Some(card_being_edited.1.tags.len() - 1));
+                                        }
+                                    }
+                                    app.state.current_cursor_position = None;
+                                    return AppReturn::Continue;
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let selected_comment_index = app
+                                            .state
+                                            .card_view_comment_list_state
+                                            .selected()
+                                            .unwrap();
+                                        if selected_comment_index > 0 {
+                                            app.state
+                                                .card_view_comment_list_state
+                                                .select(Some(selected_comment_index - 1));
+                                        }
+                                    } else {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        if !card_being_edited.1.comments.is_empty() {
+                                            app.state.card_view_comment_list_state.select(Some(
+                                                card_being_edited.1.comments.len() - 1,
+                                            ));
+                                        }
+                                    }
+                                    app.state.current_cursor_position = None;
+                                    return AppReturn::Continue;
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        Key::Delete => {
+                            match app.state.focus {
+                                Focus::CardTags => {
+                                    if app.state.card_view_tag_list_state.selected().is_some() {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        let selected_tag_index =
+                                            app.state.card_view_tag_list_state.selected().unwrap();
+                                        card_being_edited.1.tags.remove(selected_tag_index);
+                                        if selected_tag_index < card_being_edited.1.tags.len() {
+                                            app.state
+                                                .card_view_tag_list_state
+                                                .select(Some(selected_tag_index));
+                                        } else if selected_tag_index > 0 {
+                                            app.state
+                                                .card_view_tag_list_state
+                                                .select(Some(selected_tag_index - 1));
+                                        } else {
+                                            app.state.card_view_tag_list_state.select(None);
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No tag selected, press <Shift+Right> or <Shift+Left> to select a tag", None);
+                                    }
+                                    app.state.current_cursor_position = None;
+                                    return AppReturn::Continue;
+                                }
+                                Focus::CardComments => {
+                                    if app.state.card_view_comment_list_state.selected().is_some() {
+                                        let card_being_edited =
+                                            app.card_being_edited.as_mut().unwrap();
+                                        let selected_comment_index = app
+                                            .state
+                                            .card_view_comment_list_state
+                                            .selected()
+                                            .unwrap();
+                                        card_being_edited.1.comments.remove(selected_comment_index);
+                                        if selected_comment_index
+                                            < card_being_edited.1.comments.len()
+                                        {
+                                            app.state
+                                                .card_view_comment_list_state
+                                                .select(Some(selected_comment_index));
+                                        } else if selected_comment_index > 0 {
+                                            app.state
+                                                .card_view_comment_list_state
+                                                .select(Some(selected_comment_index - 1));
+                                        } else {
+                                            app.state.card_view_comment_list_state.select(None);
+                                        }
+                                    } else {
+                                        app.send_warning_toast("No comment selected, press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                    }
+                                    app.state.current_cursor_position = None;
+                                    return AppReturn::Continue;
+                                }
+                                _ => {}
+                            }
+                            return AppReturn::Continue;
+                        }
+                        _ => {}
+                    }
+                }
+                PopupMode::ConfirmDiscardCardChanges => {
+                    match key {
+                        Key::Tab => handle_next_focus(app),
+                        Key::BackTab => handle_prv_focus(app),
+                        Key::Enter => {
+                            if app.state.focus == Focus::SubmitButton {
+                                handle_edit_card_submit(app);
+                                app.state.popup_mode = None;
+                                app.state.app_status = AppStatus::Initialized;
+                            } else {
+                                if app.card_being_edited.is_some() {
+                                    warn!(
+                                        "Discarding changes to card '{}'",
+                                        app.card_being_edited.as_ref().unwrap().1.name
+                                    );
+                                }
+                                app.send_warning_toast(
+                                    &format!(
+                                        "Discarding changes to card '{}'",
+                                        app.card_being_edited.as_ref().unwrap().1.name
+                                    ),
+                                    None,
+                                );
+                                app.state.popup_mode = None;
+                                app.card_being_edited = None;
+                                app.state.app_status = AppStatus::Initialized;
+                            }
+                        }
+                        _ => {}
+                    }
+                    return AppReturn::Continue;
+                }
+                PopupMode::CardPrioritySelector => match key {
+                    Key::Up => {
+                        app.select_card_priority_prev();
+                    }
+                    Key::Down => {
+                        app.select_card_priority_next();
+                    }
+                    Key::Enter => {
+                        handle_change_card_priority(app);
+                    }
+                    _ => {}
+                },
+                PopupMode::CardStatusSelector => match key {
+                    Key::Up => {
+                        app.select_card_status_prev();
+                    }
+                    Key::Down => {
+                        app.select_card_status_next();
+                    }
+                    Key::Enter => {
+                        handle_change_card_status(app);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        let mut current_key = key.to_string();
+        match key {
+            Key::Char(' ') => current_key = " ".to_string(),
+            Key::Enter => current_key = "\n".to_string(),
+            Key::Tab => current_key = "  ".to_string(),
+            Key::BackTab => current_key = "".to_string(),
+            Key::Backspace => {
+                match app.state.ui_mode {
+                    UiMode::NewBoard => match app.state.focus {
+                        Focus::NewBoardName => {
+                            if app.state.current_cursor_position.is_some() {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    app.state.new_board_form[0].remove(current_cursor_position - 1);
+                                    app.state.current_cursor_position =
+                                        Some(current_cursor_position - 1);
+                                }
+                            } else {
+                                app.state.new_board_form[0].pop();
+                            }
+                        }
+                        Focus::NewBoardDescription => {
+                            if app.state.current_cursor_position.is_some() {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    app.state.new_board_form[1].remove(current_cursor_position - 1);
+                                    app.state.current_cursor_position =
+                                        Some(current_cursor_position - 1);
+                                }
+                            } else {
+                                app.state.new_board_form[1].pop();
+                            }
+                        }
                         _ => {
                             if app.state.current_cursor_position.is_some() {
                                 let current_cursor_position =
@@ -733,76 +1426,88 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                                 app.state.current_user_input.pop();
                             }
                         }
-                    };
-                    current_key = "".to_string();
-                }
-                Key::Left => {
-                    match app.state.ui_mode {
-                        UiMode::NewBoard => match app.state.focus {
-                            Focus::NewBoardName => {
-                                if app.state.current_cursor_position.is_none() {
+                    },
+                    UiMode::NewCard => match app.state.focus {
+                        Focus::NewCardName => {
+                            if app.state.current_cursor_position.is_some() {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    app.state.new_card_form[0].remove(current_cursor_position - 1);
                                     app.state.current_cursor_position =
-                                        Some(app.state.new_board_form[0].len());
-                                } else if app.state.current_cursor_position.unwrap() > 0 {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() - 1);
-                                } else {
-                                    app.state.current_cursor_position = Some(0);
+                                        Some(current_cursor_position - 1);
                                 }
+                            } else {
+                                app.state.new_card_form[0].pop();
                             }
-                            Focus::NewBoardDescription => {
-                                if app.state.current_cursor_position.is_none() {
+                        }
+                        Focus::CardDescription => {
+                            if app.state.current_cursor_position.is_some() {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    app.state.new_card_form[1].remove(current_cursor_position - 1);
                                     app.state.current_cursor_position =
-                                        Some(app.state.new_board_form[1].len());
-                                } else if app.state.current_cursor_position.unwrap() > 0 {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() - 1);
-                                } else {
-                                    app.state.current_cursor_position = Some(0);
+                                        Some(current_cursor_position - 1);
                                 }
+                            } else {
+                                app.state.new_card_form[1].pop();
                             }
-                            _ => {}
-                        },
-                        UiMode::NewCard => match app.state.focus {
-                            Focus::NewCardName => {
-                                if app.state.current_cursor_position.is_none() {
+                        }
+                        Focus::CardDueDate => {
+                            if app.state.current_cursor_position.is_some() {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    app.state.new_card_form[2].remove(current_cursor_position - 1);
                                     app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[0].len());
-                                } else if app.state.current_cursor_position.unwrap() > 0 {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() - 1);
-                                } else {
-                                    app.state.current_cursor_position = Some(0);
+                                        Some(current_cursor_position - 1);
                                 }
+                            } else {
+                                app.state.new_card_form[2].pop();
                             }
-                            Focus::CardDescription => {
-                                if app.state.current_cursor_position.is_none() {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[1].len());
-                                } else if app.state.current_cursor_position.unwrap() > 0 {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() - 1);
-                                } else {
-                                    app.state.current_cursor_position = Some(0);
-                                }
-                            }
-                            Focus::CardDueDate => {
-                                if app.state.current_cursor_position.is_none() {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[2].len());
-                                } else if app.state.current_cursor_position.unwrap() > 0 {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() - 1);
-                                } else {
-                                    app.state.current_cursor_position = Some(0);
-                                }
-                            }
-                            _ => {}
-                        },
+                        }
                         _ => {
+                            if app.state.current_cursor_position.is_some() {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap();
+                                if current_cursor_position > 0 {
+                                    app.state
+                                        .current_user_input
+                                        .remove(current_cursor_position - 1);
+                                    app.state.current_cursor_position =
+                                        Some(current_cursor_position - 1);
+                                }
+                            } else {
+                                app.state.current_user_input.pop();
+                            }
+                        }
+                    },
+                    _ => {
+                        if app.state.current_cursor_position.is_some() {
+                            let current_cursor_position =
+                                app.state.current_cursor_position.unwrap();
+                            if current_cursor_position > 0 {
+                                app.state
+                                    .current_user_input
+                                    .remove(current_cursor_position - 1);
+                                app.state.current_cursor_position =
+                                    Some(current_cursor_position - 1);
+                            }
+                        } else {
+                            app.state.current_user_input.pop();
+                        }
+                    }
+                };
+                current_key = "".to_string();
+            }
+            Key::Left => {
+                match app.state.ui_mode {
+                    UiMode::NewBoard => match app.state.focus {
+                        Focus::NewBoardName => {
                             if app.state.current_cursor_position.is_none() {
                                 app.state.current_cursor_position =
-                                    Some(app.state.current_user_input.len());
+                                    Some(app.state.new_board_form[0].len());
                             } else if app.state.current_cursor_position.unwrap() > 0 {
                                 app.state.current_cursor_position =
                                     Some(app.state.current_cursor_position.unwrap() - 1);
@@ -810,315 +1515,313 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                                 app.state.current_cursor_position = Some(0);
                             }
                         }
-                    };
-                    current_key = "".to_string();
-                }
-                Key::Right => {
-                    match app.state.ui_mode {
-                        UiMode::NewBoard => match app.state.focus {
-                            Focus::NewBoardName => {
-                                if app.state.current_cursor_position.is_none() {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_board_form[0].len());
-                                } else if app.state.current_cursor_position.unwrap()
-                                    < app.state.new_board_form[0].len()
-                                {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() + 1);
-                                } else {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_board_form[0].len());
-                                }
-                            }
-                            Focus::NewBoardDescription => {
-                                if app.state.current_cursor_position.is_none() {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_board_form[1].len());
-                                } else if app.state.current_cursor_position.unwrap()
-                                    < app.state.new_board_form[1].len()
-                                {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() + 1);
-                                } else {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_board_form[1].len());
-                                }
-                            }
-                            _ => {}
-                        },
-                        UiMode::NewCard => match app.state.focus {
-                            Focus::NewCardName => {
-                                if app.state.current_cursor_position.is_none() {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[0].len());
-                                } else if app.state.current_cursor_position.unwrap()
-                                    < app.state.new_card_form[0].len()
-                                {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() + 1);
-                                } else {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[0].len());
-                                }
-                            }
-                            Focus::CardDescription => {
-                                if app.state.current_cursor_position.is_none() {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[1].len());
-                                } else if app.state.current_cursor_position.unwrap()
-                                    < app.state.new_card_form[1].len()
-                                {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() + 1);
-                                } else {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[1].len());
-                                }
-                            }
-                            Focus::CardDueDate => {
-                                if app.state.current_cursor_position.is_none() {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[2].len());
-                                } else if app.state.current_cursor_position.unwrap()
-                                    < app.state.new_card_form[2].len()
-                                {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.current_cursor_position.unwrap() + 1);
-                                } else {
-                                    app.state.current_cursor_position =
-                                        Some(app.state.new_card_form[2].len());
-                                }
-                            }
-                            _ => {}
-                        },
-                        _ => {
+                        Focus::NewBoardDescription => {
                             if app.state.current_cursor_position.is_none() {
                                 app.state.current_cursor_position =
-                                    Some(app.state.current_user_input.len());
+                                    Some(app.state.new_board_form[1].len());
+                            } else if app.state.current_cursor_position.unwrap() > 0 {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() - 1);
+                            } else {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                        }
+                        _ => {}
+                    },
+                    UiMode::NewCard => match app.state.focus {
+                        Focus::NewCardName => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_card_form[0].len());
+                            } else if app.state.current_cursor_position.unwrap() > 0 {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() - 1);
+                            } else {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                        }
+                        Focus::CardDescription => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_card_form[1].len());
+                            } else if app.state.current_cursor_position.unwrap() > 0 {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() - 1);
+                            } else {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                        }
+                        Focus::CardDueDate => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position =
+                                    Some(app.state.new_card_form[2].len());
+                            } else if app.state.current_cursor_position.unwrap() > 0 {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() - 1);
+                            } else {
+                                app.state.current_cursor_position = Some(0);
+                            }
+                        }
+                        _ => {}
+                    },
+                    _ => {
+                        if app.state.current_cursor_position.is_none() {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_user_input.len());
+                        } else if app.state.current_cursor_position.unwrap() > 0 {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_cursor_position.unwrap() - 1);
+                        } else {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                    }
+                };
+                current_key = "".to_string();
+            }
+            Key::Right => {
+                match app.state.ui_mode {
+                    UiMode::NewBoard => match app.state.focus {
+                        Focus::NewBoardName => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position = Some(0);
                             } else if app.state.current_cursor_position.unwrap()
-                                < app.state.current_user_input.len()
+                                < app.state.new_board_form[0].len()
                             {
                                 app.state.current_cursor_position =
                                     Some(app.state.current_cursor_position.unwrap() + 1);
                             } else {
                                 app.state.current_cursor_position =
-                                    Some(app.state.current_user_input.len());
-                            }
-                        }
-                    };
-                    current_key = "".to_string();
-                }
-                Key::Home => {
-                    match app.state.ui_mode {
-                        UiMode::NewBoard => match app.state.focus {
-                            Focus::NewBoardName => {
-                                app.state.current_cursor_position = Some(0);
-                            }
-                            Focus::NewBoardDescription => {
-                                app.state.current_cursor_position = Some(0);
-                            }
-                            _ => {}
-                        },
-                        UiMode::NewCard => match app.state.focus {
-                            Focus::NewCardName => {
-                                app.state.current_cursor_position = Some(0);
-                            }
-                            Focus::CardDescription => {
-                                app.state.current_cursor_position = Some(0);
-                            }
-                            Focus::CardDueDate => {
-                                app.state.current_cursor_position = Some(0);
-                            }
-                            _ => {}
-                        },
-                        _ => {
-                            app.state.current_cursor_position = Some(0);
-                        }
-                    };
-                    current_key = "".to_string();
-                }
-                Key::End => {
-                    match app.state.ui_mode {
-                        UiMode::NewBoard => match app.state.focus {
-                            Focus::NewBoardName => {
-                                app.state.current_cursor_position =
                                     Some(app.state.new_board_form[0].len());
                             }
-                            Focus::NewBoardDescription => {
+                        }
+                        Focus::NewBoardDescription => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position = Some(0);
+                            } else if app.state.current_cursor_position.unwrap()
+                                < app.state.new_board_form[1].len()
+                            {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() + 1);
+                            } else {
                                 app.state.current_cursor_position =
                                     Some(app.state.new_board_form[1].len());
                             }
-                            _ => {}
-                        },
-                        UiMode::NewCard => match app.state.focus {
-                            Focus::NewCardName => {
+                        }
+                        _ => {}
+                    },
+                    UiMode::NewCard => match app.state.focus {
+                        Focus::NewCardName => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position = Some(0);
+                            } else if app.state.current_cursor_position.unwrap()
+                                < app.state.new_card_form[0].len()
+                            {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() + 1);
+                            } else {
                                 app.state.current_cursor_position =
                                     Some(app.state.new_card_form[0].len());
                             }
-                            Focus::CardDescription => {
+                        }
+                        Focus::CardDescription => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position = Some(0);
+                            } else if app.state.current_cursor_position.unwrap()
+                                < app.state.new_card_form[1].len()
+                            {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() + 1);
+                            } else {
                                 app.state.current_cursor_position =
                                     Some(app.state.new_card_form[1].len());
                             }
-                            Focus::CardDueDate => {
+                        }
+                        Focus::CardDueDate => {
+                            if app.state.current_cursor_position.is_none() {
+                                app.state.current_cursor_position = Some(0);
+                            } else if app.state.current_cursor_position.unwrap()
+                                < app.state.new_card_form[2].len()
+                            {
+                                app.state.current_cursor_position =
+                                    Some(app.state.current_cursor_position.unwrap() + 1);
+                            } else {
                                 app.state.current_cursor_position =
                                     Some(app.state.new_card_form[2].len());
                             }
-                            _ => {}
-                        },
-                        _ => {
+                        }
+                        _ => {}
+                    },
+                    _ => {
+                        if app.state.current_cursor_position.is_none() {
+                            app.state.current_cursor_position = Some(0);
+                        } else if app.state.current_cursor_position.unwrap()
+                            < app.state.current_user_input.len()
+                        {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_cursor_position.unwrap() + 1);
+                        } else {
                             app.state.current_cursor_position =
                                 Some(app.state.current_user_input.len());
                         }
-                    };
-                    current_key = "".to_string();
-                }
-                Key::Ins => {
-                    if app.state.popup_mode.is_some()
-                        && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-                    {
-                        app.state.popup_mode = None;
                     }
-                    app.state.app_status = AppStatus::Initialized;
-                    app.state.current_cursor_position = None;
-                    info!("Exiting User Input Mode");
+                };
+                current_key = "".to_string();
+            }
+            Key::Home => {
+                match app.state.ui_mode {
+                    UiMode::NewBoard => match app.state.focus {
+                        Focus::NewBoardName | Focus::NewBoardDescription => {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                        _ => {}
+                    },
+                    UiMode::NewCard => match app.state.focus {
+                        Focus::NewCardName | Focus::CardDescription | Focus::CardDueDate => {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                        _ => {}
+                    },
+                    _ => {
+                        app.state.current_cursor_position = Some(0);
+                    }
+                };
+                current_key = "".to_string();
+            }
+            Key::End => {
+                match app.state.ui_mode {
+                    UiMode::NewBoard => match app.state.focus {
+                        Focus::NewBoardName => {
+                            app.state.current_cursor_position =
+                                Some(app.state.new_board_form[0].len());
+                        }
+                        Focus::NewBoardDescription => {
+                            app.state.current_cursor_position =
+                                Some(app.state.new_board_form[1].len());
+                        }
+                        _ => {}
+                    },
+                    UiMode::NewCard => match app.state.focus {
+                        Focus::NewCardName => {
+                            app.state.current_cursor_position =
+                                Some(app.state.new_card_form[0].len());
+                        }
+                        Focus::CardDescription => {
+                            app.state.current_cursor_position =
+                                Some(app.state.new_card_form[1].len());
+                        }
+                        Focus::CardDueDate => {
+                            app.state.current_cursor_position =
+                                Some(app.state.new_card_form[2].len());
+                        }
+                        _ => {}
+                    },
+                    _ => {
+                        app.state.current_cursor_position =
+                            Some(app.state.current_user_input.len());
+                    }
+                };
+                current_key = "".to_string();
+            }
+            Key::Ins => {
+                app.state.app_status = AppStatus::Initialized;
+                app.state.current_cursor_position = None;
+                info!("Exiting User Input Mode");
+                return AppReturn::Continue;
+            }
+            _ => {
+                if current_key.starts_with('<') && current_key.ends_with('>') {
+                    current_key = current_key[1..current_key.len() - 1].to_string();
+                }
+                if current_key.is_empty() {
                     return AppReturn::Continue;
-                }
-                _ => {
-                    if current_key.starts_with("<") && current_key.ends_with(">") {
-                        current_key = current_key[1..current_key.len() - 1].to_string();
-                    }
-                    if current_key == "" {
-                        return AppReturn::Continue;
-                    }
                 }
             }
-            if current_key.chars().next().is_some() {
-                if app.state.popup_mode.is_some() {
-                    match app.state.popup_mode.unwrap() {
-                        PopupMode::ViewCard => {
-                            if app.state.current_board_id.is_none() {
-                                debug!("No board selected for view card edit");
-                                return AppReturn::Continue;
+        }
+
+        // Actually appending input to the current user input* (depending on the current mode)
+
+        if current_key.chars().next().is_some() {
+            if app.state.popup_mode.is_some() {
+                match app.state.popup_mode.unwrap() {
+                    PopupMode::ViewCard => {
+                        let card_being_edited = app.card_being_edited.as_mut().unwrap();
+                        match app.state.focus {
+                            Focus::CardDescription => {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap_or(0);
+                                for (i, char) in current_key.chars().enumerate() {
+                                    card_being_edited
+                                        .1
+                                        .description
+                                        .insert(current_cursor_position + i, char);
+                                }
+                                app.state.current_cursor_position =
+                                    Some(current_cursor_position + 1);
                             }
-                            if app.state.current_card_id.is_none() {
-                                debug!("No card selected for view card edit");
-                                return AppReturn::Continue;
+                            Focus::CardDueDate => {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap_or(0);
+                                for (i, char) in current_key.chars().enumerate() {
+                                    card_being_edited
+                                        .1
+                                        .date_due
+                                        .insert(current_cursor_position + i, char);
+                                }
+                                app.state.current_cursor_position =
+                                    Some(current_cursor_position + 1);
                             }
-                            let board = app
-                                .boards
-                                .iter_mut()
-                                .find(|b| b.id == app.state.current_board_id.unwrap());
-                            if board.is_none() {
-                                debug!("No board found for view card edit");
-                                return AppReturn::Continue;
-                            }
-                            let card = board
-                                .unwrap()
-                                .cards
-                                .iter_mut()
-                                .find(|c| c.id == app.state.current_card_id.unwrap());
-                            if card.is_none() {
-                                debug!("No card found for view card edit");
-                                return AppReturn::Continue;
-                            }
-                            let card = card.unwrap();
-                            match app.state.focus {
-                                Focus::CardDescription => {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap_or(0);
-                                    for (i, char) in current_key.chars().enumerate() {
-                                        card.description.insert(current_cursor_position + i, char);
+                            Focus::CardTags => {
+                                let mut current_cursor_position =
+                                    app.state.current_cursor_position.unwrap_or(0);
+                                if app.state.card_view_tag_list_state.selected().is_some() {
+                                    let selected_tag =
+                                        app.state.card_view_tag_list_state.selected().unwrap();
+                                    let mut tag = card_being_edited.1.tags.get_mut(selected_tag);
+                                    if tag.is_some() {
+                                        let tag = tag.as_mut().unwrap();
+                                        if current_cursor_position > tag.len() {
+                                            current_cursor_position = tag.len();
+                                        }
+                                        for (i, char) in current_key.chars().enumerate() {
+                                            tag.insert(current_cursor_position + i, char);
+                                        }
+                                        app.state.current_cursor_position =
+                                            Some(current_cursor_position + 1);
                                     }
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position + 1);
+                                } else {
+                                    app.send_warning_toast("No tag selected press <Shift+Right> or <Shift+Left> to select a tag", None);
                                 }
-                                Focus::CardDueDate => {
-                                    let current_cursor_position =
-                                        app.state.current_cursor_position.unwrap_or(0);
-                                    for (i, char) in current_key.chars().enumerate() {
-                                        card.date_due.insert(current_cursor_position + i, char);
+                            }
+                            Focus::CardComments => {
+                                let mut current_cursor_position =
+                                    app.state.current_cursor_position.unwrap_or(0);
+                                if app.state.card_view_comment_list_state.selected().is_some() {
+                                    let selected_comment =
+                                        app.state.card_view_comment_list_state.selected().unwrap();
+                                    let mut comment =
+                                        card_being_edited.1.comments.get_mut(selected_comment);
+                                    if comment.is_some() {
+                                        let comment = comment.as_mut().unwrap();
+                                        if current_cursor_position > comment.len() {
+                                            current_cursor_position = comment.len();
+                                        }
+                                        for (i, char) in current_key.chars().enumerate() {
+                                            comment.insert(current_cursor_position + i, char);
+                                        }
+                                        app.state.current_cursor_position =
+                                            Some(current_cursor_position + 1);
                                     }
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position + 1);
-                                }
-                                Focus::CardPriority => {
-                                    info!("Card priority edit not implemented yet")
-                                }
-                                Focus::CardStatus => {
-                                    info!("Card status edit not implemented yet")
-                                }
-                                Focus::CardTags => {
-                                    info!("Card tags edit not implemented yet")
-                                }
-                                Focus::CardComments => {
-                                    info!("Card comments edit not implemented yet")
-                                }
-                                _ => {
-                                    debug!("Invalid focus for view card edit");
+                                } else {
+                                    app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
                                 }
                             }
-                        }
-                        PopupMode::CommandPalette
-                        | PopupMode::CustomRGBPromptFG
-                        | PopupMode::CustomRGBPromptBG
-                        | PopupMode::EditGeneralConfig => {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap_or(0);
-                            for (i, char) in current_key.chars().enumerate() {
-                                app.state
-                                    .current_user_input
-                                    .insert(current_cursor_position + i, char);
-                            }
-                            app.state.current_cursor_position = Some(current_cursor_position + 1);
-                        }
-                        _ => {
-                            debug!(
-                                "Invalid popup mode '{}' for user input",
-                                app.state.popup_mode.unwrap()
-                            );
+                            _ => {}
                         }
                     }
-                    return AppReturn::Continue;
-                }
-                match app.state.focus {
-                    Focus::NewBoardName => {
-                        let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                        for (i, char) in current_key.chars().enumerate() {
-                            app.state.new_board_form[0].insert(cursor_position + i, char);
-                        }
-                        app.state.current_cursor_position = Some(cursor_position + 1);
-                    }
-                    Focus::NewBoardDescription => {
-                        let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                        for (i, char) in current_key.chars().enumerate() {
-                            app.state.new_board_form[1].insert(cursor_position + i, char);
-                        }
-                        app.state.current_cursor_position = Some(cursor_position + 1);
-                    }
-                    Focus::NewCardName => {
-                        let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                        for (i, char) in current_key.chars().enumerate() {
-                            app.state.new_card_form[0].insert(cursor_position + i, char);
-                        }
-                        app.state.current_cursor_position = Some(cursor_position + 1);
-                    }
-                    Focus::CardDescription => {
-                        let current_cursor_position =
-                            app.state.current_cursor_position.unwrap_or(0);
-                        for (i, char) in current_key.chars().enumerate() {
-                            app.state.new_card_form[1].insert(current_cursor_position + i, char);
-                        }
-                        app.state.current_cursor_position = Some(current_cursor_position + 1);
-                    }
-                    Focus::CardDueDate => {
-                        let current_cursor_position =
-                            app.state.current_cursor_position.unwrap_or(0);
-                        for (i, char) in current_key.chars().enumerate() {
-                            app.state.new_card_form[2].insert(current_cursor_position + i, char);
-                        }
-                        app.state.current_cursor_position = Some(current_cursor_position + 1);
-                    }
-                    _ => {
+                    PopupMode::CommandPalette
+                    | PopupMode::CustomRGBPromptFG
+                    | PopupMode::CustomRGBPromptBG
+                    | PopupMode::EditGeneralConfig => {
                         let current_cursor_position =
                             app.state.current_cursor_position.unwrap_or(0);
                         for (i, char) in current_key.chars().enumerate() {
@@ -1128,6 +1831,59 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                         app.state.current_cursor_position = Some(current_cursor_position + 1);
                     }
+                    _ => {
+                        debug!(
+                            "Invalid popup mode '{}' for user input",
+                            app.state.popup_mode.unwrap()
+                        );
+                    }
+                }
+                return AppReturn::Continue;
+            }
+            match app.state.focus {
+                Focus::NewBoardName => {
+                    let cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                    for (i, char) in current_key.chars().enumerate() {
+                        app.state.new_board_form[0].insert(cursor_position + i, char);
+                    }
+                    app.state.current_cursor_position = Some(cursor_position + 1);
+                }
+                Focus::NewBoardDescription => {
+                    let cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                    for (i, char) in current_key.chars().enumerate() {
+                        app.state.new_board_form[1].insert(cursor_position + i, char);
+                    }
+                    app.state.current_cursor_position = Some(cursor_position + 1);
+                }
+                Focus::NewCardName => {
+                    let cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                    for (i, char) in current_key.chars().enumerate() {
+                        app.state.new_card_form[0].insert(cursor_position + i, char);
+                    }
+                    app.state.current_cursor_position = Some(cursor_position + 1);
+                }
+                Focus::CardDescription => {
+                    let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                    for (i, char) in current_key.chars().enumerate() {
+                        app.state.new_card_form[1].insert(current_cursor_position + i, char);
+                    }
+                    app.state.current_cursor_position = Some(current_cursor_position + 1);
+                }
+                Focus::CardDueDate => {
+                    let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                    for (i, char) in current_key.chars().enumerate() {
+                        app.state.new_card_form[2].insert(current_cursor_position + i, char);
+                    }
+                    app.state.current_cursor_position = Some(current_cursor_position + 1);
+                }
+                _ => {
+                    let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
+                    for (i, char) in current_key.chars().enumerate() {
+                        app.state
+                            .current_user_input
+                            .insert(current_cursor_position + i, char);
+                    }
+                    app.state.current_cursor_position = Some(current_cursor_position + 1);
                 }
             }
         }
@@ -1162,27 +1918,23 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
     if let Some(action) = app.actions.find(key) {
         // check if the current focus is in the available focus list for the current ui mode if not assign it to the first
         if app.state.popup_mode.is_some() {
-            if PopupMode::get_available_targets(&app.state.popup_mode.unwrap())
+            if !PopupMode::get_available_targets(&app.state.popup_mode.unwrap())
                 .iter()
-                .find(|x| *x == &app.state.focus)
-                .is_none()
+                .any(|x| x == &app.state.focus)
             {
                 let available_targets =
                     PopupMode::get_available_targets(&app.state.popup_mode.unwrap());
-                if available_targets.len() > 0 {
+                if !available_targets.is_empty() {
                     app.state.focus = available_targets[0];
                 }
             }
-        } else {
-            if UiMode::get_available_targets(&app.state.ui_mode)
-                .iter()
-                .find(|x| *x == &app.state.focus)
-                .is_none()
-            {
-                let available_targets = UiMode::get_available_targets(&app.state.ui_mode);
-                if available_targets.len() > 0 {
-                    app.state.focus = available_targets[0];
-                }
+        } else if !UiMode::get_available_targets(&app.state.ui_mode)
+            .iter()
+            .any(|x| x == &app.state.focus)
+        {
+            let available_targets = UiMode::get_available_targets(&app.state.ui_mode);
+            if !available_targets.is_empty() {
+                app.state.focus = available_targets[0];
             }
         }
         match action {
@@ -1197,7 +1949,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 if config.save_on_exit {
                     app.dispatch(IoEvent::AutoSave).await;
                 }
-                return AppReturn::Exit;
+                AppReturn::Exit
             }
             Action::NextFocus => {
                 handle_next_focus(app);
@@ -1208,7 +1960,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::ResetUI => {
-                let new_ui_mode = app.config.default_view.clone();
+                let new_ui_mode = app.config.default_view;
                 let available_focus_targets = UiMode::get_available_targets(&new_ui_mode);
                 // check if focus is still available in the new ui_mode if not set it to the first available tab
                 if !available_focus_targets.contains(&app.state.focus) {
@@ -1239,18 +1991,17 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         if app.state.prev_ui_mode.is_some()
                             && app.state.prev_ui_mode.as_ref().unwrap() == &UiMode::ConfigMenu
                         {
-                            app.state.ui_mode = app.config.default_view.clone();
+                            app.state.ui_mode = app.config.default_view;
                         } else {
-                            app.state.ui_mode = app
+                            app.state.ui_mode = *app
                                 .state
                                 .prev_ui_mode
                                 .as_ref()
-                                .unwrap_or_else(|| &app.config.default_view)
-                                .clone();
+                                .unwrap_or(&app.config.default_view);
                         }
                     }
                     _ => {
-                        app.state.prev_ui_mode = Some(app.state.ui_mode.clone());
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::ConfigMenu;
                         if app.state.config_state.selected().is_none() {
                             app.config_next()
@@ -1279,8 +2030,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         PopupMode::ChangeUIMode => {
                             app.select_default_view_prev();
                         }
-                        PopupMode::ChangeCurrentCardStatus => {
-                            app.select_current_card_status_prev();
+                        PopupMode::CardStatusSelector => {
+                            app.select_card_status_prev();
                         }
                         PopupMode::SelectDefaultView => {
                             app.select_default_view_prev();
@@ -1311,13 +2062,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 .keybindings
                                 .next_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::Tab);
+                                .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
                                 .prev_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::BackTab);
+                                .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1334,13 +2085,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 .keybindings
                                 .next_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::Tab);
+                                .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
                                 .prev_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::BackTab);
+                                .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1362,13 +2113,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 .keybindings
                                 .next_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::Tab);
+                                .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
                                 .prev_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::BackTab);
+                                .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Submit Button with {} or {}, to create the theme",
                                 next_focus_key, prev_focus_key), None);
@@ -1392,8 +2143,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         PopupMode::ChangeUIMode => {
                             app.select_default_view_next();
                         }
-                        PopupMode::ChangeCurrentCardStatus => {
-                            app.select_current_card_status_next();
+                        PopupMode::CardStatusSelector => {
+                            app.select_card_status_next();
                         }
                         PopupMode::SelectDefaultView => {
                             app.select_default_view_next();
@@ -1424,13 +2175,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 .keybindings
                                 .next_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::Tab);
+                                .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
                                 .prev_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::BackTab);
+                                .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1447,13 +2198,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 .keybindings
                                 .next_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::Tab);
+                                .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
                                 .prev_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::BackTab);
+                                .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1475,13 +2226,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 .keybindings
                                 .next_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::Tab);
+                                .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
                                 .prev_focus
                                 .get(0)
-                                .unwrap_or_else(|| &Key::BackTab);
+                                .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Submit Button with {} or {}, to create the theme",
                                 next_focus_key, prev_focus_key), None);
@@ -1525,17 +2276,41 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     }
                     _ => {
                         if app.state.popup_mode.is_some() {
-                            if app.state.popup_mode.unwrap() == PopupMode::EditGeneralConfig
-                                || app.state.popup_mode.unwrap() == PopupMode::CustomRGBPromptFG
-                                || app.state.popup_mode.unwrap() == PopupMode::CustomRGBPromptBG
-                            {
-                                app.state.app_status = AppStatus::UserInput;
-                                info!("Taking user input");
-                            } else if app.state.popup_mode.unwrap()
-                                == PopupMode::EditSpecificKeyBinding
-                            {
-                                app.state.app_status = AppStatus::KeyBindMode;
-                                info!("Taking user keybind input");
+                            match app.state.popup_mode.unwrap() {
+                                PopupMode::EditGeneralConfig
+                                | PopupMode::CustomRGBPromptFG
+                                | PopupMode::CustomRGBPromptBG => {
+                                    app.state.app_status = AppStatus::UserInput;
+                                    info!("Taking user input");
+                                }
+                                PopupMode::EditSpecificKeyBinding => {
+                                    app.state.app_status = AppStatus::KeyBindMode;
+                                    info!("Taking user keybind input");
+                                }
+                                PopupMode::ViewCard => {
+                                    if app.state.current_board_id.is_some()
+                                        && app.state.current_card_id.is_some()
+                                    {
+                                        let board = app.boards.iter().find(|board| {
+                                            board.id == app.state.current_board_id.unwrap()
+                                        });
+                                        if board.is_some() {
+                                            let card = board.unwrap().cards.iter().find(|card| {
+                                                card.id == app.state.current_card_id.unwrap()
+                                            });
+                                            if card.is_some() {
+                                                app.card_being_edited = Some((
+                                                    app.state.current_board_id.unwrap(),
+                                                    card.unwrap().clone(),
+                                                ));
+                                            }
+                                        }
+                                        app.state.app_status = AppStatus::UserInput;
+                                    } else {
+                                        debug!("No current board or card id to edit card");
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -1548,8 +2323,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     let popup_mode = app.state.popup_mode.as_ref().unwrap();
                     match popup_mode {
                         PopupMode::ChangeUIMode => handle_change_ui_mode(app),
-                        PopupMode::ChangeCurrentCardStatus => {
-                            return handle_change_current_card_status(app);
+                        PopupMode::CardStatusSelector => {
+                            return handle_change_card_status(app);
                         }
                         PopupMode::EditGeneralConfig => {
                             if app.state.ui_mode == UiMode::CreateTheme {
@@ -1567,20 +2342,60 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         PopupMode::SaveThemePrompt => handle_save_theme_prompt(app),
                         PopupMode::CustomRGBPromptFG => handle_custom_rgb_prompt(app, true),
                         PopupMode::CustomRGBPromptBG => handle_custom_rgb_prompt(app, false),
-                        PopupMode::ViewCard => {
-                            if app.state.focus == Focus::CardDescription
-                                || app.state.focus == Focus::CardDueDate
-                                || app.state.focus == Focus::CardPriority
-                                || app.state.focus == Focus::CardStatus
-                                || app.state.focus == Focus::CardTags
-                                || app.state.focus == Focus::CardComments
-                            {
-                                app.state.app_status = AppStatus::UserInput;
-                                info!("Editing Card");
+                        PopupMode::ViewCard => match app.state.focus {
+                            Focus::CardPriority => {
+                                if app.card_being_edited.is_none() {
+                                    handle_edit_new_card(app);
+                                }
+                                app.state.popup_mode = Some(PopupMode::CardPrioritySelector);
                                 return AppReturn::Continue;
                             }
+                            Focus::CardStatus => {
+                                if app.card_being_edited.is_none() {
+                                    handle_edit_new_card(app);
+                                }
+                                app.state.popup_mode = Some(PopupMode::CardStatusSelector);
+                                return AppReturn::Continue;
+                            }
+                            Focus::CardDescription
+                            | Focus::CardDueDate
+                            | Focus::CardTags
+                            | Focus::CardComments => return handle_edit_new_card(app),
+                            Focus::SubmitButton => {
+                                return handle_edit_card_submit(app);
+                            }
+                            _ => {}
+                        },
+                        PopupMode::CommandPalette => {
+                            // not required to handle here as the command palette is handled in the user input mode
                         }
-                        PopupMode::CommandPalette => {}
+                        PopupMode::ConfirmDiscardCardChanges => match app.state.focus {
+                            Focus::SubmitButton => {
+                                handle_edit_card_submit(app);
+                                app.state.popup_mode = None;
+                            }
+                            Focus::ExtraFocus => {
+                                if app.card_being_edited.is_some() {
+                                    warn!(
+                                        "Discarding changes to card '{}'",
+                                        app.card_being_edited.as_ref().unwrap().1.name
+                                    );
+                                    app.send_warning_toast(
+                                        &format!(
+                                            "Discarding changes to card '{}'",
+                                            app.card_being_edited.as_ref().unwrap().1.name
+                                        ),
+                                        None,
+                                    );
+                                }
+                                app.state.popup_mode = None;
+                                app.card_being_edited = None;
+                            }
+                            _ => {}
+                        },
+                        PopupMode::CardPrioritySelector => {
+                            return handle_change_card_priority(app);
+                        }
                     }
                     app.state.popup_mode = None;
                     return AppReturn::Continue;
@@ -1619,11 +2434,11 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     _ => {
                         match app.state.focus {
                             Focus::Help => {
-                                app.state.prev_ui_mode = Some(app.state.ui_mode.clone());
+                                app.state.prev_ui_mode = Some(app.state.ui_mode);
                                 app.state.ui_mode = UiMode::HelpMenu;
                             }
                             Focus::Log => {
-                                app.state.prev_ui_mode = Some(app.state.ui_mode.clone());
+                                app.state.prev_ui_mode = Some(app.state.ui_mode);
                                 app.state.ui_mode = UiMode::LogsOnly;
                             }
                             _ => {}
@@ -1644,7 +2459,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             .cards
                                             .iter()
                                             .find(|card| card.id == current_card_id);
-                                        if let Some(_) = current_card {
+                                        if current_card.is_some() {
                                             app.state.popup_mode = Some(PopupMode::ViewCard);
                                         } else {
                                             // if the current card is not in the current board then set the current card to None
@@ -1665,8 +2480,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 }
             }
             Action::HideUiElement => {
-                let current_focus = Focus::from_str(app.state.focus.to_str());
-                let current_ui_mode = app.state.ui_mode.clone();
+                let current_focus =
+                    if let Ok(current_focus) = Focus::from_str(app.state.focus.to_str()) {
+                        current_focus
+                    } else {
+                        Focus::NoFocus
+                    };
+                let current_ui_mode = app.state.ui_mode;
                 // hide the current focus by switching to a view where it is not available
                 // for example if current uimode is Title and focus is on Title then switch to Zen
                 if current_ui_mode == UiMode::Zen {
@@ -1774,7 +2594,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         .map(|s| s.to_string())
                         .collect();
                     app.set_ui_mode(UiMode::NewBoard);
-                    app.state.previous_focus = Some(app.state.focus.clone());
+                    app.state.previous_focus = Some(app.state.focus);
                 }
                 AppReturn::Continue
             }
@@ -1791,7 +2611,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         .map(|s| s.to_string())
                         .collect();
                     app.set_ui_mode(UiMode::NewCard);
-                    app.state.previous_focus = Some(app.state.focus.clone());
+                    app.state.previous_focus = Some(app.state.focus);
                 }
                 AppReturn::Continue
             }
@@ -1835,7 +2655,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                                         [card_index - 1]
                                                         .id,
                                                 );
-                                            } else if app.boards[index.unwrap()].cards.len() > 0 {
+                                            } else if !app.boards[index.unwrap()].cards.is_empty() {
                                                 app.state.current_card_id =
                                                     Some(app.boards[index.unwrap()].cards[0].id);
                                             } else {
@@ -1872,7 +2692,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             if index > 0 {
                                                 app.state.current_board_id =
                                                     Some(app.boards[index - 1].id);
-                                            } else if app.boards.len() > 0 {
+                                            } else if app.boards.is_empty() {
                                                 app.state.current_board_id = Some(app.boards[0].id);
                                             } else {
                                                 app.state.current_board_id = None;
@@ -1902,7 +2722,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 match app.state.focus {
                     Focus::Body => {
                         // delete the current board from app.boards
-                        if let Some(current_board) = app.state.current_board_id.clone() {
+                        if let Some(current_board) = app.state.current_board_id {
                             // find index of current board id in app.boards
                             let index = app
                                 .boards
@@ -1913,10 +2733,9 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 app.boards.remove(index);
                                 // if index is > 0, set current board to previous board, else set to next board, else set to None
                                 if index > 0 {
-                                    app.state.current_board_id =
-                                        Some(app.boards[index - 1].id.clone());
+                                    app.state.current_board_id = Some(app.boards[index - 1].id);
                                 } else if index < app.boards.len() {
-                                    app.state.current_board_id = Some(app.boards[index].id.clone());
+                                    app.state.current_board_id = Some(app.boards[index].id);
                                 } else {
                                     app.state.current_board_id = None;
                                 }
@@ -2070,96 +2889,91 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 if !UiMode::view_modes().contains(&app.state.ui_mode) {
                     return AppReturn::Continue;
                 }
-                match app.state.focus {
-                    Focus::Body => {
-                        if app.state.current_card_id.is_none() {
+                if app.state.focus == Focus::Body {
+                    if app.state.current_card_id.is_none() {
+                        return AppReturn::Continue;
+                    } else {
+                        if app.state.current_board_id.is_none() {
+                            debug!("Cannot move card up without a current board id");
                             return AppReturn::Continue;
-                        } else {
-                            if app.state.current_board_id.is_none() {
-                                debug!("Cannot move card up without a current board id");
-                                return AppReturn::Continue;
-                            }
-                            if app.state.current_card_id.is_none() {
-                                debug!("Cannot move card up without a current card id");
-                                return AppReturn::Continue;
-                            }
-                            let current_board_id = app.state.current_board_id.unwrap();
-                            let current_card_id = app.state.current_card_id.unwrap();
-                            let current_board_index_in_all_boards = app
-                                .boards
-                                .iter()
-                                .position(|board| board.id == current_board_id);
-                            if current_board_index_in_all_boards.is_none() {
-                                debug!("Cannot move card up without a current board index");
-                                return AppReturn::Continue;
-                            }
-                            let current_card_index_in_all = app.boards
-                                [current_board_index_in_all_boards.unwrap()]
-                            .cards
-                            .iter()
-                            .position(|card| card.id == current_card_id);
-                            if current_card_index_in_all.is_none() {
-                                debug!("Cannot move card up without a current card index");
-                                return AppReturn::Continue;
-                            }
-                            let current_card_index_in_all = current_card_index_in_all.unwrap();
-                            if current_card_index_in_all == 0 {
-                                app.send_error_toast(
-                                    "Cannot move card up, it is already at the top of the board",
-                                    None,
-                                );
-                                error!(
-                                    "Cannot move card up, it is already at the top of the board"
-                                );
-                                return AppReturn::Continue;
-                            }
-                            // update visible boards and cards
-                            // check if both the cards that are being swapped are in the visible cards
-                            let current_card_index_in_visible = app.visible_boards_and_cards
-                                [&current_board_id]
-                                .iter()
-                                .position(|card_id| *card_id == current_card_id);
-                            if current_card_index_in_visible.is_none() {
-                                debug!("Cannot move card up without a current card index in visible cards");
-                                return AppReturn::Continue;
-                            }
-                            let current_card_index_in_visible =
-                                current_card_index_in_visible.unwrap();
-                            if current_card_index_in_visible == 0 {
-                                let card_above_id = app.boards
-                                    [current_board_index_in_all_boards.unwrap()]
-                                .cards[current_card_index_in_all - 1]
-                                    .id;
-                                let mut visible_cards: Vec<u128> = vec![];
-                                visible_cards.push(current_card_id);
-                                visible_cards.push(card_above_id);
-
-                                for card in app.visible_boards_and_cards[&current_board_id].iter() {
-                                    if *card != current_card_id
-                                        && visible_cards.len()
-                                            < app.config.no_of_cards_to_show as usize
-                                    {
-                                        visible_cards.push(*card);
-                                    }
-                                }
-                                app.visible_boards_and_cards
-                                    .entry(current_board_id)
-                                    .and_modify(|cards| *cards = visible_cards);
-                            } else {
-                                app.visible_boards_and_cards
-                                    .get_mut(&current_board_id)
-                                    .unwrap()
-                                    .swap(
-                                        current_card_index_in_visible,
-                                        current_card_index_in_visible - 1,
-                                    );
-                            }
-                            app.boards[current_board_index_in_all_boards.unwrap()]
-                                .cards
-                                .swap(current_card_index_in_all, current_card_index_in_all - 1);
                         }
+                        if app.state.current_card_id.is_none() {
+                            debug!("Cannot move card up without a current card id");
+                            return AppReturn::Continue;
+                        }
+                        let current_board_id = app.state.current_board_id.unwrap();
+                        let current_card_id = app.state.current_card_id.unwrap();
+                        let current_board_index_in_all_boards = app
+                            .boards
+                            .iter()
+                            .position(|board| board.id == current_board_id);
+                        if current_board_index_in_all_boards.is_none() {
+                            debug!("Cannot move card up without a current board index");
+                            return AppReturn::Continue;
+                        }
+                        let current_card_index_in_all = app.boards
+                            [current_board_index_in_all_boards.unwrap()]
+                        .cards
+                        .iter()
+                        .position(|card| card.id == current_card_id);
+                        if current_card_index_in_all.is_none() {
+                            debug!("Cannot move card up without a current card index");
+                            return AppReturn::Continue;
+                        }
+                        let current_card_index_in_all = current_card_index_in_all.unwrap();
+                        if current_card_index_in_all == 0 {
+                            app.send_error_toast(
+                                "Cannot move card up, it is already at the top of the board",
+                                None,
+                            );
+                            error!("Cannot move card up, it is already at the top of the board");
+                            return AppReturn::Continue;
+                        }
+                        // update visible boards and cards
+                        // check if both the cards that are being swapped are in the visible cards
+                        let current_card_index_in_visible = app.visible_boards_and_cards
+                            [&current_board_id]
+                            .iter()
+                            .position(|card_id| *card_id == current_card_id);
+                        if current_card_index_in_visible.is_none() {
+                            debug!(
+                                "Cannot move card up without a current card index in visible cards"
+                            );
+                            return AppReturn::Continue;
+                        }
+                        let current_card_index_in_visible = current_card_index_in_visible.unwrap();
+                        if current_card_index_in_visible == 0 {
+                            let card_above_id = app.boards
+                                [current_board_index_in_all_boards.unwrap()]
+                            .cards[current_card_index_in_all - 1]
+                                .id;
+                            let mut visible_cards: Vec<u128> = vec![];
+                            visible_cards.push(current_card_id);
+                            visible_cards.push(card_above_id);
+
+                            for card in app.visible_boards_and_cards[&current_board_id].iter() {
+                                if *card != current_card_id
+                                    && visible_cards.len() < app.config.no_of_cards_to_show as usize
+                                {
+                                    visible_cards.push(*card);
+                                }
+                            }
+                            app.visible_boards_and_cards
+                                .entry(current_board_id)
+                                .and_modify(|cards| *cards = visible_cards);
+                        } else {
+                            app.visible_boards_and_cards
+                                .get_mut(&current_board_id)
+                                .unwrap()
+                                .swap(
+                                    current_card_index_in_visible,
+                                    current_card_index_in_visible - 1,
+                                );
+                        }
+                        app.boards[current_board_index_in_all_boards.unwrap()]
+                            .cards
+                            .swap(current_card_index_in_all, current_card_index_in_all - 1);
                     }
-                    _ => {}
                 }
                 AppReturn::Continue
             }
@@ -2167,101 +2981,100 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 if !UiMode::view_modes().contains(&app.state.ui_mode) {
                     return AppReturn::Continue;
                 }
-                match app.state.focus {
-                    Focus::Body => {
-                        if app.state.current_card_id.is_none() {
+                if app.state.focus == Focus::Body {
+                    if app.state.current_card_id.is_none() {
+                        return AppReturn::Continue;
+                    } else {
+                        if app.state.current_board_id.is_none() {
+                            debug!("Cannot move card down without a current board id");
                             return AppReturn::Continue;
-                        } else {
-                            if app.state.current_board_id.is_none() {
-                                debug!("Cannot move card down without a current board id");
-                                return AppReturn::Continue;
-                            }
-                            if app.state.current_card_id.is_none() {
-                                debug!("Cannot move card down without a current card id");
-                                return AppReturn::Continue;
-                            }
-                            let current_board_id = app.state.current_board_id.unwrap();
-                            let current_card_id = app.state.current_card_id.unwrap();
-                            let current_board_index_in_all_boards = app
-                                .boards
-                                .iter()
-                                .position(|board| board.id == current_board_id);
-                            if current_board_index_in_all_boards.is_none() {
-                                debug!("Cannot move card down without a current board index");
-                                return AppReturn::Continue;
-                            }
-                            let current_card_index_in_all = app.boards
-                                [current_board_index_in_all_boards.unwrap()]
-                            .cards
-                            .iter()
-                            .position(|card| card.id == current_card_id);
-                            if current_card_index_in_all.is_none() {
-                                debug!("Cannot move card down without a current card index");
-                                return AppReturn::Continue;
-                            }
-                            let current_card_index_in_all = current_card_index_in_all.unwrap();
-                            if current_card_index_in_all
-                                == app.boards[current_board_index_in_all_boards.unwrap()]
-                                    .cards
-                                    .len()
-                                    - 1
-                            {
-                                app.send_error_toast("Cannot move card down, it is already at the bottom of the board", None);
-                                error!("Cannot move card down, it is already at the bottom of the board");
-                                return AppReturn::Continue;
-                            }
-                            // update visible boards and cards
-                            // check if both the cards that are being swapped are in the visible cards
-                            let current_card_index_in_visible = app.visible_boards_and_cards
-                                [&current_board_id]
-                                .iter()
-                                .position(|card_id| *card_id == current_card_id);
-                            if current_card_index_in_visible.is_none() {
-                                debug!("Cannot move card down without a current card index in visible cards");
-                                return AppReturn::Continue;
-                            }
-                            let current_card_index_in_visible =
-                                current_card_index_in_visible.unwrap();
-                            if current_card_index_in_visible
-                                == app.visible_boards_and_cards[&current_board_id].len() - 1
-                            {
-                                let card_below_id = app.boards
-                                    [current_board_index_in_all_boards.unwrap()]
-                                .cards[current_card_index_in_all + 1]
-                                    .id;
-                                let mut visible_cards: Vec<u128> = vec![];
-                                visible_cards.push(card_below_id);
-                                visible_cards.push(current_card_id);
-                                // insert in reverse order till we reach the no of cards to show
-                                for card in
-                                    app.visible_boards_and_cards[&current_board_id].iter().rev()
-                                {
-                                    if *card != current_card_id
-                                        && visible_cards.len()
-                                            < app.config.no_of_cards_to_show as usize
-                                    {
-                                        visible_cards.insert(0, *card);
-                                    }
-                                }
-
-                                app.visible_boards_and_cards
-                                    .entry(current_board_id)
-                                    .and_modify(|cards| *cards = visible_cards);
-                            } else {
-                                app.visible_boards_and_cards
-                                    .get_mut(&current_board_id)
-                                    .unwrap()
-                                    .swap(
-                                        current_card_index_in_visible,
-                                        current_card_index_in_visible + 1,
-                                    );
-                            }
-                            app.boards[current_board_index_in_all_boards.unwrap()]
-                                .cards
-                                .swap(current_card_index_in_all, current_card_index_in_all + 1);
                         }
+                        if app.state.current_card_id.is_none() {
+                            debug!("Cannot move card down without a current card id");
+                            return AppReturn::Continue;
+                        }
+                        let current_board_id = app.state.current_board_id.unwrap();
+                        let current_card_id = app.state.current_card_id.unwrap();
+                        let current_board_index_in_all_boards = app
+                            .boards
+                            .iter()
+                            .position(|board| board.id == current_board_id);
+                        if current_board_index_in_all_boards.is_none() {
+                            debug!("Cannot move card down without a current board index");
+                            return AppReturn::Continue;
+                        }
+                        let current_card_index_in_all = app.boards
+                            [current_board_index_in_all_boards.unwrap()]
+                        .cards
+                        .iter()
+                        .position(|card| card.id == current_card_id);
+                        if current_card_index_in_all.is_none() {
+                            debug!("Cannot move card down without a current card index");
+                            return AppReturn::Continue;
+                        }
+                        let current_card_index_in_all = current_card_index_in_all.unwrap();
+                        if current_card_index_in_all
+                            == app.boards[current_board_index_in_all_boards.unwrap()]
+                                .cards
+                                .len()
+                                - 1
+                        {
+                            app.send_error_toast(
+                                "Cannot move card down, it is already at the bottom of the board",
+                                None,
+                            );
+                            error!(
+                                "Cannot move card down, it is already at the bottom of the board"
+                            );
+                            return AppReturn::Continue;
+                        }
+                        // update visible boards and cards
+                        // check if both the cards that are being swapped are in the visible cards
+                        let current_card_index_in_visible = app.visible_boards_and_cards
+                            [&current_board_id]
+                            .iter()
+                            .position(|card_id| *card_id == current_card_id);
+                        if current_card_index_in_visible.is_none() {
+                            debug!("Cannot move card down without a current card index in visible cards");
+                            return AppReturn::Continue;
+                        }
+                        let current_card_index_in_visible = current_card_index_in_visible.unwrap();
+                        if current_card_index_in_visible
+                            == app.visible_boards_and_cards[&current_board_id].len() - 1
+                        {
+                            let card_below_id = app.boards
+                                [current_board_index_in_all_boards.unwrap()]
+                            .cards[current_card_index_in_all + 1]
+                                .id;
+                            let mut visible_cards: Vec<u128> = vec![];
+                            visible_cards.push(card_below_id);
+                            visible_cards.push(current_card_id);
+                            // insert in reverse order till we reach the no of cards to show
+                            for card in app.visible_boards_and_cards[&current_board_id].iter().rev()
+                            {
+                                if *card != current_card_id
+                                    && visible_cards.len() < app.config.no_of_cards_to_show as usize
+                                {
+                                    visible_cards.insert(0, *card);
+                                }
+                            }
+
+                            app.visible_boards_and_cards
+                                .entry(current_board_id)
+                                .and_modify(|cards| *cards = visible_cards);
+                        } else {
+                            app.visible_boards_and_cards
+                                .get_mut(&current_board_id)
+                                .unwrap()
+                                .swap(
+                                    current_card_index_in_visible,
+                                    current_card_index_in_visible + 1,
+                                );
+                        }
+                        app.boards[current_board_index_in_all_boards.unwrap()]
+                            .cards
+                            .swap(current_card_index_in_all, current_card_index_in_all + 1);
                     }
-                    _ => {}
                 }
                 AppReturn::Continue
             }
@@ -2269,119 +3082,103 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 if !UiMode::view_modes().contains(&app.state.ui_mode) {
                     return AppReturn::Continue;
                 }
-                match app.state.focus {
-                    Focus::Body => {
-                        if app.state.current_card_id.is_none() {
+                if app.state.focus == Focus::Body {
+                    if app.state.current_card_id.is_none() {
+                        return AppReturn::Continue;
+                    } else if let Some(current_board) = app.state.current_board_id {
+                        let moved_from_board_index = app
+                            .boards
+                            .iter()
+                            .position(|board| board.id == current_board);
+                        if moved_from_board_index.is_none() {
+                            app.send_error_toast(
+                                "Something went wrong, could not find the board",
+                                None,
+                            );
+                            debug!("Moved from board index is none");
                             return AppReturn::Continue;
-                        } else {
-                            if let Some(current_board) = app.state.current_board_id {
-                                let moved_from_board_index = app
-                                    .boards
+                        }
+                        let moved_from_board_index = moved_from_board_index.unwrap();
+                        // check if board is the last board
+                        if moved_from_board_index < app.boards.len() - 1 {
+                            let moved_to_board_index = moved_from_board_index + 1;
+                            if let Some(current_card) = app.state.current_card_id {
+                                let card_index = app.boards[moved_from_board_index]
+                                    .cards
                                     .iter()
-                                    .position(|board| board.id == current_board);
-                                if moved_from_board_index.is_none() {
-                                    app.send_error_toast(
-                                        "Something went wrong, could not find the board",
-                                        None,
-                                    );
-                                    debug!("Moved from board index is none");
-                                    return AppReturn::Continue;
-                                }
-                                let moved_from_board_index = moved_from_board_index.unwrap();
-                                // check if board is the last board
-                                if moved_from_board_index < app.boards.len() - 1 {
-                                    let moved_to_board_index = moved_from_board_index + 1;
-                                    if let Some(current_card) = app.state.current_card_id {
-                                        let card_index = app.boards[moved_from_board_index]
-                                            .cards
-                                            .iter()
-                                            .position(|card| card.id == current_card);
-                                        if let Some(card_index) = card_index {
-                                            let card = app.boards[moved_from_board_index]
-                                                .cards
-                                                .remove(card_index);
-                                            let card_id = card.id;
-                                            let card_name = card.name.clone();
-                                            app.boards[moved_to_board_index].cards.push(card);
-                                            // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
-                                            if app.boards[moved_to_board_index].cards.len()
-                                                <= app.config.no_of_cards_to_show as usize
-                                            {
-                                                app.visible_boards_and_cards
-                                                    .entry(app.boards[moved_to_board_index].id)
-                                                    .and_modify(|cards| cards.push(card_id));
-                                            }
-                                            // remove the moved card from visible cards for the current board
-                                            app.visible_boards_and_cards
-                                                .entry(app.boards[moved_from_board_index].id)
-                                                .and_modify(|cards| {
-                                                    cards.retain(|card_id| *card_id != current_card)
-                                                });
-                                            // set the visible cards to the last no_of_cards_to_show cards
-                                            let mut moved_to_board_visible_cards: Vec<u128> =
-                                                vec![];
-                                            let mut moved_from_board_visible_cards: Vec<u128> =
-                                                vec![];
-                                            for card in
-                                                app.boards[moved_to_board_index].cards.iter().rev()
-                                            {
-                                                if moved_to_board_visible_cards.len()
-                                                    < app.config.no_of_cards_to_show as usize
-                                                {
-                                                    moved_to_board_visible_cards.insert(0, card.id);
-                                                }
-                                            }
-                                            for card in app.boards[moved_from_board_index]
-                                                .cards
-                                                .iter()
-                                                .rev()
-                                            {
-                                                if moved_from_board_visible_cards.len()
-                                                    < app.config.no_of_cards_to_show as usize
-                                                    && !moved_to_board_visible_cards
-                                                        .contains(&card.id)
-                                                {
-                                                    moved_from_board_visible_cards
-                                                        .insert(0, card.id);
-                                                }
-                                            }
-                                            app.visible_boards_and_cards
-                                                .entry(app.boards[moved_to_board_index].id)
-                                                .and_modify(|cards| {
-                                                    *cards = moved_to_board_visible_cards
-                                                });
-                                            app.visible_boards_and_cards
-                                                .entry(app.boards[moved_from_board_index].id)
-                                                .and_modify(|cards| {
-                                                    *cards = moved_from_board_visible_cards
-                                                });
-                                            app.state.current_board_id =
-                                                Some(app.boards[moved_to_board_index].id);
-                                            info!(
-                                                "Moved card {} to board \"{}\"",
-                                                card_name, app.boards[moved_to_board_index].name
-                                            );
-                                            app.send_info_toast(
-                                                &format!(
-                                                    "Moved card {} to board \"{}\"",
-                                                    card_name,
-                                                    app.boards[moved_to_board_index].name
-                                                ),
-                                                None,
-                                            );
+                                    .position(|card| card.id == current_card);
+                                if let Some(card_index) = card_index {
+                                    let card =
+                                        app.boards[moved_from_board_index].cards.remove(card_index);
+                                    let card_id = card.id;
+                                    let card_name = card.name.clone();
+                                    app.boards[moved_to_board_index].cards.push(card);
+                                    // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
+                                    if app.boards[moved_to_board_index].cards.len()
+                                        <= app.config.no_of_cards_to_show as usize
+                                    {
+                                        app.visible_boards_and_cards
+                                            .entry(app.boards[moved_to_board_index].id)
+                                            .and_modify(|cards| cards.push(card_id));
+                                    }
+                                    // remove the moved card from visible cards for the current board
+                                    app.visible_boards_and_cards
+                                        .entry(app.boards[moved_from_board_index].id)
+                                        .and_modify(|cards| {
+                                            cards.retain(|card_id| *card_id != current_card)
+                                        });
+                                    // set the visible cards to the last no_of_cards_to_show cards
+                                    let mut moved_to_board_visible_cards: Vec<u128> = vec![];
+                                    let mut moved_from_board_visible_cards: Vec<u128> = vec![];
+                                    for card in app.boards[moved_to_board_index].cards.iter().rev()
+                                    {
+                                        if moved_to_board_visible_cards.len()
+                                            < app.config.no_of_cards_to_show as usize
+                                        {
+                                            moved_to_board_visible_cards.insert(0, card.id);
                                         }
                                     }
-                                } else {
-                                    error!("Cannot move card right as it is the last board");
-                                    app.send_error_toast(
-                                        "Cannot move card right as it is the last board",
+                                    for card in
+                                        app.boards[moved_from_board_index].cards.iter().rev()
+                                    {
+                                        if moved_from_board_visible_cards.len()
+                                            < app.config.no_of_cards_to_show as usize
+                                            && !moved_to_board_visible_cards.contains(&card.id)
+                                        {
+                                            moved_from_board_visible_cards.insert(0, card.id);
+                                        }
+                                    }
+                                    app.visible_boards_and_cards
+                                        .entry(app.boards[moved_to_board_index].id)
+                                        .and_modify(|cards| *cards = moved_to_board_visible_cards);
+                                    app.visible_boards_and_cards
+                                        .entry(app.boards[moved_from_board_index].id)
+                                        .and_modify(|cards| {
+                                            *cards = moved_from_board_visible_cards
+                                        });
+                                    app.state.current_board_id =
+                                        Some(app.boards[moved_to_board_index].id);
+                                    info!(
+                                        "Moved card {} to board \"{}\"",
+                                        card_name, app.boards[moved_to_board_index].name
+                                    );
+                                    app.send_info_toast(
+                                        &format!(
+                                            "Moved card {} to board \"{}\"",
+                                            card_name, app.boards[moved_to_board_index].name
+                                        ),
                                         None,
                                     );
                                 }
                             }
+                        } else {
+                            error!("Cannot move card right as it is the last board");
+                            app.send_error_toast(
+                                "Cannot move card right as it is the last board",
+                                None,
+                            );
                         }
                     }
-                    _ => {}
                 }
                 AppReturn::Continue
             }
@@ -2389,138 +3186,147 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 if !UiMode::view_modes().contains(&app.state.ui_mode) {
                     return AppReturn::Continue;
                 }
-                match app.state.focus {
-                    Focus::Body => {
-                        if app.state.current_card_id.is_none() {
+                if app.state.focus == Focus::Body {
+                    if app.state.current_card_id.is_none() {
+                        return AppReturn::Continue;
+                    } else if let Some(current_board) = app.state.current_board_id {
+                        let moved_from_board_index = app
+                            .boards
+                            .iter()
+                            .position(|board| board.id == current_board);
+                        if moved_from_board_index.is_none() {
+                            app.send_error_toast(
+                                "Something went wrong, could not find the board",
+                                None,
+                            );
+                            debug!("Moved from board index is none");
                             return AppReturn::Continue;
-                        } else {
-                            if let Some(current_board) = app.state.current_board_id {
-                                let moved_from_board_index = app
-                                    .boards
+                        }
+                        let moved_from_board_index = moved_from_board_index.unwrap();
+                        let moved_to_board_index = moved_from_board_index - 1;
+                        // check if board is the first board
+                        if moved_from_board_index > 0 {
+                            if let Some(current_card) = app.state.current_card_id {
+                                let card_index = app.boards[moved_from_board_index]
+                                    .cards
                                     .iter()
-                                    .position(|board| board.id == current_board);
-                                if moved_from_board_index.is_none() {
-                                    app.send_error_toast(
-                                        "Something went wrong, could not find the board",
-                                        None,
-                                    );
-                                    debug!("Moved from board index is none");
-                                    return AppReturn::Continue;
-                                }
-                                let moved_from_board_index = moved_from_board_index.unwrap();
-                                let moved_to_board_index = moved_from_board_index - 1;
-                                // check if board is the first board
-                                if moved_from_board_index > 0 {
-                                    if let Some(current_card) = app.state.current_card_id {
-                                        let card_index = app.boards[moved_from_board_index]
-                                            .cards
-                                            .iter()
-                                            .position(|card| card.id == current_card);
-                                        if let Some(card_index) = card_index {
-                                            let card = app.boards[moved_from_board_index]
-                                                .cards
-                                                .remove(card_index);
-                                            let card_id = card.id;
-                                            let card_name = card.name.clone();
-                                            app.boards[moved_to_board_index].cards.push(card);
-                                            // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
-                                            if app.boards[moved_to_board_index].cards.len()
-                                                <= app.config.no_of_cards_to_show as usize
-                                            {
-                                                app.visible_boards_and_cards
-                                                    .entry(app.boards[moved_to_board_index].id)
-                                                    .and_modify(|cards| cards.push(card_id));
-                                            }
-                                            // remove the moved card from visible cards for the current board
-                                            app.visible_boards_and_cards
-                                                .entry(app.boards[moved_from_board_index].id)
-                                                .and_modify(|cards| {
-                                                    cards.retain(|card_id| *card_id != current_card)
-                                                });
-                                            // set the visible cards to the last no_of_cards_to_show cards
-                                            let mut moved_to_board_visible_cards: Vec<u128> =
-                                                vec![];
-                                            let mut moved_from_board_visible_cards: Vec<u128> =
-                                                vec![];
-                                            for card in
-                                                app.boards[moved_to_board_index].cards.iter().rev()
-                                            {
-                                                if moved_to_board_visible_cards.len()
-                                                    < app.config.no_of_cards_to_show as usize
-                                                {
-                                                    moved_to_board_visible_cards.insert(0, card.id);
-                                                }
-                                            }
-                                            for card in app.boards[moved_from_board_index]
-                                                .cards
-                                                .iter()
-                                                .rev()
-                                            {
-                                                if moved_from_board_visible_cards.len()
-                                                    < app.config.no_of_cards_to_show as usize
-                                                    && !moved_to_board_visible_cards
-                                                        .contains(&card.id)
-                                                {
-                                                    moved_from_board_visible_cards
-                                                        .insert(0, card.id);
-                                                }
-                                            }
-                                            app.visible_boards_and_cards
-                                                .entry(app.boards[moved_to_board_index].id)
-                                                .and_modify(|cards| {
-                                                    *cards = moved_to_board_visible_cards
-                                                });
-                                            app.visible_boards_and_cards
-                                                .entry(app.boards[moved_from_board_index].id)
-                                                .and_modify(|cards| {
-                                                    *cards = moved_from_board_visible_cards
-                                                });
-                                            app.state.current_board_id =
-                                                Some(app.boards[moved_to_board_index].id);
-                                            info!(
-                                                "Moved card {} to board \"{}\"",
-                                                card_name, app.boards[moved_to_board_index].name
-                                            );
-                                            app.send_info_toast(
-                                                &format!(
-                                                    "Moved card {} to board \"{}\"",
-                                                    card_name,
-                                                    app.boards[moved_to_board_index].name
-                                                ),
-                                                None,
-                                            );
+                                    .position(|card| card.id == current_card);
+                                if let Some(card_index) = card_index {
+                                    let card =
+                                        app.boards[moved_from_board_index].cards.remove(card_index);
+                                    let card_id = card.id;
+                                    let card_name = card.name.clone();
+                                    app.boards[moved_to_board_index].cards.push(card);
+                                    // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
+                                    if app.boards[moved_to_board_index].cards.len()
+                                        <= app.config.no_of_cards_to_show as usize
+                                    {
+                                        app.visible_boards_and_cards
+                                            .entry(app.boards[moved_to_board_index].id)
+                                            .and_modify(|cards| cards.push(card_id));
+                                    }
+                                    // remove the moved card from visible cards for the current board
+                                    app.visible_boards_and_cards
+                                        .entry(app.boards[moved_from_board_index].id)
+                                        .and_modify(|cards| {
+                                            cards.retain(|card_id| *card_id != current_card)
+                                        });
+                                    // set the visible cards to the last no_of_cards_to_show cards
+                                    let mut moved_to_board_visible_cards: Vec<u128> = vec![];
+                                    let mut moved_from_board_visible_cards: Vec<u128> = vec![];
+                                    for card in app.boards[moved_to_board_index].cards.iter().rev()
+                                    {
+                                        if moved_to_board_visible_cards.len()
+                                            < app.config.no_of_cards_to_show as usize
+                                        {
+                                            moved_to_board_visible_cards.insert(0, card.id);
                                         }
                                     }
-                                } else {
-                                    error!("Cannot move card left as it is the first board");
-                                    app.send_error_toast(
-                                        "Cannot move card left as it is the first board",
+                                    for card in
+                                        app.boards[moved_from_board_index].cards.iter().rev()
+                                    {
+                                        if moved_from_board_visible_cards.len()
+                                            < app.config.no_of_cards_to_show as usize
+                                            && !moved_to_board_visible_cards.contains(&card.id)
+                                        {
+                                            moved_from_board_visible_cards.insert(0, card.id);
+                                        }
+                                    }
+                                    app.visible_boards_and_cards
+                                        .entry(app.boards[moved_to_board_index].id)
+                                        .and_modify(|cards| *cards = moved_to_board_visible_cards);
+                                    app.visible_boards_and_cards
+                                        .entry(app.boards[moved_from_board_index].id)
+                                        .and_modify(|cards| {
+                                            *cards = moved_from_board_visible_cards
+                                        });
+                                    app.state.current_board_id =
+                                        Some(app.boards[moved_to_board_index].id);
+                                    info!(
+                                        "Moved card {} to board \"{}\"",
+                                        card_name, app.boards[moved_to_board_index].name
+                                    );
+                                    app.send_info_toast(
+                                        &format!(
+                                            "Moved card {} to board \"{}\"",
+                                            card_name, app.boards[moved_to_board_index].name
+                                        ),
                                         None,
                                     );
                                 }
                             }
+                        } else {
+                            error!("Cannot move card left as it is the first board");
+                            app.send_error_toast(
+                                "Cannot move card left as it is the first board",
+                                None,
+                            );
                         }
                     }
-                    _ => {}
                 }
                 AppReturn::Continue
             }
             Action::ToggleCommandPalette => {
                 if app.state.popup_mode.is_none() {
-                    app.state.popup_mode = Some(PopupMode::CommandPalette);
-                    app.state.current_user_input = String::new();
-                    app.state.current_cursor_position = None;
-                    app.state.app_status = AppStatus::UserInput;
-                } else if app.state.popup_mode == Some(PopupMode::CommandPalette) {
-                    app.state.popup_mode = None;
-                    app.state.current_user_input = String::new();
-                    app.state.current_cursor_position = None;
-                    app.state.app_status = AppStatus::Initialized;
+                    open_command_palette(app);
                 } else {
-                    app.state.popup_mode = Some(PopupMode::CommandPalette);
-                    app.state.current_user_input = String::new();
-                    app.state.current_cursor_position = None;
-                    app.state.app_status = AppStatus::UserInput;
+                    match app.state.popup_mode.unwrap() {
+                        PopupMode::CommandPalette => {
+                            app.state.popup_mode = None;
+                            app.state.current_user_input = String::new();
+                            app.state.current_cursor_position = None;
+                            app.state.app_status = AppStatus::Initialized;
+                        }
+                        PopupMode::ViewCard => {
+                            if app.card_being_edited.is_some() {
+                                app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
+                                app.state.app_status = AppStatus::Initialized;
+                            } else {
+                                open_command_palette(app);
+                            }
+                        }
+                        PopupMode::ConfirmDiscardCardChanges => {
+                            if app.card_being_edited.is_some() {
+                                warn!(
+                                    "Discarding changes to card '{}'",
+                                    app.card_being_edited.as_ref().unwrap().1.name
+                                );
+                                app.send_warning_toast(
+                                    &format!(
+                                        "Discarding changes to card '{}'",
+                                        app.card_being_edited.as_ref().unwrap().1.name
+                                    ),
+                                    None,
+                                );
+                            }
+                            app.state.popup_mode = None;
+                            app.card_being_edited = None;
+                            open_command_palette(app);
+                        }
+                        _ => {
+                            open_command_palette(app);
+                        }
+                    }
                 }
                 AppReturn::Continue
             }
@@ -2550,6 +3356,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
             app.state.current_mouse_coordinates = (x, y);
         }
         Mouse::Drag(x, y) => {
+            // TODO: handle mouse drag features
             debug!("Mouse drag at {}, {}", x, y);
         }
         Mouse::LeftPress => left_button_pressed = true,
@@ -2569,16 +3376,46 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
     }
 
     if middle_button_pressed {
-        if app.state.popup_mode == Some(PopupMode::CommandPalette) {
-            app.state.popup_mode = None;
-            app.state.current_user_input = String::new();
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
+        if app.state.popup_mode.is_none() {
+            open_command_palette(app);
         } else {
-            app.state.popup_mode = Some(PopupMode::CommandPalette);
-            app.state.current_user_input = String::new();
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::UserInput;
+            match app.state.popup_mode.unwrap() {
+                PopupMode::CommandPalette => {
+                    app.state.popup_mode = None;
+                    app.state.current_user_input = String::new();
+                    app.state.current_cursor_position = None;
+                    app.state.app_status = AppStatus::Initialized;
+                }
+                PopupMode::ViewCard => {
+                    if app.card_being_edited.is_some() {
+                        app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
+                        app.state.app_status = AppStatus::Initialized;
+                    } else {
+                        open_command_palette(app);
+                    }
+                }
+                PopupMode::ConfirmDiscardCardChanges => {
+                    if app.card_being_edited.is_some() {
+                        warn!(
+                            "Discarding changes to card '{}'",
+                            app.card_being_edited.as_ref().unwrap().1.name
+                        );
+                        app.send_warning_toast(
+                            &format!(
+                                "Discarding changes to card '{}'",
+                                app.card_being_edited.as_ref().unwrap().1.name
+                            ),
+                            None,
+                        );
+                    }
+                    app.state.popup_mode = None;
+                    app.card_being_edited = None;
+                    open_command_palette(app);
+                }
+                _ => {
+                    open_command_palette(app);
+                }
+            }
         }
         return AppReturn::Continue;
     }
@@ -2593,6 +3430,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                         return CommandPaletteWidget::handle_command(app).await;
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         app.state.popup_mode = None;
+                        app.state.app_status = AppStatus::Initialized;
                     }
                 }
             }
@@ -2616,10 +3454,10 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     }
                 }
             }
-            PopupMode::ChangeCurrentCardStatus => {
+            PopupMode::CardStatusSelector => {
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::ChangeCardStatusPopup) {
-                        return handle_change_current_card_status(app);
+                        return handle_change_card_status(app);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         app.state.popup_mode = None;
                     }
@@ -2723,11 +3561,101 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     }
                 }
             }
-            _ => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.state.popup_mode = None;
-                        app.state.app_status = AppStatus::Initialized;
+            PopupMode::ViewCard => {
+                if left_button_pressed && app.state.mouse_focus.is_some() {
+                    match app.state.mouse_focus.unwrap() {
+                        Focus::CloseButton => {
+                            app.state.popup_mode = None;
+                            app.state.app_status = AppStatus::Initialized;
+                            if app.card_being_edited.is_some() {
+                                app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
+                            }
+                        }
+                        Focus::CardDescription
+                        | Focus::CardTags
+                        | Focus::CardComments
+                        | Focus::CardDueDate => return handle_edit_new_card(app),
+                        Focus::CardPriority => {
+                            if app.card_being_edited.is_none() {
+                                handle_edit_new_card(app);
+                            }
+                            app.state.popup_mode = Some(PopupMode::CardPrioritySelector);
+                            return AppReturn::Continue;
+                        }
+                        Focus::CardStatus => {
+                            if app.card_being_edited.is_none() {
+                                handle_edit_new_card(app);
+                            }
+                            app.state.popup_mode = Some(PopupMode::CardStatusSelector);
+                            return AppReturn::Continue;
+                        }
+                        Focus::SubmitButton => return handle_edit_card_submit(app),
+                        _ => {}
+                    }
+                }
+            }
+            PopupMode::CardPrioritySelector => {
+                if left_button_pressed && app.state.mouse_focus.is_some() {
+                    match app.state.mouse_focus.unwrap() {
+                        Focus::CloseButton => {
+                            app.state.app_status = AppStatus::Initialized;
+                            if app.card_being_edited.is_some() {
+                                app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
+                            }
+                        }
+                        Focus::ChangeCardPriorityPopup => return handle_change_card_priority(app),
+                        _ => {}
+                    }
+                }
+            }
+            PopupMode::ConfirmDiscardCardChanges => {
+                if left_button_pressed && app.state.mouse_focus.is_some() {
+                    match app.state.focus {
+                        Focus::CloseButton => {
+                            app.state.popup_mode = None;
+                            app.state.app_status = AppStatus::Initialized;
+                            if app.card_being_edited.is_some() {
+                                if app.card_being_edited.is_some() {
+                                    warn!(
+                                        "Discarding changes to card '{}'",
+                                        app.card_being_edited.as_ref().unwrap().1.name
+                                    );
+                                    app.send_warning_toast(
+                                        &format!(
+                                            "Discarding changes to card '{}'",
+                                            app.card_being_edited.as_ref().unwrap().1.name
+                                        ),
+                                        None,
+                                    );
+                                }
+                                app.state.popup_mode = None;
+                                app.card_being_edited = None;
+                            }
+                        }
+                        Focus::SubmitButton => {
+                            app.state.app_status = AppStatus::Initialized;
+                            app.state.popup_mode = None;
+                            return handle_edit_card_submit(app);
+                        }
+                        Focus::ExtraFocus => {
+                            app.state.app_status = AppStatus::Initialized;
+                            if app.card_being_edited.is_some() {
+                                warn!(
+                                    "Discarding changes to card '{}'",
+                                    app.card_being_edited.as_ref().unwrap().1.name
+                                );
+                                app.send_warning_toast(
+                                    &format!(
+                                        "Discarding changes to card '{}'",
+                                        app.card_being_edited.as_ref().unwrap().1.name
+                                    ),
+                                    None,
+                                );
+                            }
+                            app.state.popup_mode = None;
+                            app.card_being_edited = None;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -2741,6 +3669,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::TitleBody => {
@@ -2756,22 +3692,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    }
-                } else if mouse_scroll_right {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_right(app);
-                    }
-                } else if mouse_scroll_left {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_left(app);
-                    }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::BodyHelp => {
@@ -2784,22 +3712,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    }
-                } else if mouse_scroll_right {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_right(app);
-                    }
-                } else if mouse_scroll_left {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_left(app);
-                    }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::BodyLog => {
@@ -2812,22 +3732,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    }
-                } else if mouse_scroll_right {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_right(app);
-                    }
-                } else if mouse_scroll_left {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_left(app);
-                    }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::TitleBodyHelp => {
@@ -2846,22 +3758,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    }
-                } else if mouse_scroll_right {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_right(app);
-                    }
-                } else if mouse_scroll_left {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_left(app);
-                    }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::TitleBodyLog => {
@@ -2880,22 +3784,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    }
-                } else if mouse_scroll_right {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_right(app);
-                    }
-                } else if mouse_scroll_left {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_left(app);
-                    }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::TitleBodyHelpLog => {
@@ -2917,22 +3813,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    }
-                } else if mouse_scroll_right {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_right(app);
-                    }
-                } else if mouse_scroll_left {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_left(app);
-                    }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::BodyHelpLog => {
@@ -2948,22 +3836,14 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         return AppReturn::Exit;
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    }
-                } else if mouse_scroll_right {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_right(app);
-                    }
-                } else if mouse_scroll_left {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_left(app);
-                    }
+                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_up(app);
+                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_down(app);
+                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_right(app);
+                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+                    scroll_left(app);
                 }
             }
             UiMode::ConfigMenu => {
@@ -3003,38 +3883,38 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                         app.state.focus = Focus::SubmitButton;
                         handle_edit_keybindings_action(app);
                     }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::EditKeybindingsTable) {
-                        let current_selected = app.state.edit_keybindings_state.selected();
-                        if current_selected.is_none() {
-                            app.state.edit_keybindings_state.select(Some(0));
+                } else if mouse_scroll_down
+                    && app.state.mouse_focus == Some(Focus::EditKeybindingsTable)
+                {
+                    let current_selected = app.state.edit_keybindings_state.selected();
+                    if current_selected.is_none() {
+                        app.state.edit_keybindings_state.select(Some(0));
+                    } else {
+                        let current_selected = current_selected.unwrap();
+                        if current_selected < app.config.keybindings.iter().count() - 1 {
+                            app.state
+                                .edit_keybindings_state
+                                .select(Some(current_selected + 1));
                         } else {
-                            let current_selected = current_selected.unwrap();
-                            if current_selected < app.config.keybindings.iter().count() - 1 {
-                                app.state
-                                    .edit_keybindings_state
-                                    .select(Some(current_selected + 1));
-                            } else {
-                                app.state.edit_keybindings_state.select(Some(0));
-                            }
+                            app.state.edit_keybindings_state.select(Some(0));
                         }
                     }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::EditKeybindingsTable) {
-                        let current_selected = app.state.edit_keybindings_state.selected();
-                        if current_selected.is_none() {
-                            app.state.edit_keybindings_state.select(Some(0));
+                } else if mouse_scroll_up
+                    && app.state.mouse_focus == Some(Focus::EditKeybindingsTable)
+                {
+                    let current_selected = app.state.edit_keybindings_state.selected();
+                    if current_selected.is_none() {
+                        app.state.edit_keybindings_state.select(Some(0));
+                    } else {
+                        let current_selected = current_selected.unwrap();
+                        if current_selected > 0 {
+                            app.state
+                                .edit_keybindings_state
+                                .select(Some(current_selected - 1));
                         } else {
-                            let current_selected = current_selected.unwrap();
-                            if current_selected > 0 {
-                                app.state
-                                    .edit_keybindings_state
-                                    .select(Some(current_selected - 1));
-                            } else {
-                                app.state
-                                    .edit_keybindings_state
-                                    .select(Some(app.config.keybindings.iter().count() - 1));
-                            }
+                            app.state
+                                .edit_keybindings_state
+                                .select(Some(app.config.keybindings.iter().count() - 1));
                         }
                     }
                 }
@@ -3065,10 +3945,8 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                 }
             }
             UiMode::LogsOnly => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        handle_go_to_prv_ui_mode(app);
-                    }
+                if left_button_pressed && app.state.mouse_focus == Some(Focus::CloseButton) {
+                    handle_go_to_prv_ui_mode(app);
                 }
             }
             UiMode::NewBoard => {
@@ -3079,9 +3957,9 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                             .iter()
                             .map(|s| s.to_string())
                             .collect();
-                    } else if app.state.mouse_focus == Some(Focus::NewBoardName) {
-                        app.state.app_status = AppStatus::UserInput
-                    } else if app.state.mouse_focus == Some(Focus::NewBoardDescription) {
+                    } else if app.state.mouse_focus == Some(Focus::NewBoardName)
+                        || app.state.mouse_focus == Some(Focus::NewBoardDescription)
+                    {
                         app.state.app_status = AppStatus::UserInput
                     } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
                         handle_new_board_action(app);
@@ -3097,11 +3975,10 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                             .iter()
                             .map(|s| s.to_string())
                             .collect();
-                    } else if app.state.mouse_focus == Some(Focus::NewCardName) {
-                        app.state.app_status = AppStatus::UserInput
-                    } else if app.state.mouse_focus == Some(Focus::CardDescription) {
-                        app.state.app_status = AppStatus::UserInput
-                    } else if app.state.mouse_focus == Some(Focus::CardDueDate) {
+                    } else if app.state.mouse_focus == Some(Focus::NewCardName)
+                        || app.state.mouse_focus == Some(Focus::CardDescription)
+                        || app.state.mouse_focus == Some(Focus::CardDueDate)
+                    {
                         app.state.app_status = AppStatus::UserInput
                     } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
                         handle_new_card_action(app);
@@ -3113,10 +3990,10 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::CloseButton) {
                         handle_go_to_prv_ui_mode(app);
-                    } else if app.state.mouse_focus == Some(Focus::LoadSave) {
-                        if app.state.load_save_state.selected().is_some() {
-                            app.dispatch(IoEvent::LoadPreview).await;
-                        }
+                    } else if app.state.mouse_focus == Some(Focus::LoadSave)
+                        && app.state.load_save_state.selected().is_some()
+                    {
+                        app.dispatch(IoEvent::LoadPreview).await;
                     }
                 }
             }
@@ -3192,7 +4069,7 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
         let default_config_item = String::from("");
         let config_item = &app_config_list[app.config_item_being_edited.unwrap_or(0)]
             .first()
-            .unwrap_or_else(|| &default_config_item);
+            .unwrap_or(&default_config_item);
         if *config_item == "Edit Keybindings" {
             app.state.ui_mode = UiMode::EditKeybindings;
             if app.state.edit_keybindings_state.selected().is_none() {
@@ -3331,7 +4208,7 @@ fn handle_main_menu_action(app: &mut App) -> AppReturn {
             }
             MainMenuItem::View => {
                 app.state.prev_ui_mode = Some(UiMode::MainMenu);
-                app.state.ui_mode = app.config.default_view.clone();
+                app.state.ui_mode = app.config.default_view;
             }
             MainMenuItem::Help => {
                 app.state.prev_ui_mode = Some(UiMode::MainMenu);
@@ -3351,8 +4228,8 @@ fn handle_default_view_selection(app: &mut App) {
     let current_selected_mode = app.state.default_view_state.selected().unwrap_or(0);
     if current_selected_mode < all_ui_modes.len() {
         let selected_mode = &all_ui_modes[current_selected_mode];
-        app.config.default_view = UiMode::from_string(&selected_mode).unwrap_or(UiMode::MainMenu);
-        app.state.prev_ui_mode = Some(app.config.default_view.clone());
+        app.config.default_view = UiMode::from_string(selected_mode).unwrap_or(UiMode::MainMenu);
+        app.state.prev_ui_mode = Some(app.config.default_view);
         let config_string = format!("{}: {}", "Select Default View", selected_mode);
         let app_config = AppConfig::edit_with_string(&config_string, app);
         app.config = app_config.clone();
@@ -3395,9 +4272,7 @@ fn handle_change_ui_mode(app: &mut App) {
     // UiMode::all() has strings map all of them to UiMode using UiMode::from_string which returns an option<UiMode>
     let all_ui_modes = UiMode::all()
         .iter()
-        .map(|s| UiMode::from_string(s))
-        .filter(|s| s.is_some())
-        .map(|s| s.unwrap())
+        .filter_map(|s| UiMode::from_string(s))
         .collect::<Vec<UiMode>>();
 
     // make sure index is in bounds
@@ -3406,7 +4281,7 @@ fn handle_change_ui_mode(app: &mut App) {
     } else {
         current_index
     };
-    let selected_ui_mode = all_ui_modes[current_index].clone();
+    let selected_ui_mode = all_ui_modes[current_index];
     app.state.ui_mode = selected_ui_mode;
 }
 
@@ -3422,12 +4297,9 @@ fn handle_edit_keybindings_action(app: &mut App) {
         app.state.focus = Focus::NoFocus;
         app.state.edit_keybindings_state.select(None);
         let write_config_status = write_config(&app.config);
-        if write_config_status.is_err() {
-            error!(
-                "Error writing config: {}",
-                write_config_status.clone().unwrap_err()
-            );
-            app.send_error_toast(&write_config_status.unwrap_err(), None);
+        if let Err(error_message) = write_config_status {
+            error!("Error writing config: {}", error_message);
+            app.send_error_toast(&format!("Error writing config: {}", error_message), None);
         }
         app.keybind_list_maker();
     }
@@ -3435,22 +4307,60 @@ fn handle_edit_keybindings_action(app: &mut App) {
 
 fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
     if app.state.popup_mode.is_some() {
-        if app.state.popup_mode.unwrap() == PopupMode::EditGeneralConfig {
-            if app.state.ui_mode == UiMode::CreateTheme {
-                app.state.popup_mode = None;
-            } else {
-                app.state.ui_mode = UiMode::ConfigMenu;
-                if app.state.config_state.selected().is_none() {
-                    app.config_next()
+        match app.state.popup_mode.unwrap() {
+            PopupMode::EditGeneralConfig => {
+                if app.state.ui_mode == UiMode::CreateTheme {
+                    app.state.popup_mode = None;
+                } else {
+                    app.state.ui_mode = UiMode::ConfigMenu;
+                    if app.state.config_state.selected().is_none() {
+                        app.config_next()
+                    }
+                }
+                app.state.current_user_input = String::new();
+                app.state.current_cursor_position = None;
+            }
+            PopupMode::EditSpecificKeyBinding => {
+                app.state.ui_mode = UiMode::EditKeybindings;
+                if app.state.edit_keybindings_state.selected().is_none() {
+                    app.edit_keybindings_next();
                 }
             }
-            app.state.current_user_input = String::new();
-            app.state.current_cursor_position = None;
-        } else if app.state.popup_mode.unwrap() == PopupMode::EditSpecificKeyBinding {
-            app.state.ui_mode = UiMode::EditKeybindings;
-            if app.state.edit_keybindings_state.selected().is_none() {
-                app.edit_keybindings_next();
+            PopupMode::ViewCard => {
+                if app.card_being_edited.is_some() {
+                    warn!(
+                        "Discarding changes to card '{}'",
+                        app.card_being_edited.as_ref().unwrap().1.name
+                    );
+                    app.send_warning_toast(
+                        &format!(
+                            "Discarding changes to card '{}'",
+                            app.card_being_edited.as_ref().unwrap().1.name
+                        ),
+                        None,
+                    );
+                }
+                app.state.popup_mode = None;
+                app.card_being_edited = None;
             }
+            PopupMode::ConfirmDiscardCardChanges => {
+                if app.card_being_edited.is_some() {
+                    warn!(
+                        "Discarding changes to card '{}'",
+                        app.card_being_edited.as_ref().unwrap().1.name
+                    );
+                    app.send_warning_toast(
+                        &format!(
+                            "Discarding changes to card '{}'",
+                            app.card_being_edited.as_ref().unwrap().1.name
+                        ),
+                        None,
+                    );
+                }
+                app.state.popup_mode = None;
+                app.card_being_edited = None;
+            }
+            _ => {}
         }
         app.state.popup_mode = None;
         if app.state.app_status == AppStatus::UserInput {
@@ -3462,14 +4372,13 @@ fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
         UiMode::ConfigMenu => {
             if app.state.prev_ui_mode == Some(UiMode::ConfigMenu) {
                 app.state.prev_ui_mode = None;
-                app.state.ui_mode = app.config.default_view.clone();
+                app.state.ui_mode = app.config.default_view;
             } else {
-                app.state.ui_mode = app
+                app.state.ui_mode = *app
                     .state
                     .prev_ui_mode
                     .as_ref()
-                    .unwrap_or_else(|| &app.config.default_view)
-                    .clone();
+                    .unwrap_or(&app.config.default_view);
                 app.state.prev_ui_mode = Some(UiMode::ConfigMenu);
             }
             AppReturn::Continue
@@ -3487,18 +4396,13 @@ fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
                 app.state.load_save_state = ListState::default();
             }
             // check if previous ui mode is the same as the current ui mode
-            if app.state.prev_ui_mode == Some(app.state.ui_mode.clone()) {
+            if app.state.prev_ui_mode == Some(app.state.ui_mode) {
                 app.state.ui_mode = UiMode::MainMenu;
                 if app.state.main_menu_state.selected().is_none() {
                     app.main_menu_next();
                 }
             } else {
-                app.state.ui_mode = app
-                    .state
-                    .prev_ui_mode
-                    .as_ref()
-                    .unwrap_or_else(|| &UiMode::MainMenu)
-                    .clone();
+                app.state.ui_mode = *app.state.prev_ui_mode.as_ref().unwrap_or(&UiMode::MainMenu);
                 if app.state.main_menu_state.selected().is_none() {
                     app.main_menu_next();
                 }
@@ -3508,7 +4412,7 @@ fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
     }
 }
 
-fn handle_change_current_card_status(app: &mut App) -> AppReturn {
+fn handle_change_card_status(app: &mut App) -> AppReturn {
     let current_index = app.state.card_status_selector_state.selected().unwrap_or(0);
     let all_statuses = CardStatus::all();
 
@@ -3518,8 +4422,12 @@ fn handle_change_current_card_status(app: &mut App) -> AppReturn {
         current_index
     };
     let selected_status = all_statuses[current_index].clone();
-    // find current board from app.boards
-    if let Some(current_board_id) = app.state.current_board_id {
+
+    if app.card_being_edited.is_some() {
+        app.card_being_edited.as_mut().unwrap().1.card_status = selected_status;
+        app.state.popup_mode = Some(PopupMode::ViewCard);
+        return AppReturn::Continue;
+    } else if let Some(current_board_id) = app.state.current_board_id {
         if let Some(current_board) = app.boards.iter_mut().find(|b| b.id == current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) = current_board
@@ -3535,7 +4443,45 @@ fn handle_change_current_card_status(app: &mut App) -> AppReturn {
         }
     }
     app.send_error_toast("Error Could not find current card", None);
-    return AppReturn::Continue;
+    AppReturn::Continue
+}
+
+fn handle_change_card_priority(app: &mut App) -> AppReturn {
+    let current_index = app
+        .state
+        .card_priority_selector_state
+        .selected()
+        .unwrap_or(0);
+    let all_priorities = CardPriority::all();
+
+    let current_index = if current_index >= all_priorities.len() {
+        all_priorities.len() - 1
+    } else {
+        current_index
+    };
+    let selected_priority = all_priorities[current_index].clone();
+
+    if app.card_being_edited.is_some() {
+        app.card_being_edited.as_mut().unwrap().1.priority = selected_priority;
+        app.state.popup_mode = Some(PopupMode::ViewCard);
+        return AppReturn::Continue;
+    } else if let Some(current_board_id) = app.state.current_board_id {
+        if let Some(current_board) = app.boards.iter_mut().find(|b| b.id == current_board_id) {
+            if let Some(current_card_id) = app.state.current_card_id {
+                if let Some(current_card) = current_board
+                    .cards
+                    .iter_mut()
+                    .find(|c| c.id == current_card_id)
+                {
+                    current_card.priority = selected_priority;
+                    app.state.popup_mode = None;
+                    return AppReturn::Continue;
+                }
+            }
+        }
+    }
+    app.send_error_toast("Error Could not find current card", None);
+    AppReturn::Continue
 }
 
 fn handle_edit_general_config(app: &mut App) {
@@ -3544,7 +4490,7 @@ fn handle_edit_general_config(app: &mut App) {
     let config_item = config_item_list[config_item_index].clone();
     // key is the second item in the list
     let default_key = String::from("");
-    let config_item_key = config_item.get(0).unwrap_or_else(|| &default_key);
+    let config_item_key = config_item.get(0).unwrap_or(&default_key);
     let new_value = app.state.current_user_input.clone();
     // if new value is not empty update the config
     if !new_value.is_empty() {
@@ -3587,13 +4533,10 @@ fn handle_edit_specific_keybinding(app: &mut App) {
         if selected < app.config.keybindings.iter().count() {
             let result = app.config.edit_keybinding(
                 selected,
-                app.state
-                    .edited_keybinding
-                    .clone()
-                    .unwrap_or_else(|| vec![]),
+                app.state.edited_keybinding.clone().unwrap_or(vec![]),
             );
-            if result.is_err() {
-                app.send_error_toast(&result.unwrap_err(), None);
+            if let Err(e) = result {
+                app.send_error_toast(&format!("Error editing keybind: {}", e), None);
             } else {
                 let mut key_list = vec![];
                 for (k, v) in app.config.keybindings.iter() {
@@ -3601,11 +4544,7 @@ fn handle_edit_specific_keybinding(app: &mut App) {
                 }
                 let (key, _) = key_list[selected];
                 let key_string = key.to_string();
-                let value = app
-                    .state
-                    .edited_keybinding
-                    .clone()
-                    .unwrap_or_else(|| vec![]);
+                let value = app.state.edited_keybinding.clone().unwrap_or(vec![]);
                 let value = value
                     .iter()
                     .map(|s| s.to_string())
@@ -3628,12 +4567,9 @@ fn handle_edit_specific_keybinding(app: &mut App) {
         }
         app.state.edited_keybinding = None;
         let write_config_status = write_config(&app.config);
-        if write_config_status.is_err() {
-            error!(
-                "Error writing config: {}",
-                write_config_status.clone().unwrap_err()
-            );
-            app.send_error_toast(&write_config_status.unwrap_err(), None);
+        if let Err(error_message) = write_config_status {
+            error!("Error writing config: {}", error_message);
+            app.send_error_toast(&format!("Error writing config: {}", error_message), None);
         }
     } else {
         app.state.ui_mode = UiMode::EditKeybindings;
@@ -3660,24 +4596,22 @@ fn handle_new_board_action(app: &mut App) {
             let new_board = Board::new(new_board_name, new_board_description);
             app.boards.push(new_board.clone());
             app.state.current_board_id = Some(new_board.id);
-            app.state.ui_mode = app
+            app.state.ui_mode = *app
                 .state
                 .prev_ui_mode
                 .as_ref()
-                .unwrap_or_else(|| &app.config.default_view)
-                .clone();
+                .unwrap_or(&app.config.default_view);
         } else {
             warn!("New board name is empty or already exists");
             app.send_warning_toast("New board name is empty or already exists", None);
         }
-        app.state.ui_mode = app
+        app.state.ui_mode = *app
             .state
             .prev_ui_mode
             .as_ref()
-            .unwrap_or_else(|| &app.config.default_view)
-            .clone();
+            .unwrap_or(&app.config.default_view);
         if let Some(previous_focus) = &app.state.previous_focus {
-            app.state.focus = previous_focus.clone();
+            app.state.focus = *previous_focus;
         }
         refresh_visible_boards_and_cards(app);
     }
@@ -3706,25 +4640,24 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
         } else {
             debug!("Current board not found");
             app.send_error_toast("Something went wrong", None);
-            app.state.ui_mode = app
+            app.state.ui_mode = *app
                 .state
                 .prev_ui_mode
                 .as_ref()
-                .unwrap_or_else(|| &app.config.default_view)
-                .clone();
+                .unwrap_or(&app.config.default_view);
             return AppReturn::Continue;
         }
         // check if due date is empty or is a valid date
         let due_date = if new_card_due_date.is_empty() {
             Some(FIELD_NOT_SET.to_string())
         } else {
-            match NaiveDateTime::parse_from_str(&new_card_due_date, "%d/%m/%Y-%H:%M:%S") {
+            match NaiveDateTime::parse_from_str(&new_card_due_date, DEFAULT_DATE_FORMAT) {
                 Ok(due_date) => {
                     debug!("Due date: {}", due_date);
                     let new_due = due_date.to_string();
                     // the date is in the format 2023-01-20 14:10:00 convert it to 20/01/2023-14:10:00
-                    let new_due = new_due.replace("-", "/");
-                    let new_due = new_due.replace(" ", "-");
+                    let new_due = new_due.replace('-', "/");
+                    let new_due = new_due.replace(' ', "-");
                     debug!("New due date: {}", new_due);
                     Some(new_due)
                 }
@@ -3735,8 +4668,8 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
                             debug!("Due date: {}", due_date);
                             let new_due = due_date.to_string();
                             // the date is in the format 2023-01-20 14:10:00 convert it to 20/01/2023-14:10:00
-                            let new_due = new_due.replace("-", "/");
-                            let new_due = new_due.replace(" ", "-");
+                            let new_due = new_due.replace('-', "/");
+                            let new_due = new_due.replace(' ', "-");
                             let new_due = format!("{}-{}", new_due, "12:00:00");
                             debug!("New due date: {}", new_due);
                             Some(new_due)
@@ -3753,19 +4686,18 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
         if due_date.is_none() {
             warn!("Invalid due date");
             app.send_warning_toast("Invalid due date", None);
-            app.state.ui_mode = app
+            app.state.ui_mode = *app
                 .state
                 .prev_ui_mode
                 .as_ref()
-                .unwrap_or_else(|| &app.config.default_view)
-                .clone();
+                .unwrap_or(&app.config.default_view);
             return AppReturn::Continue;
         }
         if !new_card_name.is_empty() && !same_name_exists {
             let new_card = Card::new(
                 new_card_name,
                 new_card_description,
-                due_date.unwrap().to_string(),
+                due_date.unwrap(),
                 CardPriority::Low,
                 vec![],
                 vec![],
@@ -3780,27 +4712,25 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
             } else {
                 debug!("Current board not found");
                 app.send_error_toast("Something went wrong", None);
-                app.state.ui_mode = app
+                app.state.ui_mode = *app
                     .state
                     .prev_ui_mode
                     .as_ref()
-                    .unwrap_or_else(|| &app.config.default_view)
-                    .clone();
+                    .unwrap_or(&app.config.default_view);
                 return AppReturn::Continue;
             }
-            app.state.ui_mode = app
+            app.state.ui_mode = *app
                 .state
                 .prev_ui_mode
                 .as_ref()
-                .unwrap_or_else(|| &app.config.default_view)
-                .clone();
+                .unwrap_or(&app.config.default_view);
         } else {
             warn!("New card name is empty or already exists");
             app.send_warning_toast("New card name is empty or already exists", None);
         }
 
         if let Some(previous_focus) = &app.state.previous_focus {
-            app.state.focus = previous_focus.clone();
+            app.state.focus = *previous_focus;
         }
         refresh_visible_boards_and_cards(app);
     }
@@ -4056,7 +4986,7 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
             let config_item_name = if config_item_index.is_some() {
                 list_items[config_item_index.unwrap()].first().unwrap()
             } else {
-                // TODO: This is temporary, as only the Theme editor uses this other than config
+                // NOTE: This is temporary, as only the Theme editor uses this other than config
                 "Theme Name"
             };
             if config_item_name == "Default Theme" {
@@ -4082,19 +5012,19 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
                         );
                     } else {
                         app.send_info_toast("Config updated Successfully", None);
-                        app.theme = theme.clone();
+                        app.theme = theme;
                     }
                 } else {
                     debug!("Theme index {} is not in the theme list", theme_index);
                 }
             }
             app.state.popup_mode = None;
-            return AppReturn::Continue;
+            AppReturn::Continue
         } else {
             debug!("No config index found");
             app.send_error_toast("Something went wrong", None);
             app.state.popup_mode = None;
-            return AppReturn::Continue;
+            AppReturn::Continue
         }
     } else {
         let selected_item_index = app.state.theme_selector_state.selected();
@@ -4123,222 +5053,223 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
 
 fn handle_create_theme_action(app: &mut App) -> AppReturn {
     if app.state.popup_mode.is_some() {
-        let popup_mode = app.state.popup_mode.unwrap();
-        if popup_mode == PopupMode::EditGeneralConfig {
-            if app.state.current_user_input.is_empty() {
-                app.send_error_toast("Theme name cannot be empty", None);
-                app.state.popup_mode = None;
-                return AppReturn::Continue;
-            } else {
-                let mut theme_name_duplicate = false;
-                for theme in app.all_themes.iter() {
-                    if theme.name == app.state.current_user_input {
-                        theme_name_duplicate = true;
-                        break;
+        match app.state.popup_mode.unwrap() {
+            PopupMode::EditGeneralConfig => {
+                if app.state.current_user_input.is_empty() {
+                    app.send_error_toast("Theme name cannot be empty", None);
+                    app.state.popup_mode = None;
+                    return AppReturn::Continue;
+                } else {
+                    let mut theme_name_duplicate = false;
+                    for theme in app.all_themes.iter() {
+                        if theme.name == app.state.current_user_input {
+                            theme_name_duplicate = true;
+                            break;
+                        }
                     }
+                    if theme_name_duplicate {
+                        app.send_error_toast("Theme name already exists", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    app.state.theme_being_edited.name = app.state.current_user_input.clone();
                 }
-                if theme_name_duplicate {
-                    app.send_error_toast("Theme name already exists", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                app.state.theme_being_edited.name = app.state.current_user_input.clone();
-            }
-            app.state.popup_mode = None;
-        } else if popup_mode == PopupMode::ThemeEditor {
-            if app.state.focus == Focus::StyleEditorFG {
-                let all_color_options =
-                    TextColorOptions::to_iter().collect::<Vec<TextColorOptions>>();
-                let selected_index = app.state.edit_specific_style_state.0.selected();
-                if selected_index.is_none() {
-                    debug!("No selected index found");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let selected_index = selected_index.unwrap();
-                if selected_index >= all_color_options.len() {
-                    debug!("Selected index is out of bounds");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let selected_color_option = all_color_options[selected_index].clone();
-                let theme_style_bring_edited_index = app.state.theme_editor_state.selected();
-                if theme_style_bring_edited_index.is_none() {
-                    debug!("No theme style being edited index found");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let theme_style_bring_edited_index = theme_style_bring_edited_index.unwrap();
-                if theme_style_bring_edited_index >= app.state.theme_being_edited.to_vec_str().len()
-                {
-                    debug!("Theme style being edited index is out of bounds");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-                    [theme_style_bring_edited_index]
-                    .clone();
-                // check if the selected_coloroption is of the type ColorOption::RGB(x,y,z)
-                // if it is, then we need to open the color picker
-                if let TextColorOptions::RGB(_, _, _) = selected_color_option {
-                    app.state.popup_mode = Some(PopupMode::CustomRGBPromptFG);
-                    app.state.focus = Focus::TextInput;
-                    app.state.current_user_input = String::new();
-                    app.state.current_cursor_position = None;
-                    return AppReturn::Continue;
-                }
-                if selected_color_option.to_color().is_some() {
-                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                        theme_style_being_edited,
-                        Some(selected_color_option.to_color().unwrap()),
-                        None,
-                        None,
-                    );
-                } else {
-                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                        theme_style_being_edited,
-                        None,
-                        None,
-                        None,
-                    );
-                }
-                handle_next_focus(app);
-            } else if app.state.focus == Focus::StyleEditorBG {
-                let all_color_options =
-                    TextColorOptions::to_iter().collect::<Vec<TextColorOptions>>();
-                let selected_index = app.state.edit_specific_style_state.1.selected();
-                if selected_index.is_none() {
-                    debug!("No selected index found");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let selected_index = selected_index.unwrap();
-                if selected_index >= all_color_options.len() {
-                    debug!("Selected index is out of bounds");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let selected_color_option = all_color_options[selected_index].clone();
-                let theme_style_bring_edited_index = app.state.theme_editor_state.selected();
-                if theme_style_bring_edited_index.is_none() {
-                    debug!("No theme style being edited index found");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let theme_style_bring_edited_index = theme_style_bring_edited_index.unwrap();
-                if theme_style_bring_edited_index >= app.state.theme_being_edited.to_vec_str().len()
-                {
-                    debug!("Theme style being edited index is out of bounds");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-                    [theme_style_bring_edited_index]
-                    .clone();
-                // check if the selected_coloroption is of the type ColorOption::RGB(x,y,z)
-                // if it is, then we need to open the color picker
-                if let TextColorOptions::RGB(_, _, _) = selected_color_option {
-                    app.state.popup_mode = Some(PopupMode::CustomRGBPromptBG);
-                    app.state.focus = Focus::TextInput;
-                    app.state.current_user_input = String::new();
-                    app.state.current_cursor_position = None;
-                    return AppReturn::Continue;
-                }
-                if selected_color_option.to_color().is_some() {
-                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                        theme_style_being_edited,
-                        None,
-                        Some(selected_color_option.to_color().unwrap()),
-                        None,
-                    );
-                } else {
-                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                        theme_style_being_edited,
-                        None,
-                        None,
-                        None,
-                    );
-                }
-                handle_next_focus(app);
-            } else if app.state.focus == Focus::StyleEditorModifier {
-                let all_modifiers =
-                    TextModifierOptions::to_iter().collect::<Vec<TextModifierOptions>>();
-                let selected_index = app.state.edit_specific_style_state.2.selected();
-                if selected_index.is_none() {
-                    debug!("No selected index found");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let selected_index = selected_index.unwrap();
-                if selected_index >= all_modifiers.len() {
-                    debug!("Selected index is out of bounds");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let selected_modifier = all_modifiers[selected_index].clone();
-                let theme_style_bring_edited_index = app.state.theme_editor_state.selected();
-                if theme_style_bring_edited_index.is_none() {
-                    debug!("No theme style being edited index found");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let theme_style_bring_edited_index = theme_style_bring_edited_index.unwrap();
-                if theme_style_bring_edited_index >= app.state.theme_being_edited.to_vec_str().len()
-                {
-                    debug!("Theme style being edited index is out of bounds");
-                    app.send_error_toast("Something went wrong", None);
-                    app.state.popup_mode = None;
-                    return AppReturn::Continue;
-                }
-                let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-                    [theme_style_bring_edited_index]
-                    .clone();
-                app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                    theme_style_being_edited,
-                    None,
-                    None,
-                    Some(selected_modifier.to_modifier()),
-                );
-                handle_next_focus(app);
-            } else if app.state.focus == Focus::SubmitButton {
                 app.state.popup_mode = None;
-                app.state.focus = Focus::ThemeEditor;
             }
-            return AppReturn::Continue;
-        };
-    } else {
-        if app.state.focus == Focus::SubmitButton {
-            let all_default_theme_names = Theme::all_default_themes()
-                .iter()
-                .map(|theme| theme.name.clone())
-                .collect::<Vec<String>>();
-            if all_default_theme_names.contains(&app.state.theme_being_edited.name) {
-                app.send_error_toast("Theme name cannot be the same as a default theme", None);
+            PopupMode::ThemeEditor => {
+                if app.state.focus == Focus::StyleEditorFG {
+                    let all_color_options =
+                        TextColorOptions::to_iter().collect::<Vec<TextColorOptions>>();
+                    let selected_index = app.state.edit_specific_style_state.0.selected();
+                    if selected_index.is_none() {
+                        debug!("No selected index found");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let selected_index = selected_index.unwrap();
+                    if selected_index >= all_color_options.len() {
+                        debug!("Selected index is out of bounds");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let selected_color_option = all_color_options[selected_index].clone();
+                    let theme_style_bring_edited_index = app.state.theme_editor_state.selected();
+                    if theme_style_bring_edited_index.is_none() {
+                        debug!("No theme style being edited index found");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let theme_style_bring_edited_index = theme_style_bring_edited_index.unwrap();
+                    if theme_style_bring_edited_index
+                        >= app.state.theme_being_edited.to_vec_str().len()
+                    {
+                        debug!("Theme style being edited index is out of bounds");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let theme_style_being_edited =
+                        app.state.theme_being_edited.to_vec_str()[theme_style_bring_edited_index];
+                    // check if the selected_coloroption is of the type ColorOption::RGB(x,y,z)
+                    // if it is, then we need to open the color picker
+                    if let TextColorOptions::RGB(_, _, _) = selected_color_option {
+                        app.state.popup_mode = Some(PopupMode::CustomRGBPromptFG);
+                        app.state.focus = Focus::TextInput;
+                        app.state.current_user_input = String::new();
+                        app.state.current_cursor_position = None;
+                        return AppReturn::Continue;
+                    }
+                    if selected_color_option.to_color().is_some() {
+                        app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                            theme_style_being_edited,
+                            Some(selected_color_option.to_color().unwrap()),
+                            None,
+                            None,
+                        );
+                    } else {
+                        app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                            theme_style_being_edited,
+                            None,
+                            None,
+                            None,
+                        );
+                    }
+                    handle_next_focus(app);
+                } else if app.state.focus == Focus::StyleEditorBG {
+                    let all_color_options =
+                        TextColorOptions::to_iter().collect::<Vec<TextColorOptions>>();
+                    let selected_index = app.state.edit_specific_style_state.1.selected();
+                    if selected_index.is_none() {
+                        debug!("No selected index found");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let selected_index = selected_index.unwrap();
+                    if selected_index >= all_color_options.len() {
+                        debug!("Selected index is out of bounds");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let selected_color_option = all_color_options[selected_index].clone();
+                    let theme_style_bring_edited_index = app.state.theme_editor_state.selected();
+                    if theme_style_bring_edited_index.is_none() {
+                        debug!("No theme style being edited index found");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let theme_style_bring_edited_index = theme_style_bring_edited_index.unwrap();
+                    if theme_style_bring_edited_index
+                        >= app.state.theme_being_edited.to_vec_str().len()
+                    {
+                        debug!("Theme style being edited index is out of bounds");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let theme_style_being_edited =
+                        app.state.theme_being_edited.to_vec_str()[theme_style_bring_edited_index];
+                    // check if the selected_coloroption is of the type ColorOption::RGB(x,y,z)
+                    // if it is, then we need to open the color picker
+                    if let TextColorOptions::RGB(_, _, _) = selected_color_option {
+                        app.state.popup_mode = Some(PopupMode::CustomRGBPromptBG);
+                        app.state.focus = Focus::TextInput;
+                        app.state.current_user_input = String::new();
+                        app.state.current_cursor_position = None;
+                        return AppReturn::Continue;
+                    }
+                    if selected_color_option.to_color().is_some() {
+                        app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                            theme_style_being_edited,
+                            None,
+                            Some(selected_color_option.to_color().unwrap()),
+                            None,
+                        );
+                    } else {
+                        app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                            theme_style_being_edited,
+                            None,
+                            None,
+                            None,
+                        );
+                    }
+                    handle_next_focus(app);
+                } else if app.state.focus == Focus::StyleEditorModifier {
+                    let all_modifiers =
+                        TextModifierOptions::to_iter().collect::<Vec<TextModifierOptions>>();
+                    let selected_index = app.state.edit_specific_style_state.2.selected();
+                    if selected_index.is_none() {
+                        debug!("No selected index found");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let selected_index = selected_index.unwrap();
+                    if selected_index >= all_modifiers.len() {
+                        debug!("Selected index is out of bounds");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let selected_modifier = all_modifiers[selected_index].clone();
+                    let theme_style_bring_edited_index = app.state.theme_editor_state.selected();
+                    if theme_style_bring_edited_index.is_none() {
+                        debug!("No theme style being edited index found");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let theme_style_bring_edited_index = theme_style_bring_edited_index.unwrap();
+                    if theme_style_bring_edited_index
+                        >= app.state.theme_being_edited.to_vec_str().len()
+                    {
+                        debug!("Theme style being edited index is out of bounds");
+                        app.send_error_toast("Something went wrong", None);
+                        app.state.popup_mode = None;
+                        return AppReturn::Continue;
+                    }
+                    let theme_style_being_edited =
+                        app.state.theme_being_edited.to_vec_str()[theme_style_bring_edited_index];
+                    app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
+                        theme_style_being_edited,
+                        None,
+                        None,
+                        Some(selected_modifier.to_modifier()),
+                    );
+                    handle_next_focus(app);
+                } else if app.state.focus == Focus::SubmitButton {
+                    app.state.popup_mode = None;
+                    app.state.focus = Focus::ThemeEditor;
+                }
                 return AppReturn::Continue;
             }
-            app.state.popup_mode = Some(PopupMode::SaveThemePrompt);
-        } else if app.state.focus == Focus::ThemeEditor
-            && app.state.theme_editor_state.selected().is_some()
-        {
-            let selected_item_index = app.state.theme_editor_state.selected().unwrap();
-            if selected_item_index == 0 {
-                app.state.popup_mode = Some(PopupMode::EditGeneralConfig);
-                app.state.current_user_input = String::new();
-                app.state.current_cursor_position = None;
-            } else {
-                app.state.popup_mode = Some(PopupMode::ThemeEditor);
-            }
+            _ => {}
+        }
+    } else if app.state.focus == Focus::SubmitButton {
+        let all_default_theme_names = Theme::all_default_themes()
+            .iter()
+            .map(|theme| theme.name.clone())
+            .collect::<Vec<String>>();
+        if all_default_theme_names.contains(&app.state.theme_being_edited.name) {
+            app.send_error_toast("Theme name cannot be the same as a default theme", None);
+            return AppReturn::Continue;
+        }
+        app.state.popup_mode = Some(PopupMode::SaveThemePrompt);
+    } else if app.state.focus == Focus::ThemeEditor
+        && app.state.theme_editor_state.selected().is_some()
+    {
+        let selected_item_index = app.state.theme_editor_state.selected().unwrap();
+        if selected_item_index == 0 {
+            app.state.popup_mode = Some(PopupMode::EditGeneralConfig);
+            app.state.current_user_input = String::new();
+            app.state.current_cursor_position = None;
+        } else {
+            app.state.popup_mode = Some(PopupMode::ThemeEditor);
         }
     }
     AppReturn::Continue
@@ -4362,10 +5293,10 @@ fn handle_next_focus(app: &mut App) {
         UiMode::get_available_targets(&app.state.ui_mode)
     };
     if !available_targets.contains(&app.state.focus) {
-        if available_targets.len() > 0 {
-            app.state.focus = available_targets[0];
-        } else {
+        if available_targets.is_empty() {
             app.state.focus = Focus::NoFocus;
+        } else {
+            app.state.focus = available_targets[0];
         }
         return;
     }
@@ -4385,10 +5316,10 @@ fn handle_prv_focus(app: &mut App) {
         UiMode::get_available_targets(&app.state.ui_mode)
     };
     if !available_targets.contains(&app.state.focus) {
-        if available_targets.len() > 0 {
-            app.state.focus = available_targets[available_targets.len() - 1];
-        } else {
+        if available_targets.is_empty() {
             app.state.focus = Focus::NoFocus;
+        } else {
+            app.state.focus = available_targets[available_targets.len() - 1];
         }
         return;
     }
@@ -4465,7 +5396,7 @@ fn handle_custom_rgb_prompt(app: &mut App, fg: bool) {
             app.send_error_toast("Something went wrong", None);
         }
         let theme_style_being_edited =
-            app.state.theme_being_edited.to_vec_str()[theme_style_bring_edited_index].clone();
+            app.state.theme_being_edited.to_vec_str()[theme_style_bring_edited_index];
         if fg {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
@@ -4503,8 +5434,7 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
             .0
             .select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.theme_editor_state.selected().unwrap()]
-        .clone();
+            [app.state.theme_editor_state.selected().unwrap()];
         if TextColorOptions::to_iter().nth(selector_index).is_some() {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
@@ -4533,8 +5463,7 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
             .1
             .select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.theme_editor_state.selected().unwrap()]
-        .clone();
+            [app.state.theme_editor_state.selected().unwrap()];
         if TextColorOptions::to_iter().nth(selector_index).is_some() {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
@@ -4563,8 +5492,7 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
             .2
             .select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.theme_editor_state.selected().unwrap()]
-        .clone();
+            [app.state.theme_editor_state.selected().unwrap()];
         if TextModifierOptions::to_iter().nth(selector_index).is_some() {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
@@ -4580,6 +5508,7 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
         }
     }
 }
+
 fn handle_theme_maker_scroll_down(app: &mut App) {
     if app.state.focus == Focus::StyleEditorFG {
         let current_index = app.state.edit_specific_style_state.0.selected();
@@ -4598,8 +5527,7 @@ fn handle_theme_maker_scroll_down(app: &mut App) {
             .0
             .select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.theme_editor_state.selected().unwrap()]
-        .clone();
+            [app.state.theme_editor_state.selected().unwrap()];
         if TextColorOptions::to_iter().nth(selector_index).is_some() {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
@@ -4628,8 +5556,7 @@ fn handle_theme_maker_scroll_down(app: &mut App) {
             .1
             .select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.theme_editor_state.selected().unwrap()]
-        .clone();
+            [app.state.theme_editor_state.selected().unwrap()];
         if TextColorOptions::to_iter().nth(selector_index).is_some() {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
@@ -4658,8 +5585,7 @@ fn handle_theme_maker_scroll_down(app: &mut App) {
             .2
             .select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.theme_editor_state.selected().unwrap()]
-        .clone();
+            [app.state.theme_editor_state.selected().unwrap()];
         if TextModifierOptions::to_iter().nth(selector_index).is_some() {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
@@ -4674,4 +5600,138 @@ fn handle_theme_maker_scroll_down(app: &mut App) {
             );
         }
     }
+}
+
+fn handle_edit_new_card(app: &mut App) -> AppReturn {
+    app.state.app_status = AppStatus::UserInput;
+    if app.state.current_board_id.is_none() || app.state.current_card_id.is_none() {
+        app.send_error_toast("No card selected to edit", None);
+        app.state.popup_mode = None;
+        return AppReturn::Continue;
+    }
+    let board = app
+        .boards
+        .iter()
+        .find(|b| b.id == app.state.current_board_id.unwrap());
+    if board.is_none() {
+        app.send_error_toast("No board found for editing card", None);
+        app.state.popup_mode = None;
+        return AppReturn::Continue;
+    }
+    let card = board
+        .unwrap()
+        .cards
+        .iter()
+        .find(|c| c.id == app.state.current_card_id.unwrap());
+    if card.is_none() {
+        app.send_error_toast("No card found for editing", None);
+        app.state.popup_mode = None;
+        return AppReturn::Continue;
+    }
+    let card = card.unwrap();
+    // check if the app.card_being_edited is already set to the card we are trying to edit to avoid discarding changes
+    if app.card_being_edited.is_some() && app.card_being_edited.as_ref().unwrap().1.id == card.id {
+        return AppReturn::Continue;
+    }
+    match app.state.focus {
+        Focus::CardDescription => {
+            if !card.description.is_empty() {
+                app.state.current_cursor_position = Some(0);
+            }
+        }
+        Focus::CardDueDate => {
+            if !card.date_due.is_empty() {
+                app.state.current_cursor_position = Some(0);
+            }
+        }
+        _ => {}
+    }
+    app.card_being_edited = Some((app.state.current_board_id.unwrap(), card.clone()));
+    info!("Editing Card '{}'", card.name);
+    app.send_info_toast(&format!("Editing Card '{}'", card.name), None);
+    AppReturn::Continue
+}
+
+fn handle_edit_card_submit(app: &mut App) -> AppReturn {
+    let mut send_warning_toast = false;
+    let mut warning_date_due = String::new();
+    if app.state.current_board_id.is_none() {
+        return AppReturn::Continue;
+    }
+    if app.state.current_card_id.is_none() {
+        return AppReturn::Continue;
+    }
+    let board = app
+        .boards
+        .iter_mut()
+        .find(|board| board.id == app.state.current_board_id.unwrap());
+    if board.is_none() {
+        return AppReturn::Continue;
+    }
+    let board = board.unwrap();
+    // replace the card with the edited card
+    let card = board
+        .cards
+        .iter_mut()
+        .find(|card| card.id == app.state.current_card_id.unwrap());
+    if card.is_none() {
+        return AppReturn::Continue;
+    }
+    let card = card.unwrap();
+    let mut edited_card = app.card_being_edited.as_ref().unwrap().1.clone();
+    let parsed_date_ymd_t =
+        NaiveDateTime::parse_from_str(&edited_card.date_due, "%Y/%m/%d-%H:%M:%S");
+    let parsed_date_ymd = NaiveDate::parse_from_str(&edited_card.date_due, "%Y/%m/%d");
+    let parsed_date_dmy_t =
+        NaiveDateTime::parse_from_str(&edited_card.date_due, DEFAULT_DATE_FORMAT);
+    let parsed_date_dmy = NaiveDate::parse_from_str(&edited_card.date_due, "%d/%m/%Y");
+    let parsed_date = if let Ok(parsed_date_ymd_t) = parsed_date_ymd_t {
+        // convert to DD/MM/YYYY-HH:MM:SS
+        parsed_date_ymd_t.format(DEFAULT_DATE_FORMAT).to_string()
+    } else if let Ok(parsed_date_ymd) = parsed_date_ymd {
+        parsed_date_ymd
+            .and_hms_opt(12, 0, 0)
+            .unwrap()
+            .format(DEFAULT_DATE_FORMAT)
+            .to_string()
+    } else if let Ok(parsed_date_dmy_t) = parsed_date_dmy_t {
+        parsed_date_dmy_t.format(DEFAULT_DATE_FORMAT).to_string()
+    } else if let Ok(parsed_date_dmy) = parsed_date_dmy {
+        parsed_date_dmy
+            .and_hms_opt(12, 0, 0)
+            .unwrap()
+            .format(DEFAULT_DATE_FORMAT)
+            .to_string()
+    } else {
+        if edited_card.date_due != FIELD_NOT_SET {
+            send_warning_toast = true;
+            warning_date_due = edited_card.date_due.clone();
+        }
+        FIELD_NOT_SET.to_string()
+    };
+    edited_card.date_due = parsed_date;
+    *card = edited_card;
+
+    let card_name = card.name.clone();
+    app.card_being_edited = None;
+    info!("Changes to Card '{}' saved", card_name);
+    if send_warning_toast {
+        app.send_warning_toast(
+            &format!(
+                "Invalid date format for '{}'. Please use DD/MM/YYYY-HH:MM:SS, YYYY-MM-DD-HH:MM:SS, DD/MM/YYY or YYYY/MM/DD. Date has been reset and other changes have been saved.",
+                warning_date_due
+            ),
+            None,
+        );
+    }
+    app.send_info_toast(&format!("Changes to Card '{}' saved", card_name), None);
+    app.state.app_status = AppStatus::Initialized;
+    AppReturn::Continue
+}
+
+fn open_command_palette(app: &mut App) {
+    app.state.popup_mode = Some(PopupMode::CommandPalette);
+    app.state.current_user_input = String::new();
+    app.state.current_cursor_position = None;
+    app.state.app_status = AppStatus::UserInput;
 }

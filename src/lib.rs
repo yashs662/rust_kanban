@@ -85,10 +85,12 @@ fn calculate_cursor_position(
     let wrapped_text_iter = text.iter();
     let mut cursor_pos = current_cursor_position;
 
+    let mut x_pos = view_box.x + 1 + cursor_pos as u16;
+    let mut y_pos = view_box.y + 1;
     for (i, line) in wrapped_text_iter.enumerate() {
-        if cursor_pos <= line.len() || i == text.len() - 1 {
-            let x_pos = view_box.x + 1 + cursor_pos as u16;
-            let y_pos = view_box.y + 1 + i as u16;
+        x_pos = view_box.x + 1 + cursor_pos as u16;
+        y_pos = view_box.y + 1 + i as u16;
+        if cursor_pos <= line.len() {
             // if x_pos is > i subtract i
             let x_pos = if x_pos > i as u16 {
                 x_pos - i as u16
@@ -99,7 +101,7 @@ fn calculate_cursor_position(
         }
         cursor_pos -= line.len();
     }
-    (view_box.x + 1, view_box.y + 1)
+    (x_pos, y_pos)
 }
 
 /// function to lerp between rgb values of two colors

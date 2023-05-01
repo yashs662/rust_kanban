@@ -161,31 +161,28 @@ impl Actions {
     /// Given a key, find the corresponding action
     pub fn find(&self, key: Key) -> Option<&Action> {
         let get_config_status = get_config(false);
-        let config = if get_config_status.is_err() {
+        let config = if let Ok(config) = get_config_status {
+            config
+        } else {
             debug!("Error getting config: {}", get_config_status.unwrap_err());
             AppConfig::default()
-        } else {
-            get_config_status.unwrap()
         };
         let current_bindings = config.keybindings.clone();
         let action_list = &mut Vec::new();
         for (k, _v) in current_bindings.iter() {
-            action_list.push(KeyBindings::str_to_action(
-                current_bindings.clone(),
-                k.clone(),
-            ));
+            action_list.push(KeyBindings::str_to_action(current_bindings.clone(), k));
         }
-        let binding_action = KeyBindings::key_to_action(config.keybindings.clone(), key);
+        let binding_action = KeyBindings::key_to_action(config.keybindings, key);
         if binding_action.is_some() {
-            return binding_action;
+            binding_action
         } else {
             let temp_action = Action::iterator()
                 .filter(|action| self.0.contains(action))
                 .find(|action| action.keys().contains(&key));
             if temp_action.is_some() && !action_list.contains(&temp_action) {
-                return temp_action;
+                temp_action
             } else {
-                return None;
+                None
             }
         }
     }

@@ -1,11 +1,14 @@
+use std::{fmt, str::FromStr};
+
 use log::error;
 use serde::{Deserialize, Serialize};
 
 use super::actions::Action;
 use crate::inputs::key::Key;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default)]
 pub enum UiMode {
+    #[default]
     Zen,
     TitleBody,
     BodyHelp,
@@ -25,15 +28,16 @@ pub enum UiMode {
     CreateTheme,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub enum AppStatus {
+    #[default]
     Init,
     Initialized,
     UserInput,
     KeyBindMode,
 }
 
-#[derive(Clone, PartialEq, Debug, Copy)]
+#[derive(Clone, PartialEq, Debug, Copy, Default)]
 pub enum Focus {
     Title,
     Body,
@@ -68,6 +72,8 @@ pub enum Focus {
     CardStatus,
     CardTags,
     CardComments,
+    ChangeCardPriorityPopup,
+    #[default]
     NoFocus,
     ExtraFocus, // Used in cases where defining a new focus is not necessary
 }
@@ -99,32 +105,6 @@ pub struct KeyBindings {
 }
 
 impl UiMode {
-    pub fn default() -> UiMode {
-        UiMode::Zen
-    }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            UiMode::Zen => "Zen".to_string(),
-            UiMode::TitleBody => "Title and Body".to_string(),
-            UiMode::BodyHelp => "Body and Help".to_string(),
-            UiMode::BodyLog => "Body and Log".to_string(),
-            UiMode::TitleBodyHelp => "Title, Body and Help".to_string(),
-            UiMode::TitleBodyLog => "Title, Body and Log".to_string(),
-            UiMode::BodyHelpLog => "Body, Help and Log".to_string(),
-            UiMode::TitleBodyHelpLog => "Title, Body, Help and Log".to_string(),
-            UiMode::ConfigMenu => "Config".to_string(),
-            UiMode::EditKeybindings => "Edit Keybindings".to_string(),
-            UiMode::MainMenu => "Main Menu".to_string(),
-            UiMode::HelpMenu => "Help Menu".to_string(),
-            UiMode::LogsOnly => "Logs Only".to_string(),
-            UiMode::NewBoard => "New Board".to_string(),
-            UiMode::NewCard => "New Card".to_string(),
-            UiMode::LoadSave => "Load a Save".to_string(),
-            UiMode::CreateTheme => "Create Theme".to_string(),
-        }
-    }
-
     pub fn from_string(s: &str) -> Option<UiMode> {
         match s {
             "Zen" => Some(UiMode::Zen),
@@ -223,11 +203,31 @@ impl UiMode {
     }
 }
 
-impl AppStatus {
-    pub fn default() -> Self {
-        Self::Init
+impl fmt::Display for UiMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UiMode::Zen => write!(f, "Zen"),
+            UiMode::TitleBody => write!(f, "Title and Body"),
+            UiMode::BodyHelp => write!(f, "Body and Help"),
+            UiMode::BodyLog => write!(f, "Body and Log"),
+            UiMode::TitleBodyHelp => write!(f, "Title, Body and Help"),
+            UiMode::TitleBodyLog => write!(f, "Title, Body and Log"),
+            UiMode::BodyHelpLog => write!(f, "Body, Help and Log"),
+            UiMode::TitleBodyHelpLog => write!(f, "Title, Body, Help and Log"),
+            UiMode::ConfigMenu => write!(f, "Config"),
+            UiMode::EditKeybindings => write!(f, "Edit Keybindings"),
+            UiMode::MainMenu => write!(f, "Main Menu"),
+            UiMode::HelpMenu => write!(f, "Help Menu"),
+            UiMode::LogsOnly => write!(f, "Logs Only"),
+            UiMode::NewBoard => write!(f, "New Board"),
+            UiMode::NewCard => write!(f, "New Card"),
+            UiMode::LoadSave => write!(f, "Load a Save"),
+            UiMode::CreateTheme => write!(f, "Create Theme"),
+        }
     }
+}
 
+impl AppStatus {
     pub fn initialized() -> Self {
         Self::Initialized
     }
@@ -238,10 +238,6 @@ impl AppStatus {
 }
 
 impl Focus {
-    pub fn default() -> Self {
-        Self::NoFocus
-    }
-
     pub fn to_str(&self) -> &str {
         match self {
             Self::Title => "Title",
@@ -277,6 +273,7 @@ impl Focus {
             Self::CardStatus => "Card Status",
             Self::CardTags => "Card Tags",
             Self::CardComments => "Card Comments",
+            Self::ChangeCardPriorityPopup => "Change Card Priority Popup",
             Self::NoFocus => "No Focus",
             Self::ExtraFocus => "Extra Focus",
         }
@@ -307,77 +304,54 @@ impl Focus {
             available_tabs[0]
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Self {
+impl FromStr for Focus {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Title" => Self::Title,
-            "Body" => Self::Body,
-            "Help" => Self::Help,
-            "Log" => Self::Log,
-            "Config" => Self::ConfigTable,
-            "Config Help" => Self::ConfigHelp,
-            "Main Menu" => Self::MainMenu,
-            "Main Menu Help" => Self::MainMenuHelp,
-            "No Focus" => Self::NoFocus,
-            "New Board Name" => Self::NewBoardName,
-            "New Board Description" => Self::NewBoardDescription,
-            "New Card Name" => Self::NewCardName,
-            "Card Description" => Self::CardDescription,
-            "Card Due Date" => Self::CardDueDate,
-            "Edit Keybindings Table" => Self::EditKeybindingsTable,
-            "Close Button" => Self::CloseButton,
-            "Command Palette" => Self::CommandPalette,
-            "Load Save" => Self::LoadSave,
-            "Select Default View" => Self::SelectDefaultView,
-            "Change Ui Mode Popup" => Self::ChangeUiModePopup,
-            "Change Card Status Popup" => Self::ChangeCardStatusPopup,
-            "Edit General Config Popup" => Self::EditGeneralConfigPopup,
-            "Edit Specific Key Binding Popup" => Self::EditSpecificKeyBindingPopup,
-            "Theme Selector" => Self::ThemeSelector,
-            "Theme Editor" => Self::ThemeEditor,
-            "Theme Editor FG" => Self::StyleEditorFG,
-            "Theme Editor BG" => Self::StyleEditorBG,
-            "Theme Editor Modifier" => Self::StyleEditorModifier,
-            "Text Input" => Self::TextInput,
-            "Card Priority" => Self::CardPriority,
-            "Card Status" => Self::CardStatus,
-            "Card Tags" => Self::CardTags,
-            "Card Comments" => Self::CardComments,
-            "Submit Button" => Self::SubmitButton,
-            "Extra Focus" => Self::ExtraFocus,
-            _ => Self::NoFocus,
+            "Title" => Ok(Self::Title),
+            "Body" => Ok(Self::Body),
+            "Help" => Ok(Self::Help),
+            "Log" => Ok(Self::Log),
+            "Config" => Ok(Self::ConfigTable),
+            "Config Help" => Ok(Self::ConfigHelp),
+            "Main Menu" => Ok(Self::MainMenu),
+            "Main Menu Help" => Ok(Self::MainMenuHelp),
+            "No Focus" => Ok(Self::NoFocus),
+            "New Board Name" => Ok(Self::NewBoardName),
+            "New Board Description" => Ok(Self::NewBoardDescription),
+            "New Card Name" => Ok(Self::NewCardName),
+            "Card Description" => Ok(Self::CardDescription),
+            "Card Due Date" => Ok(Self::CardDueDate),
+            "Edit Keybindings Table" => Ok(Self::EditKeybindingsTable),
+            "Close Button" => Ok(Self::CloseButton),
+            "Command Palette" => Ok(Self::CommandPalette),
+            "Load Save" => Ok(Self::LoadSave),
+            "Select Default View" => Ok(Self::SelectDefaultView),
+            "Change Ui Mode Popup" => Ok(Self::ChangeUiModePopup),
+            "Change Card Status Popup" => Ok(Self::ChangeCardStatusPopup),
+            "Edit General Config Popup" => Ok(Self::EditGeneralConfigPopup),
+            "Edit Specific Key Binding Popup" => Ok(Self::EditSpecificKeyBindingPopup),
+            "Theme Selector" => Ok(Self::ThemeSelector),
+            "Theme Editor" => Ok(Self::ThemeEditor),
+            "Theme Editor FG" => Ok(Self::StyleEditorFG),
+            "Theme Editor BG" => Ok(Self::StyleEditorBG),
+            "Theme Editor Modifier" => Ok(Self::StyleEditorModifier),
+            "Text Input" => Ok(Self::TextInput),
+            "Card Priority" => Ok(Self::CardPriority),
+            "Card Status" => Ok(Self::CardStatus),
+            "Card Tags" => Ok(Self::CardTags),
+            "Card Comments" => Ok(Self::CardComments),
+            "Change Card Priority Popup" => Ok(Self::ChangeCardPriorityPopup),
+            "Submit Button" => Ok(Self::SubmitButton),
+            "Extra Focus" => Ok(Self::ExtraFocus),
+            _ => Ok(Self::NoFocus),
         }
     }
 }
 
 impl KeyBindings {
-    pub fn default() -> Self {
-        Self {
-            quit: vec![Key::Ctrl('c'), Key::Char('q')],
-            next_focus: vec![Key::Tab],
-            prev_focus: vec![Key::BackTab],
-            open_config_menu: vec![Key::Char('c')],
-            up: vec![Key::Up],
-            down: vec![Key::Down],
-            right: vec![Key::Right],
-            left: vec![Key::Left],
-            take_user_input: vec![Key::Char('i')],
-            hide_ui_element: vec![Key::Char('h')],
-            save_state: vec![Key::Ctrl('s')],
-            new_board: vec![Key::Char('b')],
-            new_card: vec![Key::Char('n')],
-            delete_card: vec![Key::Char('d')],
-            delete_board: vec![Key::Char('D')],
-            change_card_status_to_completed: vec![Key::Char('1')],
-            change_card_status_to_active: vec![Key::Char('2')],
-            change_card_status_to_stale: vec![Key::Char('3')],
-            reset_ui: vec![Key::Char('r')],
-            go_to_main_menu: vec![Key::Char('m')],
-            toggle_command_palette: vec![Key::Ctrl('p')],
-            clear_all_toasts: vec![Key::Char('t')],
-        }
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Vec<Key>)> {
         vec![
             ("quit", &self.quit),
@@ -477,6 +451,35 @@ impl KeyBindings {
             "toggle_command_palette" => Some(&Action::ToggleCommandPalette),
             "clear_all_toasts" => Some(&Action::ClearAllToasts),
             _ => None,
+        }
+    }
+}
+
+impl Default for KeyBindings {
+    fn default() -> Self {
+        Self {
+            quit: vec![Key::Ctrl('c'), Key::Char('q')],
+            next_focus: vec![Key::Tab],
+            prev_focus: vec![Key::BackTab],
+            open_config_menu: vec![Key::Char('c')],
+            up: vec![Key::Up],
+            down: vec![Key::Down],
+            right: vec![Key::Right],
+            left: vec![Key::Left],
+            take_user_input: vec![Key::Char('i')],
+            hide_ui_element: vec![Key::Char('h')],
+            save_state: vec![Key::Ctrl('s')],
+            new_board: vec![Key::Char('b')],
+            new_card: vec![Key::Char('n')],
+            delete_card: vec![Key::Char('d')],
+            delete_board: vec![Key::Char('D')],
+            change_card_status_to_completed: vec![Key::Char('1')],
+            change_card_status_to_active: vec![Key::Char('2')],
+            change_card_status_to_stale: vec![Key::Char('3')],
+            reset_ui: vec![Key::Char('r')],
+            go_to_main_menu: vec![Key::Char('m')],
+            toggle_command_palette: vec![Key::Ctrl('p')],
+            clear_all_toasts: vec![Key::Char('t')],
         }
     }
 }

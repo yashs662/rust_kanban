@@ -27,11 +27,12 @@ pub const DEFAULT_TICKRATE: u64 = 50;
 pub const DEFAULT_TOAST_DURATION: u64 = 5;
 pub const IO_EVENT_WAIT_TIME: u64 = 5; // ms
 pub const MOUSE_OUT_OF_BOUNDS_COORDINATES: (u16, u16) = (9999, 9999);
-pub const NEW_CARD_FORM_DEFAULT_STATE: [&'static str; 3] = ["", "", ""];
-pub const NEW_BOARD_FORM_DEFAULT_STATE: [&'static str; 2] = ["", ""];
+pub const NEW_CARD_FORM_DEFAULT_STATE: [&str; 3] = ["", "", ""];
+pub const NEW_BOARD_FORM_DEFAULT_STATE: [&str; 2] = ["", ""];
 pub const SAMPLE_TEXT: &str = "Sample Text";
 pub const THEME_DIR_NAME: &str = "themes";
 pub const THEME_FILE_NAME: &str = "kanban_theme";
+pub const DEFAULT_DATE_FORMAT: &str = "%d/%m/%Y-%H:%M:%S";
 
 // Style
 pub const GENERAL_STYLE: Style = Style {

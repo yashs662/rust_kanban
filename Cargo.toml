@@ -1,6 +1,6 @@
 [package]
 name = "rust-kanban"
-version = "0.5.3"
+version = "0.6.0"
 authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -22,12 +22,12 @@ chrono = "0.4.24"
 textwrap = "0.16"
 eyre = "0.6.8"
 home = "0.5.4"
-serde = { version = "1.0.159", features = ["derive"] }
-serde_json = "1.0.95"
-clap = { version = "4.2.1", features = ["derive"] }
+serde = { version = "1.0.160", features = ["derive"] }
+serde_json = "1.0.96"
+clap = { version = "4.2.2", features = ["derive"] }
 savefile-derive = "0.12.0"
 savefile = "0.12.0"
-uuid = { version = "1.3.0", features = ["v4"] }
+uuid = { version = "1.3.1", features = ["v4"] }
 regex = "1.7.3"
 linked-hash-map = "0.5.6"
 ngrammatic = "0.4.0"

@@ -76,8 +76,8 @@ where
             PopupMode::ViewCard => {
                 ui_helper::render_view_card(rect, app);
             }
-            PopupMode::ChangeCurrentCardStatus => {
-                ui_helper::render_change_current_card_status_popup(rect, app);
+            PopupMode::CardStatusSelector => {
+                ui_helper::render_change_card_status_popup(rect, app);
             }
             PopupMode::ChangeUIMode => {
                 ui_helper::render_change_ui_mode_popup(rect, app);
@@ -106,6 +106,12 @@ where
             PopupMode::CustomRGBPromptFG | PopupMode::CustomRGBPromptBG => {
                 ui_helper::render_custom_rgb_color_prompt(rect, app);
             }
+            PopupMode::ConfirmDiscardCardChanges => {
+                ui_helper::render_confirm_discard_card_changes(rect, app);
+            }
+            PopupMode::CardPrioritySelector => {
+                ui_helper::render_card_priority_selector(rect, app);
+            }
         }
     }
 
@@ -113,10 +119,5 @@ where
     ui_helper::render_toast(rect, app);
     if app.state.debug_menu_toggled {
         ui_helper::render_debug_panel(rect, app);
-        if app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-        {
-            ui_helper::render_command_palette(rect, app);
-        }
     }
 }

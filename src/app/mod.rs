@@ -15,7 +15,7 @@ use self::{
         handle_general_actions, handle_keybind_mode, handle_mouse_action, handle_user_input_mode,
         prepare_config_for_new_app,
     },
-    kanban::Board,
+    kanban::{Board, Card, CardPriority},
     state::{AppStatus, Focus, KeyBindings, UiMode},
 };
 use crate::{
@@ -61,6 +61,7 @@ pub struct App {
     pub boards: Vec<Board>,
     pub config: AppConfig,
     pub config_item_being_edited: Option<usize>,
+    pub card_being_edited: Option<(u128, Card)>, // (board_id, card)
     pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
     pub command_palette: CommandPaletteWidget,
     pub last_io_event_time: Option<Instant>,
@@ -90,9 +91,10 @@ impl App {
             actions,
             is_loading,
             state,
-            boards: boards,
-            config: config,
+            boards,
+            config,
             config_item_being_edited: None,
+            card_being_edited: None,
             visible_boards_and_cards: LinkedHashMap::new(),
             command_palette: CommandPaletteWidget::new(),
             last_io_event_time: None,
@@ -135,7 +137,7 @@ impl App {
     }
 
     pub async fn handle_mouse(&mut self, mouse_action: Mouse) -> AppReturn {
-        return handle_mouse_action(self, mouse_action).await;
+        handle_mouse_action(self, mouse_action).await
     }
 
     pub fn actions(&self) -> &Actions {
@@ -178,7 +180,7 @@ impl App {
     pub fn config_next(&mut self) {
         let i = match self.state.config_state.selected() {
             Some(i) => {
-                if i >= self.config.len() - 1 {
+                if i >= self.config.to_list().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -192,7 +194,7 @@ impl App {
         let i = match self.state.config_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.config.len() - 1
+                    self.config.to_list().len() - 1
                 } else {
                     i - 1
                 }
@@ -230,15 +232,13 @@ impl App {
     pub fn load_save_next(&mut self) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                let local_save_files_len = get_available_local_savefiles();
-                let local_save_files_len = if local_save_files_len.is_none() {
-                    0
+                let local_save_files = get_available_local_savefiles();
+                let local_save_files_len = if let Some(local_save_files_len) = local_save_files {
+                    local_save_files_len.len()
                 } else {
-                    local_save_files_len.unwrap().len()
-                };
-                if local_save_files_len == 0 {
                     0
-                } else if i >= local_save_files_len - 1 {
+                };
+                if local_save_files_len == 0 || i >= local_save_files_len - 1 {
                     0
                 } else {
                     i + 1
@@ -251,11 +251,11 @@ impl App {
     pub fn load_save_previous(&mut self) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                let local_save_files_len = get_available_local_savefiles();
-                let local_save_files_len = if local_save_files_len.is_none() {
-                    0
+                let local_save_files = get_available_local_savefiles();
+                let local_save_files_len = if let Some(local_save_files_len) = local_save_files {
+                    local_save_files_len.len()
                 } else {
-                    local_save_files_len.unwrap().len()
+                    0
                 };
                 if local_save_files_len == 0 {
                     0
@@ -273,7 +273,7 @@ impl App {
         &self.state.config_state
     }
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
-        self.state.prev_ui_mode = Some(self.state.ui_mode.clone());
+        self.state.prev_ui_mode = Some(self.state.ui_mode);
         self.state.ui_mode = ui_mode;
         let available_focus_targets = self.state.ui_mode.get_available_targets();
         if !available_focus_targets.contains(&self.state.focus) {
@@ -377,7 +377,7 @@ impl App {
     pub fn command_palette_up(&mut self) {
         let i = match self.state.command_palette_list_state.selected() {
             Some(i) => {
-                if !self.command_palette.search_results.is_none() {
+                if self.command_palette.search_results.is_some() {
                     if i == 0 {
                         self.command_palette.search_results.clone().unwrap().len() - 1
                     } else {
@@ -394,7 +394,7 @@ impl App {
     pub fn command_palette_down(&mut self) {
         let i = match self.state.command_palette_list_state.selected() {
             Some(i) => {
-                if !self.command_palette.search_results.is_none() {
+                if self.command_palette.search_results.is_some() {
                     if i >= self.command_palette.search_results.clone().unwrap().len() - 1 {
                         0
                     } else {
@@ -419,11 +419,11 @@ impl App {
             let mut keybind_string = String::new();
             for key in keys {
                 keybind_string.push_str(&key.to_string());
-                keybind_string.push_str(" ");
+                keybind_string.push(' ');
             }
             keybind_action.push(keybind_string);
             let action_translated_string = KeyBindings::str_to_action(keybinds.clone(), action)
-                .unwrap_or_else(|| &Action::Quit)
+                .unwrap_or(&Action::Quit)
                 .to_string();
             keybind_action.push(action_translated_string);
             keybind_action_list.push(keybind_action);
@@ -516,7 +516,7 @@ impl App {
             ));
         }
     }
-    pub fn select_current_card_status_prev(&mut self) {
+    pub fn select_card_status_prev(&mut self) {
         let i = match self.state.card_status_selector_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -529,7 +529,7 @@ impl App {
         };
         self.state.card_status_selector_state.select(Some(i));
     }
-    pub fn select_current_card_status_next(&mut self) {
+    pub fn select_card_status_next(&mut self) {
         let i = match self.state.card_status_selector_state.selected() {
             Some(i) => {
                 if i >= CardStatus::all().len() - 1 {
@@ -683,6 +683,32 @@ impl App {
         };
         self.state.edit_specific_style_state.2.select(Some(i));
     }
+    pub fn select_card_priority_next(&mut self) {
+        let i = match self.state.card_priority_selector_state.selected() {
+            Some(i) => {
+                if i >= CardPriority::all().len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.card_priority_selector_state.select(Some(i));
+    }
+    pub fn select_card_priority_prev(&mut self) {
+        let i = match self.state.card_priority_selector_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    CardPriority::all().len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.card_priority_selector_state.select(Some(i));
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -739,7 +765,7 @@ pub enum PopupMode {
     CommandPalette,
     EditSpecificKeyBinding,
     ChangeUIMode,
-    ChangeCurrentCardStatus,
+    CardStatusSelector,
     EditGeneralConfig,
     SelectDefaultView,
     ChangeTheme,
@@ -747,6 +773,8 @@ pub enum PopupMode {
     SaveThemePrompt,
     CustomRGBPromptFG,
     CustomRGBPromptBG,
+    ConfirmDiscardCardChanges,
+    CardPrioritySelector,
 }
 
 impl Display for PopupMode {
@@ -756,7 +784,7 @@ impl Display for PopupMode {
             PopupMode::CommandPalette => write!(f, "Command Palette"),
             PopupMode::EditSpecificKeyBinding => write!(f, "Edit Specific Key Binding"),
             PopupMode::ChangeUIMode => write!(f, "Change UI Mode"),
-            PopupMode::ChangeCurrentCardStatus => write!(f, "Change Current Card Status"),
+            PopupMode::CardStatusSelector => write!(f, "Change Card Status"),
             PopupMode::EditGeneralConfig => write!(f, "Edit General Config"),
             PopupMode::SelectDefaultView => write!(f, "Select Default View"),
             PopupMode::ChangeTheme => write!(f, "Change Theme"),
@@ -764,6 +792,8 @@ impl Display for PopupMode {
             PopupMode::SaveThemePrompt => write!(f, "Save Theme Prompt"),
             PopupMode::CustomRGBPromptFG => write!(f, "Custom RGB Prompt"),
             PopupMode::CustomRGBPromptBG => write!(f, "Custom RGB Prompt"),
+            PopupMode::ConfirmDiscardCardChanges => write!(f, "Confirm Discard Card Changes"),
+            PopupMode::CardPrioritySelector => write!(f, "Change Card Priority"),
         }
     }
 }
@@ -778,11 +808,12 @@ impl PopupMode {
                 Focus::CardStatus,
                 Focus::CardTags,
                 Focus::CardComments,
+                Focus::SubmitButton,
             ],
             PopupMode::CommandPalette => vec![],
             PopupMode::EditSpecificKeyBinding => vec![],
             PopupMode::ChangeUIMode => vec![],
-            PopupMode::ChangeCurrentCardStatus => vec![],
+            PopupMode::CardStatusSelector => vec![],
             PopupMode::EditGeneralConfig => vec![],
             PopupMode::SelectDefaultView => vec![],
             PopupMode::ChangeTheme => vec![],
@@ -795,6 +826,8 @@ impl PopupMode {
             PopupMode::SaveThemePrompt => vec![Focus::SubmitButton, Focus::ExtraFocus],
             PopupMode::CustomRGBPromptFG => vec![Focus::TextInput, Focus::SubmitButton],
             PopupMode::CustomRGBPromptBG => vec![Focus::TextInput, Focus::SubmitButton],
+            PopupMode::ConfirmDiscardCardChanges => vec![Focus::SubmitButton, Focus::ExtraFocus],
+            PopupMode::CardPrioritySelector => vec![],
         }
     }
 }
@@ -842,6 +875,9 @@ pub struct AppState {
     pub edit_specific_style_state: (ListState, ListState, ListState),
     pub default_theme_mode: bool,
     pub card_view_list_state: ListState,
+    pub card_view_tag_list_state: ListState,
+    pub card_view_comment_list_state: ListState,
+    pub card_priority_selector_state: ListState,
 }
 
 impl Default for AppState {
@@ -892,6 +928,9 @@ impl Default for AppState {
             ),
             default_theme_mode: false,
             card_view_list_state: ListState::default(),
+            card_view_tag_list_state: ListState::default(),
+            card_view_comment_list_state: ListState::default(),
+            card_priority_selector_state: ListState::default(),
         }
     }
 }
@@ -912,8 +951,8 @@ pub struct AppConfig {
     pub default_theme: String,
 }
 
-impl AppConfig {
-    pub fn default() -> Self {
+impl Default for AppConfig {
+    fn default() -> Self {
         let default_view = UiMode::TitleBodyHelpLog;
         let default_theme = Theme::default();
         Self {
@@ -931,7 +970,9 @@ impl AppConfig {
             default_theme: default_theme.name,
         }
     }
+}
 
+impl AppConfig {
     pub fn to_list(&self) -> Vec<Vec<String>> {
         vec![
             vec![
@@ -981,9 +1022,9 @@ impl AppConfig {
 
     pub fn edit_with_string(change_str: &str, app: &mut App) -> Self {
         let mut config = app.config.clone();
-        let mut lines = change_str.lines();
-        while let Some(line) = lines.next() {
-            let mut parts = line.split(":");
+        let lines = change_str.lines();
+        for line in lines {
+            let mut parts = line.split(':');
             let key = parts.next().unwrap_or("").trim();
             let value = parts.next().unwrap_or("").trim();
             match key {
@@ -1000,8 +1041,8 @@ impl AppConfig {
                 }
                 "Select Default View" => {
                     let new_ui_mode = UiMode::from_string(value);
-                    if new_ui_mode.is_some() {
-                        config.default_view = new_ui_mode.unwrap();
+                    if let Some(new_ui_mode) = new_ui_mode {
+                        config.default_view = new_ui_mode;
                     } else {
                         error!("Invalid UiMode: {}", value);
                         app.send_error_toast(&format!("Invalid UiMode: {}", value), None);
@@ -1050,8 +1091,8 @@ impl AppConfig {
                 }
                 "Number of Days to Warn Before Due Date" => {
                     let new_delta = value.parse::<u16>();
-                    if new_delta.is_ok() {
-                        config.warning_delta = new_delta.unwrap();
+                    if let Ok(new_delta) = new_delta {
+                        config.warning_delta = new_delta;
                     } else {
                         error!("Invalid number: {}", value);
                         app.send_error_toast(
@@ -1062,8 +1103,7 @@ impl AppConfig {
                 }
                 "Tickrate" => {
                     let new_tickrate = value.parse::<u64>();
-                    if new_tickrate.is_ok() {
-                        let new_tickrate = new_tickrate.unwrap();
+                    if let Ok(new_tickrate) = new_tickrate {
                         // make sure tickrate is not too low or too high
                         if new_tickrate < 10 {
                             error!(
@@ -1096,9 +1136,8 @@ impl AppConfig {
                 }
                 "Number of Cards to Show per board" => {
                     let new_no_cards = value.parse::<u16>();
-                    if new_no_cards.is_ok() {
-                        let unwrapped = new_no_cards.unwrap();
-                        if unwrapped < MIN_NO_CARDS_PER_BOARD {
+                    if let Ok(new_no_cards) = new_no_cards {
+                        if new_no_cards < MIN_NO_CARDS_PER_BOARD {
                             error!(
                                 "Number of cards must be greater than {}",
                                 MIN_NO_CARDS_PER_BOARD
@@ -1110,7 +1149,7 @@ impl AppConfig {
                                 ),
                                 None,
                             );
-                        } else if unwrapped > MAX_NO_CARDS_PER_BOARD {
+                        } else if new_no_cards > MAX_NO_CARDS_PER_BOARD {
                             error!(
                                 "Number of cards must be less than {}",
                                 MAX_NO_CARDS_PER_BOARD
@@ -1123,11 +1162,11 @@ impl AppConfig {
                                 None,
                             );
                         } else {
-                            config.no_of_cards_to_show = unwrapped;
+                            config.no_of_cards_to_show = new_no_cards;
                             app.send_info_toast(
                                 &format!(
                                     "Number of cards per board to display set to {}",
-                                    unwrapped
+                                    new_no_cards
                                 ),
                                 None,
                             );
@@ -1142,9 +1181,8 @@ impl AppConfig {
                 }
                 "Number of Boards to Show" => {
                     let new_no_boards = value.parse::<u16>();
-                    if new_no_boards.is_ok() {
-                        let unwrapped = new_no_boards.unwrap();
-                        if unwrapped < MIN_NO_BOARDS_PER_PAGE {
+                    if let Ok(new_no_boards) = new_no_boards {
+                        if new_no_boards < MIN_NO_BOARDS_PER_PAGE {
                             error!(
                                 "Number of boards must be greater than {}",
                                 MIN_NO_BOARDS_PER_PAGE
@@ -1156,7 +1194,7 @@ impl AppConfig {
                                 ),
                                 None,
                             );
-                        } else if unwrapped > MAX_NO_BOARDS_PER_PAGE {
+                        } else if new_no_boards > MAX_NO_BOARDS_PER_PAGE {
                             error!(
                                 "Number of boards must be less than {}",
                                 MAX_NO_BOARDS_PER_PAGE
@@ -1169,9 +1207,9 @@ impl AppConfig {
                                 None,
                             );
                         } else {
-                            config.no_of_boards_to_show = unwrapped;
+                            config.no_of_boards_to_show = new_no_boards;
                             app.send_info_toast(
-                                &format!("Number of boards to display set to {}", unwrapped),
+                                &format!("Number of boards to display set to {}", new_no_boards),
                                 None,
                             );
                         }
@@ -1201,11 +1239,11 @@ impl AppConfig {
         // make sure key is not empty, or already assigned
 
         let get_config_status = get_config(false);
-        let config = if get_config_status.is_err() {
+        let config = if let Ok(config) = get_config_status {
+            config
+        } else {
             debug!("Error getting config: {}", get_config_status.unwrap_err());
             AppConfig::default()
-        } else {
-            get_config_status.unwrap()
         };
         let current_bindings = config.keybindings;
 
@@ -1272,10 +1310,6 @@ impl AppConfig {
             }
         }
         Ok(())
-    }
-
-    pub fn len(&self) -> usize {
-        self.to_list().len()
     }
 }
 

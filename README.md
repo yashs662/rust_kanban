@@ -9,14 +9,15 @@
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
+- [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
 - [ ] Allow for more mouse Interactions (Dragging cards maybe?)
-- [ ] Allow Card to be modified in Card View
 - [ ] Implement Cloud saves (Google drive maybe? as I am not going to host a server)
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Allow Card to be modified in Card View
 - [x] Implement a way to add custom colors (Theme support)
 - [x] Implement a way to interact with the kanban board using the mouse (Clicking, Scrolling are supported as of now)
 - [x] Added ability to export kanban data to JSON
@@ -35,7 +36,7 @@
 - [x] Logging
   
 ## Known Issues
-None as of now, please let me know if you find any bugs
+- [ ] Cursor positioning in Card view is sometimes off by one or two spaces and is consistantly on the previous line for comments and tags and the 2nd line or below
 
 ## How to use
 ### Default Keybindings
@@ -51,6 +52,7 @@ None as of now, please let me know if you find any bugs
 | 'Right'                     | Move Right                                 |
 | 'Left'                      | Move Left                                  |
 | 'i'                         | Take User Input (when filling out a form)  |
+| 'Insert'                    | Exit user input mode                       |
 | 'h'                         | Hide UI Element                            |
 | 'Ctrl + s'                  | Save State                                 |
 | 'b'                         | New Board                                  |

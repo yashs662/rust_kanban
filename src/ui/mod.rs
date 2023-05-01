@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 use log::debug;
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -49,9 +51,8 @@ pub struct Theme {
     pub card_priority_high_style: Style,
 }
 
-// implement the themetype enum to return the theme struct
-impl Theme {
-    pub fn default() -> Theme {
+impl Default for Theme {
+    fn default() -> Theme {
         Theme {
             name: "Default Theme".to_string(),
             general_style: GENERAL_STYLE,
@@ -79,6 +80,9 @@ impl Theme {
             card_priority_high_style: CARD_PRIORITY_HIGH_STYLE,
         }
     }
+}
+
+impl Theme {
     fn midnight_blue() -> Theme {
         Theme {
             name: "Midnight Blue".to_string(),
@@ -509,452 +513,427 @@ impl Theme {
         match style_being_edited {
             "name" => debug!("Cannot edit name"),
             "general_style" => {
-                if fg_color.is_some() {
-                    theme.general_style = theme.general_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.general_style = theme.general_style.fg(fg_color);
                 } else {
                     theme.general_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.general_style = theme.general_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.general_style = theme.general_style.bg(bg_color);
                 } else {
                     theme.general_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.general_style = theme.general_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.general_style = theme.general_style.add_modifier(modifier);
                 } else {
                     theme.general_style.sub_modifier = Modifier::empty();
                     theme.general_style.add_modifier = Modifier::empty();
                 }
             }
             "list_select_style" => {
-                if fg_color.is_some() {
-                    theme.list_select_style = theme.list_select_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.list_select_style = theme.list_select_style.fg(fg_color);
                 } else {
                     theme.list_select_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.list_select_style = theme.list_select_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.list_select_style = theme.list_select_style.bg(bg_color);
                 } else {
                     theme.list_select_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.list_select_style =
-                        theme.list_select_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.list_select_style = theme.list_select_style.add_modifier(modifier);
                 } else {
                     theme.list_select_style.sub_modifier = Modifier::empty();
                     theme.list_select_style.add_modifier = Modifier::empty();
                 }
             }
             "card_due_default_style" => {
-                if fg_color.is_some() {
-                    theme.card_due_default_style =
-                        theme.card_due_default_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.card_due_default_style = theme.card_due_default_style.fg(fg_color);
                 } else {
                     theme.card_due_default_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.card_due_default_style =
-                        theme.card_due_default_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.card_due_default_style = theme.card_due_default_style.bg(bg_color);
                 } else {
                     theme.card_due_default_style.bg = None;
                 }
-                if modifier.is_some() {
+                if let Some(modifier) = modifier {
                     theme.card_due_default_style =
-                        theme.card_due_default_style.add_modifier(modifier.unwrap());
+                        theme.card_due_default_style.add_modifier(modifier);
                 } else {
                     theme.card_due_default_style.sub_modifier = Modifier::empty();
                     theme.card_due_default_style.add_modifier = Modifier::empty();
                 }
             }
             "card_due_warning_style" => {
-                if fg_color.is_some() {
-                    theme.card_due_warning_style =
-                        theme.card_due_warning_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.card_due_warning_style = theme.card_due_warning_style.fg(fg_color);
                 } else {
                     theme.card_due_warning_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.card_due_warning_style =
-                        theme.card_due_warning_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.card_due_warning_style = theme.card_due_warning_style.bg(bg_color);
                 } else {
                     theme.card_due_warning_style.bg = None;
                 }
-                if modifier.is_some() {
+                if let Some(modifier) = modifier {
                     theme.card_due_warning_style =
-                        theme.card_due_warning_style.add_modifier(modifier.unwrap());
+                        theme.card_due_warning_style.add_modifier(modifier);
                 } else {
                     theme.card_due_warning_style.sub_modifier = Modifier::empty();
                     theme.card_due_warning_style.add_modifier = Modifier::empty();
                 }
             }
             "card_due_overdue_style" => {
-                if fg_color.is_some() {
-                    theme.card_due_overdue_style =
-                        theme.card_due_overdue_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.card_due_overdue_style = theme.card_due_overdue_style.fg(fg_color);
                 } else {
                     theme.card_due_overdue_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.card_due_overdue_style =
-                        theme.card_due_overdue_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.card_due_overdue_style = theme.card_due_overdue_style.bg(bg_color);
                 } else {
                     theme.card_due_overdue_style.bg = None;
                 }
-                if modifier.is_some() {
+                if let Some(modifier) = modifier {
                     theme.card_due_overdue_style =
-                        theme.card_due_overdue_style.add_modifier(modifier.unwrap());
+                        theme.card_due_overdue_style.add_modifier(modifier);
                 } else {
                     theme.card_due_overdue_style.sub_modifier = Modifier::empty();
                     theme.card_due_overdue_style.add_modifier = Modifier::empty();
                 }
             }
             "card_status_active_style" => {
-                if fg_color.is_some() {
-                    theme.card_status_active_style =
-                        theme.card_status_active_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.card_status_active_style = theme.card_status_active_style.fg(fg_color);
                 } else {
                     theme.card_status_active_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.card_status_active_style =
-                        theme.card_status_active_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.card_status_active_style = theme.card_status_active_style.bg(bg_color);
                 } else {
                     theme.card_status_active_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.card_status_active_style = theme
-                        .card_status_active_style
-                        .add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.card_status_active_style =
+                        theme.card_status_active_style.add_modifier(modifier);
                 } else {
                     theme.card_status_active_style.sub_modifier = Modifier::empty();
                     theme.card_status_active_style.add_modifier = Modifier::empty();
                 }
             }
             "card_status_completed_style" => {
-                if fg_color.is_some() {
+                if let Some(fg_color) = fg_color {
                     theme.card_status_completed_style =
-                        theme.card_status_completed_style.fg(fg_color.unwrap());
+                        theme.card_status_completed_style.fg(fg_color);
                 } else {
                     theme.card_status_completed_style.fg = None;
                 }
-                if bg_color.is_some() {
+                if let Some(bg_color) = bg_color {
                     theme.card_status_completed_style =
-                        theme.card_status_completed_style.bg(bg_color.unwrap());
+                        theme.card_status_completed_style.bg(bg_color);
                 } else {
                     theme.card_status_completed_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.card_status_completed_style = theme
-                        .card_status_completed_style
-                        .add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.card_status_completed_style =
+                        theme.card_status_completed_style.add_modifier(modifier);
                 } else {
                     theme.card_status_completed_style.sub_modifier = Modifier::empty();
                     theme.card_status_completed_style.add_modifier = Modifier::empty();
                 }
             }
             "card_status_stale_style" => {
-                if fg_color.is_some() {
-                    theme.card_status_stale_style =
-                        theme.card_status_stale_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.card_status_stale_style = theme.card_status_stale_style.fg(fg_color);
                 } else {
                     theme.card_status_stale_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.card_status_stale_style =
-                        theme.card_status_stale_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.card_status_stale_style = theme.card_status_stale_style.bg(bg_color);
                 } else {
                     theme.card_status_stale_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.card_status_stale_style = theme
-                        .card_status_stale_style
-                        .add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.card_status_stale_style =
+                        theme.card_status_stale_style.add_modifier(modifier);
                 } else {
                     theme.card_status_stale_style.sub_modifier = Modifier::empty();
                     theme.card_status_stale_style.add_modifier = Modifier::empty();
                 }
             }
             "keyboard_focus_style" => {
-                if fg_color.is_some() {
-                    theme.keyboard_focus_style = theme.keyboard_focus_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.keyboard_focus_style = theme.keyboard_focus_style.fg(fg_color);
                 } else {
                     theme.keyboard_focus_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.keyboard_focus_style = theme.keyboard_focus_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.keyboard_focus_style = theme.keyboard_focus_style.bg(bg_color);
                 } else {
                     theme.keyboard_focus_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.keyboard_focus_style =
-                        theme.keyboard_focus_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.keyboard_focus_style = theme.keyboard_focus_style.add_modifier(modifier);
                 } else {
                     theme.keyboard_focus_style.sub_modifier = Modifier::empty();
                     theme.keyboard_focus_style.add_modifier = Modifier::empty();
                 }
             }
             "mouse_focus_style" => {
-                if fg_color.is_some() {
-                    theme.mouse_focus_style = theme.mouse_focus_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.mouse_focus_style = theme.mouse_focus_style.fg(fg_color);
                 } else {
                     theme.mouse_focus_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.mouse_focus_style = theme.mouse_focus_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.mouse_focus_style = theme.mouse_focus_style.bg(bg_color);
                 } else {
                     theme.mouse_focus_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.mouse_focus_style =
-                        theme.mouse_focus_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.mouse_focus_style = theme.mouse_focus_style.add_modifier(modifier);
                 } else {
                     theme.mouse_focus_style.sub_modifier = Modifier::empty();
                     theme.mouse_focus_style.add_modifier = Modifier::empty();
                 }
             }
             "help_key_style" => {
-                if fg_color.is_some() {
-                    theme.help_key_style = theme.help_key_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.help_key_style = theme.help_key_style.fg(fg_color);
                 } else {
                     theme.help_key_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.help_key_style = theme.help_key_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.help_key_style = theme.help_key_style.bg(bg_color);
                 } else {
                     theme.help_key_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.help_key_style = theme.help_key_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.help_key_style = theme.help_key_style.add_modifier(modifier);
                 } else {
                     theme.help_key_style.sub_modifier = Modifier::empty();
                     theme.help_key_style.add_modifier = Modifier::empty();
                 }
             }
             "help_text_style" => {
-                if fg_color.is_some() {
-                    theme.help_text_style = theme.help_text_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.help_text_style = theme.help_text_style.fg(fg_color);
                 } else {
                     theme.help_text_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.help_text_style = theme.help_text_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.help_text_style = theme.help_text_style.bg(bg_color);
                 } else {
                     theme.help_text_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.help_text_style = theme.help_text_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.help_text_style = theme.help_text_style.add_modifier(modifier);
                 } else {
                     theme.help_text_style.sub_modifier = Modifier::empty();
                     theme.help_text_style.add_modifier = Modifier::empty();
                 }
             }
             "log_error_style" => {
-                if fg_color.is_some() {
-                    theme.log_error_style = theme.log_error_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.log_error_style = theme.log_error_style.fg(fg_color);
                 } else {
                     theme.log_error_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.log_error_style = theme.log_error_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.log_error_style = theme.log_error_style.bg(bg_color);
                 } else {
                     theme.log_error_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.log_error_style = theme.log_error_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.log_error_style = theme.log_error_style.add_modifier(modifier);
                 } else {
                     theme.log_error_style.sub_modifier = Modifier::empty();
                     theme.log_error_style.add_modifier = Modifier::empty();
                 }
             }
             "log_debug_style" => {
-                if fg_color.is_some() {
-                    theme.log_debug_style = theme.log_debug_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.log_debug_style = theme.log_debug_style.fg(fg_color);
                 } else {
                     theme.log_debug_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.log_debug_style = theme.log_debug_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.log_debug_style = theme.log_debug_style.bg(bg_color);
                 } else {
                     theme.log_debug_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.log_debug_style = theme.log_debug_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.log_debug_style = theme.log_debug_style.add_modifier(modifier);
                 } else {
                     theme.log_debug_style.sub_modifier = Modifier::empty();
                     theme.log_debug_style.add_modifier = Modifier::empty();
                 }
             }
             "log_warn_style" => {
-                if fg_color.is_some() {
-                    theme.log_warn_style = theme.log_warn_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.log_warn_style = theme.log_warn_style.fg(fg_color);
                 } else {
                     theme.log_warn_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.log_warn_style = theme.log_warn_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.log_warn_style = theme.log_warn_style.bg(bg_color);
                 } else {
                     theme.log_warn_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.log_warn_style = theme.log_warn_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.log_warn_style = theme.log_warn_style.add_modifier(modifier);
                 } else {
                     theme.log_warn_style.sub_modifier = Modifier::empty();
                     theme.log_warn_style.add_modifier = Modifier::empty();
                 }
             }
             "log_trace_style" => {
-                if fg_color.is_some() {
-                    theme.log_trace_style = theme.log_trace_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.log_trace_style = theme.log_trace_style.fg(fg_color);
                 } else {
                     theme.log_trace_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.log_trace_style = theme.log_trace_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.log_trace_style = theme.log_trace_style.bg(bg_color);
                 } else {
                     theme.log_trace_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.log_trace_style = theme.log_trace_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.log_trace_style = theme.log_trace_style.add_modifier(modifier);
                 } else {
                     theme.log_trace_style.sub_modifier = Modifier::empty();
                     theme.log_trace_style.add_modifier = Modifier::empty();
                 }
             }
             "log_info_style" => {
-                if fg_color.is_some() {
-                    theme.log_info_style = theme.log_info_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.log_info_style = theme.log_info_style.fg(fg_color);
                 } else {
                     theme.log_info_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.log_info_style = theme.log_info_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.log_info_style = theme.log_info_style.bg(bg_color);
                 } else {
                     theme.log_info_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.log_info_style = theme.log_info_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.log_info_style = theme.log_info_style.add_modifier(modifier);
                 } else {
                     theme.log_info_style.sub_modifier = Modifier::empty();
                     theme.log_info_style.add_modifier = Modifier::empty();
                 }
             }
             "progress_bar_style" => {
-                if fg_color.is_some() {
-                    theme.progress_bar_style = theme.progress_bar_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.progress_bar_style = theme.progress_bar_style.fg(fg_color);
                 } else {
                     theme.progress_bar_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.progress_bar_style = theme.progress_bar_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.progress_bar_style = theme.progress_bar_style.bg(bg_color);
                 } else {
                     theme.progress_bar_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.progress_bar_style =
-                        theme.progress_bar_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.progress_bar_style = theme.progress_bar_style.add_modifier(modifier);
                 } else {
                     theme.progress_bar_style.sub_modifier = Modifier::empty();
                     theme.progress_bar_style.add_modifier = Modifier::empty();
                 }
             }
             "error_text_style" => {
-                if fg_color.is_some() {
-                    theme.error_text_style = theme.error_text_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.error_text_style = theme.error_text_style.fg(fg_color);
                 } else {
                     theme.error_text_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.error_text_style = theme.error_text_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.error_text_style = theme.error_text_style.bg(bg_color);
                 } else {
                     theme.error_text_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.error_text_style = theme.error_text_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.error_text_style = theme.error_text_style.add_modifier(modifier);
                 } else {
                     theme.error_text_style.sub_modifier = Modifier::empty();
                     theme.error_text_style.add_modifier = Modifier::empty();
                 }
             }
             "inactive_text_style" => {
-                if fg_color.is_some() {
-                    theme.inactive_text_style = theme.inactive_text_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.inactive_text_style = theme.inactive_text_style.fg(fg_color);
                 } else {
                     theme.inactive_text_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.inactive_text_style = theme.inactive_text_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.inactive_text_style = theme.inactive_text_style.bg(bg_color);
                 } else {
                     theme.inactive_text_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.inactive_text_style =
-                        theme.inactive_text_style.add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.inactive_text_style = theme.inactive_text_style.add_modifier(modifier);
                 } else {
                     theme.inactive_text_style.sub_modifier = Modifier::empty();
                     theme.inactive_text_style.add_modifier = Modifier::empty();
                 }
             }
             "card_priority_low_style" => {
-                if fg_color.is_some() {
-                    theme.card_priority_low_style =
-                        theme.card_priority_low_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.card_priority_low_style = theme.card_priority_low_style.fg(fg_color);
                 } else {
                     theme.card_priority_low_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.card_priority_low_style =
-                        theme.card_priority_low_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.card_priority_low_style = theme.card_priority_low_style.bg(bg_color);
                 } else {
                     theme.card_priority_low_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.card_priority_low_style = theme
-                        .card_priority_low_style
-                        .add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.card_priority_low_style =
+                        theme.card_priority_low_style.add_modifier(modifier);
                 } else {
                     theme.card_priority_low_style.sub_modifier = Modifier::empty();
                     theme.card_priority_low_style.add_modifier = Modifier::empty();
                 }
             }
             "card_priority_medium_style" => {
-                if fg_color.is_some() {
+                if let Some(fg_color) = fg_color {
                     theme.card_priority_medium_style =
-                        theme.card_priority_medium_style.fg(fg_color.unwrap());
+                        theme.card_priority_medium_style.fg(fg_color);
                 } else {
                     theme.card_priority_medium_style.fg = None;
                 }
-                if bg_color.is_some() {
+                if let Some(bg_color) = bg_color {
                     theme.card_priority_medium_style =
-                        theme.card_priority_medium_style.bg(bg_color.unwrap());
+                        theme.card_priority_medium_style.bg(bg_color);
                 } else {
                     theme.card_priority_medium_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.card_priority_medium_style = theme
-                        .card_priority_medium_style
-                        .add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.card_priority_medium_style =
+                        theme.card_priority_medium_style.add_modifier(modifier);
                 } else {
                     theme.card_priority_medium_style.sub_modifier = Modifier::empty();
                     theme.card_priority_medium_style.add_modifier = Modifier::empty();
                 }
             }
             "card_priority_high_style" => {
-                if fg_color.is_some() {
-                    theme.card_priority_high_style =
-                        theme.card_priority_high_style.fg(fg_color.unwrap());
+                if let Some(fg_color) = fg_color {
+                    theme.card_priority_high_style = theme.card_priority_high_style.fg(fg_color);
                 } else {
                     theme.card_priority_high_style.fg = None;
                 }
-                if bg_color.is_some() {
-                    theme.card_priority_high_style =
-                        theme.card_priority_high_style.bg(bg_color.unwrap());
+                if let Some(bg_color) = bg_color {
+                    theme.card_priority_high_style = theme.card_priority_high_style.bg(bg_color);
                 } else {
                     theme.card_priority_high_style.bg = None;
                 }
-                if modifier.is_some() {
-                    theme.card_priority_high_style = theme
-                        .card_priority_high_style
-                        .add_modifier(modifier.unwrap());
+                if let Some(modifier) = modifier {
+                    theme.card_priority_high_style =
+                        theme.card_priority_high_style.add_modifier(modifier);
                 } else {
                     theme.card_priority_high_style.sub_modifier = Modifier::empty();
                     theme.card_priority_high_style.add_modifier = Modifier::empty();
@@ -990,29 +969,32 @@ pub enum TextColorOptions {
     None,
 }
 
-impl TextColorOptions {
-    pub fn to_string(&self) -> String {
+impl Display for TextColorOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TextColorOptions::White => "White".to_string(),
-            TextColorOptions::Black => "Black".to_string(),
-            TextColorOptions::Red => "Red".to_string(),
-            TextColorOptions::Green => "Green".to_string(),
-            TextColorOptions::Yellow => "Yellow".to_string(),
-            TextColorOptions::Blue => "Blue".to_string(),
-            TextColorOptions::Magenta => "Magenta".to_string(),
-            TextColorOptions::Cyan => "Cyan".to_string(),
-            TextColorOptions::Gray => "Gray".to_string(),
-            TextColorOptions::DarkGray => "DarkGray".to_string(),
-            TextColorOptions::LightRed => "LightRed".to_string(),
-            TextColorOptions::LightGreen => "LightGreen".to_string(),
-            TextColorOptions::LightYellow => "LightYellow".to_string(),
-            TextColorOptions::LightBlue => "LightBlue".to_string(),
-            TextColorOptions::LightMagenta => "LightMagenta".to_string(),
-            TextColorOptions::LightCyan => "LightCyan".to_string(),
-            TextColorOptions::RGB(r, g, b) => format!("RGB({}, {}, {})", r, g, b),
-            TextColorOptions::None => "None".to_string(),
+            TextColorOptions::White => write!(f, "White"),
+            TextColorOptions::Black => write!(f, "Black"),
+            TextColorOptions::Red => write!(f, "Red"),
+            TextColorOptions::Green => write!(f, "Green"),
+            TextColorOptions::Yellow => write!(f, "Yellow"),
+            TextColorOptions::Blue => write!(f, "Blue"),
+            TextColorOptions::Magenta => write!(f, "Magenta"),
+            TextColorOptions::Cyan => write!(f, "Cyan"),
+            TextColorOptions::Gray => write!(f, "Gray"),
+            TextColorOptions::DarkGray => write!(f, "DarkGray"),
+            TextColorOptions::LightRed => write!(f, "LightRed"),
+            TextColorOptions::LightGreen => write!(f, "LightGreen"),
+            TextColorOptions::LightYellow => write!(f, "LightYellow"),
+            TextColorOptions::LightBlue => write!(f, "LightBlue"),
+            TextColorOptions::LightMagenta => write!(f, "LightMagenta"),
+            TextColorOptions::LightCyan => write!(f, "LightCyan"),
+            TextColorOptions::RGB(r, g, b) => write!(f, "RGB({}, {}, {})", r, g, b),
+            TextColorOptions::None => write!(f, "None"),
         }
     }
+}
+
+impl TextColorOptions {
     pub fn to_color(&self) -> Option<Color> {
         match self {
             TextColorOptions::White => Some(Color::White),
@@ -1082,7 +1064,7 @@ impl TextColorOptions {
             _ => TextColorOptions::None,
         }
     }
-    // TODO: This is a hack to get around the fact that the Color struct doesn't have a way to get the RGB values
+    // TODO: This is a hack to get around the fact that the Color struct doesn't have a way to get the RGB values, find a better way to do this
     pub fn to_rgb(&self) -> (u8, u8, u8) {
         match self {
             TextColorOptions::White => (255, 255, 255),
@@ -1121,21 +1103,24 @@ pub enum TextModifierOptions {
     None,
 }
 
-impl TextModifierOptions {
-    pub fn to_string(&self) -> String {
+impl Display for TextModifierOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TextModifierOptions::Bold => "Bold".to_string(),
-            TextModifierOptions::Dim => "Dim".to_string(),
-            TextModifierOptions::Italic => "Italic".to_string(),
-            TextModifierOptions::Underlined => "Underlined".to_string(),
-            TextModifierOptions::SlowBlink => "SlowBlink".to_string(),
-            TextModifierOptions::RapidBlink => "RapidBlink".to_string(),
-            TextModifierOptions::Reversed => "Reversed".to_string(),
-            TextModifierOptions::Hidden => "Hidden".to_string(),
-            TextModifierOptions::CrossedOut => "CrossedOut".to_string(),
-            TextModifierOptions::None => "None".to_string(),
+            TextModifierOptions::Bold => write!(f, "Bold"),
+            TextModifierOptions::Dim => write!(f, "Dim"),
+            TextModifierOptions::Italic => write!(f, "Italic"),
+            TextModifierOptions::Underlined => write!(f, "Underlined"),
+            TextModifierOptions::SlowBlink => write!(f, "SlowBlink"),
+            TextModifierOptions::RapidBlink => write!(f, "RapidBlink"),
+            TextModifierOptions::Reversed => write!(f, "Reversed"),
+            TextModifierOptions::Hidden => write!(f, "Hidden"),
+            TextModifierOptions::CrossedOut => write!(f, "CrossedOut"),
+            TextModifierOptions::None => write!(f, "None"),
         }
     }
+}
+
+impl TextModifierOptions {
     pub fn to_modifier(&self) -> Modifier {
         match self {
             TextModifierOptions::Bold => Modifier::BOLD,

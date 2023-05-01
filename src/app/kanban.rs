@@ -1,3 +1,5 @@
+use std::fmt;
+
 use chrono::Utc;
 use savefile_derive::Savefile;
 use serde::{Deserialize, Serialize};
@@ -46,14 +48,17 @@ pub enum CardStatus {
     Stale,
 }
 
-impl CardStatus {
-    pub fn to_string(&self) -> String {
+impl fmt::Display for CardStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            CardStatus::Active => "Active".to_string(),
-            CardStatus::Complete => "Complete".to_string(),
-            CardStatus::Stale => "Stale".to_string(),
+            CardStatus::Active => write!(f, "Active"),
+            CardStatus::Complete => write!(f, "Complete"),
+            CardStatus::Stale => write!(f, "Stale"),
         }
     }
+}
+
+impl CardStatus {
     pub fn all() -> Vec<CardStatus> {
         vec![CardStatus::Active, CardStatus::Complete, CardStatus::Stale]
     }
@@ -66,13 +71,19 @@ pub enum CardPriority {
     High,
 }
 
-impl CardPriority {
-    pub fn to_string(&self) -> String {
+impl fmt::Display for CardPriority {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            CardPriority::Low => "Low".to_string(),
-            CardPriority::Medium => "Medium".to_string(),
-            CardPriority::High => "High".to_string(),
+            CardPriority::Low => write!(f, "Low"),
+            CardPriority::Medium => write!(f, "Medium"),
+            CardPriority::High => write!(f, "High"),
         }
+    }
+}
+
+impl CardPriority {
+    pub fn all() -> Vec<CardPriority> {
+        vec![CardPriority::Low, CardPriority::Medium, CardPriority::High]
     }
 }
 

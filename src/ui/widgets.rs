@@ -1,6 +1,10 @@
 use log::{debug, error, info};
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
-use std::{sync::Arc, time::Duration};
+use std::{
+    fmt::{self, Display},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{sync::MutexGuard, time::Instant};
 
 use crate::{
@@ -171,12 +175,18 @@ pub struct CommandPaletteWidget {
     pub corpus: Corpus,
 }
 
+impl Default for CommandPaletteWidget {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommandPaletteWidget {
     pub fn new() -> Self {
         let available_commands = CommandPaletteActions::all();
         let mut corpus = CorpusBuilder::new().arity(2).pad_full(Pad::Auto).finish();
         for command in available_commands {
-            corpus.add_text(command.as_str().to_lowercase().as_str());
+            corpus.add_text(command.to_string().to_lowercase().as_str());
         }
         Self {
             search_results: None,
@@ -246,7 +256,7 @@ impl CommandPaletteWidget {
                     CommandPaletteActions::NewBoard => {
                         if UiMode::view_modes().contains(&app.state.ui_mode) {
                             app.state.popup_mode = None;
-                            app.state.prev_ui_mode = Some(app.state.ui_mode.clone());
+                            app.state.prev_ui_mode = Some(app.state.ui_mode);
                             app.state.ui_mode = UiMode::NewBoard;
                             app.state.focus = Focus::NewBoardName;
                         } else {
@@ -263,7 +273,7 @@ impl CommandPaletteWidget {
                                 return AppReturn::Continue;
                             }
                             app.state.popup_mode = None;
-                            app.state.prev_ui_mode = Some(app.state.ui_mode.clone());
+                            app.state.prev_ui_mode = Some(app.state.ui_mode);
                             app.state.ui_mode = UiMode::NewCard;
                             app.state.focus = Focus::NewCardName;
                         } else {
@@ -273,8 +283,7 @@ impl CommandPaletteWidget {
                     }
                     CommandPaletteActions::ResetUI => {
                         app.state.popup_mode = None;
-                        let default_view = app.config.default_view.clone();
-                        app.state.ui_mode = default_view;
+                        app.state.ui_mode = app.config.default_view;
                         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
                     }
                     CommandPaletteActions::ChangeUIMode => {
@@ -287,13 +296,13 @@ impl CommandPaletteWidget {
                                     app.boards.iter_mut().find(|b| b.id == current_board_id)
                                 {
                                     if let Some(current_card_id) = app.state.current_card_id {
-                                        if let Some(_) = current_board
+                                        if current_board
                                             .cards
                                             .iter_mut()
-                                            .find(|c| c.id == current_card_id)
+                                            .any(|c| c.id == current_card_id)
                                         {
                                             app.state.popup_mode =
-                                                Some(PopupMode::ChangeCurrentCardStatus);
+                                                Some(PopupMode::CardStatusSelector);
                                             app.state.app_status = AppStatus::Initialized;
                                             app.state.card_status_selector_state.select(Some(0));
                                             return AppReturn::Continue;
@@ -357,7 +366,7 @@ impl CommandPaletteWidget {
                 search_results.push(CommandPaletteActions::from_string(&item.text, true));
             }
             let search_results: Vec<CommandPaletteActions> =
-                search_results.into_iter().filter_map(|x| x).collect();
+                search_results.into_iter().flatten().collect();
             // if the search results are empty, then show all commands
             let search_results = if search_results.is_empty() {
                 CommandPaletteActions::all()
@@ -368,7 +377,13 @@ impl CommandPaletteWidget {
             app.command_palette.last_search_string = current_search_string;
             if app.command_palette.search_results.is_some() {
                 // if length is > 0 select first item
-                if app.command_palette.search_results.as_ref().unwrap().len() > 0 {
+                if !app
+                    .command_palette
+                    .search_results
+                    .as_ref()
+                    .unwrap()
+                    .is_empty()
+                {
                     app.state.command_palette_list_state.select(Some(0));
                 }
             }
@@ -393,6 +408,28 @@ pub enum CommandPaletteActions {
     ChangeTheme,
     CreateATheme,
     Quit,
+}
+
+impl Display for CommandPaletteActions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ExportToJSON => write!(f, "Export to JSON"),
+            Self::OpenConfigMenu => write!(f, "Open Config Menu"),
+            Self::SaveKanbanState => write!(f, "Save Kanban State"),
+            Self::LoadASave => write!(f, "Load a Save"),
+            Self::NewBoard => write!(f, "New Board"),
+            Self::NewCard => write!(f, "New Card"),
+            Self::ResetUI => write!(f, "Reset UI"),
+            Self::OpenMainMenu => write!(f, "Open Main Menu"),
+            Self::OpenHelpMenu => write!(f, "Open Help Menu"),
+            Self::ChangeUIMode => write!(f, "Change UI Mode"),
+            Self::ChangeCurrentCardStatus => write!(f, "Change Current Card Status"),
+            Self::DebugMenu => write!(f, "Toggle Debug Panel"),
+            Self::ChangeTheme => write!(f, "Change Theme"),
+            Self::CreateATheme => write!(f, "Create a Theme"),
+            Self::Quit => write!(f, "Quit"),
+        }
+    }
 }
 
 impl CommandPaletteActions {
@@ -423,33 +460,9 @@ impl CommandPaletteActions {
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::ExportToJSON => "Export to JSON",
-            Self::OpenConfigMenu => "Open Config Menu",
-            Self::SaveKanbanState => "Save Kanban State",
-            Self::LoadASave => "Load a Save",
-            Self::NewBoard => "New Board",
-            Self::NewCard => "New Card",
-            Self::ResetUI => "Reset UI",
-            Self::OpenMainMenu => "Open Main Menu",
-            Self::OpenHelpMenu => "Open Help Menu",
-            Self::ChangeUIMode => "Change UI Mode",
-            Self::ChangeCurrentCardStatus => "Change Current Card Status",
-            Self::DebugMenu => "Toggle Debug Panel",
-            Self::ChangeTheme => "Change Theme",
-            Self::CreateATheme => "Create a Theme",
-            Self::Quit => "Quit",
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        self.as_str().to_string()
-    }
-
     pub fn from_string(s: &str, lowercase_match: bool) -> Option<Self> {
         if lowercase_match {
-            return match s.to_lowercase().as_str() {
+            match s.to_lowercase().as_str() {
                 "export to json" => Some(Self::ExportToJSON),
                 "open config menu" => Some(Self::OpenConfigMenu),
                 "save kanban state" => Some(Self::SaveKanbanState),
@@ -466,9 +479,9 @@ impl CommandPaletteActions {
                 "create a theme" => Some(Self::CreateATheme),
                 "quit" => Some(Self::Quit),
                 _ => None,
-            };
+            }
         } else {
-            return match s {
+            match s {
                 "Export to JSON" => Some(Self::ExportToJSON),
                 "Open Config Menu" => Some(Self::OpenConfigMenu),
                 "Save Kanban State" => Some(Self::SaveKanbanState),
@@ -485,7 +498,7 @@ impl CommandPaletteActions {
                 "Create a Theme" => Some(Self::CreateATheme),
                 "Quit" => Some(Self::Quit),
                 _ => None,
-            };
+            }
         }
     }
 }

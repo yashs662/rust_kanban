@@ -2,7 +2,7 @@ use log::{debug, error, info};
 use regex::Regex;
 use savefile::prelude::*;
 use serde::Serialize;
-use std::{collections::HashMap, env, fs, path::PathBuf};
+use std::{cmp::Ordering, collections::HashMap, env, fs, path::PathBuf};
 
 use super::handler::{get_config_dir, make_file_system_safe_name};
 use crate::{
@@ -20,10 +20,11 @@ extern crate savefile;
 
 pub fn get_config(ignore_overlapped_keybinds: bool) -> Result<AppConfig, String> {
     let config_dir_status = get_config_dir();
-    if config_dir_status.is_err() {
+    let config_dir = if let Ok(config_dir) = config_dir_status {
+        config_dir
+    } else {
         return Err(config_dir_status.unwrap_err());
-    }
-    let config_dir = config_dir_status.unwrap();
+    };
     let config_path = config_dir.join(CONFIG_FILE_NAME);
     let config = match fs::read_to_string(config_path) {
         Ok(config) => AppConfig {
@@ -65,7 +66,7 @@ pub fn get_config(ignore_overlapped_keybinds: bool) -> Result<AppConfig, String>
             overlapped_keys.push(*key);
         }
     }
-    if overlapped_keys.len() > 0 {
+    if !overlapped_keys.is_empty() {
         let mut overlapped_keys_str = String::new();
         for key in overlapped_keys.iter() {
             overlapped_keys_str.push_str(&format!("{:?}, ", key));
@@ -80,15 +81,8 @@ pub fn get_config(ignore_overlapped_keybinds: bool) -> Result<AppConfig, String>
 
 pub fn write_config(config: &AppConfig) -> Result<(), String> {
     let config_str = serde_json::to_string_pretty(&config).unwrap();
-    let prepare_config_dir_status = prepare_config_dir();
-    if prepare_config_dir_status.is_err() {
-        return Err(prepare_config_dir_status.unwrap_err());
-    }
-    let config_dir_status = get_config_dir();
-    if config_dir_status.is_err() {
-        return Err(config_dir_status.unwrap_err());
-    }
-    let config_dir = config_dir_status.unwrap();
+    prepare_config_dir()?;
+    let config_dir = get_config_dir()?;
     let write_result = fs::write(config_dir.join(CONFIG_FILE_NAME), config_str);
     match write_result {
         Ok(_) => Ok(()),
@@ -101,11 +95,11 @@ pub fn write_config(config: &AppConfig) -> Result<(), String> {
 
 pub fn get_default_ui_mode() -> UiMode {
     let get_config_status = get_config(false);
-    let config = if get_config_status.is_err() {
+    let config = if let Ok(config) = get_config_status {
+        config
+    } else {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
-    } else {
-        get_config_status.unwrap()
     };
     config.default_view
 }
@@ -123,11 +117,11 @@ pub fn reset_config() {
 
 pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError> {
     let get_config_status = get_config(false);
-    let config = if get_config_status.is_err() {
+    let config = if let Ok(config) = get_config_status {
+        config
+    } else {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
-    } else {
-        get_config_status.unwrap()
     };
     // check config.save_directory for previous versions of the boards
     // versioning style is: SAVE_FILE_NAME_27-12-2020_v1
@@ -141,28 +135,28 @@ pub fn save_kanban_state_locally(boards: Vec<Board>) -> Result<(), SavefileError
         if file_name.contains(SAVE_FILE_NAME)
             && file_name.contains(chrono::Local::now().format("%d-%m-%Y").to_string().as_str())
         {
-            let file_version = file_name.split("_").last();
-            if file_version.is_none() {
-                debug!("File version not found");
-                continue;
-            } else {
+            let file_version = file_name.split('_').last();
+            if let Some(file_version) = file_version {
                 // remove v from version number and find max of version numbers
-                let file_version = file_version.unwrap().replace("v", "");
+                let file_version = file_version.replace('v', "");
                 let file_version = file_version.parse::<u32>();
-                if file_version.is_err() {
+                if let Ok(file_version) = file_version {
+                    match file_version.cmp(&version) {
+                        Ordering::Greater => {
+                            version = file_version;
+                            version += 1;
+                        }
+                        Ordering::Equal => {
+                            version += 1;
+                        }
+                        Ordering::Less => {}
+                    }
+                } else {
                     debug!(
                         "Error parsing version number: {}",
                         file_version.unwrap_err()
                     );
                     continue;
-                } else {
-                    let file_version = file_version.unwrap();
-                    if file_version > version {
-                        version = file_version;
-                        version += 1;
-                    } else if file_version == version {
-                        version += 1;
-                    }
                 }
             }
         }
@@ -187,11 +181,11 @@ pub fn get_local_kanban_state(
     preview_mode: bool,
 ) -> Result<Vec<Board>, SavefileError> {
     let get_config_status = get_config(false);
-    let config = if get_config_status.is_err() {
+    let config = if let Ok(config) = get_config_status {
+        config
+    } else {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
-    } else {
-        get_config_status.unwrap()
     };
     let file_path = config.save_directory.join(file_name);
     if !preview_mode {
@@ -203,11 +197,11 @@ pub fn get_local_kanban_state(
 
 pub fn get_available_local_savefiles() -> Option<Vec<String>> {
     let get_config_status = get_config(false);
-    let config = if get_config_status.is_err() {
+    let config = if let Ok(config) = get_config_status {
+        config
+    } else {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
-    } else {
-        get_config_status.unwrap()
     };
     let read_dir_status = fs::read_dir(&config.save_directory);
     match read_dir_status {
@@ -225,26 +219,24 @@ pub fn get_available_local_savefiles() -> Option<Vec<String>> {
             savefiles.retain(|file| re.is_match(file));
             // order the files by date and version
             savefiles.sort_by(|a, b| {
-                let a_date = a.split("_").nth(1).unwrap();
-                let b_date = b.split("_").nth(1).unwrap();
-                let a_version = a.split("_").nth(2).unwrap();
-                let b_version = b.split("_").nth(2).unwrap();
+                let a_date = a.split('_').nth(1).unwrap();
+                let b_date = b.split('_').nth(1).unwrap();
+                let a_version = a.split('_').nth(2).unwrap();
+                let b_version = b.split('_').nth(2).unwrap();
                 let a_date = chrono::NaiveDate::parse_from_str(a_date, "%d-%m-%Y").unwrap();
                 let b_date = chrono::NaiveDate::parse_from_str(b_date, "%d-%m-%Y").unwrap();
-                let a_version = a_version.split("v").nth(1).unwrap().parse::<u32>().unwrap();
-                let b_version = b_version.split("v").nth(1).unwrap().parse::<u32>().unwrap();
+                let a_version = a_version.split('v').nth(1).unwrap().parse::<u32>().unwrap();
+                let b_version = b_version.split('v').nth(1).unwrap().parse::<u32>().unwrap();
                 if a_date > b_date {
                     std::cmp::Ordering::Greater
                 } else if a_date < b_date {
                     std::cmp::Ordering::Less
+                } else if a_version > b_version {
+                    std::cmp::Ordering::Greater
+                } else if a_version < b_version {
+                    std::cmp::Ordering::Less
                 } else {
-                    if a_version > b_version {
-                        std::cmp::Ordering::Greater
-                    } else if a_version < b_version {
-                        std::cmp::Ordering::Less
-                    } else {
-                        std::cmp::Ordering::Equal
-                    }
+                    std::cmp::Ordering::Equal
                 }
             });
             Some(savefiles)
@@ -269,7 +261,7 @@ pub fn get_available_local_savefiles() -> Option<Vec<String>> {
     }
 }
 
-pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
+pub fn export_kanban_to_json(boards: &[Board]) -> Result<String, String> {
     #[derive(Serialize)]
     struct ExportStruct {
         kanban_version: String,
@@ -278,11 +270,11 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
     }
     // use serde serialization
     let get_config_status = get_config(false);
-    let config = if get_config_status.is_err() {
+    let config = if let Ok(config) = get_config_status {
+        config
+    } else {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
-    } else {
-        get_config_status.unwrap()
     };
     // make json with the keys Version, Date, Boards
     // get version from cargo.toml
@@ -292,7 +284,7 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
     let export_struct = ExportStruct {
         kanban_version: version.to_string(),
         export_date: date.to_string(),
-        boards: boards.clone(),
+        boards: boards.to_vec(),
     };
     let file_path = config.save_directory.join("kanban_export.json");
     // check if file exists if so add a number to the end of the file name with _<number>
@@ -300,12 +292,12 @@ pub fn export_kanban_to_json(boards: &Vec<Board>) -> Result<String, String> {
         let mut i = 1;
         let mut new_file_path = config
             .save_directory
-            .join(format!("kanban_export_{}.json", i.to_string()));
+            .join(format!("kanban_export_{}.json", i));
         while new_file_path.exists() {
             i += 1;
             new_file_path = config
                 .save_directory
-                .join(format!("kanban_export_{}.json", i.to_string()));
+                .join(format!("kanban_export_{}.json", i));
         }
         new_file_path
     } else {
@@ -381,14 +373,10 @@ pub fn get_saved_themes() -> Option<Vec<Theme>> {
 }
 
 pub fn save_theme(theme: Theme) -> Result<String, String> {
-    let theme_dir = get_theme_dir();
-    if theme_dir.is_err() {
-        return Err(theme_dir.unwrap_err());
-    }
-    let theme_dir = theme_dir.unwrap();
+    let theme_dir = get_theme_dir()?;
     let create_dir_status = fs::create_dir_all(&theme_dir);
-    if create_dir_status.is_err() {
-        return Err(create_dir_status.unwrap_err().to_string());
+    if let Err(e) = create_dir_status {
+        return Err(e.to_string());
     }
     // export the theme to json using serde prefix the file name with THEME_FILE_NAME and put the theme.name next then .json
     let theme_name = format!(
@@ -401,8 +389,8 @@ pub fn save_theme(theme: Theme) -> Result<String, String> {
         theme_path.clone(),
         serde_json::to_string_pretty(&theme).unwrap(),
     );
-    if write_status.is_err() {
-        return Err(write_status.unwrap_err().to_string());
+    if let Err(write_status) = write_status {
+        return Err(write_status.to_string());
     }
     Ok(theme_path.to_str().unwrap().to_string())
 }

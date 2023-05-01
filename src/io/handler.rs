@@ -181,7 +181,7 @@ impl IoAsyncHandler {
             }
         }
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
-        app.state.ui_mode = app.config.default_view.clone();
+        app.state.ui_mode = app.config.default_view;
         Ok(())
     }
 
@@ -243,10 +243,10 @@ impl IoAsyncHandler {
             file_list.unwrap()
         };
         if selected >= file_list.len() {
-            if file_list.len() > 0 {
-                app.state.load_save_state.select(Some(file_list.len() - 1));
-            } else {
+            if file_list.is_empty() {
                 app.state.load_save_state = ListState::default();
+            } else {
+                app.state.load_save_state.select(Some(file_list.len() - 1));
             }
         }
         Ok(())
@@ -259,46 +259,8 @@ impl IoAsyncHandler {
     }
 
     async fn auto_save(&mut self) -> Result<()> {
-        let app = self.app.lock().await;
-        let mut file_version = 0;
-        let latest_save_file_info = get_latest_save_file();
-        let get_config_status = get_config(false);
-        let config = if get_config_status.is_err() {
-            debug!("Error getting config: {}", get_config_status.unwrap_err());
-            AppConfig::default()
-        } else {
-            get_config_status.unwrap()
-        };
-        let save_required = if latest_save_file_info.is_ok() {
-            let latest_save_file_info = latest_save_file_info.unwrap();
-            let save_file_name = latest_save_file_info.0;
-            file_version = latest_save_file_info.1;
-            let file_path = config.save_directory.join(save_file_name);
-            let boards: Vec<Board> = load_file(&file_path, file_version)?;
-            if app.boards != boards {
-                true
-            } else {
-                false
-            }
-        } else {
-            true
-        };
-        return if save_required {
-            let file_name = format!(
-                "{}_{}_v{}",
-                SAVE_FILE_NAME,
-                chrono::Local::now().format("%d-%m-%Y"),
-                file_version + 1
-            );
-            let file_path = config.save_directory.join(file_name);
-            let save_status = save_file(file_path, file_version, &app.boards);
-            match save_status {
-                Ok(_) => Ok(()),
-                Err(e) => Err(anyhow!("Error saving file: {}", e)),
-            }
-        } else {
-            Ok(())
-        };
+        let mut app = self.app.lock().await;
+        auto_save(&mut app).await
     }
 
     async fn load_preview(&mut self) -> Result<()> {
@@ -342,13 +304,18 @@ impl IoAsyncHandler {
         match board_data {
             Ok(boards) => {
                 app.state.preview_boards_and_cards = Some(boards);
-
-                let mut counter = 0;
                 // get self.boards and make Vec<LinkedHashMap<u128, Vec<u128>>> of visible boards and cards
                 let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> =
                     LinkedHashMap::new();
-                for board in app.state.preview_boards_and_cards.as_ref().unwrap().iter() {
-                    if counter == app.config.no_of_boards_to_show {
+                for (counter, board) in app
+                    .state
+                    .preview_boards_and_cards
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                {
+                    if counter >= app.config.no_of_boards_to_show.into() {
                         break;
                     }
                     let mut visible_cards: Vec<u128> = Vec::new();
@@ -369,7 +336,6 @@ impl IoAsyncHandler {
                     let mut visible_board: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
                     visible_board.insert(board.id, visible_cards);
                     visible_boards_and_cards.extend(visible_board);
-                    counter += 1;
                 }
                 app.state.preview_visible_boards_and_cards = visible_boards_and_cards;
                 app.state.preview_file_name = Some(save_file_name);
@@ -419,19 +385,18 @@ pub fn prepare_config_dir() -> Result<(), String> {
         }
     }
     // make config file if it doesn't exist and write default config to it
-    let mut config_file = config_dir.clone();
+    let mut config_file = config_dir;
     config_file.push(CONFIG_FILE_NAME);
     if !config_file.exists() {
         let default_config = AppConfig::default();
         let config_json = serde_json::to_string_pretty(&default_config);
-        if config_json.is_err() {
-            return Err(String::from("Error creating config file"));
-        } else {
-            let config_json = config_json.unwrap();
+        if let Ok(config_json) = config_json {
             let file_creation_status = std::fs::write(&config_file, config_json);
             if file_creation_status.is_err() {
                 return Err(String::from("Error creating config file"));
             }
+        } else {
+            return Err(String::from("Error creating config file"));
         }
     }
     Ok(())
@@ -447,16 +412,15 @@ fn prepare_save_dir() -> bool {
 
 fn prepare_boards(app: &mut App) -> Vec<Board> {
     let get_config_status = get_config(false);
-    let config = if get_config_status.is_err() {
+    let config = if let Ok(config) = get_config_status {
+        config
+    } else {
         debug!("Error getting config: {}", get_config_status.unwrap_err());
         AppConfig::default()
-    } else {
-        get_config_status.unwrap()
     };
     if config.always_load_last_save {
         let latest_save_file_info = get_latest_save_file();
-        if latest_save_file_info.is_ok() {
-            let latest_save_file_info = latest_save_file_info.unwrap();
+        if let Ok(latest_save_file_info) = latest_save_file_info {
             let latest_save_file = latest_save_file_info.0;
             let latest_version = latest_save_file_info.1;
             let local_data =
@@ -489,10 +453,10 @@ fn prepare_boards(app: &mut App) -> Vec<Board> {
 // return save file name and the latest verison
 fn get_latest_save_file() -> Result<(String, u32)> {
     let local_save_files = get_available_local_savefiles();
-    let local_save_files = if local_save_files.is_none() {
-        return Err(anyhow!("No local save files found"));
+    let local_save_files = if let Some(local_save_files) = local_save_files {
+        local_save_files
     } else {
-        local_save_files.unwrap()
+        return Err(anyhow!("No local save files found"));
     };
     let fall_back_version = -1;
     if local_save_files.is_empty() {
@@ -501,22 +465,19 @@ fn get_latest_save_file() -> Result<(String, u32)> {
     let latest_date = local_save_files
         .iter()
         .map(|file| {
-            let date = file.split("_").collect::<Vec<&str>>()[1];
-            let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
-            date
+            let date = file.split('_').collect::<Vec<&str>>()[1];
+            NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap()
         })
         .max()
         .unwrap();
     let latest_version = local_save_files
         .iter()
         .filter(|file| {
-            let date = file.split("_").collect::<Vec<&str>>()[1];
-            let date = NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap();
-            date == latest_date
+            let date = file.split('_').collect::<Vec<&str>>()[1];
+            NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap() == latest_date
         })
         .map(|file| {
             let version = file.split("_v").collect::<Vec<&str>>()[1];
-            // convert version t0 integer
             version.parse::<i32>().unwrap_or(fall_back_version)
         })
         .max()
@@ -563,8 +524,7 @@ pub fn refresh_visible_boards_and_cards(app: &mut App) {
     app.visible_boards_and_cards = visible_boards_and_cards;
     // if a board and card are there set it to current board and card
     if !app.visible_boards_and_cards.is_empty() {
-        app.state.current_board_id =
-            Some(app.visible_boards_and_cards.keys().next().unwrap().clone());
+        app.state.current_board_id = Some(*app.visible_boards_and_cards.keys().next().unwrap());
         if !app
             .visible_boards_and_cards
             .values()
@@ -585,4 +545,42 @@ pub fn make_file_system_safe_name(name: &str) -> String {
         safe_name = safe_name.replace(unsafe_char, "");
     }
     safe_name
+}
+
+pub async fn auto_save(app: &mut App) -> Result<()> {
+    let mut file_version = 0;
+    let latest_save_file_info = get_latest_save_file();
+    let get_config_status = get_config(false);
+    let config = if get_config_status.is_err() {
+        debug!("Error getting config: {}", get_config_status.unwrap_err());
+        AppConfig::default()
+    } else {
+        get_config_status.unwrap()
+    };
+    let save_required = if latest_save_file_info.is_ok() {
+        let latest_save_file_info = latest_save_file_info.unwrap();
+        let save_file_name = latest_save_file_info.0;
+        file_version = latest_save_file_info.1;
+        let file_path = config.save_directory.join(save_file_name);
+        let boards: Vec<Board> = load_file(file_path, file_version)?;
+        app.boards != boards
+    } else {
+        true
+    };
+    if save_required {
+        let file_name = format!(
+            "{}_{}_v{}",
+            SAVE_FILE_NAME,
+            chrono::Local::now().format("%d-%m-%Y"),
+            file_version + 1
+        );
+        let file_path = config.save_directory.join(file_name);
+        let save_status = save_file(file_path, file_version, &app.boards);
+        match save_status {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!("Error saving file: {}", e)),
+        }
+    } else {
+        Ok(())
+    }
 }
