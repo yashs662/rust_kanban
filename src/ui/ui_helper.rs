@@ -2291,7 +2291,7 @@ where
         Span::styled(input_mode_key, help_key_style),
         Span::styled("to start typing", default_style),
         Span::styled("; ", default_style),
-        Span::styled("<Esc>", help_key_style),
+        Span::styled("<Ins>", help_key_style),
         Span::styled(" to stop typing", default_style),
         Span::styled("; ", default_style),
         Span::styled("Press ", default_style),
