@@ -32,11 +32,15 @@ use super::{
 
 pub fn go_right(app: &mut App) {
     let current_visible_boards = app.visible_boards_and_cards.clone();
-    let all_boards = app.boards.clone();
+    let boards: &Vec<Board> = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
     let current_board_id = app.state.current_board_id;
     // check if current_board_id is set, if not assign to the first board
     // check if all_boards is empty, if so, return
-    if all_boards.is_empty() {
+    if boards.is_empty() {
         error!("Cannot go right: no boards found");
         app.send_error_toast("Cannot go right: no boards found", None);
         return;
@@ -44,7 +48,7 @@ pub fn go_right(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
-        all_boards[0].id
+        boards[0].id
     };
     // check if the current board is the last one in visible_boards which is a LinkedHashMap of board_id and card_ids
     let current_board_index = current_visible_boards
@@ -63,16 +67,15 @@ pub fn go_right(app: &mut App) {
     let current_board_index = current_board_index.unwrap();
     if current_board_index == current_visible_boards.len() - 1 {
         // we are at the last board, check the index for the current board in all boards, if it is the last one, we cannot go right
-        let current_board_index_in_all_boards = all_boards
-            .iter()
-            .position(|board| board.id == current_board_id);
+        let current_board_index_in_all_boards =
+            boards.iter().position(|board| board.id == current_board_id);
         if current_board_index_in_all_boards.is_none() {
             debug!("Cannot go right: current board not found");
             app.send_error_toast("Cannot go right: Something went wrong", None);
             return;
         }
         let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
-        if current_board_index_in_all_boards == all_boards.len() - 1 {
+        if current_board_index_in_all_boards == boards.len() - 1 {
             // we are at the last board, we cannot go right
             app.send_error_toast("Cannot go right: Already at the last board", None);
             return;
@@ -80,7 +83,7 @@ pub fn go_right(app: &mut App) {
         // we are not at the last board, we can go right
         // get the next NO_OF_BOARDS_PER_PAGE boards
         let next_board_index = current_board_index_in_all_boards + 1;
-        let next_board = &all_boards[next_board_index];
+        let next_board = &boards[next_board_index];
         let next_board_card_ids: Vec<u128> = next_board
             .cards
             .clone()
@@ -124,11 +127,15 @@ pub fn go_right(app: &mut App) {
 
 pub fn go_left(app: &mut App) {
     let current_visible_boards = app.visible_boards_and_cards.clone();
-    let all_boards = app.boards.clone();
+    let boards: &Vec<Board> = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
     let current_board_id = app.state.current_board_id;
     // check if current_board_id is set, if not assign to the first board
     // check if all_boards is empty, if so, return
-    if all_boards.is_empty() {
+    if boards.is_empty() {
         error!("Cannot go left: no boards");
         app.send_error_toast("Cannot go left: no boards", None);
         return;
@@ -136,7 +143,7 @@ pub fn go_left(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
-        all_boards[0].id
+        boards[0].id
     };
     // check if the current board is the first one in visible_boards which is a LinkedHashMap of board_id and card_ids
     let current_board_index = current_visible_boards
@@ -150,9 +157,8 @@ pub fn go_left(app: &mut App) {
     let current_board_index = current_board_index.unwrap();
     if current_board_index == 0 {
         // we are at the first board, check the index for the current board in all boards, if it is the first one, we cannot go left
-        let current_board_index_in_all_boards = all_boards
-            .iter()
-            .position(|board| board.id == current_board_id);
+        let current_board_index_in_all_boards =
+            boards.iter().position(|board| board.id == current_board_id);
         if current_board_index_in_all_boards.is_none() {
             debug!("Cannot go left: current board not found");
             app.send_error_toast("Cannot go left: Something went wrong", None);
@@ -167,7 +173,7 @@ pub fn go_left(app: &mut App) {
         // we are not at the first board, we can go left
         // get the previous NO_OF_BOARDS_PER_PAGE boards
         let previous_board_index = current_board_index_in_all_boards - 1;
-        let previous_board = &all_boards[previous_board_index];
+        let previous_board = &boards[previous_board_index];
         let previous_board_card_ids: Vec<u128> = previous_board
             .cards
             .clone()
@@ -217,6 +223,11 @@ pub fn go_up(app: &mut App) {
     let current_visible_boards = app.visible_boards_and_cards.clone();
     let current_board_id = app.state.current_board_id;
     let current_card_id = app.state.current_card_id;
+    let boards: &Vec<Board> = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
     // check if app.board is empty, if so, return
     if current_visible_boards.is_empty() {
         return;
@@ -224,13 +235,13 @@ pub fn go_up(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
-        app.boards[0].id
+        boards[0].id
     };
     let current_card_id = if let Some(current_card_id) = current_card_id {
         current_card_id
     } else {
         // get the first card of the current board
-        let current_board = app.boards.iter().find(|board| board.id == current_board_id);
+        let current_board = boards.iter().find(|board| board.id == current_board_id);
         if current_board.is_none() {
             debug!("Cannot go up: current board not found");
             app.send_error_toast("Cannot go up: Something went wrong", None);
@@ -258,8 +269,7 @@ pub fn go_up(app: &mut App) {
     }
     let current_card_index = current_card_index.unwrap();
     if current_card_index == 0 {
-        let current_card_index_in_all_cards = app
-            .boards
+        let current_card_index_in_all_cards = boards
             .iter()
             .find(|board| board.id == current_board_id)
             .unwrap()
@@ -280,15 +290,13 @@ pub fn go_up(app: &mut App) {
         // we are not at the first card, we can go up
         // get the previous NO_OF_CARDS_PER_PAGE cards
         let previous_card_index = current_card_index_in_all_cards - 1;
-        let previous_card_id = app
-            .boards
+        let previous_card_id = boards
             .iter()
             .find(|board| board.id == current_board_id)
             .unwrap()
             .cards[previous_card_index]
             .id;
-        let previous_cards = app
-            .boards
+        let previous_cards = boards
             .iter()
             .find(|board| board.id == current_board_id)
             .unwrap()
@@ -330,6 +338,11 @@ pub fn go_down(app: &mut App) {
     let current_visible_boards = app.visible_boards_and_cards.clone();
     let current_board_id = app.state.current_board_id;
     let current_card_id = app.state.current_card_id;
+    let boards: &Vec<Board> = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
     // check if app.board is empty, if so, return
     if current_visible_boards.is_empty() {
         return;
@@ -337,13 +350,13 @@ pub fn go_down(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
-        app.boards[0].id
+        boards[0].id
     };
     let current_card_id = if let Some(current_card_id) = current_card_id {
         current_card_id
     } else {
         // get the first card of the current board
-        let current_board = app.boards.iter().find(|board| board.id == current_board_id);
+        let current_board = boards.iter().find(|board| board.id == current_board_id);
         if current_board.is_none() {
             debug!("Cannot go down: current board not found, trying to get the first board");
             // check if app.visible_boards_and_cards is empty, if so, return else select the first board and first card
@@ -380,8 +393,7 @@ pub fn go_down(app: &mut App) {
     }
     let current_card_index = current_card_index.unwrap();
     if current_card_index == app.config.no_of_cards_to_show as usize - 1 {
-        let current_card_index_in_all_cards = app
-            .boards
+        let current_card_index_in_all_cards = boards
             .iter()
             .find(|board| board.id == current_board_id)
             .unwrap()
@@ -395,8 +407,7 @@ pub fn go_down(app: &mut App) {
         }
         let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
         if current_card_index_in_all_cards
-            == app
-                .boards
+            == boards
                 .iter()
                 .find(|board| board.id == current_board_id)
                 .unwrap()
@@ -411,8 +422,7 @@ pub fn go_down(app: &mut App) {
         // we are not at the last card, we can go down
         // get the next NO_OF_CARDS_PER_PAGE cards
         let next_card_index = current_card_index_in_all_cards + 1;
-        let next_card_id = app
-            .boards
+        let next_card_id = boards
             .iter()
             .find(|board| board.id == current_board_id)
             .unwrap()
@@ -421,15 +431,14 @@ pub fn go_down(app: &mut App) {
         let start_index = next_card_index - 1;
         let end_index = next_card_index - 1 + app.config.no_of_cards_to_show as usize;
         let end_index = if end_index
-            > app
-                .boards
+            > boards
                 .iter()
                 .find(|board| board.id == current_board_id)
                 .unwrap()
                 .cards
                 .len()
         {
-            app.boards
+            boards
                 .iter()
                 .find(|board| board.id == current_board_id)
                 .unwrap()
@@ -438,8 +447,7 @@ pub fn go_down(app: &mut App) {
         } else {
             end_index
         };
-        let next_card_ids = app
-            .boards
+        let next_card_ids = boards
             .iter()
             .find(|board| board.id == current_board_id)
             .unwrap()
@@ -455,7 +463,7 @@ pub fn go_down(app: &mut App) {
                 start_index -= 1;
                 next_card_ids.insert(
                     0,
-                    app.boards
+                    boards
                         .iter()
                         .find(|board| board.id == current_board_id)
                         .unwrap()
@@ -1981,7 +1989,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 app.send_info_toast("UI reset, all toasts cleared", None);
                 app.state.ui_mode = new_ui_mode;
                 app.state.popup_mode = None;
-                app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
+                refresh_visible_boards_and_cards(app);
                 AppReturn::Continue
             }
             Action::OpenConfigMenu => {
@@ -2027,18 +2035,10 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 if app.state.popup_mode.is_some() {
                     let popup_mode = app.state.popup_mode.as_ref().unwrap();
                     match popup_mode {
-                        PopupMode::ChangeUIMode => {
-                            app.select_default_view_prev();
-                        }
-                        PopupMode::CardStatusSelector => {
-                            app.select_card_status_prev();
-                        }
-                        PopupMode::SelectDefaultView => {
-                            app.select_default_view_prev();
-                        }
-                        PopupMode::ChangeTheme => {
-                            app.select_change_theme_prev();
-                        }
+                        PopupMode::ChangeUIMode => app.select_default_view_prev(),
+                        PopupMode::CardStatusSelector => app.select_card_status_prev(),
+                        PopupMode::SelectDefaultView => app.select_default_view_prev(),
+                        PopupMode::ChangeTheme => app.select_change_theme_prev(),
                         PopupMode::ThemeEditor => {
                             if app.state.focus == Focus::StyleEditorFG {
                                 app.select_edit_style_fg_prev();
@@ -2048,6 +2048,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 app.select_edit_style_modifier_prev();
                             }
                         }
+                        PopupMode::FilterByTag => app.filter_by_tag_popup_prev(),
                         _ => {}
                     }
                     return AppReturn::Continue;
@@ -2140,18 +2141,10 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 if app.state.popup_mode.is_some() {
                     let popup_mode = app.state.popup_mode.as_ref().unwrap();
                     match popup_mode {
-                        PopupMode::ChangeUIMode => {
-                            app.select_default_view_next();
-                        }
-                        PopupMode::CardStatusSelector => {
-                            app.select_card_status_next();
-                        }
-                        PopupMode::SelectDefaultView => {
-                            app.select_default_view_next();
-                        }
-                        PopupMode::ChangeTheme => {
-                            app.select_change_theme_next();
-                        }
+                        PopupMode::ChangeUIMode => app.select_default_view_next(),
+                        PopupMode::CardStatusSelector => app.select_card_status_next(),
+                        PopupMode::SelectDefaultView => app.select_default_view_next(),
+                        PopupMode::ChangeTheme => app.select_change_theme_next(),
                         PopupMode::ThemeEditor => {
                             if app.state.focus == Focus::StyleEditorFG {
                                 app.select_edit_style_fg_next();
@@ -2161,6 +2154,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 app.select_edit_style_modifier_next();
                             }
                         }
+                        PopupMode::FilterByTag => app.filter_by_tag_popup_next(),
                         _ => {}
                     }
                     return AppReturn::Continue;
@@ -2395,6 +2389,10 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         },
                         PopupMode::CardPrioritySelector => {
                             return handle_change_card_priority(app);
+                        }
+                        PopupMode::FilterByTag => {
+                            handle_filter_by_tag(app);
+                            return AppReturn::Continue;
                         }
                     }
                     app.state.popup_mode = None;
@@ -2677,7 +2675,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                                     visible_cards.remove(card_index);
                                                 }
                                             }
-                                            app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
+                                            refresh_visible_boards_and_cards(app);
                                         }
                                     } else if let Some(current_board) = app.state.current_board_id {
                                         // find index of current board id in app.boards
@@ -2704,7 +2702,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             );
                                             // remove board_id from app.visible_boards_and_cards if it is there
                                             app.visible_boards_and_cards.remove(&current_board);
-                                            app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
+                                            refresh_visible_boards_and_cards(app);
                                         }
                                     }
                                 }
@@ -2893,6 +2891,11 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     if app.state.current_card_id.is_none() {
                         return AppReturn::Continue;
                     } else {
+                        let boards: &mut Vec<Board> = if app.filtered_boards.is_empty() {
+                            app.boards.as_mut()
+                        } else {
+                            app.filtered_boards.as_mut()
+                        };
                         if app.state.current_board_id.is_none() {
                             debug!("Cannot move card up without a current board id");
                             return AppReturn::Continue;
@@ -2903,15 +2906,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                         let current_board_id = app.state.current_board_id.unwrap();
                         let current_card_id = app.state.current_card_id.unwrap();
-                        let current_board_index_in_all_boards = app
-                            .boards
-                            .iter()
-                            .position(|board| board.id == current_board_id);
+                        let current_board_index_in_all_boards =
+                            boards.iter().position(|board| board.id == current_board_id);
                         if current_board_index_in_all_boards.is_none() {
                             debug!("Cannot move card up without a current board index");
                             return AppReturn::Continue;
                         }
-                        let current_card_index_in_all = app.boards
+                        let current_card_index_in_all = boards
                             [current_board_index_in_all_boards.unwrap()]
                         .cards
                         .iter()
@@ -2943,9 +2944,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                         let current_card_index_in_visible = current_card_index_in_visible.unwrap();
                         if current_card_index_in_visible == 0 {
-                            let card_above_id = app.boards
-                                [current_board_index_in_all_boards.unwrap()]
-                            .cards[current_card_index_in_all - 1]
+                            let card_above_id = boards[current_board_index_in_all_boards.unwrap()]
+                                .cards[current_card_index_in_all - 1]
                                 .id;
                             let mut visible_cards: Vec<u128> = vec![];
                             visible_cards.push(current_card_id);
@@ -2970,7 +2970,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                     current_card_index_in_visible - 1,
                                 );
                         }
-                        app.boards[current_board_index_in_all_boards.unwrap()]
+                        boards[current_board_index_in_all_boards.unwrap()]
                             .cards
                             .swap(current_card_index_in_all, current_card_index_in_all - 1);
                     }
@@ -2985,6 +2985,11 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     if app.state.current_card_id.is_none() {
                         return AppReturn::Continue;
                     } else {
+                        let boards: &mut Vec<Board> = if app.filtered_boards.is_empty() {
+                            app.boards.as_mut()
+                        } else {
+                            app.filtered_boards.as_mut()
+                        };
                         if app.state.current_board_id.is_none() {
                             debug!("Cannot move card down without a current board id");
                             return AppReturn::Continue;
@@ -2995,15 +3000,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                         let current_board_id = app.state.current_board_id.unwrap();
                         let current_card_id = app.state.current_card_id.unwrap();
-                        let current_board_index_in_all_boards = app
-                            .boards
-                            .iter()
-                            .position(|board| board.id == current_board_id);
+                        let current_board_index_in_all_boards =
+                            boards.iter().position(|board| board.id == current_board_id);
                         if current_board_index_in_all_boards.is_none() {
                             debug!("Cannot move card down without a current board index");
                             return AppReturn::Continue;
                         }
-                        let current_card_index_in_all = app.boards
+                        let current_card_index_in_all = boards
                             [current_board_index_in_all_boards.unwrap()]
                         .cards
                         .iter()
@@ -3014,7 +3017,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                         let current_card_index_in_all = current_card_index_in_all.unwrap();
                         if current_card_index_in_all
-                            == app.boards[current_board_index_in_all_boards.unwrap()]
+                            == boards[current_board_index_in_all_boards.unwrap()]
                                 .cards
                                 .len()
                                 - 1
@@ -3042,9 +3045,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         if current_card_index_in_visible
                             == app.visible_boards_and_cards[&current_board_id].len() - 1
                         {
-                            let card_below_id = app.boards
-                                [current_board_index_in_all_boards.unwrap()]
-                            .cards[current_card_index_in_all + 1]
+                            let card_below_id = boards[current_board_index_in_all_boards.unwrap()]
+                                .cards[current_card_index_in_all + 1]
                                 .id;
                             let mut visible_cards: Vec<u128> = vec![];
                             visible_cards.push(card_below_id);
@@ -3071,7 +3073,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                     current_card_index_in_visible + 1,
                                 );
                         }
-                        app.boards[current_board_index_in_all_boards.unwrap()]
+                        boards[current_board_index_in_all_boards.unwrap()]
                             .cards
                             .swap(current_card_index_in_all, current_card_index_in_all + 1);
                     }
@@ -3079,6 +3081,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::MoveCardRight => {
+                // TODO: move card in reality when moved during filtered view
                 if !UiMode::view_modes().contains(&app.state.ui_mode) {
                     return AppReturn::Continue;
                 }
@@ -3086,10 +3089,15 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     if app.state.current_card_id.is_none() {
                         return AppReturn::Continue;
                     } else if let Some(current_board) = app.state.current_board_id {
-                        let moved_from_board_index = app
-                            .boards
-                            .iter()
-                            .position(|board| board.id == current_board);
+                        let mut filter_mode = false;
+                        let boards: &mut Vec<Board> = if app.filtered_boards.is_empty() {
+                            app.boards.as_mut()
+                        } else {
+                            filter_mode = true;
+                            app.filtered_boards.as_mut()
+                        };
+                        let moved_from_board_index =
+                            boards.iter().position(|board| board.id == current_board);
                         if moved_from_board_index.is_none() {
                             app.send_error_toast(
                                 "Something went wrong, could not find the board",
@@ -3100,47 +3108,46 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                         let moved_from_board_index = moved_from_board_index.unwrap();
                         // check if board is the last board
-                        if moved_from_board_index < app.boards.len() - 1 {
+                        if moved_from_board_index < boards.len() - 1 {
                             let moved_to_board_index = moved_from_board_index + 1;
                             if let Some(current_card) = app.state.current_card_id {
-                                let card_index = app.boards[moved_from_board_index]
+                                let card_index = boards[moved_from_board_index]
                                     .cards
                                     .iter()
                                     .position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
+                                    let moved_to_board_id = boards[moved_to_board_index].id;
+                                    let moved_from_board_id = boards[moved_from_board_index].id;
                                     let card =
-                                        app.boards[moved_from_board_index].cards.remove(card_index);
+                                        boards[moved_from_board_index].cards.remove(card_index);
                                     let card_id = card.id;
                                     let card_name = card.name.clone();
-                                    app.boards[moved_to_board_index].cards.push(card);
+                                    boards[moved_to_board_index].cards.push(card.clone());
                                     // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
-                                    if app.boards[moved_to_board_index].cards.len()
+                                    if boards[moved_to_board_index].cards.len()
                                         <= app.config.no_of_cards_to_show as usize
                                     {
                                         app.visible_boards_and_cards
-                                            .entry(app.boards[moved_to_board_index].id)
+                                            .entry(moved_to_board_id)
                                             .and_modify(|cards| cards.push(card_id));
                                     }
                                     // remove the moved card from visible cards for the current board
                                     app.visible_boards_and_cards
-                                        .entry(app.boards[moved_from_board_index].id)
+                                        .entry(moved_from_board_id)
                                         .and_modify(|cards| {
                                             cards.retain(|card_id| *card_id != current_card)
                                         });
                                     // set the visible cards to the last no_of_cards_to_show cards
                                     let mut moved_to_board_visible_cards: Vec<u128> = vec![];
                                     let mut moved_from_board_visible_cards: Vec<u128> = vec![];
-                                    for card in app.boards[moved_to_board_index].cards.iter().rev()
-                                    {
+                                    for card in boards[moved_to_board_index].cards.iter().rev() {
                                         if moved_to_board_visible_cards.len()
                                             < app.config.no_of_cards_to_show as usize
                                         {
                                             moved_to_board_visible_cards.insert(0, card.id);
                                         }
                                     }
-                                    for card in
-                                        app.boards[moved_from_board_index].cards.iter().rev()
-                                    {
+                                    for card in boards[moved_from_board_index].cards.iter().rev() {
                                         if moved_from_board_visible_cards.len()
                                             < app.config.no_of_cards_to_show as usize
                                             && !moved_to_board_visible_cards.contains(&card.id)
@@ -3149,26 +3156,48 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                         }
                                     }
                                     app.visible_boards_and_cards
-                                        .entry(app.boards[moved_to_board_index].id)
+                                        .entry(moved_to_board_id)
                                         .and_modify(|cards| *cards = moved_to_board_visible_cards);
                                     app.visible_boards_and_cards
-                                        .entry(app.boards[moved_from_board_index].id)
+                                        .entry(moved_from_board_id)
                                         .and_modify(|cards| {
                                             *cards = moved_from_board_visible_cards
                                         });
-                                    app.state.current_board_id =
-                                        Some(app.boards[moved_to_board_index].id);
-                                    info!(
+                                    app.state.current_board_id = Some(moved_to_board_id);
+
+                                    let info_msg = &format!(
                                         "Moved card {} to board \"{}\"",
-                                        card_name, app.boards[moved_to_board_index].name
+                                        card_name, boards[moved_to_board_index].name
                                     );
-                                    app.send_info_toast(
-                                        &format!(
-                                            "Moved card {} to board \"{}\"",
-                                            card_name, app.boards[moved_to_board_index].name
-                                        ),
-                                        None,
-                                    );
+
+                                    // handling for filtered boards
+                                    if filter_mode {
+                                        let moved_from_board_index_in_all_boards = app
+                                            .boards
+                                            .iter()
+                                            .position(|board| board.id == moved_from_board_id)
+                                            .unwrap();
+                                        let moved_to_board_index_in_all_boards = app
+                                            .boards
+                                            .iter()
+                                            .position(|board| board.id == moved_to_board_id)
+                                            .unwrap();
+                                        let card_index_in_all = app.boards
+                                            [moved_from_board_index_in_all_boards]
+                                            .cards
+                                            .iter()
+                                            .position(|card| card.id == card_id)
+                                            .unwrap();
+                                        app.boards[moved_from_board_index_in_all_boards]
+                                            .cards
+                                            .remove(card_index_in_all);
+                                        app.boards[moved_to_board_index_in_all_boards]
+                                            .cards
+                                            .push(card);
+                                    }
+
+                                    info!("{}", info_msg);
+                                    app.send_info_toast(info_msg, None);
                                 }
                             }
                         } else {
@@ -3183,6 +3212,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::MoveCardLeft => {
+                // TODO: move card in reality when moved during filtered view
                 if !UiMode::view_modes().contains(&app.state.ui_mode) {
                     return AppReturn::Continue;
                 }
@@ -3190,10 +3220,15 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     if app.state.current_card_id.is_none() {
                         return AppReturn::Continue;
                     } else if let Some(current_board) = app.state.current_board_id {
-                        let moved_from_board_index = app
-                            .boards
-                            .iter()
-                            .position(|board| board.id == current_board);
+                        let mut filter_mode = false;
+                        let boards: &mut Vec<Board> = if app.filtered_boards.is_empty() {
+                            app.boards.as_mut()
+                        } else {
+                            filter_mode = true;
+                            app.filtered_boards.as_mut()
+                        };
+                        let moved_from_board_index =
+                            boards.iter().position(|board| board.id == current_board);
                         if moved_from_board_index.is_none() {
                             app.send_error_toast(
                                 "Something went wrong, could not find the board",
@@ -3207,44 +3242,43 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         // check if board is the first board
                         if moved_from_board_index > 0 {
                             if let Some(current_card) = app.state.current_card_id {
-                                let card_index = app.boards[moved_from_board_index]
+                                let card_index = boards[moved_from_board_index]
                                     .cards
                                     .iter()
                                     .position(|card| card.id == current_card);
                                 if let Some(card_index) = card_index {
+                                    let moved_to_board_id = boards[moved_to_board_index].id;
+                                    let moved_from_board_id = boards[moved_from_board_index].id;
                                     let card =
-                                        app.boards[moved_from_board_index].cards.remove(card_index);
+                                        boards[moved_from_board_index].cards.remove(card_index);
                                     let card_id = card.id;
                                     let card_name = card.name.clone();
-                                    app.boards[moved_to_board_index].cards.push(card);
+                                    boards[moved_to_board_index].cards.push(card.clone());
                                     // if the next board has cards less than the app.config.no_of_cards_to_show, then add the card to the visible cards
-                                    if app.boards[moved_to_board_index].cards.len()
+                                    if boards[moved_to_board_index].cards.len()
                                         <= app.config.no_of_cards_to_show as usize
                                     {
                                         app.visible_boards_and_cards
-                                            .entry(app.boards[moved_to_board_index].id)
+                                            .entry(moved_to_board_id)
                                             .and_modify(|cards| cards.push(card_id));
                                     }
                                     // remove the moved card from visible cards for the current board
                                     app.visible_boards_and_cards
-                                        .entry(app.boards[moved_from_board_index].id)
+                                        .entry(moved_from_board_id)
                                         .and_modify(|cards| {
                                             cards.retain(|card_id| *card_id != current_card)
                                         });
                                     // set the visible cards to the last no_of_cards_to_show cards
                                     let mut moved_to_board_visible_cards: Vec<u128> = vec![];
                                     let mut moved_from_board_visible_cards: Vec<u128> = vec![];
-                                    for card in app.boards[moved_to_board_index].cards.iter().rev()
-                                    {
+                                    for card in boards[moved_to_board_index].cards.iter().rev() {
                                         if moved_to_board_visible_cards.len()
                                             < app.config.no_of_cards_to_show as usize
                                         {
                                             moved_to_board_visible_cards.insert(0, card.id);
                                         }
                                     }
-                                    for card in
-                                        app.boards[moved_from_board_index].cards.iter().rev()
-                                    {
+                                    for card in boards[moved_from_board_index].cards.iter().rev() {
                                         if moved_from_board_visible_cards.len()
                                             < app.config.no_of_cards_to_show as usize
                                             && !moved_to_board_visible_cards.contains(&card.id)
@@ -3253,26 +3287,48 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                         }
                                     }
                                     app.visible_boards_and_cards
-                                        .entry(app.boards[moved_to_board_index].id)
+                                        .entry(moved_to_board_id)
                                         .and_modify(|cards| *cards = moved_to_board_visible_cards);
                                     app.visible_boards_and_cards
-                                        .entry(app.boards[moved_from_board_index].id)
+                                        .entry(moved_from_board_id)
                                         .and_modify(|cards| {
                                             *cards = moved_from_board_visible_cards
                                         });
-                                    app.state.current_board_id =
-                                        Some(app.boards[moved_to_board_index].id);
-                                    info!(
+                                    app.state.current_board_id = Some(moved_to_board_id);
+
+                                    let info_msg = &format!(
                                         "Moved card {} to board \"{}\"",
-                                        card_name, app.boards[moved_to_board_index].name
+                                        card_name, boards[moved_to_board_index].name
                                     );
-                                    app.send_info_toast(
-                                        &format!(
-                                            "Moved card {} to board \"{}\"",
-                                            card_name, app.boards[moved_to_board_index].name
-                                        ),
-                                        None,
-                                    );
+
+                                    // handling for filtered boards
+                                    if filter_mode {
+                                        let moved_from_board_index_in_all_boards = app
+                                            .boards
+                                            .iter()
+                                            .position(|board| board.id == moved_from_board_id)
+                                            .unwrap();
+                                        let moved_to_board_index_in_all_boards = app
+                                            .boards
+                                            .iter()
+                                            .position(|board| board.id == moved_to_board_id)
+                                            .unwrap();
+                                        let card_index_in_all = app.boards
+                                            [moved_from_board_index_in_all_boards]
+                                            .cards
+                                            .iter()
+                                            .position(|card| card.id == card_id)
+                                            .unwrap();
+                                        app.boards[moved_from_board_index_in_all_boards]
+                                            .cards
+                                            .remove(card_index_in_all);
+                                        app.boards[moved_to_board_index_in_all_boards]
+                                            .cards
+                                            .push(card);
+                                    }
+
+                                    info!("{}", info_msg);
+                                    app.send_info_toast(info_msg, None);
                                 }
                             }
                         } else {
@@ -3656,6 +3712,21 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                             app.card_being_edited = None;
                         }
                         _ => {}
+                    }
+                }
+            }
+            PopupMode::FilterByTag => {
+                if left_button_pressed {
+                    if app.state.mouse_focus == Some(Focus::FilterByTagPopup) {
+                        handle_filter_by_tag(app);
+                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        app.state.filter_tags = None;
+                        app.state.all_available_tags = None;
+                        app.state.filter_by_tag_list_state.select(None);
+                        app.state.popup_mode = None;
+                    } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
+                        handle_filter_by_tag(app);
+                        app.state.popup_mode = None;
                     }
                 }
             }
@@ -4360,6 +4431,11 @@ fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
                 app.state.popup_mode = None;
                 app.card_being_edited = None;
             }
+            PopupMode::FilterByTag => {
+                app.state.filter_tags = None;
+                app.state.all_available_tags = None;
+                app.state.filter_by_tag_list_state.select(None);
+            }
             _ => {}
         }
         app.state.popup_mode = None;
@@ -4428,7 +4504,12 @@ fn handle_change_card_status(app: &mut App) -> AppReturn {
         app.state.popup_mode = Some(PopupMode::ViewCard);
         return AppReturn::Continue;
     } else if let Some(current_board_id) = app.state.current_board_id {
-        if let Some(current_board) = app.boards.iter_mut().find(|b| b.id == current_board_id) {
+        let boards: &mut Vec<Board> = if app.filtered_boards.is_empty() {
+            app.boards.as_mut()
+        } else {
+            app.filtered_boards.as_mut()
+        };
+        if let Some(current_board) = boards.iter_mut().find(|b| b.id == current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) = current_board
                     .cards
@@ -4466,7 +4547,12 @@ fn handle_change_card_priority(app: &mut App) -> AppReturn {
         app.state.popup_mode = Some(PopupMode::ViewCard);
         return AppReturn::Continue;
     } else if let Some(current_board_id) = app.state.current_board_id {
-        if let Some(current_board) = app.boards.iter_mut().find(|b| b.id == current_board_id) {
+        let boards: &mut Vec<Board> = if app.filtered_boards.is_empty() {
+            app.boards.as_mut()
+        } else {
+            app.filtered_boards.as_mut()
+        };
+        if let Some(current_board) = boards.iter_mut().find(|b| b.id == current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) = current_board
                     .cards
@@ -4619,6 +4705,10 @@ fn handle_new_board_action(app: &mut App) {
         .iter()
         .map(|s| s.to_string())
         .collect();
+    if !app.filtered_boards.is_empty() {
+        app.state.filter_tags = None;
+        app.send_warning_toast("Filter Reset", None);
+    }
 }
 
 fn handle_new_card_action(app: &mut App) -> AppReturn {
@@ -4738,6 +4828,10 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
         .iter()
         .map(|s| s.to_string())
         .collect();
+    if !app.filtered_boards.is_empty() {
+        app.state.filter_tags = None;
+        app.send_warning_toast("Filter Reset", None);
+    }
     AppReturn::Continue
 }
 
@@ -4751,7 +4845,12 @@ fn scroll_up(app: &mut App) {
         return;
     }
     let current_board_id = app.state.current_board_id.unwrap();
-    let current_board = app.boards.iter().find(|b| b.id == current_board_id);
+    let boards = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
+    let current_board = boards.iter().find(|b| b.id == current_board_id);
     if current_board.is_none() {
         debug!("No current board found in all boards");
         return;
@@ -4806,8 +4905,13 @@ fn scroll_down(app: &mut App) {
         debug!("No current board id found");
         return;
     }
+    let boards = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
     let current_board_id = app.state.current_board_id.unwrap();
-    let current_board = app.boards.iter().find(|b| b.id == current_board_id);
+    let current_board = boards.iter().find(|b| b.id == current_board_id);
     if current_board.is_none() {
         debug!("No current board found in all boards");
         return;
@@ -4864,25 +4968,24 @@ fn scroll_right(app: &mut App) {
         debug!("No last board in visible boards found");
         return;
     }
+    let boards = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
     let last_board_in_visible = last_board_in_visible.unwrap();
-    let last_board_index = app
-        .boards
-        .iter()
-        .position(|b| b.id == *last_board_in_visible);
+    let last_board_index = boards.iter().position(|b| b.id == *last_board_in_visible);
     if last_board_index.is_none() {
         debug!("No last board index found");
         return;
     }
     let last_board_index = last_board_index.unwrap();
-    if last_board_index == app.boards.len() - 1 {
+    if last_board_index == boards.len() - 1 {
         return;
     }
     let next_board_index = last_board_index + 1;
     // get no_of_cards_to_show cards from the next board and add them to the visible boards
-    let next_board = app
-        .boards
-        .iter()
-        .find(|b| b.id == app.boards[next_board_index].id);
+    let next_board = boards.iter().find(|b| b.id == boards[next_board_index].id);
     if next_board.is_none() {
         debug!("No next board found");
         return;
@@ -4918,11 +5021,13 @@ fn scroll_left(app: &mut App) {
         debug!("No first board in visible boards found");
         return;
     }
+    let boards = if app.filtered_boards.is_empty() {
+        &app.boards
+    } else {
+        &app.filtered_boards
+    };
     let first_board_in_visible = first_board_in_visible.unwrap();
-    let first_board_index = app
-        .boards
-        .iter()
-        .position(|b| b.id == *first_board_in_visible);
+    let first_board_index = boards.iter().position(|b| b.id == *first_board_in_visible);
     if first_board_index.is_none() {
         debug!("No first board index found");
         return;
@@ -4933,10 +5038,9 @@ fn scroll_left(app: &mut App) {
     }
     let previous_board_index = first_board_index - 1;
     // get no_of_cards_to_show cards from the previous board and add them to the visible boards
-    let previous_board = app
-        .boards
+    let previous_board = boards
         .iter()
-        .find(|b| b.id == app.boards[previous_board_index].id);
+        .find(|b| b.id == boards[previous_board_index].id);
     if previous_board.is_none() {
         debug!("No previous board found");
         return;
@@ -5721,11 +5825,19 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
                 "Invalid date format for '{}'. Please use DD/MM/YYYY-HH:MM:SS, YYYY-MM-DD-HH:MM:SS, DD/MM/YYY or YYYY/MM/DD. Date has been reset and other changes have been saved.",
                 warning_date_due
             ),
-            None,
+            Some(Duration::from_secs(10)),
         );
     }
     app.send_info_toast(&format!("Changes to Card '{}' saved", card_name), None);
     app.state.app_status = AppStatus::Initialized;
+    // all tags have " - count" attached so we need to remove that
+    let calculated_tags = CommandPaletteWidget::calculate_tags(app);
+    if calculated_tags.is_empty() {
+        app.state.all_available_tags = None;
+    } else {
+        app.state.all_available_tags = Some(calculated_tags);
+    };
+    filter_boards(app);
     AppReturn::Continue
 }
 
@@ -5734,4 +5846,101 @@ fn open_command_palette(app: &mut App) {
     app.state.current_user_input = String::new();
     app.state.current_cursor_position = None;
     app.state.app_status = AppStatus::UserInput;
+}
+
+fn handle_filter_by_tag(app: &mut App) {
+    match app.state.focus {
+        Focus::FilterByTagPopup => {
+            let selected_index = app.state.filter_by_tag_list_state.selected();
+            if selected_index.is_none() {
+                return;
+            }
+            let selected_index = selected_index.unwrap();
+            let all_tags = app.state.all_available_tags.clone();
+            if all_tags.is_none() {
+                debug!("No tags found to select");
+                return;
+            }
+            let all_tags = all_tags.unwrap();
+            if selected_index >= all_tags.len() {
+                debug!("Selected index is out of bounds");
+                return;
+            }
+            let selected_tag = all_tags[selected_index].clone();
+            if app.state.filter_tags.is_some() {
+                let mut filter_tags = app.state.filter_tags.clone().unwrap();
+                if filter_tags.contains(&selected_tag) {
+                    app.send_warning_toast(
+                        &format!("Removed tag {} from filter", selected_tag),
+                        None,
+                    );
+                    filter_tags.retain(|tag| tag != &selected_tag);
+                } else {
+                    app.send_info_toast(&format!("Added tag {} to filter", selected_tag), None);
+                    filter_tags.push(selected_tag);
+                }
+                app.state.filter_tags = Some(filter_tags);
+            } else {
+                let filter_tags = vec![selected_tag.clone()];
+                app.send_info_toast(&format!("Added tag {} to filter", selected_tag), None);
+                app.state.filter_tags = Some(filter_tags);
+            }
+        }
+        Focus::SubmitButton => filter_boards(app),
+        _ => {}
+    }
+}
+
+fn filter_boards(app: &mut App) {
+    if app.state.filter_tags.is_none() {
+        app.send_warning_toast("No tags selected to filter", None);
+        app.state.popup_mode = None;
+        return;
+    }
+    let all_boards = app.boards.clone();
+    app.state.current_board_id = None;
+    app.state.current_card_id = None;
+    let filter_tags = app
+        .state
+        .filter_tags
+        .clone()
+        .unwrap()
+        .iter()
+        .map(|tag| {
+            let tag = tag.clone();
+            let tag = tag.split(" -").collect::<Vec<&str>>();
+            // remove last element
+            tag[..tag.len() - 1].join("")
+        })
+        .collect::<Vec<String>>();
+    let mut filtered_boards = Vec::new();
+    for board in all_boards {
+        let mut filtered_cards = Vec::new();
+        for card in board.cards {
+            let mut card_tags = card.tags.clone();
+            card_tags.retain(|tag| filter_tags.contains(&tag.to_lowercase()));
+            if !card_tags.is_empty() {
+                filtered_cards.push(card);
+            }
+        }
+        if !filtered_cards.is_empty() {
+            filtered_boards.push(Board {
+                id: board.id,
+                name: board.name,
+                description: board.description,
+                cards: filtered_cards,
+            });
+        }
+    }
+    app.filtered_boards = filtered_boards;
+    refresh_visible_boards_and_cards(app);
+    app.send_info_toast(
+        &format!(
+            "Filtered by {} tags",
+            app.state.filter_tags.clone().unwrap().len()
+        ),
+        None,
+    );
+    app.state.popup_mode = None;
+    app.state.filter_by_tag_list_state.select(None);
 }

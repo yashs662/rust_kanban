@@ -112,6 +112,9 @@ where
             PopupMode::CardPrioritySelector => {
                 ui_helper::render_card_priority_selector(rect, app);
             }
+            PopupMode::FilterByTag => {
+                ui_helper::render_filter_by_tag_popup(rect, app);
+            }
         }
     }
 

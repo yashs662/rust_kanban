@@ -9,6 +9,7 @@
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
+- [ ] Allow for vertical movement in text fields (e.g. card description)
 - [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
 - [ ] Allow for more mouse Interactions (Dragging cards maybe?)
 - [ ] Implement Cloud saves (Google drive maybe? as I am not going to host a server)
@@ -17,6 +18,7 @@
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Ability to filter cards by tags
 - [x] Allow Card to be modified in Card View
 - [x] Implement a way to add custom colors (Theme support)
 - [x] Implement a way to interact with the kanban board using the mouse (Clicking, Scrolling are supported as of now)
@@ -36,7 +38,7 @@
 - [x] Logging
   
 ## Known Issues
-- [ ] Cursor positioning in Card view is sometimes off by one or two spaces and is consistantly on the previous line for comments and tags and the 2nd line or below
+- [ ] Cursor positioning in Card view is sometimes off by one or two spaces and is consistantly on the previous line for comments and tags for the 2nd line or below
 
 ## How to use
 ### Default Keybindings

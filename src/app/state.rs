@@ -73,6 +73,7 @@ pub enum Focus {
     CardTags,
     CardComments,
     ChangeCardPriorityPopup,
+    FilterByTagPopup,
     #[default]
     NoFocus,
     ExtraFocus, // Used in cases where defining a new focus is not necessary
@@ -274,6 +275,7 @@ impl Focus {
             Self::CardTags => "Card Tags",
             Self::CardComments => "Card Comments",
             Self::ChangeCardPriorityPopup => "Change Card Priority Popup",
+            Self::FilterByTagPopup => "Filter By Tag Popup",
             Self::NoFocus => "No Focus",
             Self::ExtraFocus => "Extra Focus",
         }
@@ -344,6 +346,7 @@ impl FromStr for Focus {
             "Card Tags" => Ok(Self::CardTags),
             "Card Comments" => Ok(Self::CardComments),
             "Change Card Priority Popup" => Ok(Self::ChangeCardPriorityPopup),
+            "Filter By Tag Popup" => Ok(Self::FilterByTagPopup),
             "Submit Button" => Ok(Self::SubmitButton),
             "Extra Focus" => Ok(Self::ExtraFocus),
             _ => Ok(Self::NoFocus),

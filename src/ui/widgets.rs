@@ -1,6 +1,7 @@
 use log::{debug, error, info};
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use std::{
+    collections::HashMap,
     fmt::{self, Display},
     sync::Arc,
     time::Duration,
@@ -13,7 +14,7 @@ use crate::{
         App, AppReturn, PopupMode,
     },
     constants::{TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
-    io::{data_handler::export_kanban_to_json, IoEvent},
+    io::{data_handler::export_kanban_to_json, handler::refresh_visible_boards_and_cards, IoEvent},
     lerp_between,
 };
 
@@ -333,6 +334,25 @@ impl CommandPaletteWidget {
                         app.state.ui_mode = UiMode::CreateTheme;
                         app.state.popup_mode = None;
                     }
+                    CommandPaletteActions::FilterByTag => {
+                        let tags = Self::calculate_tags(app);
+                        if tags.is_empty() {
+                            app.send_warning_toast("No tags found to filter with", None);
+                            app.state.popup_mode = None;
+                        } else {
+                            app.state.popup_mode = Some(PopupMode::FilterByTag);
+                            app.state.all_available_tags = Some(tags);
+                        }
+                    }
+                    CommandPaletteActions::ClearFilter => {
+                        app.state.filter_tags = None;
+                        app.state.all_available_tags = None;
+                        app.state.filter_by_tag_list_state.select(None);
+                        app.state.popup_mode = None;
+                        app.filtered_boards = vec![];
+                        refresh_visible_boards_and_cards(app);
+                        app.send_info_toast("All Filters Cleared", None);
+                    }
                 }
                 app.state.current_user_input = "".to_string();
             } else {
@@ -371,7 +391,22 @@ impl CommandPaletteWidget {
             let search_results = if search_results.is_empty() {
                 CommandPaletteActions::all()
             } else {
-                search_results
+                // sort to keep search results that start with the current search string at the top of the list
+                let mut ordered_search_results = vec![];
+                let mut extra_results = vec![];
+                for result in search_results {
+                    if result
+                        .to_string()
+                        .to_lowercase()
+                        .starts_with(&current_search_string)
+                    {
+                        ordered_search_results.push(result);
+                    } else {
+                        extra_results.push(result);
+                    }
+                }
+                ordered_search_results.extend(extra_results);
+                ordered_search_results
             };
             app.command_palette.search_results = Some(search_results);
             app.command_palette.last_search_string = current_search_string;
@@ -388,6 +423,29 @@ impl CommandPaletteWidget {
                 }
             }
         }
+    }
+
+    pub fn calculate_tags(app: &App) -> Vec<String> {
+        let mut tags: Vec<String> = vec![];
+        for board in &app.boards {
+            for card in &board.cards {
+                for tag in &card.tags {
+                    if tag.is_empty() {
+                        continue;
+                    }
+                    tags.push(tag.clone());
+                }
+            }
+        }
+        tags = tags.iter().map(|tag| tag.to_lowercase()).collect();
+        let count_hash: HashMap<String, u32> = tags.iter().fold(HashMap::new(), |mut acc, tag| {
+            *acc.entry(tag.clone()).or_insert(0) += 1;
+            acc
+        });
+        count_hash
+            .iter()
+            .map(|(tag, count)| format!("{} - {} occurrences", tag, count))
+            .collect()
     }
 }
 
@@ -407,6 +465,8 @@ pub enum CommandPaletteActions {
     DebugMenu,
     ChangeTheme,
     CreateATheme,
+    FilterByTag,
+    ClearFilter,
     Quit,
 }
 
@@ -427,6 +487,8 @@ impl Display for CommandPaletteActions {
             Self::DebugMenu => write!(f, "Toggle Debug Panel"),
             Self::ChangeTheme => write!(f, "Change Theme"),
             Self::CreateATheme => write!(f, "Create a Theme"),
+            Self::FilterByTag => write!(f, "Filter by Tag"),
+            Self::ClearFilter => write!(f, "Clear Filter"),
             Self::Quit => write!(f, "Quit"),
         }
     }
@@ -448,6 +510,8 @@ impl CommandPaletteActions {
             Self::ChangeCurrentCardStatus,
             Self::ChangeTheme,
             Self::CreateATheme,
+            Self::FilterByTag,
+            Self::ClearFilter,
             Self::Quit,
         ];
 
@@ -477,6 +541,8 @@ impl CommandPaletteActions {
                 "toggle debug panel" => Some(Self::DebugMenu),
                 "change theme" => Some(Self::ChangeTheme),
                 "create a theme" => Some(Self::CreateATheme),
+                "filter by tag" => Some(Self::FilterByTag),
+                "clear filter" => Some(Self::ClearFilter),
                 "quit" => Some(Self::Quit),
                 _ => None,
             }
@@ -496,6 +562,8 @@ impl CommandPaletteActions {
                 "Toggle Debug Panel" => Some(Self::DebugMenu),
                 "Change Theme" => Some(Self::ChangeTheme),
                 "Create a Theme" => Some(Self::CreateATheme),
+                "Filter by Tag" => Some(Self::FilterByTag),
+                "Clear Filter" => Some(Self::ClearFilter),
                 "Quit" => Some(Self::Quit),
                 _ => None,
             }

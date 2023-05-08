@@ -59,6 +59,7 @@ pub struct App {
     is_loading: bool,
     pub state: AppState,
     pub boards: Vec<Board>,
+    pub filtered_boards: Vec<Board>,
     pub config: AppConfig,
     pub config_item_being_edited: Option<usize>,
     pub card_being_edited: Option<(u128, Card)>, // (board_id, card)
@@ -75,6 +76,7 @@ impl App {
         let is_loading = false;
         let mut state = AppState::default();
         let boards = vec![];
+        let filtered_boards = vec![];
         let all_themes = Theme::all_default_themes();
         let mut theme = Theme::default();
         let config = prepare_config_for_new_app(&mut state, theme.clone());
@@ -92,6 +94,7 @@ impl App {
             is_loading,
             state,
             boards,
+            filtered_boards,
             config,
             config_item_being_edited: None,
             card_being_edited: None,
@@ -709,6 +712,46 @@ impl App {
         };
         self.state.card_priority_selector_state.select(Some(i));
     }
+    pub fn filter_by_tag_popup_next(&mut self) {
+        let all_tags_len = if self.state.all_available_tags.is_some() {
+            self.state.all_available_tags.clone().unwrap().len()
+        } else {
+            0
+        };
+        if all_tags_len > 0 {
+            let i = match self.state.filter_by_tag_list_state.selected() {
+                Some(i) => {
+                    if i >= all_tags_len - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 0,
+            };
+            self.state.filter_by_tag_list_state.select(Some(i));
+        }
+    }
+    pub fn filter_by_tag_popup_prev(&mut self) {
+        let all_tags_len = if self.state.all_available_tags.is_some() {
+            self.state.all_available_tags.clone().unwrap().len()
+        } else {
+            0
+        };
+        if all_tags_len > 0 {
+            let i = match self.state.filter_by_tag_list_state.selected() {
+                Some(i) => {
+                    if i == 0 {
+                        all_tags_len - 1
+                    } else {
+                        i - 1
+                    }
+                }
+                None => 0,
+            };
+            self.state.filter_by_tag_list_state.select(Some(i));
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -775,6 +818,7 @@ pub enum PopupMode {
     CustomRGBPromptBG,
     ConfirmDiscardCardChanges,
     CardPrioritySelector,
+    FilterByTag,
 }
 
 impl Display for PopupMode {
@@ -794,6 +838,7 @@ impl Display for PopupMode {
             PopupMode::CustomRGBPromptBG => write!(f, "Custom RGB Prompt"),
             PopupMode::ConfirmDiscardCardChanges => write!(f, "Confirm Discard Card Changes"),
             PopupMode::CardPrioritySelector => write!(f, "Change Card Priority"),
+            PopupMode::FilterByTag => write!(f, "Filter By Tag"),
         }
     }
 }
@@ -828,6 +873,7 @@ impl PopupMode {
             PopupMode::CustomRGBPromptBG => vec![Focus::TextInput, Focus::SubmitButton],
             PopupMode::ConfirmDiscardCardChanges => vec![Focus::SubmitButton, Focus::ExtraFocus],
             PopupMode::CardPrioritySelector => vec![],
+            PopupMode::FilterByTag => vec![Focus::FilterByTagPopup, Focus::SubmitButton],
         }
     }
 }
@@ -878,6 +924,9 @@ pub struct AppState {
     pub card_view_tag_list_state: ListState,
     pub card_view_comment_list_state: ListState,
     pub card_priority_selector_state: ListState,
+    pub all_available_tags: Option<Vec<String>>,
+    pub filter_tags: Option<Vec<String>>,
+    pub filter_by_tag_list_state: ListState,
 }
 
 impl Default for AppState {
@@ -931,6 +980,9 @@ impl Default for AppState {
             card_view_tag_list_state: ListState::default(),
             card_view_comment_list_state: ListState::default(),
             card_priority_selector_state: ListState::default(),
+            all_available_tags: None,
+            filter_tags: None,
+            filter_by_tag_list_state: ListState::default(),
         }
     }
 }

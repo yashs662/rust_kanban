@@ -71,7 +71,6 @@ impl IoAsyncHandler {
         app.boards = prepare_boards(&mut app);
         app.keybind_list_maker();
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
-        app.initialized(); // we could update the app state
         let saved_themes = get_saved_themes();
         if saved_themes.is_some() {
             app.all_themes.extend(saved_themes.unwrap());
@@ -90,6 +89,7 @@ impl IoAsyncHandler {
             app.state.term_background_color = (0, 0, 0)
         }
         info!("👍 Application initialized");
+        app.initialized(); // we could update the app state
         if app.config.save_directory == get_default_save_directory() {
             app.send_warning_toast(
                 "Save directory is set to a temporary directory,
@@ -498,7 +498,12 @@ fn get_latest_save_file() -> Result<(String, u32)> {
 
 pub fn refresh_visible_boards_and_cards(app: &mut App) {
     let mut visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
-    for (i, board) in app.boards.iter().enumerate() {
+    let boards = if app.filtered_boards.is_empty() {
+        app.boards.clone()
+    } else {
+        app.filtered_boards.clone()
+    };
+    for (i, board) in boards.iter().enumerate() {
         if (i) as u16 == app.config.no_of_boards_to_show {
             break;
         }

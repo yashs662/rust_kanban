@@ -6,7 +6,7 @@ use ratatui::{
     style::Style,
     text::{Span, Spans},
     widgets::{
-        Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table, Wrap,
+        Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table,
     },
     Frame,
 };
@@ -542,7 +542,6 @@ where
         .borders(Borders::ALL)
         .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
-    rect.render_widget(Clear, clear_area);
     render_blank_styled_canvas(rect, app, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
 
@@ -681,7 +680,6 @@ where
         .borders(Borders::ALL)
         .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
-    rect.render_widget(Clear, clear_area);
     render_blank_styled_canvas(rect, app, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     let chunks = Layout::default()
@@ -742,12 +740,12 @@ where
         Span::styled(" and ", app.theme.general_style),
         Span::styled(down_key, app.theme.help_key_style),
         Span::styled("to navigate", app.theme.general_style),
-        Span::raw("; "),
-        Span::raw("Press "),
+        Span::styled("; ", app.theme.general_style),
+        Span::styled("Press ", app.theme.general_style),
         Span::styled("<Enter>", app.theme.help_key_style),
-        Span::raw(" To select a Default View; Press "),
+        Span::styled(" To select a Default View; Press ", app.theme.general_style),
         Span::styled("<Esc>", app.theme.help_key_style),
-        Span::raw(" to cancel"),
+        Span::styled(" to cancel", app.theme.general_style),
     ]);
 
     let config_help = Paragraph::new(help_spans)
@@ -1011,7 +1009,6 @@ where
         .border_style(app.theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
 
-    rect.render_widget(Clear, clear_area);
     render_blank_styled_canvas(rect, app, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     let chunks = if app.config.enable_mouse_support {
@@ -1556,6 +1553,8 @@ where
         } else {
             &fallback_boards
         }
+    } else if !app.filtered_boards.is_empty() {
+        &app.filtered_boards
     } else {
         &app.boards
     };
@@ -1622,18 +1621,40 @@ where
         return;
     }
 
+    let filter_chunks = if app.filtered_boards.is_empty() {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(0), Constraint::Percentage(100)].as_ref())
+            .split(area)
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Percentage(99)].as_ref())
+            .split(area)
+    };
+
     // make a list of constraints depending on NO_OF_BOARDS_PER_PAGE constant
     let chunks = if app.config.disable_scrollbars {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(100)].as_ref())
-            .split(area)
+            .split(filter_chunks[1])
     } else {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(99), Constraint::Length(1)].as_ref())
-            .split(area)
+            .split(filter_chunks[1])
     };
+
+    if !app.filtered_boards.is_empty() {
+        let filtered_text = "This is a filtered view, Clear filter to see all boards and cards";
+        let filtered_paragraph = Paragraph::new(filtered_text.to_string())
+            .alignment(Alignment::Center)
+            .block(Block::default())
+            .style(error_text_style);
+        rect.render_widget(filtered_paragraph, filter_chunks[0]);
+    }
+
     let mut constraints = vec![];
     // check if length of boards is more than NO_OF_BOARDS_PER_PAGE
     if boards.len() > app.config.no_of_boards_to_show.into() {
@@ -1673,7 +1694,7 @@ where
                 .iter()
                 .find(|&b| b.id == *board_id)
         } else {
-            app.boards.iter().find(|&b| b.id == *board_id)
+            boards.iter().find(|&b| b.id == *board_id)
         };
         // check if board is found if not continue
         if board.is_none() {
@@ -2058,11 +2079,15 @@ where
     let title = draw_title(app, *size);
     rect.render_widget(title, chunks[0]);
 
-    let mut text = vec![Spans::from(Span::styled(msg, app.theme.error_text_style))];
-    text.append(&mut vec![Spans::from(Span::raw(
-        "Resize the window to continue, or press 'q' to quit.",
-    ))]);
-    let body = Paragraph::new(text)
+    let error_text_spans = vec![
+        Spans::from(Span::styled(msg, app.theme.error_text_style)),
+        Spans::from(Span::styled(
+            "Resize the window to continue, or press 'q' to quit.",
+            app.theme.general_style,
+        )),
+    ];
+
+    let body = Paragraph::new(error_text_spans)
         .block(Block::default().borders(Borders::ALL))
         .alignment(Alignment::Center);
     rect.render_widget(body, chunks[1]);
@@ -2809,8 +2834,8 @@ where
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .wrap(Wrap { trim: true })
-        .style(default_style);
+        .style(default_style)
+        .wrap(ratatui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[2]);
 
     // preview pane
@@ -2824,7 +2849,7 @@ where
                         .border_type(BorderType::Rounded),
                 )
                 .style(default_style)
-                .wrap(Wrap { trim: true });
+                .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(preview_paragraph, preview_chunks[1]);
     } else if app.state.preview_boards_and_cards.is_none() {
         let loading_text = if app.config.enable_mouse_support {
@@ -2840,7 +2865,7 @@ where
                     .border_type(BorderType::Rounded),
             )
             .style(default_style)
-            .wrap(Wrap { trim: true });
+            .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(preview_paragraph, preview_chunks[1]);
     } else {
         render_body(rect, preview_chunks[1], app, true)
@@ -2855,7 +2880,7 @@ where
                     .border_type(BorderType::Rounded),
             )
             .style(default_style)
-            .wrap(Wrap { trim: true })
+            .wrap(ratatui::widgets::Wrap { trim: true })
     } else {
         Paragraph::new("Select a file to preview")
             .alignment(Alignment::Center)
@@ -2865,7 +2890,7 @@ where
                     .border_type(BorderType::Rounded),
             )
             .style(default_style)
-            .wrap(Wrap { trim: true })
+            .wrap(ratatui::widgets::Wrap { trim: true })
     };
 
     if app.config.enable_mouse_support {
@@ -2988,7 +3013,7 @@ where
         let toast_paragraph = Paragraph::new(lines)
             .block(toast_block)
             .alignment(Alignment::Left)
-            .wrap(Wrap { trim: true })
+            .wrap(ratatui::widgets::Wrap { trim: true })
             .style(toast_style);
         rect.render_widget(
             Clear,
@@ -3035,7 +3060,6 @@ where
         )
         .style(app.theme.general_style);
     let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
-    rect.render_widget(Clear, message_area);
     render_blank_styled_canvas(rect, app, message_area, false);
     rect.render_widget(toast_count_paragraph, message_area);
 }
@@ -3045,7 +3069,6 @@ where
     B: Backend,
 {
     let popup_area = centered_rect(90, 90, rect.size());
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, false);
     let card_chunks = if app.card_being_edited.is_some() {
         Layout::default()
@@ -3078,8 +3101,7 @@ where
                     .border_type(BorderType::Rounded)
                     .style(app.theme.error_text_style),
             )
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true });
+            .alignment(Alignment::Center);
         rect.render_widget(no_board_or_card_selected, popup_area);
         return;
     }
@@ -3097,7 +3119,7 @@ where
                     .style(app.theme.error_text_style),
             )
             .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true });
+            .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(could_not_find_board, popup_area);
         return;
     }
@@ -3116,7 +3138,7 @@ where
                     .style(app.theme.error_text_style),
             )
             .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true });
+            .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(could_not_find_card, popup_area);
         return;
     }
@@ -3532,8 +3554,6 @@ where
                 rect.set_cursor(x_pos + 5, y_pos + 2); // +5 and +2 are to account for the "Due: " text and extra info position offset
             }
             Focus::CardTags => {
-                // TODO: Fix cursor position
-                // card_tag_spans.0 is a vector of spans check app.state.card_view_tag_list_state.selected() check i which span is selected and then calculate the cursor position
                 if app.state.card_view_tag_list_state.selected().is_some() {
                     let selected_index = app.state.card_view_tag_list_state.selected().unwrap();
                     let mut counter = 0;
@@ -3729,16 +3749,13 @@ where
     rect.set_cursor(x_cursor_position, y_cursor_position);
 
     // make a search bar and display all the commands that match the search below it in a list
-    let search_bar = Paragraph::new(search_box_text)
-        .block(
-            Block::default()
-                .title("Command Palette")
-                .borders(Borders::ALL)
-                .style(app.theme.general_style)
-                .border_type(BorderType::Rounded),
-        )
-        .wrap(Wrap { trim: false });
-    rect.render_widget(Clear, vertical_chunks[1]);
+    let search_bar = Paragraph::new(search_box_text).block(
+        Block::default()
+            .title("Command Palette")
+            .borders(Borders::ALL)
+            .style(app.theme.general_style)
+            .border_type(BorderType::Rounded),
+    );
     render_blank_styled_canvas(rect, app, vertical_chunks[1], false);
     rect.render_widget(search_bar, vertical_chunks[1]);
 
@@ -3752,7 +3769,6 @@ where
         .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    rect.render_widget(Clear, vertical_chunks[2]);
     render_blank_styled_canvas(rect, app, vertical_chunks[2], false);
     rect.render_stateful_widget(
         search_results,
@@ -3821,7 +3837,6 @@ where
         .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(ui_modes, popup_area, &mut app.state.default_view_state);
 
@@ -3836,8 +3851,13 @@ where
 {
     let mut card_name = String::new();
     let mut board_name = String::new();
+    let boards = if app.filtered_boards.is_empty() {
+        app.boards.clone()
+    } else {
+        app.filtered_boards.clone()
+    };
     if let Some(current_board_id) = app.state.current_board_id {
-        if let Some(current_board) = app.boards.iter().find(|b| b.id == current_board_id) {
+        if let Some(current_board) = boards.iter().find(|b| b.id == current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) =
                     current_board.cards.iter().find(|c| c.id == current_card_id)
@@ -3884,7 +3904,6 @@ where
         .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(
         statuses,
@@ -3903,8 +3922,13 @@ where
 {
     let mut card_name = String::new();
     let mut board_name = String::new();
+    let boards = if app.filtered_boards.is_empty() {
+        app.boards.clone()
+    } else {
+        app.filtered_boards.clone()
+    };
     if let Some(current_board_id) = app.state.current_board_id {
-        if let Some(current_board) = app.boards.iter().find(|b| b.id == current_board_id) {
+        if let Some(current_board) = boards.iter().find(|b| b.id == current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) =
                     current_board.cards.iter().find(|c| c.id == current_card_id)
@@ -3951,13 +3975,219 @@ where
         .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(
         priorities,
         popup_area,
         &mut app.state.card_priority_selector_state,
     );
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app);
+    }
+}
+
+pub fn render_filter_by_tag_popup<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    if app.state.all_available_tags.is_some() {
+        let submit_style = if app.state.focus == Focus::SubmitButton {
+            app.theme.keyboard_focus_style
+        } else {
+            app.theme.general_style
+        };
+
+        let tag_box_style = if app.state.focus == Focus::FilterByTagPopup {
+            app.theme.keyboard_focus_style
+        } else {
+            app.theme.general_style
+        };
+
+        let popup_area = centered_rect(70, 70, rect.size());
+        render_blank_styled_canvas(rect, app, popup_area, false);
+        let all_available_tags = app.state.all_available_tags.as_ref().unwrap();
+        let empty_vec = vec![];
+        let selected_tags = if app.state.filter_tags.is_some() {
+            app.state.filter_tags.as_ref().unwrap()
+        } else {
+            &empty_vec
+        };
+        let main_chunks = if all_available_tags.len() > (popup_area.height as usize + 5) {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(100)])
+                .split(popup_area)
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(100)])
+                .split(popup_area)
+        };
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Min(5),
+                    Constraint::Length(5),
+                    Constraint::Length(3),
+                ]
+                .as_ref(),
+            )
+            .split(main_chunks[0]);
+
+        // go through all_available tags and map them to list items if the tag is in selected_tags highlight it with app.theme.list_select_style
+        let all_tags = all_available_tags
+            .iter()
+            .map(|tag| {
+                if selected_tags.contains(tag) {
+                    ListItem::new(vec![Spans::from(vec![Span::styled(
+                        format!("(Selected) {}", tag.clone()),
+                        app.theme.list_select_style,
+                    )])])
+                } else {
+                    ListItem::new(vec![Spans::from(vec![Span::styled(
+                        tag.clone(),
+                        app.theme.general_style,
+                    )])])
+                }
+            })
+            .collect::<Vec<ListItem>>();
+
+        let tags = List::new(all_tags.clone())
+            .block(
+                Block::default()
+                    .title("Filter by Tag")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .style(app.theme.general_style)
+                    .border_style(tag_box_style),
+            )
+            .highlight_style(app.theme.list_select_style)
+            .highlight_symbol(LIST_SELECTED_SYMBOL);
+
+        render_blank_styled_canvas(rect, app, chunks[0], false);
+        rect.render_stateful_widget(tags, chunks[0], &mut app.state.filter_by_tag_list_state);
+
+        let up_key = app
+            .state
+            .keybind_store
+            .iter()
+            .find(|x| x[1] == "Go up")
+            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+            .clone();
+        let down_key = app
+            .state
+            .keybind_store
+            .iter()
+            .find(|x| x[1] == "Go down")
+            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+            .clone();
+        let next_focus_key = app
+            .state
+            .keybind_store
+            .iter()
+            .find(|x| x[1] == "Focus next")
+            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+            .clone();
+        let prev_focus_key = app
+            .state
+            .keybind_store
+            .iter()
+            .find(|x| x[1] == "Focus previous")
+            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+            .clone();
+
+        let help_spans = Spans::from(vec![
+            Span::styled("Use ", app.theme.general_style),
+            Span::styled(up_key, app.theme.help_key_style),
+            Span::styled("and ", app.theme.general_style),
+            Span::styled(down_key, app.theme.help_key_style),
+            Span::styled("to navigate", app.theme.general_style),
+            Span::styled("Press ", app.theme.general_style),
+            Span::styled("<Enter>", app.theme.help_key_style),
+            Span::styled(
+                " To select a Tag (multiple tags can be selected); Press ",
+                app.theme.general_style,
+            ),
+            Span::styled("<Enter>", app.theme.help_key_style),
+            Span::styled(
+                " on an already selected tag to deselect it; Press ",
+                app.theme.general_style,
+            ),
+            Span::styled("<Esc>", app.theme.help_key_style),
+            Span::styled(" to cancel, Press ", app.theme.general_style),
+            Span::styled(next_focus_key, app.theme.help_key_style),
+            Span::styled("or ", app.theme.general_style),
+            Span::styled(prev_focus_key, app.theme.help_key_style),
+            Span::styled("to change focus", app.theme.general_style),
+        ]);
+
+        let help = Paragraph::new(help_spans)
+            .alignment(Alignment::Left)
+            .block(
+                Block::default()
+                    .title("Help")
+                    .borders(Borders::ALL)
+                    .style(app.theme.general_style)
+                    .border_type(BorderType::Rounded),
+            )
+            .alignment(Alignment::Center)
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        rect.render_widget(help, chunks[1]);
+
+        let submit_btn_text = if app.state.filter_tags.is_some() {
+            if app.state.filter_tags.as_ref().unwrap().len() > 1 {
+                "Confirm filters"
+            } else {
+                "Confirm filter"
+            }
+        } else {
+            "Confirm filter"
+        };
+
+        let submit_button = Paragraph::new(submit_btn_text)
+            .block(
+                Block::default()
+                    .title("Submit")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .style(app.theme.general_style)
+                    .border_style(submit_style),
+            )
+            .alignment(Alignment::Center);
+
+        rect.render_widget(submit_button, chunks[2]);
+
+        if main_chunks.len() > 1 {
+            let current_index = app.state.edit_keybindings_state.selected().unwrap_or(0);
+            let total_rows = all_tags.len();
+            let visible_rows = (chunks[0].height - 1) as usize;
+            let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
+            let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
+
+            // render blocks VERTICAL_SCROLL_BAR_SYMBOL
+            for i in 0..blocks_to_render {
+                let block_x = chunks[0].right() - 2;
+                let block_y = chunks[0].top() + i as u16;
+                let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
+                    .style(app.theme.progress_bar_style)
+                    .block(Block::default().borders(Borders::NONE));
+                rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
+            }
+        }
+
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
+            app.state.mouse_focus = Some(Focus::FilterByTagPopup);
+            app.state.focus = Focus::FilterByTagPopup;
+        }
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
+            app.state.mouse_focus = Some(Focus::SubmitButton);
+            app.state.focus = Focus::SubmitButton;
+        }
+    }
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
@@ -4008,17 +4238,14 @@ where
             }
         })
         .collect::<Vec<Spans>>();
-    let debug_panel = Paragraph::new(strings)
-        .block(
-            Block::default()
-                .title("Debug Panel")
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .style(app.theme.general_style)
-                .border_style(app.theme.log_debug_style),
-        )
-        .wrap(Wrap { trim: false });
-    rect.render_widget(Clear, menu_area);
+    let debug_panel = Paragraph::new(strings).block(
+        Block::default()
+            .title("Debug Panel")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .style(app.theme.general_style)
+            .border_style(app.theme.log_debug_style),
+    );
     render_blank_styled_canvas(rect, app, menu_area, false);
     rect.render_widget(debug_panel, menu_area);
 }
@@ -4098,7 +4325,6 @@ where
         )
         .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(themes, popup_area, &mut app.state.theme_selector_state);
 
@@ -4374,7 +4600,6 @@ where
                 .border_style(submit_button_style),
         )
         .alignment(Alignment::Center);
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(
         fg_list,
@@ -4450,7 +4675,6 @@ where
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(app.theme.general_style);
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, true);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
@@ -4466,6 +4690,7 @@ where
     B: Backend,
 {
     let popup_area = centered_rect(30, 25, rect.size());
+    render_blank_styled_canvas(rect, app, popup_area, true);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
@@ -4512,7 +4737,6 @@ where
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(app.theme.general_style);
-    rect.render_widget(Clear, popup_area);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
     rect.render_widget(border_block, popup_area);
@@ -4589,7 +4813,6 @@ where
         )
         .alignment(Alignment::Center);
 
-    rect.render_widget(Clear, popup_area);
     render_blank_styled_canvas(rect, app, popup_area, true);
     rect.render_widget(prompt_text, chunks[0]);
     rect.render_widget(text_input, chunks[1]);
