@@ -1,4 +1,4 @@
-use chrono::{Local, NaiveDateTime};
+use chrono::{Local, NaiveDate, NaiveDateTime};
 use log::debug;
 use ratatui::{
     backend::Backend,
@@ -735,17 +735,20 @@ where
         .clone();
 
     let help_spans = Spans::from(vec![
-        Span::styled("Use ", app.theme.general_style),
+        Span::styled("Use ", app.theme.help_text_style),
         Span::styled(up_key, app.theme.help_key_style),
-        Span::styled(" and ", app.theme.general_style),
+        Span::styled("or ", app.theme.help_text_style),
         Span::styled(down_key, app.theme.help_key_style),
-        Span::styled("to navigate", app.theme.general_style),
-        Span::styled("; ", app.theme.general_style),
-        Span::styled("Press ", app.theme.general_style),
+        Span::styled("to navigate. Press ", app.theme.help_text_style),
         Span::styled("<Enter>", app.theme.help_key_style),
-        Span::styled(" To select a Default View; Press ", app.theme.general_style),
+        Span::styled(" or ", app.theme.help_text_style),
+        Span::styled("<Mouse Left Click>", app.theme.help_key_style),
+        Span::styled(
+            " To select a Default View. Press ",
+            app.theme.help_text_style,
+        ),
         Span::styled("<Esc>", app.theme.help_key_style),
-        Span::styled(" to cancel", app.theme.general_style),
+        Span::styled(" to cancel", app.theme.help_text_style),
     ]);
 
     let config_help = Paragraph::new(help_spans)
@@ -892,6 +895,11 @@ where
     } else {
         app.theme.help_key_style
     };
+    let help_text_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_text_style
+    };
 
     let t = Table::new(rows)
         .block(
@@ -940,31 +948,27 @@ where
         .clone();
 
     let edit_keybind_help_spans = Spans::from(vec![
-        Span::styled("Use ", app.theme.help_text_style),
+        Span::styled("Use ", help_text_style),
         Span::styled(up_key, help_key_style),
-        Span::styled("and ", app.theme.help_text_style),
+        Span::styled("and ", help_text_style),
         Span::styled(down_key, help_key_style),
-        Span::styled("or scroll with the mouse", app.theme.help_text_style),
-        Span::styled(" to select a keybinding, ", app.theme.help_text_style),
+        Span::styled("or scroll with the mouse", help_text_style),
+        Span::styled(" to select a keybinding, Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
-        Span::styled(" or ", app.theme.help_text_style),
+        Span::styled(" or ", help_text_style),
         Span::styled("<Mouse Left Click>", help_key_style),
-        Span::styled(" to edit, ", app.theme.help_text_style),
+        Span::styled(" to edit, ", help_text_style),
         Span::styled("<Esc>", help_key_style),
         Span::styled(
-            " to cancel, To Reset Keybindings to Default, Press ",
-            app.theme.help_text_style,
+            " to cancel, To Reset Keybindings to Default Press ",
+            help_text_style,
         ),
-        Span::styled([next_focus_key, prev_focus_key].join("or "), help_key_style),
-        Span::styled(
-            "to highlight Reset Button and Press ",
-            app.theme.help_text_style,
-        ),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled("or ", help_text_style),
+        Span::styled(prev_focus_key, help_key_style),
+        Span::styled("to highlight Reset Button and Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
-        Span::styled(
-            " on the Reset Keybindings Button",
-            app.theme.help_text_style,
-        ),
+        Span::styled(" on the Reset Keybindings Button", help_text_style),
     ]);
 
     let edit_keybind_help = Paragraph::new(edit_keybind_help_spans)
@@ -1067,8 +1071,15 @@ where
             key_value.push_str(&v.to_string());
             key_value.push(' ');
         }
+        let enter_user_input_key = app
+            .state
+            .keybind_store
+            .iter()
+            .find(|x| x[1] == "Enter input mode")
+            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+            .clone();
         let paragraph_text = format!("Current Value is {}\n\n{}",key_value,
-            "Press 'i' to edit, or 'Esc' to cancel, Press 'Ins' to stop editing and press 'Enter' on Submit to save");
+            format!("Press <{}> to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",enter_user_input_key));
         let paragraph_title = key.to_uppercase();
         let config_item = Paragraph::new(paragraph_text)
             .block(
@@ -1270,7 +1281,7 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
     let default_style = if popup_mode {
         app.theme.inactive_text_style
     } else {
-        app.theme.general_style
+        app.theme.help_text_style
     };
     let border_style = if popup_mode {
         app.theme.inactive_text_style
@@ -1289,6 +1300,16 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
     } else {
         app.theme.list_select_style
     };
+    let help_key_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_key_style
+    };
+    let help_text_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_text_style
+    };
 
     let rows = keybind_store.iter().map(|item| {
         let height = item
@@ -1297,7 +1318,10 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
             .max()
             .unwrap_or(0)
             + 1;
-        let cells = item.iter().map(|c| Cell::from(c.to_string()));
+        let cells = vec![
+            Cell::from(item[0].to_string()).style(help_key_style),
+            Cell::from(item[1].to_string()).style(help_text_style),
+        ];
         Row::new(cells).height(height as u16)
     });
 
@@ -1338,12 +1362,12 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
     } else {
         app.theme.general_style
     };
-    let text_style = if popup_mode {
+    let help_text_style = if popup_mode {
         app.theme.inactive_text_style
     } else {
-        app.theme.general_style
+        app.theme.help_text_style
     };
-    let helpkey_style = if popup_mode {
+    let help_key_style = if popup_mode {
         app.theme.inactive_text_style
     } else {
         app.theme.help_key_style
@@ -1379,24 +1403,29 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
         .clone();
 
     let help_spans = Spans::from(vec![
-        Span::styled("Use ", text_style),
-        Span::styled(up_key, helpkey_style),
-        Span::styled(" and ", text_style),
-        Span::styled(down_key, helpkey_style),
-        Span::styled("to navigate", text_style),
-        Span::styled("; ", text_style),
-        Span::styled("To edit a value, press ", text_style),
-        Span::styled("<Enter>", helpkey_style),
-        Span::styled("; Press ", text_style),
-        Span::styled("<Esc>", helpkey_style),
+        Span::styled("Use ", help_text_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled("and ", help_text_style),
+        Span::styled(down_key, help_key_style),
+        Span::styled("to navigate. To edit a value press ", help_text_style),
+        Span::styled("<Enter>", help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled("<Mouse Left Click>", help_key_style),
+        Span::styled(". Press ", help_text_style),
+        Span::styled("<Esc>", help_key_style),
         Span::styled(
-            " to cancel, To Reset Keybindings to Default, Press ",
-            text_style,
+            " to cancel. To Reset Keybindings or config to Default, press ",
+            help_text_style,
         ),
-        Span::styled([next_focus_key, prev_focus_key].join(" or "), helpkey_style),
-        Span::styled("to highlight Reset Button and Press ", text_style),
-        Span::styled("<Enter>", helpkey_style),
-        Span::styled(" on the Reset Keybindings Button", text_style),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled("or ", help_text_style),
+        Span::styled(prev_focus_key, help_key_style),
+        Span::styled(
+            "to highlight respective Reset Button then press ",
+            help_text_style,
+        ),
+        Span::styled("<Enter>", help_key_style),
+        Span::styled(" to reset", help_text_style),
     ]);
 
     Paragraph::new(help_spans)
@@ -1884,7 +1913,7 @@ where
             } else {
                 let card_due_date = card.date_due.clone();
                 let parsed_due_date =
-                    NaiveDateTime::parse_from_str(&card_due_date, "%Y/%m/%d-%H:%M:%S");
+                    NaiveDateTime::parse_from_str(&card_due_date, DEFAULT_DATE_FORMAT);
                 // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
                 let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
                     let today = Local::now().naive_local();
@@ -2195,6 +2224,11 @@ where
     } else {
         app.theme.general_style
     };
+    let help_text_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_text_style
+    };
     let name_style = if app.state.popup_mode.is_some() {
         app.theme.inactive_text_style
     } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
@@ -2312,25 +2346,21 @@ where
         .clone();
 
     let help_text = Spans::from(vec![
-        Span::styled("Press ", default_style),
+        Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
-        Span::styled("to start typing", default_style),
-        Span::styled("; ", default_style),
+        Span::styled("or ", help_text_style),
+        Span::styled("<Enter> ", help_key_style),
+        Span::styled("to start typing. Press ", help_text_style),
         Span::styled("<Ins>", help_key_style),
-        Span::styled(" to stop typing", default_style),
-        Span::styled("; ", default_style),
-        Span::styled("Press ", default_style),
-        Span::styled(
-            [next_focus_key, prev_focus_key].join(" or "),
-            help_key_style,
-        ),
-        Span::styled("to switch focus", default_style),
-        Span::styled("; ", default_style),
+        Span::styled(" to stop typing. Press ", help_text_style),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled("or ", help_text_style),
+        Span::styled(prev_focus_key, help_key_style),
+        Span::styled("to switch focus. Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
-        Span::styled(" to submit", default_style),
-        Span::styled("; ", default_style),
+        Span::styled(" to submit. Press ", help_text_style),
         Span::styled("<Esc>", help_key_style),
-        Span::styled(" to cancel", default_style),
+        Span::styled(" to cancel", help_text_style),
     ]);
     let help_paragraph = Paragraph::new(help_text)
         .alignment(Alignment::Center)
@@ -2460,6 +2490,11 @@ where
     } else {
         app.theme.help_key_style
     };
+    let help_text_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_text_style
+    };
     let submit_style = if app.state.popup_mode.is_some() {
         app.theme.inactive_text_style
     } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[5]) {
@@ -2524,17 +2559,21 @@ where
         );
     rect.render_widget(card_description, chunks[2]);
 
-    // check if &app.state.new_card_form[2] is in the format (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)
-    let parsed_date =
-        match NaiveDateTime::parse_from_str(&app.state.new_card_form[2], DEFAULT_DATE_FORMAT) {
-            Ok(date) => Some(date),
-            Err(_) => {
-                match NaiveDateTime::parse_from_str(&app.state.new_card_form[2], "%d/%m/%Y") {
-                    Ok(date) => Some(date),
-                    Err(_) => None,
-                }
-            }
-        };
+    let mut show_warning = false;
+    let parsed_date_ymd_t =
+        NaiveDateTime::parse_from_str(&app.state.new_card_form[2], "%Y/%m/%d-%H:%M:%S");
+    let parsed_date_ymd = NaiveDate::parse_from_str(&app.state.new_card_form[2], "%Y/%m/%d");
+    let parsed_date_dmy_t =
+        NaiveDateTime::parse_from_str(&app.state.new_card_form[2], DEFAULT_DATE_FORMAT);
+    let parsed_date_dmy = NaiveDate::parse_from_str(&app.state.new_card_form[2], "%d/%m/%Y");
+    if !(parsed_date_dmy.is_ok()
+        || parsed_date_dmy_t.is_ok()
+        || parsed_date_ymd.is_ok()
+        || parsed_date_ymd_t.is_ok())
+        && !app.state.new_card_form[2].is_empty()
+    {
+        show_warning = true;
+    }
     let card_due_date = Paragraph::new(card_due_date_field)
         .alignment(Alignment::Left)
         .block(
@@ -2542,11 +2581,9 @@ where
                 .borders(Borders::ALL)
                 .style(due_date_style)
                 .border_type(BorderType::Rounded)
-                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS) or (DD/MM/YYYY)"),
+                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS), (DD/MM/YYYY), (YYYY/MM/DD-HH:MM:SS), or (YYYY/MM/DD)"),
         );
-    if parsed_date.is_some() {
-        rect.render_widget(card_due_date, chunks[3]);
-    } else if !app.state.new_card_form[2].is_empty() {
+    if show_warning {
         let new_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(70), Constraint::Length(20)].as_ref())
@@ -2588,29 +2625,25 @@ where
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let help_text = Spans::from(vec![
-        Span::styled("Press ", default_style),
+    let help_spans = Spans::from(vec![
+        Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
-        Span::styled("to start typing", default_style),
-        Span::styled("; ", default_style),
+        Span::styled("or ", help_text_style),
+        Span::styled("<Enter> ", help_key_style),
+        Span::styled("to start typing. Press ", help_text_style),
         Span::styled("<Ins>", help_key_style),
-        Span::styled(" to stop typing", default_style),
-        Span::styled("; ", default_style),
-        Span::styled("Press ", default_style),
-        Span::styled(
-            [next_focus_key, prev_focus_key].join(" or "),
-            help_key_style,
-        ),
-        Span::styled("to switch focus", default_style),
-        Span::styled("; ", default_style),
+        Span::styled(" to stop typing. Press ", help_text_style),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled("or ", help_text_style),
+        Span::styled(prev_focus_key, help_key_style),
+        Span::styled("to switch focus. Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
-        Span::styled(" to submit", default_style),
-        Span::styled("; ", default_style),
+        Span::styled(" to submit. Press ", help_text_style),
         Span::styled("<Esc>", help_key_style),
-        Span::styled(" to cancel", default_style),
+        Span::styled(" to cancel", help_text_style),
     ]);
 
-    let help_paragraph = Paragraph::new(help_text)
+    let help_paragraph = Paragraph::new(help_spans)
         .alignment(Alignment::Center)
         .block(
             Block::default()
@@ -2691,6 +2724,11 @@ where
         app.theme.inactive_text_style
     } else {
         app.theme.help_key_style
+    };
+    let help_text_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_text_style
     };
     let main_chunks = {
         Layout::default()
@@ -2808,23 +2846,23 @@ where
         .clone();
 
     let help_text = Spans::from(vec![
-        Span::styled("Use ", default_style),
+        Span::styled("Use ", help_text_style),
         Span::styled(&up_key, help_key_style),
-        Span::styled(" and ", default_style),
+        Span::styled(" and ", help_text_style),
         Span::styled(&down_key, help_key_style),
-        Span::styled("to navigate", default_style),
+        Span::styled("to navigate", help_text_style),
         Span::raw("; "),
         Span::styled("<Enter>", help_key_style),
-        Span::styled(" to Load the save file", default_style),
+        Span::styled(" to Load the save file", help_text_style),
         Span::raw("; "),
         Span::styled("<Esc>", help_key_style),
-        Span::styled(" to cancel", default_style),
+        Span::styled(" to cancel", help_text_style),
         Span::raw("; "),
         Span::styled(delete_key, help_key_style),
-        Span::styled("to delete a save file", default_style),
+        Span::styled("to delete a save file", help_text_style),
         Span::styled(
             ". If using a mouse click on a save file to preview",
-            default_style,
+            help_text_style,
         ),
     ]);
     let help_paragraph = Paragraph::new(help_text)
@@ -3666,6 +3704,71 @@ pub fn render_command_palette<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
+    // Housekeeping
+    match app.state.focus {
+        Focus::CommandPaletteCommand => {
+            if app
+                .state
+                .command_palette_command_search_list_state
+                .selected()
+                .is_none()
+                && app.command_palette.command_search_results.is_some()
+                && app
+                    .command_palette
+                    .command_search_results
+                    .as_ref()
+                    .unwrap()
+                    .len()
+                    > 0
+            {
+                app.state
+                    .command_palette_command_search_list_state
+                    .select(Some(0));
+            }
+        }
+        Focus::CommandPaletteCard => {
+            if app
+                .state
+                .command_palette_card_search_list_state
+                .selected()
+                .is_none()
+                && app.command_palette.card_search_results.is_some()
+                && app
+                    .command_palette
+                    .card_search_results
+                    .as_ref()
+                    .unwrap()
+                    .len()
+                    > 0
+            {
+                app.state
+                    .command_palette_card_search_list_state
+                    .select(Some(0));
+            }
+        }
+        Focus::CommandPaletteBoard => {
+            if app
+                .state
+                .command_palette_board_search_list_state
+                .selected()
+                .is_none()
+                && app.command_palette.board_search_results.is_some()
+                && app
+                    .command_palette
+                    .board_search_results
+                    .as_ref()
+                    .unwrap()
+                    .len()
+                    > 0
+            {
+                app.state
+                    .command_palette_board_search_list_state
+                    .select(Some(0));
+            }
+        }
+        _ => {}
+    }
+
     let current_search_text_input = app.state.current_user_input.clone();
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -3679,12 +3782,59 @@ where
         )
         .split(rect.size());
 
-    let search_results = if app.command_palette.search_results.is_some() {
+    let command_search_border_style = if app.state.focus == Focus::CommandPaletteCommand {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let card_search_border_style = if app.state.focus == Focus::CommandPaletteCard {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let board_search_border_style = if app.state.focus == Focus::CommandPaletteBoard {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let command_search_text_style = if app.state.focus == Focus::CommandPaletteCommand {
+        app.theme.general_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let card_search_text_style = if app.state.focus == Focus::CommandPaletteCard {
+        app.theme.general_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let board_search_text_style = if app.state.focus == Focus::CommandPaletteBoard {
+        app.theme.general_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let command_search_highlight_style = if app.state.focus == Focus::CommandPaletteCommand {
+        app.theme.list_select_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let card_search_highlight_style = if app.state.focus == Focus::CommandPaletteCard {
+        app.theme.list_select_style
+    } else {
+        app.theme.inactive_text_style
+    };
+    let board_search_highlight_style = if app.state.focus == Focus::CommandPaletteBoard {
+        app.theme.list_select_style
+    } else {
+        app.theme.inactive_text_style
+    };
+
+    let command_search_results = if app.command_palette.command_search_results.is_some() {
         // convert the vec of strings to a vec of list items
-        let raw_search_results = app.command_palette.search_results.as_ref().unwrap();
+        let raw_search_results = app.command_palette.command_search_results.as_ref().unwrap();
 
         let mut list_items = vec![];
-        // make a for loop and go through the raw search results and check if the current item has a character that is in the charaters of the search string highlight it with selected style using Span::Styled
+        // make a for loop and go through the raw search results and check if the current item has a character that is in the
+        // charaters of the search string highlight it with selected style using Span::Styled
         for item in raw_search_results {
             let mut spans = vec![];
             for (_, c) in item.to_string().chars().enumerate() {
@@ -3694,28 +3844,115 @@ where
                 {
                     spans.push(Span::styled(c.to_string(), app.theme.keyboard_focus_style));
                 } else {
-                    spans.push(Span::styled(c.to_string(), app.theme.general_style));
+                    spans.push(Span::styled(c.to_string(), command_search_text_style));
                 }
             }
-            list_items.push(ListItem::new(vec![Spans::from(spans)]));
+            list_items.push(ListItem::new(Spans::from(spans)));
         }
         list_items
     } else {
         app.command_palette
             .available_commands
             .iter()
-            .map(|s| ListItem::new(vec![Spans::from(s.to_string())]))
+            .map(|c| ListItem::new(Spans::from(format!("Command - {}", c.to_string()))))
             .collect::<Vec<ListItem>>()
     };
 
-    let search_results_length = if (search_results.len() + 2) > 3 {
-        if (search_results.len() + 2) > (rect.size().height - 7) as usize {
-            rect.size().height - 7
+    let card_search_results = if app.command_palette.card_search_results.is_some()
+        && !current_search_text_input.is_empty()
+        && current_search_text_input.len() > 1
+    {
+        let raw_search_results = app.command_palette.card_search_results.as_ref().unwrap();
+        let mut list_items = vec![];
+        for (item, _) in raw_search_results {
+            let item = if item.len() > (horizontal_chunks[1].width - 2) as usize {
+                format!("{}...", &item[0..(horizontal_chunks[1].width - 5) as usize])
+            } else {
+                item.to_string()
+            };
+            list_items.push(ListItem::new(Spans::from(Span::styled(
+                item.to_string(),
+                card_search_text_style,
+            ))));
+        }
+        list_items
+    } else {
+        vec![]
+    };
+
+    let board_search_results = if app.command_palette.board_search_results.is_some()
+        && !current_search_text_input.is_empty()
+        && current_search_text_input.len() > 1
+    {
+        let raw_search_results = app.command_palette.board_search_results.as_ref().unwrap();
+        let mut list_items = vec![];
+        for (item, _) in raw_search_results {
+            let item = if item.len() > (horizontal_chunks[1].width - 2) as usize {
+                format!("{}...", &item[0..(horizontal_chunks[1].width - 5) as usize])
+            } else {
+                item.to_string()
+            };
+            list_items.push(ListItem::new(Spans::from(Span::styled(
+                item.to_string(),
+                board_search_text_style,
+            ))));
+        }
+        list_items
+    } else {
+        vec![]
+    };
+
+    let max_height = (rect.size().height - 12) as usize;
+    let min_height = 2;
+    let command_search_results_length = command_search_results.len() + 2;
+    let card_search_results_length = card_search_results.len() + 2;
+    let board_search_results_length = board_search_results.len() + 2;
+    let command_search_results_length = if command_search_results_length >= min_height {
+        if (command_search_results_length + (2 * min_height)) < max_height {
+            command_search_results_length
         } else {
-            (search_results.len() + 2) as u16
+            let calc = max_height - (2 * min_height);
+            if calc < min_height {
+                min_height
+            } else {
+                calc
+            }
         }
     } else {
-        3
+        min_height
+    };
+    let card_search_results_length = if card_search_results_length >= min_height {
+        if (command_search_results_length + card_search_results_length + min_height) < max_height {
+            card_search_results_length
+        } else {
+            let calc = max_height - (command_search_results_length + min_height);
+            if calc < min_height {
+                min_height
+            } else {
+                calc
+            }
+        }
+    } else {
+        min_height
+    };
+    let board_search_results_length = if board_search_results_length >= min_height {
+        if (command_search_results_length
+            + card_search_results_length
+            + board_search_results_length)
+            < max_height
+        {
+            board_search_results_length
+        } else {
+            let calc = max_height
+                - (command_search_results_length + card_search_results_length + min_height);
+            if calc < min_height {
+                min_height
+            } else {
+                calc
+            }
+        }
+    } else {
+        min_height
     };
 
     let vertical_chunks = Layout::default()
@@ -3724,15 +3961,23 @@ where
             [
                 Constraint::Length(2),
                 Constraint::Length(3),
-                Constraint::Length(search_results_length),
-                Constraint::Length(2),
+                Constraint::Length(
+                    ((command_search_results_length
+                        + card_search_results_length
+                        + board_search_results_length)
+                        + 2) as u16,
+                ),
+                Constraint::Min(1),
+                Constraint::Length(4),
             ]
             .as_ref(),
         )
         .split(horizontal_chunks[1]);
 
     let search_box_text = if app.state.current_user_input.is_empty() {
-        vec![Spans::from("Start typing to search")]
+        vec![Spans::from(
+            "Start typing to search for a command, card or board!",
+        )]
     } else {
         vec![Spans::from(app.state.current_user_input.clone())]
     };
@@ -3759,37 +4004,155 @@ where
     render_blank_styled_canvas(rect, app, vertical_chunks[1], false);
     rect.render_widget(search_bar, vertical_chunks[1]);
 
-    let search_results = List::new(search_results)
+    let results_border = Block::default()
+        .style(app.theme.general_style)
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
+
+    let search_results_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(command_search_results_length as u16),
+                Constraint::Min(card_search_results_length as u16),
+                Constraint::Min(board_search_results_length as u16),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(vertical_chunks[2]);
+
+    let command_search_results = List::new(command_search_results)
         .block(
             Block::default()
-                .style(app.theme.general_style)
+                .title("Commands")
+                .border_style(command_search_border_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(app.theme.list_select_style)
+        .highlight_style(command_search_highlight_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+
+    let card_search_results = List::new(card_search_results)
+        .block(
+            Block::default()
+                .title("Cards")
+                .border_style(card_search_border_style)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(card_search_highlight_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+
+    let board_search_results = List::new(board_search_results)
+        .block(
+            Block::default()
+                .title("Boards")
+                .border_style(board_search_border_style)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(board_search_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     render_blank_styled_canvas(rect, app, vertical_chunks[2], false);
+    rect.render_widget(results_border, vertical_chunks[2]);
     rect.render_stateful_widget(
-        search_results,
-        vertical_chunks[2],
-        &mut app.state.command_palette_list_state,
+        command_search_results,
+        search_results_chunks[0],
+        &mut app.state.command_palette_command_search_list_state,
+    );
+    rect.render_stateful_widget(
+        card_search_results,
+        search_results_chunks[1],
+        &mut app.state.command_palette_card_search_list_state,
+    );
+    rect.render_stateful_widget(
+        board_search_results,
+        search_results_chunks[2],
+        &mut app.state.command_palette_board_search_list_state,
     );
 
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, vertical_chunks[2]) {
-        app.state.mouse_focus = Some(Focus::CommandPalette);
-        app.state.focus = Focus::CommandPalette;
-        let top_of_list = vertical_chunks[2].y + 1;
-        let mut bottom_of_list = vertical_chunks[2].y + search_results_length;
-        if bottom_of_list > vertical_chunks[2].bottom() {
-            bottom_of_list = vertical_chunks[2].bottom();
-        }
-        let mouse_y = app.state.current_mouse_coordinates.1;
-        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-            app.state
-                .command_palette_list_state
-                .select(Some((mouse_y - top_of_list) as usize));
-        }
+    let up_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let next_focus_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Focus next")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let prev_focus_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Focus previous")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let help_spans = Spans::from(vec![
+        Span::styled("Use ", app.theme.help_text_style),
+        Span::styled(up_key, app.theme.help_key_style),
+        Span::styled("and ", app.theme.help_text_style),
+        Span::styled(down_key, app.theme.help_key_style),
+        Span::styled(
+            "or scroll with the mouse to highlight a Command/Card/Board. Press ",
+            app.theme.help_text_style,
+        ),
+        Span::styled("<Enter> ", app.theme.help_key_style),
+        Span::styled("to select. Press ", app.theme.help_text_style),
+        Span::styled(next_focus_key, app.theme.help_key_style),
+        Span::styled("or ", app.theme.help_text_style),
+        Span::styled(prev_focus_key, app.theme.help_key_style),
+        Span::styled("to change focus", app.theme.help_text_style),
+    ]);
+
+    let help_paragraph = Paragraph::new(help_spans)
+        .block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .style(app.theme.general_style),
+        )
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: false });
+
+    render_blank_styled_canvas(rect, app, vertical_chunks[4], false);
+    rect.render_widget(help_paragraph, vertical_chunks[4]);
+
+    if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        search_results_chunks[0],
+    ) {
+        app.state.mouse_focus = Some(Focus::CommandPaletteCommand);
+        app.state.focus = Focus::CommandPaletteCommand;
+    }
+    if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        search_results_chunks[1],
+    ) {
+        app.state.mouse_focus = Some(Focus::CommandPaletteCard);
+        app.state.focus = Focus::CommandPaletteCard;
+    }
+    if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        search_results_chunks[2],
+    ) {
+        app.state.mouse_focus = Some(Focus::CommandPaletteBoard);
+        app.state.focus = Focus::CommandPaletteBoard;
     }
 
     if app.config.enable_mouse_support {
@@ -4004,7 +4367,7 @@ where
             app.theme.general_style
         };
 
-        let popup_area = centered_rect(70, 70, rect.size());
+        let popup_area = centered_rect(80, 80, rect.size());
         render_blank_styled_canvas(rect, app, popup_area, false);
         let all_available_tags = app.state.all_available_tags.as_ref().unwrap();
         let empty_vec = vec![];
@@ -4012,17 +4375,6 @@ where
             app.state.filter_tags.as_ref().unwrap()
         } else {
             &empty_vec
-        };
-        let main_chunks = if all_available_tags.len() > (popup_area.height as usize + 5) {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(100)])
-                .split(popup_area)
-        } else {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(100)])
-                .split(popup_area)
         };
 
         let chunks = Layout::default()
@@ -4035,20 +4387,34 @@ where
                 ]
                 .as_ref(),
             )
-            .split(main_chunks[0]);
+            .split(popup_area);
+
+        let filter_list_chunks = if all_available_tags.len() > (popup_area.height as usize - 10) {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Min(10), Constraint::Length(1)])
+                .margin(1)
+                .split(chunks[0])
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(100)])
+                .margin(1)
+                .split(chunks[0])
+        };
 
         // go through all_available tags and map them to list items if the tag is in selected_tags highlight it with app.theme.list_select_style
         let all_tags = all_available_tags
             .iter()
             .map(|tag| {
-                if selected_tags.contains(tag) {
+                if selected_tags.contains(&tag.0) {
                     ListItem::new(vec![Spans::from(vec![Span::styled(
-                        format!("(Selected) {}", tag.clone()),
+                        format!("(Selected) {} - {} occurrences", tag.0, tag.1),
                         app.theme.list_select_style,
                     )])])
                 } else {
                     ListItem::new(vec![Spans::from(vec![Span::styled(
-                        tag.clone(),
+                        format!("{} - {} occurrences", tag.0, tag.1),
                         app.theme.general_style,
                     )])])
                 }
@@ -4056,19 +4422,25 @@ where
             .collect::<Vec<ListItem>>();
 
         let tags = List::new(all_tags.clone())
-            .block(
-                Block::default()
-                    .title("Filter by Tag")
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .style(app.theme.general_style)
-                    .border_style(tag_box_style),
-            )
+            .block(Block::default())
             .highlight_style(app.theme.list_select_style)
             .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-        render_blank_styled_canvas(rect, app, chunks[0], false);
-        rect.render_stateful_widget(tags, chunks[0], &mut app.state.filter_by_tag_list_state);
+        let tag_box_border = Block::default()
+            .title("Filter by Tag")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .style(app.theme.general_style)
+            .border_style(tag_box_style);
+
+        rect.render_widget(tag_box_border, chunks[0]);
+
+        render_blank_styled_canvas(rect, app, filter_list_chunks[0], false);
+        rect.render_stateful_widget(
+            tags,
+            filter_list_chunks[0],
+            &mut app.state.filter_by_tag_list_state,
+        );
 
         let up_key = app
             .state
@@ -4100,28 +4472,30 @@ where
             .clone();
 
         let help_spans = Spans::from(vec![
-            Span::styled("Use ", app.theme.general_style),
+            Span::styled("Use ", app.theme.help_text_style),
             Span::styled(up_key, app.theme.help_key_style),
-            Span::styled("and ", app.theme.general_style),
+            Span::styled("and ", app.theme.help_text_style),
             Span::styled(down_key, app.theme.help_key_style),
-            Span::styled("to navigate", app.theme.general_style),
-            Span::styled("Press ", app.theme.general_style),
-            Span::styled("<Enter>", app.theme.help_key_style),
             Span::styled(
-                " To select a Tag (multiple tags can be selected); Press ",
-                app.theme.general_style,
+                "or scroll with the mouse to navigate. Press ",
+                app.theme.help_text_style,
             ),
             Span::styled("<Enter>", app.theme.help_key_style),
             Span::styled(
-                " on an already selected tag to deselect it; Press ",
-                app.theme.general_style,
+                " To select a Tag (multiple tags can be selected). Press ",
+                app.theme.help_text_style,
+            ),
+            Span::styled("<Enter>", app.theme.help_key_style),
+            Span::styled(
+                " on an already selected tag to deselect it. Press ",
+                app.theme.help_text_style,
             ),
             Span::styled("<Esc>", app.theme.help_key_style),
-            Span::styled(" to cancel, Press ", app.theme.general_style),
+            Span::styled(" to cancel, Press ", app.theme.help_text_style),
             Span::styled(next_focus_key, app.theme.help_key_style),
-            Span::styled("or ", app.theme.general_style),
+            Span::styled("or ", app.theme.help_text_style),
             Span::styled(prev_focus_key, app.theme.help_key_style),
-            Span::styled("to change focus", app.theme.general_style),
+            Span::styled("to change focus", app.theme.help_text_style),
         ]);
 
         let help = Paragraph::new(help_spans)
@@ -4161,17 +4535,18 @@ where
 
         rect.render_widget(submit_button, chunks[2]);
 
-        if main_chunks.len() > 1 {
-            let current_index = app.state.edit_keybindings_state.selected().unwrap_or(0);
+        if filter_list_chunks.len() > 1 {
+            render_blank_styled_canvas(rect, app, filter_list_chunks[1], false);
+            let current_index = app.state.filter_by_tag_list_state.selected().unwrap_or(0);
             let total_rows = all_tags.len();
-            let visible_rows = (chunks[0].height - 1) as usize;
+            let visible_rows = (filter_list_chunks[1].height - 1) as usize;
             let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
             let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
 
             // render blocks VERTICAL_SCROLL_BAR_SYMBOL
             for i in 0..blocks_to_render {
-                let block_x = chunks[0].right() - 2;
-                let block_y = chunks[0].top() + i as u16;
+                let block_x = filter_list_chunks[1].right() - 1;
+                let block_y = filter_list_chunks[1].top() + i as u16;
                 let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
                     .style(app.theme.progress_bar_style)
                     .block(Block::default().borders(Borders::NONE));
@@ -4348,6 +4723,10 @@ where
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .margin(1)
         .split(main_chunks[0]);
+    let button_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .split(main_chunks[1]);
     let theme_table_rows = app.state.theme_being_edited.to_rows(app);
     let list_highlight_style = if app.state.popup_mode.is_some() {
         app.theme.inactive_text_style
@@ -4382,12 +4761,23 @@ where
     };
     let submit_button_style = if app.state.popup_mode.is_some() {
         app.theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, main_chunks[1]) {
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, button_chunks[0]) {
         app.state.mouse_focus = Some(Focus::SubmitButton);
         app.state.focus = Focus::SubmitButton;
         app.theme.mouse_focus_style
     } else if app.state.focus == Focus::SubmitButton {
         app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+    let reset_button_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, button_chunks[1]) {
+        app.state.mouse_focus = Some(Focus::ExtraFocus);
+        app.state.focus = Focus::ExtraFocus;
+        app.theme.error_text_style
+    } else if app.state.focus == Focus::ExtraFocus {
+        app.theme.error_text_style
     } else {
         app.theme.general_style
     };
@@ -4416,7 +4806,16 @@ where
                 .style(submit_button_style),
         )
         .alignment(Alignment::Center);
-    rect.render_widget(submit_button, main_chunks[1]);
+    rect.render_widget(submit_button, button_chunks[0]);
+
+    let reset_button = Paragraph::new(vec![Spans::from("Reset")])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(reset_button_style),
+        )
+        .alignment(Alignment::Center);
+    rect.render_widget(reset_button, button_chunks[1]);
 
     let border_block = Block::default()
         .title("Create a new Theme")
@@ -4438,8 +4837,15 @@ where
     // show the fg , bg, and modifiers in a table to be selected by the user
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(3)].as_ref())
-        .margin(2)
+        .constraints(
+            [
+                Constraint::Min(10),
+                Constraint::Length(4),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
         .split(popup_area);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -4504,7 +4910,38 @@ where
     let fg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
         .map(|color| {
             let mut fg_style = Style::default();
-            if color.to_color().is_some() {
+            let current_user_input = app.state.current_user_input.clone();
+            let mut is_rgb = false;
+            if let TextColorOptions::RGB(_, _, _) = color {
+                is_rgb = true;
+            }
+            if !current_user_input.is_empty() && is_rgb {
+                let split_input = current_user_input
+                    .split(",")
+                    .map(|s| s.to_string().trim().to_string());
+                if split_input.clone().count() == 3 {
+                    let mut input_is_valid = true;
+                    for i in split_input.clone() {
+                        if i.parse::<u8>().is_err() {
+                            input_is_valid = false;
+                        }
+                    }
+                    if input_is_valid {
+                        let r = split_input.clone().nth(0).unwrap().parse::<u8>().unwrap();
+                        let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
+                        let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
+                        fg_style.fg = Some(ratatui::style::Color::Rgb(r, g, b));
+                        return ListItem::new(vec![Spans::from(vec![
+                            Span::styled("Sample Text", fg_style),
+                            Span::styled(
+                                format!(" - {}", format!("RGB({},{},{})", r, g, b)),
+                                app.theme.general_style,
+                            ),
+                        ])]);
+                    }
+                }
+            }
+            return if color.to_color().is_some() {
                 fg_style.fg = Some(color.to_color().unwrap());
                 ListItem::new(vec![Spans::from(vec![
                     Span::styled("Sample Text", fg_style),
@@ -4515,7 +4952,7 @@ where
                     Span::raw("Sample Text"),
                     Span::styled(format!(" - {}", color), app.theme.general_style),
                 ])])
-            }
+            };
         })
         .collect();
     let fg_list = List::new(fg_list_items)
@@ -4530,7 +4967,38 @@ where
     let bg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
         .map(|color| {
             let mut bg_style = Style::default();
-            if color.to_color().is_some() {
+            let current_user_input = app.state.current_user_input.clone();
+            let mut is_rgb = false;
+            if let TextColorOptions::RGB(_, _, _) = color {
+                is_rgb = true;
+            }
+            if !current_user_input.is_empty() && is_rgb {
+                let split_input = current_user_input
+                    .split(",")
+                    .map(|s| s.to_string().trim().to_string());
+                if split_input.clone().count() == 3 {
+                    let mut input_is_valid = true;
+                    for i in split_input.clone() {
+                        if i.parse::<u8>().is_err() {
+                            input_is_valid = false;
+                        }
+                    }
+                    if input_is_valid {
+                        let r = split_input.clone().nth(0).unwrap().parse::<u8>().unwrap();
+                        let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
+                        let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
+                        bg_style.bg = Some(ratatui::style::Color::Rgb(r, g, b));
+                        return ListItem::new(vec![Spans::from(vec![
+                            Span::styled("Sample Text", bg_style),
+                            Span::styled(
+                                format!(" - {}", format!("RGB({},{},{})", r, g, b)),
+                                app.theme.general_style,
+                            ),
+                        ])]);
+                    }
+                }
+            }
+            return if color.to_color().is_some() {
                 bg_style.bg = Some(color.to_color().unwrap());
                 ListItem::new(vec![Spans::from(vec![
                     Span::styled("Sample Text", bg_style),
@@ -4541,7 +5009,7 @@ where
                     Span::raw("Sample Text"),
                     Span::styled(format!(" - {}", color), app.theme.general_style),
                 ])])
-            }
+            };
         })
         .collect();
     let bg_list = List::new(bg_list_items)
@@ -4600,6 +5068,68 @@ where
                 .border_style(submit_button_style),
         )
         .alignment(Alignment::Center);
+
+    let next_focus_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Focus next")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let previous_focus_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Focus previous")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let up_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let help_spans = vec![
+        Span::styled("Use ", app.theme.help_text_style),
+        Span::styled(up_key, app.theme.help_key_style),
+        Span::styled("and ", app.theme.help_text_style),
+        Span::styled(down_key, app.theme.help_key_style),
+        Span::styled("or scroll with the mouse", app.theme.help_text_style),
+        Span::styled(
+            " to select a Color/Modifier, Press ",
+            app.theme.help_text_style,
+        ),
+        Span::styled("<Enter>", app.theme.help_key_style),
+        Span::styled(" or ", app.theme.help_text_style),
+        Span::styled("<Mouse Left Click>", app.theme.help_key_style),
+        Span::styled(
+            " to edit (for custom RBG), Press ",
+            app.theme.help_text_style,
+        ),
+        Span::styled(next_focus_key, app.theme.help_key_style),
+        Span::styled("or ", app.theme.help_text_style),
+        Span::styled(previous_focus_key, app.theme.help_key_style),
+        Span::styled("to change focus.", app.theme.help_text_style),
+    ];
+
+    let help_text = Paragraph::new(Spans::from(help_spans))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(app.theme.help_text_style),
+        )
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
     render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(
         fg_list,
@@ -4616,7 +5146,8 @@ where
         chunks[2],
         &mut app.state.edit_specific_style_state.2,
     );
-    rect.render_widget(submit_button, main_chunks[1]);
+    rect.render_widget(help_text, main_chunks[1]);
+    rect.render_widget(submit_button, main_chunks[2]);
     rect.render_widget(border_block, popup_area);
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -4751,20 +5282,21 @@ where
     B: Backend,
 {
     // make a small popup with a text input field and a submit button
-    let popup_area = centered_rect(50, 50, rect.size());
+    let popup_area = centered_rect(50, 60, rect.size());
     let prompt_text = "Enter a custom RGB color in the format: r,g,b (0-254)";
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Length(3),
+                Constraint::Length(1),
                 Constraint::Min(5),
                 Constraint::Length(3),
+                Constraint::Length(5),
             ]
             .as_ref(),
         )
-        .margin(2)
+        .margin(1)
         .split(popup_area);
     let border_block = Block::default()
         .title("Custom RGB Color")
@@ -4796,7 +5328,8 @@ where
     let prompt_text = Paragraph::new(prompt_text)
         .style(app.theme.general_style)
         .block(Block::default())
-        .alignment(Alignment::Center);
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
     let text_input = Paragraph::new(app.state.current_user_input.clone())
         .style(app.theme.general_style)
         .block(
@@ -4804,6 +5337,47 @@ where
                 .borders(Borders::ALL)
                 .border_style(text_input_style),
         );
+
+    let enter_user_input_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Enter input mode")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let next_focus_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Focus next")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let previous_focus_key = app
+        .state
+        .keybind_store
+        .iter()
+        .find(|x| x[1] == "Focus previous")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let help_spans = vec![
+        Span::styled("Press ", app.theme.help_text_style),
+        Span::styled(enter_user_input_key, app.theme.help_key_style),
+        Span::styled("to enter input mode. Press ", app.theme.help_text_style),
+        Span::styled("<Ins>", app.theme.help_key_style),
+        Span::styled(" to stop editing. Use ", app.theme.help_text_style),
+        Span::styled(next_focus_key, app.theme.help_key_style),
+        Span::styled("or ", app.theme.help_text_style),
+        Span::styled(previous_focus_key, app.theme.help_key_style),
+        Span::styled("to change focus. Press ", app.theme.help_text_style),
+        Span::styled("<Enter>", app.theme.help_key_style),
+        Span::styled(" to submit.", app.theme.help_text_style),
+    ];
+    let help_text = Paragraph::new(Spans::from(help_spans))
+        .block(Block::default().borders(Borders::ALL))
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
     let submit_button = Paragraph::new("Submit")
         .style(app.theme.general_style)
         .block(
@@ -4817,6 +5391,7 @@ where
     rect.render_widget(prompt_text, chunks[0]);
     rect.render_widget(text_input, chunks[1]);
     rect.render_widget(submit_button, chunks[2]);
+    rect.render_widget(help_text, chunks[3]);
     rect.render_widget(border_block, popup_area);
 
     if app.state.app_status == AppStatus::UserInput {
@@ -4841,16 +5416,12 @@ pub fn render_blank_styled_canvas<B>(
 ) where
     B: Backend,
 {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(100), Constraint::Percentage(100)].as_ref())
-        .split(render_area);
     let mut styled_text = vec![];
-    for _ in 0..chunks[0].width + 1 {
+    for _ in 0..render_area.width + 1 {
         styled_text.push(" ".to_string());
     }
     let mut render_text = vec![];
-    for _ in 0..chunks[0].height {
+    for _ in 0..render_area.height {
         render_text.push(format!("{}\n", styled_text.join("")));
     }
     let styled_text = if popup_mode {

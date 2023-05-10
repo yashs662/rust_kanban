@@ -149,9 +149,9 @@ impl Theme {
                 .bg(Color::Rgb(25, 25, 112)),
         }
     }
-    fn dark_slate() -> Theme {
+    fn slate() -> Theme {
         Theme {
-            name: "Dark Slate".to_string(),
+            name: "Slate".to_string(),
             general_style: Style::default().fg(Color::Gray).bg(Color::Rgb(47, 79, 79)),
             list_select_style: Style::default()
                 .fg(Color::Gray)
@@ -363,11 +363,48 @@ impl Theme {
                 .bg(Color::Black),
         }
     }
+    fn light() -> Theme {
+        Theme {
+            name: "Light".to_string(),
+            general_style: Style::default().fg(Color::Black).bg(Color::White),
+            list_select_style: Style::default().fg(Color::White).bg(Color::LightMagenta),
+            card_due_default_style: Style::default().fg(Color::LightGreen).bg(Color::White),
+            card_due_warning_style: Style::default()
+                .fg(Color::Rgb(255, 165, 0))
+                .bg(Color::White),
+            card_due_overdue_style: Style::default().fg(Color::LightRed).bg(Color::White),
+            card_status_active_style: Style::default().fg(Color::Cyan).bg(Color::White),
+            card_status_completed_style: Style::default().fg(Color::LightGreen).bg(Color::White),
+            card_status_stale_style: Style::default().fg(Color::DarkGray).bg(Color::White),
+            keyboard_focus_style: Style::default().fg(Color::Blue).bg(Color::White),
+            mouse_focus_style: Style::default()
+                .fg(Color::Rgb(255, 165, 0))
+                .bg(Color::White),
+            help_key_style: Style::default().fg(Color::LightMagenta).bg(Color::White),
+            help_text_style: Style::default().fg(Color::Black).bg(Color::White),
+            log_error_style: Style::default().fg(Color::LightRed).bg(Color::White),
+            log_debug_style: Style::default().fg(Color::LightGreen).bg(Color::White),
+            log_warn_style: Style::default()
+                .fg(Color::Rgb(255, 165, 0))
+                .bg(Color::White),
+            log_trace_style: Style::default().fg(Color::DarkGray).bg(Color::White),
+            log_info_style: Style::default().fg(Color::Blue).bg(Color::White),
+            progress_bar_style: Style::default().fg(Color::Green).bg(Color::White),
+            error_text_style: Style::default().fg(Color::Black).bg(Color::LightRed),
+            inactive_text_style: Style::default().fg(Color::Gray).bg(Color::DarkGray),
+            card_priority_low_style: Style::default().fg(Color::LightGreen).bg(Color::White),
+            card_priority_medium_style: Style::default()
+                .fg(Color::Rgb(255, 165, 0))
+                .bg(Color::White),
+            card_priority_high_style: Style::default().fg(Color::LightRed).bg(Color::White),
+        }
+    }
     pub fn all_default_themes() -> Vec<Theme> {
         vec![
             Theme::default(),
+            Theme::light(),
             Theme::midnight_blue(),
-            Theme::dark_slate(),
+            Theme::slate(),
             Theme::metro(),
             Theme::matrix(),
             Theme::cyberpunk(),
@@ -1036,7 +1073,7 @@ impl TextColorOptions {
             TextColorOptions::LightMagenta,
             TextColorOptions::LightCyan,
             TextColorOptions::Black,
-            TextColorOptions::RGB(255, 255, 255),
+            TextColorOptions::RGB(128, 128, 128),
             TextColorOptions::None,
         ]
         .into_iter()

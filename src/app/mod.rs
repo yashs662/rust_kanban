@@ -193,7 +193,7 @@ impl App {
         };
         self.state.config_state.select(Some(i));
     }
-    pub fn config_previous(&mut self) {
+    pub fn config_prv(&mut self) {
         let i = match self.state.config_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -219,7 +219,7 @@ impl App {
         };
         self.state.main_menu_state.select(Some(i));
     }
-    pub fn main_menu_previous(&mut self) {
+    pub fn main_menu_prv(&mut self) {
         let i = match self.state.main_menu_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -251,7 +251,7 @@ impl App {
         };
         self.state.load_save_state.select(Some(i));
     }
-    pub fn load_save_previous(&mut self) {
+    pub fn load_save_prv(&mut self) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
                 let local_save_files = get_available_local_savefiles();
@@ -302,7 +302,7 @@ impl App {
         };
         self.state.edit_keybindings_state.select(Some(i));
     }
-    pub fn edit_keybindings_prev(&mut self) {
+    pub fn edit_keybindings_prv(&mut self) {
         let keybind_iterator = self.config.keybindings.iter();
         let i = match self.state.edit_keybindings_state.selected() {
             Some(i) => {
@@ -334,7 +334,7 @@ impl App {
         };
         self.state.help_state.select(Some(i));
     }
-    pub fn help_prev(&mut self) {
+    pub fn help_prv(&mut self) {
         let i = match self.state.help_state.selected() {
             Some(i) => {
                 if !self.state.keybind_store.is_empty() {
@@ -364,7 +364,7 @@ impl App {
         };
         self.state.default_view_state.select(Some(i));
     }
-    pub fn select_default_view_prev(&mut self) {
+    pub fn select_default_view_prv(&mut self) {
         let i = match self.state.default_view_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -377,12 +377,21 @@ impl App {
         };
         self.state.default_view_state.select(Some(i));
     }
-    pub fn command_palette_up(&mut self) {
-        let i = match self.state.command_palette_list_state.selected() {
+    pub fn command_palette_command_search_prv(&mut self) {
+        let i = match self
+            .state
+            .command_palette_command_search_list_state
+            .selected()
+        {
             Some(i) => {
-                if self.command_palette.search_results.is_some() {
+                if self.command_palette.command_search_results.is_some() {
                     if i == 0 {
-                        self.command_palette.search_results.clone().unwrap().len() - 1
+                        self.command_palette
+                            .command_search_results
+                            .clone()
+                            .unwrap()
+                            .len()
+                            - 1
                     } else {
                         i - 1
                     }
@@ -392,13 +401,26 @@ impl App {
             }
             None => 0,
         };
-        self.state.command_palette_list_state.select(Some(i));
+        self.state
+            .command_palette_command_search_list_state
+            .select(Some(i));
     }
-    pub fn command_palette_down(&mut self) {
-        let i = match self.state.command_palette_list_state.selected() {
+    pub fn command_palette_command_search_next(&mut self) {
+        let i = match self
+            .state
+            .command_palette_command_search_list_state
+            .selected()
+        {
             Some(i) => {
-                if self.command_palette.search_results.is_some() {
-                    if i >= self.command_palette.search_results.clone().unwrap().len() - 1 {
+                if self.command_palette.command_search_results.is_some() {
+                    if i >= self
+                        .command_palette
+                        .command_search_results
+                        .clone()
+                        .unwrap()
+                        .len()
+                        - 1
+                    {
                         0
                     } else {
                         i + 1
@@ -409,7 +431,117 @@ impl App {
             }
             None => 0,
         };
-        self.state.command_palette_list_state.select(Some(i));
+        self.state
+            .command_palette_command_search_list_state
+            .select(Some(i));
+    }
+    pub fn command_palette_card_search_next(&mut self) {
+        let i = match self.state.command_palette_card_search_list_state.selected() {
+            Some(i) => {
+                if self.command_palette.card_search_results.is_some() {
+                    if i >= self
+                        .command_palette
+                        .card_search_results
+                        .clone()
+                        .unwrap()
+                        .len()
+                        - 1
+                    {
+                        0
+                    } else {
+                        i + 1
+                    }
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+        self.state
+            .command_palette_card_search_list_state
+            .select(Some(i));
+    }
+    pub fn command_palette_card_search_prv(&mut self) {
+        let i = match self.state.command_palette_card_search_list_state.selected() {
+            Some(i) => {
+                if self.command_palette.card_search_results.is_some() {
+                    if i == 0 {
+                        self.command_palette
+                            .card_search_results
+                            .clone()
+                            .unwrap()
+                            .len()
+                            - 1
+                    } else {
+                        i - 1
+                    }
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+        self.state
+            .command_palette_card_search_list_state
+            .select(Some(i));
+    }
+    pub fn command_palette_board_search_next(&mut self) {
+        let i = match self
+            .state
+            .command_palette_board_search_list_state
+            .selected()
+        {
+            Some(i) => {
+                if self.command_palette.board_search_results.is_some() {
+                    if i >= self
+                        .command_palette
+                        .board_search_results
+                        .clone()
+                        .unwrap()
+                        .len()
+                        - 1
+                    {
+                        0
+                    } else {
+                        i + 1
+                    }
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+        self.state
+            .command_palette_board_search_list_state
+            .select(Some(i));
+    }
+    pub fn command_palette_board_search_prv(&mut self) {
+        let i = match self
+            .state
+            .command_palette_board_search_list_state
+            .selected()
+        {
+            Some(i) => {
+                if self.command_palette.board_search_results.is_some() {
+                    if i == 0 {
+                        self.command_palette
+                            .board_search_results
+                            .clone()
+                            .unwrap()
+                            .len()
+                            - 1
+                    } else {
+                        i - 1
+                    }
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+        self.state
+            .command_palette_board_search_list_state
+            .select(Some(i));
     }
     pub fn keybind_list_maker(&mut self) {
         let keybinds = &self.config.keybindings;
@@ -519,7 +651,7 @@ impl App {
             ));
         }
     }
-    pub fn select_card_status_prev(&mut self) {
+    pub fn select_card_status_prv(&mut self) {
         let i = match self.state.card_status_selector_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -567,7 +699,7 @@ impl App {
         };
         self.state.theme_selector_state.select(Some(i));
     }
-    pub fn select_change_theme_prev(&mut self) {
+    pub fn select_change_theme_prv(&mut self) {
         let i = match self.state.theme_selector_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -594,7 +726,7 @@ impl App {
         };
         self.state.theme_editor_state.select(Some(i));
     }
-    pub fn select_create_theme_prev(&mut self) {
+    pub fn select_create_theme_prv(&mut self) {
         let theme_rows_len = Theme::default().to_rows(self).1.len();
         let i = match self.state.theme_editor_state.selected() {
             Some(i) => {
@@ -621,7 +753,7 @@ impl App {
         };
         self.state.edit_specific_style_state.0.select(Some(i));
     }
-    pub fn select_edit_style_fg_prev(&mut self) {
+    pub fn select_edit_style_fg_prv(&mut self) {
         let i = match self.state.edit_specific_style_state.0.selected() {
             Some(i) => {
                 if i == 0 {
@@ -647,7 +779,7 @@ impl App {
         };
         self.state.edit_specific_style_state.1.select(Some(i));
     }
-    pub fn select_edit_style_bg_prev(&mut self) {
+    pub fn select_edit_style_bg_prv(&mut self) {
         let i = match self.state.edit_specific_style_state.1.selected() {
             Some(i) => {
                 if i == 0 {
@@ -673,7 +805,7 @@ impl App {
         };
         self.state.edit_specific_style_state.2.select(Some(i));
     }
-    pub fn select_edit_style_modifier_prev(&mut self) {
+    pub fn select_edit_style_modifier_prv(&mut self) {
         let i = match self.state.edit_specific_style_state.2.selected() {
             Some(i) => {
                 if i == 0 {
@@ -699,7 +831,7 @@ impl App {
         };
         self.state.card_priority_selector_state.select(Some(i));
     }
-    pub fn select_card_priority_prev(&mut self) {
+    pub fn select_card_priority_prv(&mut self) {
         let i = match self.state.card_priority_selector_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -732,7 +864,7 @@ impl App {
             self.state.filter_by_tag_list_state.select(Some(i));
         }
     }
-    pub fn filter_by_tag_popup_prev(&mut self) {
+    pub fn filter_by_tag_popup_prv(&mut self) {
         let all_tags_len = if self.state.all_available_tags.is_some() {
             self.state.all_available_tags.clone().unwrap().len()
         } else {
@@ -812,7 +944,7 @@ pub enum PopupMode {
     EditGeneralConfig,
     SelectDefaultView,
     ChangeTheme,
-    ThemeEditor,
+    EditThemeStyle,
     SaveThemePrompt,
     CustomRGBPromptFG,
     CustomRGBPromptBG,
@@ -832,7 +964,7 @@ impl Display for PopupMode {
             PopupMode::EditGeneralConfig => write!(f, "Edit General Config"),
             PopupMode::SelectDefaultView => write!(f, "Select Default View"),
             PopupMode::ChangeTheme => write!(f, "Change Theme"),
-            PopupMode::ThemeEditor => write!(f, "Edit Theme Style"),
+            PopupMode::EditThemeStyle => write!(f, "Edit Theme Style"),
             PopupMode::SaveThemePrompt => write!(f, "Save Theme Prompt"),
             PopupMode::CustomRGBPromptFG => write!(f, "Custom RGB Prompt"),
             PopupMode::CustomRGBPromptBG => write!(f, "Custom RGB Prompt"),
@@ -855,14 +987,18 @@ impl PopupMode {
                 Focus::CardComments,
                 Focus::SubmitButton,
             ],
-            PopupMode::CommandPalette => vec![],
+            PopupMode::CommandPalette => vec![
+                Focus::CommandPaletteCommand,
+                Focus::CommandPaletteCard,
+                Focus::CommandPaletteBoard,
+            ],
             PopupMode::EditSpecificKeyBinding => vec![],
             PopupMode::ChangeUIMode => vec![],
             PopupMode::CardStatusSelector => vec![],
             PopupMode::EditGeneralConfig => vec![],
             PopupMode::SelectDefaultView => vec![],
             PopupMode::ChangeTheme => vec![],
-            PopupMode::ThemeEditor => vec![
+            PopupMode::EditThemeStyle => vec![
                 Focus::StyleEditorFG,
                 Focus::StyleEditorBG,
                 Focus::StyleEditorModifier,
@@ -905,7 +1041,9 @@ pub struct AppState {
     pub popup_mode: Option<PopupMode>,
     pub ui_mode: UiMode,
     pub no_of_cards_to_show: u16,
-    pub command_palette_list_state: ListState,
+    pub command_palette_command_search_list_state: ListState,
+    pub command_palette_card_search_list_state: ListState,
+    pub command_palette_board_search_list_state: ListState,
     pub card_status_selector_state: ListState,
     pub prev_ui_mode: Option<UiMode>,
     pub debug_menu_toggled: bool,
@@ -924,7 +1062,7 @@ pub struct AppState {
     pub card_view_tag_list_state: ListState,
     pub card_view_comment_list_state: ListState,
     pub card_priority_selector_state: ListState,
-    pub all_available_tags: Option<Vec<String>>,
+    pub all_available_tags: Option<Vec<(String, u32)>>,
     pub filter_tags: Option<Vec<String>>,
     pub filter_by_tag_list_state: ListState,
 }
@@ -957,7 +1095,9 @@ impl Default for AppState {
             popup_mode: None,
             ui_mode: get_default_ui_mode(),
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
-            command_palette_list_state: ListState::default(),
+            command_palette_command_search_list_state: ListState::default(),
+            command_palette_card_search_list_state: ListState::default(),
+            command_palette_board_search_list_state: ListState::default(),
             card_status_selector_state: ListState::default(),
             prev_ui_mode: None,
             debug_menu_toggled: false,
@@ -1162,7 +1302,7 @@ impl AppConfig {
                                 "Tickrate must be greater than 10ms, to avoid overloading the CPU"
                             );
                             app.send_error_toast(
-                                "Tickrate must be greater than 50ms, to avoid overloading the CPU",
+                                "Tickrate must be greater than 10ms, to avoid overloading the CPU",
                                 None,
                             );
                         } else if new_tickrate > 1000 {

@@ -97,7 +97,7 @@ where
             PopupMode::ChangeTheme => {
                 ui_helper::render_change_theme_popup(rect, app);
             }
-            PopupMode::ThemeEditor => {
+            PopupMode::EditThemeStyle => {
                 ui_helper::render_edit_specific_style_popup(rect, app);
             }
             PopupMode::SaveThemePrompt => {

@@ -123,7 +123,7 @@ impl Display for Action {
             Action::Quit => "Quit",
             Action::NextFocus => "Focus next",
             Action::PrvFocus => "Focus previous",
-            Action::OpenConfigMenu => "Open config Menu",
+            Action::OpenConfigMenu => "configure",
             Action::Up => "Go up",
             Action::Down => "Go down",
             Action::Right => "Go right",

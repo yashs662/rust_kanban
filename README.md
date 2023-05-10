@@ -9,6 +9,8 @@
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
+- [ ] Allow to change timezones and date formats
+- [ ] Ability to Undo and Redo actions
 - [ ] Allow for vertical movement in text fields (e.g. card description)
 - [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
 - [ ] Allow for more mouse Interactions (Dragging cards maybe?)
@@ -18,6 +20,7 @@
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Ability to search for cards and boards in the command palette
 - [x] Ability to filter cards by tags
 - [x] Allow Card to be modified in Card View
 - [x] Implement a way to add custom colors (Theme support)
@@ -48,7 +51,7 @@
 | 'Ctrl + c' or 'q'           | Quit                                       |
 | 'Tab'                       | Next Focus                                 |
 | 'BackTab'                   | Previous Focus                             |
-| 'c'                         | Open Config Menu                           |
+| 'c'                         | Configure                                  |
 | 'Up'                        | Move Up                                    |
 | 'Down'                      | Move Down                                  |
 | 'Right'                     | Move Right                                 |
@@ -80,10 +83,12 @@
 ## Avialable Themes
 - Default Theme
 ![Default Theme](https://user-images.githubusercontent.com/66156000/232308319-125e990e-98e0-4960-ba7e-9492a2b4eaa7.png)
+- Light
+![Light](https://github.com/yashs662/rust_kanban/assets/66156000/7130e87a-b9bb-4a7f-8acb-b762e5f8522e)
 - Midnight Blue
 ![Midnight Blue](https://user-images.githubusercontent.com/66156000/232308318-d61a84f3-0108-4572-8421-537c34c2f080.png)
-- Dark Slate
-![Dark Slate](https://user-images.githubusercontent.com/66156000/232308315-ed65cd3f-0b3d-49fa-9e56-2b684191bbdc.png)
+- Slate
+![Slate](https://user-images.githubusercontent.com/66156000/232308315-ed65cd3f-0b3d-49fa-9e56-2b684191bbdc.png)
 - Metro
 ![Metro](https://user-images.githubusercontent.com/66156000/232308314-e735f84b-75f6-4c20-9196-81618040e7b6.png)
 - Matrix

@@ -13,7 +13,7 @@ use crate::{
         state::{AppStatus, Focus, UiMode},
         App, AppReturn, PopupMode,
     },
-    constants::{TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
+    constants::{RANDOM_SEARCH_TERM, TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
     io::{data_handler::export_kanban_to_json, handler::refresh_visible_boards_and_cards, IoEvent},
     lerp_between,
 };
@@ -170,10 +170,12 @@ impl WidgetManager {
 
 #[derive(Debug)]
 pub struct CommandPaletteWidget {
-    pub search_results: Option<Vec<CommandPaletteActions>>,
+    pub command_search_results: Option<Vec<CommandPaletteActions>>,
+    pub card_search_results: Option<Vec<(String, u128)>>,
+    pub board_search_results: Option<Vec<(String, u128)>>,
     pub last_search_string: String,
     pub available_commands: Vec<CommandPaletteActions>,
-    pub corpus: Corpus,
+    pub command_palette_actions_corpus: Corpus,
 }
 
 impl Default for CommandPaletteWidget {
@@ -190,19 +192,30 @@ impl CommandPaletteWidget {
             corpus.add_text(command.to_string().to_lowercase().as_str());
         }
         Self {
-            search_results: None,
-            last_search_string: "iibnigivirneiivure".to_string(), // random string that will never be typed as the selected index jumps around when a mouse is used with an empty search string
+            command_search_results: None,
+            card_search_results: None,
+            board_search_results: None,
+            last_search_string: RANDOM_SEARCH_TERM.to_string(), // random string that will never be typed as the selected index jumps around when a mouse is used with an empty search string
             available_commands: CommandPaletteActions::all(),
-            corpus,
+            command_palette_actions_corpus: corpus,
         }
     }
 
     pub async fn handle_command(app: &mut App) -> AppReturn {
-        if app.state.command_palette_list_state.selected().is_some() {
-            let command_index = app.state.command_palette_list_state.selected().unwrap();
-            let command = if app.command_palette.search_results.is_some() {
+        if app
+            .state
+            .command_palette_command_search_list_state
+            .selected()
+            .is_some()
+        {
+            let command_index = app
+                .state
+                .command_palette_command_search_list_state
+                .selected()
+                .unwrap();
+            let command = if app.command_palette.command_search_results.is_some() {
                 app.command_palette
-                    .search_results
+                    .command_search_results
                     .as_ref()
                     .unwrap()
                     .get(command_index)
@@ -345,13 +358,20 @@ impl CommandPaletteWidget {
                         }
                     }
                     CommandPaletteActions::ClearFilter => {
+                        if app.filtered_boards.is_empty() {
+                            app.send_warning_toast("No filters to clear", None);
+                        } else {
+                            app.send_info_toast("All Filters Cleared", None);
+                        }
                         app.state.filter_tags = None;
                         app.state.all_available_tags = None;
                         app.state.filter_by_tag_list_state.select(None);
                         app.state.popup_mode = None;
                         app.filtered_boards = vec![];
                         refresh_visible_boards_and_cards(app);
-                        app.send_info_toast("All Filters Cleared", None);
+                    }
+                    CommandPaletteActions::NoCommandsFound => {
+                        return AppReturn::Continue;
                     }
                 }
                 app.state.current_user_input = "".to_string();
@@ -359,7 +379,7 @@ impl CommandPaletteWidget {
                 debug!("No command found for the command palette");
             }
         } else {
-            debug!("Tried to handle command but no item was selected");
+            return AppReturn::Continue;
         }
         app.state.app_status = AppStatus::Initialized;
         app.state.current_user_input = String::new();
@@ -368,64 +388,151 @@ impl CommandPaletteWidget {
     }
 
     fn update(mut app: MutexGuard<App>) {
-        if app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-        {
-            // check if last search string is different from app,.state.current_user_input
-            if app.state.current_user_input.to_lowercase() == app.command_palette.last_search_string
-            {
-                return;
-            }
-            let current_search_string = app.state.current_user_input.clone().to_lowercase();
-            let result = app
-                .command_palette
-                .corpus
-                .search(&current_search_string, 0.2);
-            let mut search_results = vec![];
-            for item in result {
-                search_results.push(CommandPaletteActions::from_string(&item.text, true));
-            }
-            let search_results: Vec<CommandPaletteActions> =
-                search_results.into_iter().flatten().collect();
-            // if the search results are empty, then show all commands
-            let search_results = if search_results.is_empty() {
-                CommandPaletteActions::all()
-            } else {
-                // sort to keep search results that start with the current search string at the top of the list
-                let mut ordered_search_results = vec![];
-                let mut extra_results = vec![];
-                for result in search_results {
-                    if result
-                        .to_string()
-                        .to_lowercase()
-                        .starts_with(&current_search_string)
+        if app.state.popup_mode.is_some() {
+            match app.state.popup_mode.unwrap() {
+                PopupMode::CommandPalette => {
+                    // check if last search string is different from app,.state.current_user_input
+                    if app.state.current_user_input.to_lowercase()
+                        == app.command_palette.last_search_string
                     {
-                        ordered_search_results.push(result);
+                        return;
+                    }
+                    let current_search_string = app.state.current_user_input.clone().to_lowercase();
+                    let result = app
+                        .command_palette
+                        .command_palette_actions_corpus
+                        .search(&current_search_string, 0.2);
+                    let mut search_results = vec![];
+                    for item in result {
+                        search_results
+                            .push(CommandPaletteActions::from_string(&item.text, true).unwrap());
+                    }
+                    // if the search results are empty, then show all commands
+                    let mut command_search_results = if search_results.is_empty() {
+                        if current_search_string.is_empty() {
+                            CommandPaletteActions::all()
+                        } else {
+                            let all_actions = CommandPaletteActions::all();
+                            let mut results = vec![];
+                            // append all that start with the current search string
+                            for action in all_actions {
+                                if action
+                                    .to_string()
+                                    .to_lowercase()
+                                    .starts_with(&current_search_string)
+                                {
+                                    results.push(action);
+                                }
+                            }
+                            results
+                        }
                     } else {
-                        extra_results.push(result);
+                        // sort to keep search results that start with the current search string at the top of the list
+                        let mut ordered_command_search_results = vec![];
+                        let mut extra_command_results = vec![];
+                        for result in search_results {
+                            if result
+                                .to_string()
+                                .to_lowercase()
+                                .starts_with(&current_search_string)
+                            {
+                                ordered_command_search_results.push(result);
+                            } else {
+                                extra_command_results.push(result);
+                            }
+                        }
+                        ordered_command_search_results.extend(extra_command_results);
+                        ordered_command_search_results
+                    };
+                    if command_search_results.is_empty() {
+                        command_search_results = vec![CommandPaletteActions::NoCommandsFound]
+                    }
+
+                    // search for cards
+                    let mut card_search_results: Vec<(String, u128)> = vec![];
+                    if !current_search_string.is_empty() {
+                        for board in &app.boards {
+                            for card in &board.cards {
+                                let search_helper =
+                                    if card.name.to_lowercase().contains(&current_search_string) {
+                                        format!("{} - Matched in Name", card.name)
+                                    } else if card
+                                        .description
+                                        .to_lowercase()
+                                        .contains(&current_search_string)
+                                    {
+                                        format!("{} - Matched in Description", card.name)
+                                    } else if card.tags.iter().any(|tag| {
+                                        tag.to_lowercase().contains(&current_search_string)
+                                    }) {
+                                        format!("{} - Matched in Tags", card.name)
+                                    } else if card.comments.iter().any(|comment| {
+                                        comment.to_lowercase().contains(&current_search_string)
+                                    }) {
+                                        format!("{} - Matched in Comments", card.name)
+                                    } else {
+                                        String::new()
+                                    };
+                                if !search_helper.is_empty() {
+                                    card_search_results.push((search_helper, card.id));
+                                }
+                            }
+                        }
+                    }
+                    if !card_search_results.is_empty() {
+                        app.command_palette.card_search_results = Some(card_search_results.clone());
+                    }
+
+                    // search for boards
+                    let mut board_search_results: Vec<(String, u128)> = vec![];
+                    if !current_search_string.is_empty() {
+                        for board in &app.boards {
+                            let search_helper =
+                                if board.name.to_lowercase().contains(&current_search_string) {
+                                    format!("{} - Matched in Name", board.name)
+                                } else if board
+                                    .description
+                                    .to_lowercase()
+                                    .contains(&current_search_string)
+                                {
+                                    format!("{} - Matched in Description", board.name)
+                                } else {
+                                    String::new()
+                                };
+                            if !search_helper.is_empty() {
+                                board_search_results.push((search_helper, board.id));
+                            }
+                        }
+                    }
+                    if !board_search_results.is_empty() {
+                        app.command_palette.board_search_results =
+                            Some(board_search_results.clone());
+                    }
+
+                    app.command_palette.command_search_results =
+                        Some(command_search_results.clone());
+                    app.command_palette.last_search_string = current_search_string;
+                    if app.command_palette.command_search_results.is_some() {
+                        // if length is > 0 select first item
+                        if !app
+                            .command_palette
+                            .command_search_results
+                            .as_ref()
+                            .unwrap()
+                            .is_empty()
+                        {
+                            app.state
+                                .command_palette_command_search_list_state
+                                .select(Some(0));
+                        }
                     }
                 }
-                ordered_search_results.extend(extra_results);
-                ordered_search_results
-            };
-            app.command_palette.search_results = Some(search_results);
-            app.command_palette.last_search_string = current_search_string;
-            if app.command_palette.search_results.is_some() {
-                // if length is > 0 select first item
-                if !app
-                    .command_palette
-                    .search_results
-                    .as_ref()
-                    .unwrap()
-                    .is_empty()
-                {
-                    app.state.command_palette_list_state.select(Some(0));
-                }
+                _ => {}
             }
         }
     }
 
-    pub fn calculate_tags(app: &App) -> Vec<String> {
+    pub fn calculate_tags(app: &App) -> Vec<(String, u32)> {
         let mut tags: Vec<String> = vec![];
         for board in &app.boards {
             for card in &board.cards {
@@ -442,10 +549,18 @@ impl CommandPaletteWidget {
             *acc.entry(tag.clone()).or_insert(0) += 1;
             acc
         });
-        count_hash
+        let mut tags: Vec<(String, u32)> = count_hash
             .iter()
-            .map(|(tag, count)| format!("{} - {} occurrences", tag, count))
-            .collect()
+            .map(|(tag, count)| (tag.clone(), *count))
+            .collect();
+        tags.sort_by(|a, b| {
+            if a.1 == b.1 {
+                a.0.cmp(&b.0)
+            } else {
+                b.1.cmp(&a.1)
+            }
+        });
+        tags
     }
 }
 
@@ -467,6 +582,7 @@ pub enum CommandPaletteActions {
     CreateATheme,
     FilterByTag,
     ClearFilter,
+    NoCommandsFound,
     Quit,
 }
 
@@ -474,7 +590,7 @@ impl Display for CommandPaletteActions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ExportToJSON => write!(f, "Export to JSON"),
-            Self::OpenConfigMenu => write!(f, "Open Config Menu"),
+            Self::OpenConfigMenu => write!(f, "Configure"),
             Self::SaveKanbanState => write!(f, "Save Kanban State"),
             Self::LoadASave => write!(f, "Load a Save"),
             Self::NewBoard => write!(f, "New Board"),
@@ -489,6 +605,7 @@ impl Display for CommandPaletteActions {
             Self::CreateATheme => write!(f, "Create a Theme"),
             Self::FilterByTag => write!(f, "Filter by Tag"),
             Self::ClearFilter => write!(f, "Clear Filter"),
+            Self::NoCommandsFound => write!(f, "No Commands Found"),
             Self::Quit => write!(f, "Quit"),
         }
     }
@@ -528,7 +645,7 @@ impl CommandPaletteActions {
         if lowercase_match {
             match s.to_lowercase().as_str() {
                 "export to json" => Some(Self::ExportToJSON),
-                "open config menu" => Some(Self::OpenConfigMenu),
+                "configure" => Some(Self::OpenConfigMenu),
                 "save kanban state" => Some(Self::SaveKanbanState),
                 "load a save" => Some(Self::LoadASave),
                 "new board" => Some(Self::NewBoard),
@@ -549,7 +666,7 @@ impl CommandPaletteActions {
         } else {
             match s {
                 "Export to JSON" => Some(Self::ExportToJSON),
-                "Open Config Menu" => Some(Self::OpenConfigMenu),
+                "Configure" => Some(Self::OpenConfigMenu),
                 "Save Kanban State" => Some(Self::SaveKanbanState),
                 "Load a Save" => Some(Self::LoadASave),
                 "New Board" => Some(Self::NewBoard),
