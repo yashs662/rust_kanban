@@ -4177,14 +4177,12 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     if app.state.mouse_focus == Some(Focus::CloseButton) {
                         app.state.theme_being_edited = Theme::default();
                         handle_go_to_prv_ui_mode(app);
-                    } else {
-                        if app.state.mouse_focus.is_some() {
-                            match app.state.mouse_focus.unwrap() {
-                                Focus::ThemeEditor | Focus::SubmitButton | Focus::ExtraFocus => {
-                                    return handle_create_theme_action(app);
-                                }
-                                _ => {}
+                    } else if app.state.mouse_focus.is_some() {
+                        match app.state.mouse_focus.unwrap() {
+                            Focus::ThemeEditor | Focus::SubmitButton | Focus::ExtraFocus => {
+                                return handle_create_theme_action(app);
                             }
+                            _ => {}
                         }
                     }
                 }
@@ -5338,7 +5336,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                                 let split_input = app
                                     .state
                                     .current_user_input
-                                    .split(",")
+                                    .split(',')
                                     .map(|s| s.to_string().trim().to_string());
                                 if split_input.clone().count() == 3 {
                                     let mut input_is_valid = true;
@@ -5349,8 +5347,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                                     }
                                     if input_is_valid {
                                         let r = split_input
-                                            .clone()
-                                            .nth(0)
+                                            .clone().next()
                                             .unwrap()
                                             .parse::<u8>()
                                             .unwrap();
@@ -5376,7 +5373,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                                 let split_input = app
                                     .state
                                     .current_user_input
-                                    .split(",")
+                                    .split(',')
                                     .map(|s| s.to_string().trim().to_string());
                                 if split_input.clone().count() == 3 {
                                     let mut input_is_valid = true;
@@ -5387,8 +5384,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                                     }
                                     if input_is_valid {
                                         let r = split_input
-                                            .clone()
-                                            .nth(0)
+                                            .clone().next()
                                             .unwrap()
                                             .parse::<u8>()
                                             .unwrap();
@@ -6091,7 +6087,7 @@ fn handle_command_palette_card_selection(app: &mut App) {
         debug!("Selected index is out of bounds");
         return;
     }
-    let card_id = all_card_details[card_details_index].1.clone();
+    let card_id = all_card_details[card_details_index].1;
     let mut number_of_times_to_go_right = 0;
     let mut number_of_times_to_go_down = 0;
     // find the number of times to go right and down to get to the card in app.boards
@@ -6131,7 +6127,7 @@ fn handle_command_palette_board_selection(app: &mut App) {
         debug!("Selected index is out of bounds");
         return;
     }
-    let board_id = all_board_details[board_details_index].1.clone();
+    let board_id = all_board_details[board_details_index].1;
     let mut number_of_times_to_go_right = 0;
     // find the number of times to go right to get to the board in app.boards
     for (board_index, board) in app.boards.iter().enumerate() {

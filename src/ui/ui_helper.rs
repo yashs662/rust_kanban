@@ -1071,15 +1071,14 @@ where
             key_value.push_str(&v.to_string());
             key_value.push(' ');
         }
-        let enter_user_input_key = app
+        let user_input_key = app
             .state
             .keybind_store
             .iter()
             .find(|x| x[1] == "Enter input mode")
             .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
             .clone();
-        let paragraph_text = format!("Current Value is {}\n\n{}",key_value,
-            format!("Press <{}> to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",enter_user_input_key));
+        let paragraph_text = format!("Current Value is {}\n\nPress <{}> to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",key_value,user_input_key);
         let paragraph_title = key.to_uppercase();
         let config_item = Paragraph::new(paragraph_text)
             .block(
@@ -2569,8 +2568,8 @@ where
     if !(parsed_date_dmy.is_ok()
         || parsed_date_dmy_t.is_ok()
         || parsed_date_ymd.is_ok()
-        || parsed_date_ymd_t.is_ok())
-        && !app.state.new_card_form[2].is_empty()
+        || parsed_date_ymd_t.is_ok()
+        || app.state.new_card_form[2].is_empty())
     {
         show_warning = true;
     }
@@ -3713,13 +3712,12 @@ where
                 .selected()
                 .is_none()
                 && app.command_palette.command_search_results.is_some()
-                && app
+                && !app
                     .command_palette
                     .command_search_results
                     .as_ref()
                     .unwrap()
-                    .len()
-                    > 0
+                    .is_empty()
             {
                 app.state
                     .command_palette_command_search_list_state
@@ -3733,13 +3731,12 @@ where
                 .selected()
                 .is_none()
                 && app.command_palette.card_search_results.is_some()
-                && app
+                && !app
                     .command_palette
                     .card_search_results
                     .as_ref()
                     .unwrap()
-                    .len()
-                    > 0
+                    .is_empty()
             {
                 app.state
                     .command_palette_card_search_list_state
@@ -3753,13 +3750,12 @@ where
                 .selected()
                 .is_none()
                 && app.command_palette.board_search_results.is_some()
-                && app
+                && !app
                     .command_palette
                     .board_search_results
                     .as_ref()
                     .unwrap()
-                    .len()
-                    > 0
+                    .is_empty()
             {
                 app.state
                     .command_palette_board_search_list_state
@@ -3854,7 +3850,7 @@ where
         app.command_palette
             .available_commands
             .iter()
-            .map(|c| ListItem::new(Spans::from(format!("Command - {}", c.to_string()))))
+            .map(|c| ListItem::new(Spans::from(format!("Command - {}", c))))
             .collect::<Vec<ListItem>>()
     };
 
@@ -4917,7 +4913,7 @@ where
             }
             if !current_user_input.is_empty() && is_rgb {
                 let split_input = current_user_input
-                    .split(",")
+                    .split(',')
                     .map(|s| s.to_string().trim().to_string());
                 if split_input.clone().count() == 3 {
                     let mut input_is_valid = true;
@@ -4927,14 +4923,14 @@ where
                         }
                     }
                     if input_is_valid {
-                        let r = split_input.clone().nth(0).unwrap().parse::<u8>().unwrap();
+                        let r = split_input.clone().next().unwrap().parse::<u8>().unwrap();
                         let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
                         let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
                         fg_style.fg = Some(ratatui::style::Color::Rgb(r, g, b));
                         return ListItem::new(vec![Spans::from(vec![
                             Span::styled("Sample Text", fg_style),
                             Span::styled(
-                                format!(" - {}", format!("RGB({},{},{})", r, g, b)),
+                                format!(" - RGB({},{},{})", r, g, b),
                                 app.theme.general_style,
                             ),
                         ])]);
@@ -4974,7 +4970,7 @@ where
             }
             if !current_user_input.is_empty() && is_rgb {
                 let split_input = current_user_input
-                    .split(",")
+                    .split(',')
                     .map(|s| s.to_string().trim().to_string());
                 if split_input.clone().count() == 3 {
                     let mut input_is_valid = true;
@@ -4984,14 +4980,14 @@ where
                         }
                     }
                     if input_is_valid {
-                        let r = split_input.clone().nth(0).unwrap().parse::<u8>().unwrap();
+                        let r = split_input.clone().next().unwrap().parse::<u8>().unwrap();
                         let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
                         let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
                         bg_style.bg = Some(ratatui::style::Color::Rgb(r, g, b));
                         return ListItem::new(vec![Spans::from(vec![
                             Span::styled("Sample Text", bg_style),
                             Span::styled(
-                                format!(" - {}", format!("RGB({},{},{})", r, g, b)),
+                                format!(" - RGB({},{},{})", r, g, b),
                                 app.theme.general_style,
                             ),
                         ])]);

@@ -388,146 +388,141 @@ impl CommandPaletteWidget {
     }
 
     fn update(mut app: MutexGuard<App>) {
-        if app.state.popup_mode.is_some() {
-            match app.state.popup_mode.unwrap() {
-                PopupMode::CommandPalette => {
-                    // check if last search string is different from app,.state.current_user_input
-                    if app.state.current_user_input.to_lowercase()
-                        == app.command_palette.last_search_string
-                    {
-                        return;
-                    }
-                    let current_search_string = app.state.current_user_input.clone().to_lowercase();
-                    let result = app
-                        .command_palette
-                        .command_palette_actions_corpus
-                        .search(&current_search_string, 0.2);
-                    let mut search_results = vec![];
-                    for item in result {
-                        search_results
-                            .push(CommandPaletteActions::from_string(&item.text, true).unwrap());
-                    }
-                    // if the search results are empty, then show all commands
-                    let mut command_search_results = if search_results.is_empty() {
-                        if current_search_string.is_empty() {
-                            CommandPaletteActions::all()
-                        } else {
-                            let all_actions = CommandPaletteActions::all();
-                            let mut results = vec![];
-                            // append all that start with the current search string
-                            for action in all_actions {
-                                if action
-                                    .to_string()
-                                    .to_lowercase()
-                                    .starts_with(&current_search_string)
-                                {
-                                    results.push(action);
-                                }
-                            }
-                            results
-                        }
-                    } else {
-                        // sort to keep search results that start with the current search string at the top of the list
-                        let mut ordered_command_search_results = vec![];
-                        let mut extra_command_results = vec![];
-                        for result in search_results {
-                            if result
-                                .to_string()
-                                .to_lowercase()
-                                .starts_with(&current_search_string)
-                            {
-                                ordered_command_search_results.push(result);
-                            } else {
-                                extra_command_results.push(result);
-                            }
-                        }
-                        ordered_command_search_results.extend(extra_command_results);
-                        ordered_command_search_results
-                    };
-                    if command_search_results.is_empty() {
-                        command_search_results = vec![CommandPaletteActions::NoCommandsFound]
-                    }
-
-                    // search for cards
-                    let mut card_search_results: Vec<(String, u128)> = vec![];
-                    if !current_search_string.is_empty() {
-                        for board in &app.boards {
-                            for card in &board.cards {
-                                let search_helper =
-                                    if card.name.to_lowercase().contains(&current_search_string) {
-                                        format!("{} - Matched in Name", card.name)
-                                    } else if card
-                                        .description
-                                        .to_lowercase()
-                                        .contains(&current_search_string)
-                                    {
-                                        format!("{} - Matched in Description", card.name)
-                                    } else if card.tags.iter().any(|tag| {
-                                        tag.to_lowercase().contains(&current_search_string)
-                                    }) {
-                                        format!("{} - Matched in Tags", card.name)
-                                    } else if card.comments.iter().any(|comment| {
-                                        comment.to_lowercase().contains(&current_search_string)
-                                    }) {
-                                        format!("{} - Matched in Comments", card.name)
-                                    } else {
-                                        String::new()
-                                    };
-                                if !search_helper.is_empty() {
-                                    card_search_results.push((search_helper, card.id));
-                                }
-                            }
-                        }
-                    }
-                    if !card_search_results.is_empty() {
-                        app.command_palette.card_search_results = Some(card_search_results.clone());
-                    }
-
-                    // search for boards
-                    let mut board_search_results: Vec<(String, u128)> = vec![];
-                    if !current_search_string.is_empty() {
-                        for board in &app.boards {
-                            let search_helper =
-                                if board.name.to_lowercase().contains(&current_search_string) {
-                                    format!("{} - Matched in Name", board.name)
-                                } else if board
-                                    .description
-                                    .to_lowercase()
-                                    .contains(&current_search_string)
-                                {
-                                    format!("{} - Matched in Description", board.name)
-                                } else {
-                                    String::new()
-                                };
-                            if !search_helper.is_empty() {
-                                board_search_results.push((search_helper, board.id));
-                            }
-                        }
-                    }
-                    if !board_search_results.is_empty() {
-                        app.command_palette.board_search_results =
-                            Some(board_search_results.clone());
-                    }
-
-                    app.command_palette.command_search_results =
-                        Some(command_search_results.clone());
-                    app.command_palette.last_search_string = current_search_string;
-                    if app.command_palette.command_search_results.is_some() {
-                        // if length is > 0 select first item
-                        if !app
-                            .command_palette
-                            .command_search_results
-                            .as_ref()
-                            .unwrap()
-                            .is_empty()
+        if app.state.popup_mode.is_some()
+            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
+        {
+            // check if last search string is different from app,.state.current_user_input
+            if app.state.current_user_input.to_lowercase() == app.command_palette.last_search_string
+            {
+                return;
+            }
+            let current_search_string = app.state.current_user_input.clone().to_lowercase();
+            let result = app
+                .command_palette
+                .command_palette_actions_corpus
+                .search(&current_search_string, 0.2);
+            let mut search_results = vec![];
+            for item in result {
+                search_results.push(CommandPaletteActions::from_string(&item.text, true).unwrap());
+            }
+            // if the search results are empty, then show all commands
+            let mut command_search_results = if search_results.is_empty() {
+                if current_search_string.is_empty() {
+                    CommandPaletteActions::all()
+                } else {
+                    let all_actions = CommandPaletteActions::all();
+                    let mut results = vec![];
+                    // append all that start with the current search string
+                    for action in all_actions {
+                        if action
+                            .to_string()
+                            .to_lowercase()
+                            .starts_with(&current_search_string)
                         {
-                            app.state
-                                .command_palette_command_search_list_state
-                                .select(Some(0));
+                            results.push(action);
+                        }
+                    }
+                    results
+                }
+            } else {
+                // sort to keep search results that start with the current search string at the top of the list
+                let mut ordered_command_search_results = vec![];
+                let mut extra_command_results = vec![];
+                for result in search_results {
+                    if result
+                        .to_string()
+                        .to_lowercase()
+                        .starts_with(&current_search_string)
+                    {
+                        ordered_command_search_results.push(result);
+                    } else {
+                        extra_command_results.push(result);
+                    }
+                }
+                ordered_command_search_results.extend(extra_command_results);
+                ordered_command_search_results
+            };
+            if command_search_results.is_empty() {
+                command_search_results = vec![CommandPaletteActions::NoCommandsFound]
+            }
+
+            // search for cards
+            let mut card_search_results: Vec<(String, u128)> = vec![];
+            if !current_search_string.is_empty() {
+                for board in &app.boards {
+                    for card in &board.cards {
+                        let search_helper =
+                            if card.name.to_lowercase().contains(&current_search_string) {
+                                format!("{} - Matched in Name", card.name)
+                            } else if card
+                                .description
+                                .to_lowercase()
+                                .contains(&current_search_string)
+                            {
+                                format!("{} - Matched in Description", card.name)
+                            } else if card
+                                .tags
+                                .iter()
+                                .any(|tag| tag.to_lowercase().contains(&current_search_string))
+                            {
+                                format!("{} - Matched in Tags", card.name)
+                            } else if card.comments.iter().any(|comment| {
+                                comment.to_lowercase().contains(&current_search_string)
+                            }) {
+                                format!("{} - Matched in Comments", card.name)
+                            } else {
+                                String::new()
+                            };
+                        if !search_helper.is_empty() {
+                            card_search_results.push((search_helper, card.id));
                         }
                     }
                 }
-                _ => {}
+            }
+            if !card_search_results.is_empty() {
+                app.command_palette.card_search_results = Some(card_search_results.clone());
+            }
+
+            // search for boards
+            let mut board_search_results: Vec<(String, u128)> = vec![];
+            if !current_search_string.is_empty() {
+                for board in &app.boards {
+                    let search_helper =
+                        if board.name.to_lowercase().contains(&current_search_string) {
+                            format!("{} - Matched in Name", board.name)
+                        } else if board
+                            .description
+                            .to_lowercase()
+                            .contains(&current_search_string)
+                        {
+                            format!("{} - Matched in Description", board.name)
+                        } else {
+                            String::new()
+                        };
+                    if !search_helper.is_empty() {
+                        board_search_results.push((search_helper, board.id));
+                    }
+                }
+            }
+            if !board_search_results.is_empty() {
+                app.command_palette.board_search_results = Some(board_search_results.clone());
+            }
+
+            app.command_palette.command_search_results = Some(command_search_results);
+            app.command_palette.last_search_string = current_search_string;
+            if app.command_palette.command_search_results.is_some() {
+                // if length is > 0 select first item
+                if !app
+                    .command_palette
+                    .command_search_results
+                    .as_ref()
+                    .unwrap()
+                    .is_empty()
+                {
+                    app.state
+                        .command_palette_command_search_list_state
+                        .select(Some(0));
+                }
             }
         }
     }
