@@ -2847,20 +2847,16 @@ where
     let help_text = Spans::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(&up_key, help_key_style),
-        Span::styled(" and ", help_text_style),
+        Span::styled("or ", help_text_style),
         Span::styled(&down_key, help_key_style),
-        Span::styled("to navigate", help_text_style),
-        Span::raw("; "),
+        Span::styled("to navigate. Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
-        Span::styled(" to Load the save file", help_text_style),
-        Span::raw("; "),
+        Span::styled(" to Load the selected save file. Press ", help_text_style),
         Span::styled("<Esc>", help_key_style),
-        Span::styled(" to cancel", help_text_style),
-        Span::raw("; "),
+        Span::styled(" to cancel. Press ", help_text_style),
         Span::styled(delete_key, help_key_style),
-        Span::styled("to delete a save file", help_text_style),
         Span::styled(
-            ". If using a mouse click on a save file to preview",
+            "to delete a save file. If using a mouse click on a save file to preview",
             help_text_style,
         ),
     ]);
@@ -2878,7 +2874,7 @@ where
     // preview pane
     if app.state.load_save_state.selected().is_none() {
         let preview_paragraph =
-            Paragraph::new(format!("Select a save file with {} or {} to preview or Click on a save file to preview if using a mouse", up_key, down_key))
+            Paragraph::new(format!("Select a save file with {}or {}to preview or Click on a save file to preview if using a mouse", up_key, down_key))
                 .alignment(Alignment::Center)
                 .block(
                     Block::default()

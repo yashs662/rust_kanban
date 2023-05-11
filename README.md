@@ -41,7 +41,8 @@
 - [x] Logging
   
 ## Known Issues
-- [ ] Cursor positioning in Card view is sometimes off by one or two spaces and is consistantly on the previous line for comments and tags for the 2nd line or below
+- [ ] Cursor positioning in Card view is sometimes off by one or two spaces and is consistently on the previous line for comments and tags for the 2nd line or below
+- [ ] Emoticons or characters in other languages with special symbols can crash the app due to the way cursor position is handled
 
 ## How to use
 ### Default Keybindings
@@ -80,7 +81,7 @@
 | 'Ctrl + Mouse Scroll Up'    | Scroll to the right (for boards)           |
 | 'Ctrl + Mouse Scroll Down'  | Scroll to the left (for boards)            |
 
-## Avialable Themes
+## Available Themes
 - Default Theme
 ![Default Theme](https://user-images.githubusercontent.com/66156000/232308319-125e990e-98e0-4960-ba7e-9492a2b4eaa7.png)
 - Light
