@@ -370,6 +370,9 @@ impl CommandPaletteWidget {
                         app.filtered_boards = vec![];
                         refresh_visible_boards_and_cards(app);
                     }
+                    CommandPaletteActions::ChangeDateFormat => {
+                        app.state.popup_mode = Some(PopupMode::ChangeDateFormatPopup);
+                    }
                     CommandPaletteActions::NoCommandsFound => {
                         return AppReturn::Continue;
                     }
@@ -578,6 +581,7 @@ pub enum CommandPaletteActions {
     FilterByTag,
     ClearFilter,
     NoCommandsFound,
+    ChangeDateFormat,
     Quit,
 }
 
@@ -600,6 +604,7 @@ impl Display for CommandPaletteActions {
             Self::CreateATheme => write!(f, "Create a Theme"),
             Self::FilterByTag => write!(f, "Filter by Tag"),
             Self::ClearFilter => write!(f, "Clear Filter"),
+            Self::ChangeDateFormat => write!(f, "Change Date Format"),
             Self::NoCommandsFound => write!(f, "No Commands Found"),
             Self::Quit => write!(f, "Quit"),
         }
@@ -624,6 +629,7 @@ impl CommandPaletteActions {
             Self::CreateATheme,
             Self::FilterByTag,
             Self::ClearFilter,
+            Self::ChangeDateFormat,
             Self::Quit,
         ];
 
@@ -655,6 +661,7 @@ impl CommandPaletteActions {
                 "create a theme" => Some(Self::CreateATheme),
                 "filter by tag" => Some(Self::FilterByTag),
                 "clear filter" => Some(Self::ClearFilter),
+                "change date format" => Some(Self::ChangeDateFormat),
                 "quit" => Some(Self::Quit),
                 _ => None,
             }
@@ -676,6 +683,7 @@ impl CommandPaletteActions {
                 "Create a Theme" => Some(Self::CreateATheme),
                 "Filter by Tag" => Some(Self::FilterByTag),
                 "Clear Filter" => Some(Self::ClearFilter),
+                "Change Date Format" => Some(Self::ChangeDateFormat),
                 "Quit" => Some(Self::Quit),
                 _ => None,
             }

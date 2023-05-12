@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, NaiveDateTime, Utc};
+use chrono::Utc;
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info, warn};
 use ratatui::{style::Color, widgets::ListState};
@@ -7,8 +7,8 @@ use std::{str::FromStr, time::Duration};
 use crate::{
     app::{state::KeyBindings, AppConfig},
     constants::{
-        DEFAULT_DATE_FORMAT, DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME,
-        MOUSE_OUT_OF_BOUNDS_COORDINATES, NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
+        DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MOUSE_OUT_OF_BOUNDS_COORDINATES,
+        NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
@@ -25,9 +25,10 @@ use crate::{
 
 use super::{
     actions::Action,
+    date_format_converter,
     kanban::{Board, Card, CardPriority, CardStatus},
     state::{AppStatus, Focus, UiMode},
-    App, AppReturn, AppState, MainMenu, MainMenuItem, PopupMode,
+    App, AppReturn, AppState, DateFormat, MainMenu, MainMenuItem, PopupMode,
 };
 
 pub fn go_right(app: &mut App) {
@@ -622,6 +623,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
             return AppReturn::Continue;
         }
         if app.state.popup_mode.is_some() {
+            let stop_input_mode_keys = &app.config.keybindings.stop_user_input;
             match app.state.popup_mode.unwrap() {
                 PopupMode::CommandPalette => match key {
                     Key::Up => {
@@ -674,10 +676,6 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                         _ => {}
                     },
-                    Key::Ins => {
-                        app.state.popup_mode = None;
-                        return AppReturn::Continue;
-                    }
                     Key::Tab => {
                         handle_next_focus(app);
                         return AppReturn::Continue;
@@ -686,7 +684,13 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         handle_prv_focus(app);
                         return AppReturn::Continue;
                     }
-                    _ => {}
+                    _ => {
+                        if stop_input_mode_keys.contains(&key) {
+                            app.state.popup_mode = None;
+                            app.state.app_status = AppStatus::Initialized;
+                            return AppReturn::Continue;
+                        }
+                    }
                 },
                 PopupMode::ViewCard => {
                     if app.card_being_edited.is_none()
@@ -1194,14 +1198,6 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                             }
                             return AppReturn::Continue;
                         }
-                        Key::Ins => {
-                            app.state.current_cursor_position = None;
-                            if app.card_being_edited.is_some() {
-                                app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
-                                app.state.app_status = AppStatus::Initialized;
-                            }
-                            return AppReturn::Continue;
-                        }
                         Key::ShiftRight => {
                             match app.state.focus {
                                 Focus::CardTags => {
@@ -1371,7 +1367,17 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                             }
                             return AppReturn::Continue;
                         }
-                        _ => {}
+                        _ => {
+                            if stop_input_mode_keys.contains(&key) {
+                                app.state.current_cursor_position = None;
+                                if app.card_being_edited.is_some() {
+                                    app.state.popup_mode =
+                                        Some(PopupMode::ConfirmDiscardCardChanges);
+                                    app.state.app_status = AppStatus::Initialized;
+                                }
+                                return AppReturn::Continue;
+                            }
+                        }
                     }
                 }
                 PopupMode::ConfirmDiscardCardChanges => {
@@ -1779,13 +1785,13 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                 };
                 current_key = "".to_string();
             }
-            Key::Ins => {
-                app.state.app_status = AppStatus::Initialized;
-                app.state.current_cursor_position = None;
-                info!("Exiting User Input Mode");
-                return AppReturn::Continue;
-            }
             _ => {
+                if app.config.keybindings.stop_user_input.contains(&key) {
+                    app.state.app_status = AppStatus::Initialized;
+                    app.state.current_cursor_position = None;
+                    info!("Exiting User Input Mode");
+                    return AppReturn::Continue;
+                }
                 if current_key.starts_with('<') && current_key.ends_with('>') {
                     current_key = current_key[1..current_key.len() - 1].to_string();
                 }
@@ -1950,16 +1956,17 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
 
 pub async fn handle_keybind_mode(app: &mut App, key: Key) -> AppReturn {
     match key {
-        Key::Ins => {
-            app.state.app_status = AppStatus::Initialized;
-            info!("Exiting user keybind input mode");
-        }
         Key::Esc => {
             app.state.app_status = AppStatus::Initialized;
             app.state.edited_keybinding = None;
             info!("Exiting user keybind input mode");
         }
         _ => {
+            if app.config.keybindings.stop_user_input.contains(&key) {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user keybind input mode");
+                return AppReturn::Continue;
+            }
             if app.state.edited_keybinding.is_some() {
                 let keybinding = app.state.edited_keybinding.as_mut().unwrap();
                 keybinding.push(key);
@@ -2097,6 +2104,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 app.select_edit_style_modifier_prv();
                             }
                         }
+                        PopupMode::ChangeDateFormatPopup => app.change_date_format_popup_prv(),
                         PopupMode::FilterByTag => app.filter_by_tag_popup_prv(),
                         _ => {}
                     }
@@ -2203,6 +2211,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 app.select_edit_style_modifier_next();
                             }
                         }
+                        PopupMode::ChangeDateFormatPopup => app.change_date_format_popup_next(),
                         PopupMode::FilterByTag => app.filter_by_tag_popup_next(),
                         _ => {}
                     }
@@ -2360,6 +2369,11 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 }
                 AppReturn::Continue
             }
+            Action::StopUserInput => {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+                AppReturn::Continue
+            }
             Action::GoToPreviousUIMode => handle_go_to_previous_ui_mode(app),
             Action::Enter => {
                 if app.state.popup_mode.is_some() {
@@ -2378,6 +2392,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                         PopupMode::EditSpecificKeyBinding => handle_edit_specific_keybinding(app),
                         PopupMode::SelectDefaultView => handle_default_view_selection(app),
+                        PopupMode::ChangeDateFormatPopup => handle_change_date_format(app),
                         PopupMode::ChangeTheme => {
                             return handle_change_theme(app, app.state.default_theme_mode)
                         }
@@ -3641,6 +3656,15 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     }
                 }
             }
+            PopupMode::ChangeDateFormatPopup => {
+                if left_button_pressed {
+                    if app.state.mouse_focus == Some(Focus::ChangeDateFormatPopup) {
+                        handle_change_date_format(app);
+                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        app.state.popup_mode = None;
+                    }
+                }
+            }
             PopupMode::ChangeTheme => {
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::ThemeSelector) {
@@ -4066,6 +4090,10 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
                         handle_go_to_prv_ui_mode(app);
                     }
+                } else if mouse_scroll_down {
+                    app.config_next();
+                } else if mouse_scroll_up {
+                    app.config_prv();
                 }
             }
             UiMode::EditKeybindings => {
@@ -4361,6 +4389,8 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
         } else if *config_item == "Default Theme" {
             app.state.default_theme_mode = true;
             app.state.popup_mode = Some(PopupMode::ChangeTheme);
+        } else if *config_item == "Default Date Format" {
+            app.state.popup_mode = Some(PopupMode::ChangeDateFormatPopup);
         } else {
             app.state.popup_mode = Some(PopupMode::EditGeneralConfig);
         }
@@ -4432,7 +4462,6 @@ fn handle_default_view_selection(app: &mut App) {
 
         // reset everything
         app.state.default_view_state.select(Some(0));
-        app.state.ui_mode = UiMode::ConfigMenu;
         if app.state.config_state.selected().is_none() {
             app.config_next();
         }
@@ -4443,6 +4472,52 @@ fn handle_default_view_selection(app: &mut App) {
         debug!(
             "Selected mode {} is not in the list of all UI modes",
             current_selected_mode
+        );
+    }
+}
+
+fn handle_change_date_format(app: &mut App) {
+    let all_date_formats = DateFormat::get_all_date_formats();
+    let current_selected_format = app.state.date_format_selector_state.selected().unwrap_or(0);
+    if current_selected_format < all_date_formats.len() {
+        let selected_format = &all_date_formats[current_selected_format];
+        app.config.date_format = *selected_format;
+        let config_string = format!(
+            "{}: {}",
+            "Default Date Format",
+            selected_format.to_human_readable_string()
+        );
+        let app_config = AppConfig::edit_with_string(&config_string, app);
+        app.config = app_config.clone();
+        let write_config_status = write_config(&app_config);
+        if write_config_status.is_err() {
+            error!(
+                "Error writing config file: {}",
+                write_config_status.clone().unwrap_err()
+            );
+            app.send_error_toast(
+                &format!(
+                    "Error writing config file: {}",
+                    write_config_status.unwrap_err()
+                ),
+                None,
+            );
+        } else {
+            app.send_info_toast("Config updated Successfully", None);
+        }
+
+        // reset everything
+        app.state.date_format_selector_state.select(Some(0));
+        if app.state.config_state.selected().is_none() {
+            app.config_next();
+        }
+        if app.state.popup_mode.is_some() {
+            app.state.popup_mode = None;
+        }
+    } else {
+        debug!(
+            "Selected format {} is not in the list of all date formats",
+            current_selected_format
         );
     }
 }
@@ -4713,6 +4788,7 @@ fn handle_edit_general_config(app: &mut App) {
         app.state.config_state.select(Some(0));
         app.config_item_being_edited = None;
         app.state.current_user_input = String::new();
+        app.state.current_cursor_position = None;
         app.state.ui_mode = UiMode::ConfigMenu;
         if app.state.config_state.selected().is_none() {
             app.config_next();
@@ -4848,49 +4924,29 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
                 .unwrap_or(&app.config.default_view);
             return AppReturn::Continue;
         }
-        let mut warning_date_due = String::new();
-        let mut send_warning_toast = false;
-        let parsed_date_ymd_t =
-            NaiveDateTime::parse_from_str(&new_card_due_date, "%Y/%m/%d-%H:%M:%S");
-        let parsed_date_ymd = NaiveDate::parse_from_str(&new_card_due_date, "%Y/%m/%d");
-        let parsed_date_dmy_t =
-            NaiveDateTime::parse_from_str(&new_card_due_date, DEFAULT_DATE_FORMAT);
-        let parsed_date_dmy = NaiveDate::parse_from_str(&new_card_due_date, "%d/%m/%Y");
-        let parsed_date = if let Ok(parsed_date_ymd_t) = parsed_date_ymd_t {
-            // convert to DD/MM/YYYY-HH:MM:SS
-            parsed_date_ymd_t.format(DEFAULT_DATE_FORMAT).to_string()
-        } else if let Ok(parsed_date_ymd) = parsed_date_ymd {
-            parsed_date_ymd
-                .and_hms_opt(12, 0, 0)
-                .unwrap()
-                .format(DEFAULT_DATE_FORMAT)
-                .to_string()
-        } else if let Ok(parsed_date_dmy_t) = parsed_date_dmy_t {
-            parsed_date_dmy_t.format(DEFAULT_DATE_FORMAT).to_string()
-        } else if let Ok(parsed_date_dmy) = parsed_date_dmy {
-            parsed_date_dmy
-                .and_hms_opt(12, 0, 0)
-                .unwrap()
-                .format(DEFAULT_DATE_FORMAT)
-                .to_string()
-        } else {
-            if new_card_due_date != FIELD_NOT_SET {
-                send_warning_toast = true;
-                warning_date_due = new_card_due_date;
-            }
-            FIELD_NOT_SET.to_string()
-        };
-        if send_warning_toast {
+        let parsed_due_date =
+            date_format_converter(new_card_due_date.trim(), app.config.date_format);
+        if parsed_due_date.is_err() {
+            let all_date_formats = DateFormat::get_all_date_formats()
+                .iter()
+                .map(|x| x.to_human_readable_string())
+                .collect::<Vec<&str>>()
+                .join(", ");
             app.send_warning_toast(
                 &format!(
-                    "Invalid date format '{}'. Please use DD/MM/YYYY-HH:MM:SS, YYYY-MM-DD-HH:MM:SS, DD/MM/YYY or YYYY/MM/DD. Date has been reset and other changes have been saved.",
-                    warning_date_due
+                    "Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
+                    &new_card_due_date, all_date_formats
                 ),
                 Some(Duration::from_secs(10)),
             );
-            warn!("Invalid date format '{}'. Please use DD/MM/YYYY-HH:MM:SS, YYYY-MM-DD-HH:MM:SS, DD/MM/YYY or YYYY/MM/DD. Date has been reset and other changes have been saved.",
-            warning_date_due);
+            warn!("Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
+            &new_card_due_date, all_date_formats);
         }
+        let parsed_date = if let Ok(parsed_due_date) = parsed_due_date {
+            parsed_due_date
+        } else {
+            FIELD_NOT_SET.to_string()
+        };
         if !new_card_name.is_empty() && !same_name_exists {
             let new_card = Card::new(
                 new_card_name,
@@ -5347,7 +5403,8 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                                     }
                                     if input_is_valid {
                                         let r = split_input
-                                            .clone().next()
+                                            .clone()
+                                            .next()
                                             .unwrap()
                                             .parse::<u8>()
                                             .unwrap();
@@ -5384,7 +5441,8 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                                     }
                                     if input_is_valid {
                                         let r = split_input
-                                            .clone().next()
+                                            .clone()
+                                            .next()
                                             .unwrap()
                                             .parse::<u8>()
                                             .unwrap();
@@ -5914,53 +5972,37 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
     }
     let card = card.unwrap();
     let mut edited_card = app.card_being_edited.as_ref().unwrap().1.clone();
-    let parsed_date_ymd_t =
-        NaiveDateTime::parse_from_str(&edited_card.date_due, "%Y/%m/%d-%H:%M:%S");
-    let parsed_date_ymd = NaiveDate::parse_from_str(&edited_card.date_due, "%Y/%m/%d");
-    let parsed_date_dmy_t =
-        NaiveDateTime::parse_from_str(&edited_card.date_due, DEFAULT_DATE_FORMAT);
-    let parsed_date_dmy = NaiveDate::parse_from_str(&edited_card.date_due, "%d/%m/%Y");
-    let parsed_date = if let Ok(parsed_date_ymd_t) = parsed_date_ymd_t {
-        // convert to DD/MM/YYYY-HH:MM:SS
-        parsed_date_ymd_t.format(DEFAULT_DATE_FORMAT).to_string()
-    } else if let Ok(parsed_date_ymd) = parsed_date_ymd {
-        parsed_date_ymd
-            .and_hms_opt(12, 0, 0)
-            .unwrap()
-            .format(DEFAULT_DATE_FORMAT)
-            .to_string()
-    } else if let Ok(parsed_date_dmy_t) = parsed_date_dmy_t {
-        parsed_date_dmy_t.format(DEFAULT_DATE_FORMAT).to_string()
-    } else if let Ok(parsed_date_dmy) = parsed_date_dmy {
-        parsed_date_dmy
-            .and_hms_opt(12, 0, 0)
-            .unwrap()
-            .format(DEFAULT_DATE_FORMAT)
-            .to_string()
-    } else {
-        if edited_card.date_due != FIELD_NOT_SET {
+    let card_due_date = edited_card.date_due.clone();
+    let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
+    let parsed_date = match parsed_due_date {
+        Ok(date) => date,
+        Err(_) => {
             send_warning_toast = true;
-            warning_date_due = edited_card.date_due.clone();
+            warning_date_due = card_due_date;
+            FIELD_NOT_SET.to_string()
         }
-        FIELD_NOT_SET.to_string()
     };
     edited_card.date_due = parsed_date;
     *card = edited_card;
 
     let card_name = card.name.clone();
     app.card_being_edited = None;
-    info!("Changes to Card '{}' saved", card_name);
     if send_warning_toast {
+        let all_date_formats = DateFormat::get_all_date_formats()
+            .iter()
+            .map(|x| x.to_human_readable_string())
+            .collect::<Vec<&str>>()
+            .join(", ");
         app.send_warning_toast(
             &format!(
-                "Invalid date format '{}'. Please use DD/MM/YYYY-HH:MM:SS, YYYY-MM-DD-HH:MM:SS, DD/MM/YYY or YYYY/MM/DD. Date has been reset and other changes have been saved.",
-                warning_date_due
+                "Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
+                warning_date_due, all_date_formats
             ),
             Some(Duration::from_secs(10)),
         );
         warn!(
-            "Invalid date format '{}'. Please use DD/MM/YYYY-HH:MM:SS, YYYY-MM-DD-HH:MM:SS, DD/MM/YYY or YYYY/MM/DD. Date has been reset and other changes have been saved.",
-            warning_date_due
+            "Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
+            warning_date_due, all_date_formats
         );
     }
     app.send_info_toast(&format!("Changes to Card '{}' saved", card_name), None);

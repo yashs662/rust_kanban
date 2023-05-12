@@ -9,7 +9,7 @@
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
-- [ ] Allow to change timezones and date formats
+- [ ] Allow to change timezones
 - [ ] Ability to Undo and Redo actions
 - [ ] Allow for vertical movement in text fields (e.g. card description)
 - [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
@@ -20,6 +20,7 @@
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Ability to change date formats
 - [x] Ability to search for cards and boards in the command palette
 - [x] Ability to filter cards by tags
 - [x] Allow Card to be modified in Card View

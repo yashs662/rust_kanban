@@ -1,3 +1,4 @@
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info};
 use ratatui::widgets::{ListState, TableState};
@@ -884,6 +885,32 @@ impl App {
             self.state.filter_by_tag_list_state.select(Some(i));
         }
     }
+    pub fn change_date_format_popup_next(&mut self) {
+        let i = match self.state.date_format_selector_state.selected() {
+            Some(i) => {
+                if i >= DateFormat::get_all_date_formats().len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.date_format_selector_state.select(Some(i));
+    }
+    pub fn change_date_format_popup_prv(&mut self) {
+        let i = match self.state.date_format_selector_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    DateFormat::get_all_date_formats().len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.date_format_selector_state.select(Some(i));
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -943,6 +970,7 @@ pub enum PopupMode {
     CardStatusSelector,
     EditGeneralConfig,
     SelectDefaultView,
+    ChangeDateFormatPopup,
     ChangeTheme,
     EditThemeStyle,
     SaveThemePrompt,
@@ -963,6 +991,7 @@ impl Display for PopupMode {
             PopupMode::CardStatusSelector => write!(f, "Change Card Status"),
             PopupMode::EditGeneralConfig => write!(f, "Edit General Config"),
             PopupMode::SelectDefaultView => write!(f, "Select Default View"),
+            PopupMode::ChangeDateFormatPopup => write!(f, "Change Date Format"),
             PopupMode::ChangeTheme => write!(f, "Change Theme"),
             PopupMode::EditThemeStyle => write!(f, "Edit Theme Style"),
             PopupMode::SaveThemePrompt => write!(f, "Save Theme Prompt"),
@@ -997,6 +1026,7 @@ impl PopupMode {
             PopupMode::CardStatusSelector => vec![],
             PopupMode::EditGeneralConfig => vec![],
             PopupMode::SelectDefaultView => vec![],
+            PopupMode::ChangeDateFormatPopup => vec![],
             PopupMode::ChangeTheme => vec![],
             PopupMode::EditThemeStyle => vec![
                 Focus::StyleEditorFG,
@@ -1065,6 +1095,7 @@ pub struct AppState {
     pub all_available_tags: Option<Vec<(String, u32)>>,
     pub filter_tags: Option<Vec<String>>,
     pub filter_by_tag_list_state: ListState,
+    pub date_format_selector_state: ListState,
 }
 
 impl Default for AppState {
@@ -1123,7 +1154,66 @@ impl Default for AppState {
             all_available_tags: None,
             filter_tags: None,
             filter_by_tag_list_state: ListState::default(),
+            date_format_selector_state: ListState::default(),
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq)]
+pub enum DateFormat {
+    DayMonthYear,
+    MonthDayYear,
+    YearMonthDay,
+    #[default]
+    DayMonthYearTime,
+    MonthDayYearTime,
+    YearMonthDayTime,
+}
+
+impl DateFormat {
+    pub fn to_human_readable_string(&self) -> &str {
+        match self {
+            DateFormat::DayMonthYear => "DD/MM/YYYY",
+            DateFormat::MonthDayYear => "MM/DD/YYYY",
+            DateFormat::YearMonthDay => "YYYY/MM/DD",
+            DateFormat::DayMonthYearTime => "DD/MM/YYYY-HH:MM:SS",
+            DateFormat::MonthDayYearTime => "MM/DD/YYYY-HH:MM:SS",
+            DateFormat::YearMonthDayTime => "YYYY/MM/DD-HH:MM:SS",
+        }
+    }
+    pub fn to_parser_string(&self) -> &str {
+        match self {
+            DateFormat::DayMonthYear => "%d/%m/%Y",
+            DateFormat::MonthDayYear => "%m/%d/%Y",
+            DateFormat::YearMonthDay => "%Y/%m/%d",
+            DateFormat::DayMonthYearTime => "%d/%m/%Y-%H:%M:%S",
+            DateFormat::MonthDayYearTime => "%m/%d/%Y-%H:%M:%S",
+            DateFormat::YearMonthDayTime => "%Y/%m/%d-%H:%M:%S",
+        }
+    }
+    pub fn get_all_date_formats() -> Vec<DateFormat> {
+        vec![
+            DateFormat::DayMonthYear,
+            DateFormat::MonthDayYear,
+            DateFormat::YearMonthDay,
+            DateFormat::DayMonthYearTime,
+            DateFormat::MonthDayYearTime,
+            DateFormat::YearMonthDayTime,
+        ]
+    }
+    pub fn all_formats_with_time() -> Vec<DateFormat> {
+        vec![
+            DateFormat::DayMonthYearTime,
+            DateFormat::MonthDayYearTime,
+            DateFormat::YearMonthDayTime,
+        ]
+    }
+    pub fn all_formats_without_time() -> Vec<DateFormat> {
+        vec![
+            DateFormat::DayMonthYear,
+            DateFormat::MonthDayYear,
+            DateFormat::YearMonthDay,
+        ]
     }
 }
 
@@ -1141,6 +1231,7 @@ pub struct AppConfig {
     pub no_of_boards_to_show: u16,
     pub enable_mouse_support: bool,
     pub default_theme: String,
+    pub date_format: DateFormat,
 }
 
 impl Default for AppConfig {
@@ -1160,6 +1251,7 @@ impl Default for AppConfig {
             no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
             enable_mouse_support: true,
             default_theme: default_theme.name,
+            date_format: DateFormat::default(),
         }
     }
 }
@@ -1207,6 +1299,10 @@ impl AppConfig {
             vec![
                 String::from("Default Theme"),
                 self.default_theme.to_string(),
+            ],
+            vec![
+                String::from("Default Date Format"),
+                self.date_format.to_human_readable_string().to_string(),
             ],
             vec![String::from("Edit Keybindings")],
         ]
@@ -1416,6 +1512,9 @@ impl AppConfig {
                 "default_theme" => {
                     // TODO: check if theme exists
                 }
+                "Default Date Format" => {
+                    // TODO
+                }
                 _ => {
                     debug!("Invalid key: {}", key);
                     app.send_error_toast("Something went wrong 😢 ", None);
@@ -1480,6 +1579,7 @@ impl AppConfig {
             "right" => self.keybindings.right = value,
             "left" => self.keybindings.left = value,
             "take_user_input" => self.keybindings.take_user_input = value,
+            "stop_user_input" => self.keybindings.stop_user_input = value,
             "hide_ui_element" => self.keybindings.hide_ui_element = value,
             "save_state" => self.keybindings.save_state = value,
             "new_board" => self.keybindings.new_board = value,
@@ -1508,4 +1608,99 @@ impl AppConfig {
 pub fn get_term_bg_color() -> (u8, u8, u8) {
     // TODO: make this work on windows and unix
     (0, 0, 0)
+}
+
+pub fn date_format_finder(date_string: &str) -> Result<DateFormat, String> {
+    let date_formats = DateFormat::get_all_date_formats();
+    for date_format in date_formats {
+        if DateFormat::all_formats_with_time().contains(&date_format) {
+            match NaiveDateTime::parse_from_str(date_string, date_format.to_parser_string()) {
+                Ok(_) => return Ok(date_format),
+                Err(_) => {
+                    continue;
+                }
+            }
+        } else {
+            match NaiveDate::parse_from_str(date_string, date_format.to_parser_string()) {
+                Ok(_) => return Ok(date_format),
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+    }
+    Err("Invalid date format".to_string())
+}
+
+pub fn date_format_converter(date_string: &str, date_format: DateFormat) -> Result<String, String> {
+    let given_date_format = date_format_finder(date_string)?;
+    let all_formats_with_time = DateFormat::all_formats_with_time();
+    let all_formats_without_time = DateFormat::all_formats_without_time();
+    // check if the time needs to be added to the string or removed from it to parse and convert to the required format that is date_format
+    if all_formats_with_time.contains(&given_date_format)
+        && all_formats_without_time.contains(&date_format)
+    {
+        let naive_date_time =
+            NaiveDateTime::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date_time) = naive_date_time {
+            let naive_date = NaiveDate::from_ymd_opt(
+                naive_date_time.year(),
+                naive_date_time.month(),
+                naive_date_time.day(),
+            );
+            if let Some(naive_date) = naive_date {
+                return Ok(naive_date
+                    .format(date_format.to_parser_string())
+                    .to_string());
+            } else {
+                Err("Invalid date format".to_string())
+            }
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else if all_formats_without_time.contains(&given_date_format)
+        && all_formats_with_time.contains(&date_format)
+    {
+        let naive_date =
+            NaiveDate::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date) = naive_date {
+            let default_time = NaiveTime::from_hms_opt(0, 0, 0);
+            if let Some(default_time) = default_time {
+                let naive_date_time = NaiveDateTime::new(naive_date, default_time);
+                return Ok(naive_date_time
+                    .format(date_format.to_parser_string())
+                    .to_string());
+            } else {
+                Err("Invalid date format".to_string())
+            }
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else if all_formats_with_time.contains(&given_date_format)
+        && all_formats_with_time.contains(&date_format)
+    {
+        let naive_date_time =
+            NaiveDateTime::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date_time) = naive_date_time {
+            return Ok(naive_date_time
+                .format(date_format.to_parser_string())
+                .to_string());
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else if all_formats_without_time.contains(&given_date_format)
+        && all_formats_without_time.contains(&date_format)
+    {
+        let naive_date =
+            NaiveDate::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date) = naive_date {
+            return Ok(naive_date
+                .format(date_format.to_parser_string())
+                .to_string());
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else {
+        Err("Invalid date format".to_string())
+    }
 }

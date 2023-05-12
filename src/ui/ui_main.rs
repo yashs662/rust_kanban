@@ -115,6 +115,9 @@ where
             PopupMode::FilterByTag => {
                 ui_helper::render_filter_by_tag_popup(rect, app);
             }
+            PopupMode::ChangeDateFormatPopup => {
+                ui_helper::render_change_date_format_popup(rect, app);
+            }
         }
     }
 

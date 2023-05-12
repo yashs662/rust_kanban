@@ -15,15 +15,16 @@ use tui_logger::TuiLoggerWidget;
 
 use crate::{
     app::{
+        date_format_converter, date_format_finder,
         kanban::{CardPriority, CardStatus},
         state::{AppStatus, Focus, UiMode},
-        App, AppConfig, MainMenu, PopupMode,
+        App, AppConfig, DateFormat, MainMenu, PopupMode,
     },
     calculate_cursor_position,
     constants::{
-        APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, DEFAULT_DATE_FORMAT,
-        FIELD_NOT_SET, LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT,
-        MIN_TERM_WIDTH, SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
+        APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
+        LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
+        SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
     },
     io::data_handler::{get_available_local_savefiles, get_config},
 };
@@ -370,6 +371,12 @@ where
         )
         .split(rect.size());
 
+    let table_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(5), Constraint::Length(1)].as_ref())
+        .margin(1)
+        .split(chunks[1]);
+
     let reset_btn_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
@@ -385,9 +392,7 @@ where
         rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
     };
 
-    let config_table = draw_config_table_selector(app, chunks[1]);
-    rect.render_stateful_widget(config_table, chunks[1], &mut app.state.config_state);
-
+    let config_table = draw_config_table_selector(app);
     let reset_both_style = if popup_mode {
         app.theme.inactive_text_style
     } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, reset_btn_chunks[0]) {
@@ -410,6 +415,52 @@ where
     } else {
         app.theme.general_style
     };
+    let progress_bar_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.progress_bar_style
+    };
+    let config_text_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.general_style
+    };
+    let default_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, table_chunks[0]) {
+        app.state.mouse_focus = Some(Focus::ConfigTable);
+        app.state.focus = Focus::ConfigTable;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::ConfigTable {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let config_border = Block::default()
+        .title("Config Editor")
+        .borders(Borders::ALL)
+        .style(config_text_style)
+        .border_style(default_style)
+        .border_type(BorderType::Rounded);
+    rect.render_widget(config_border, chunks[1]);
+    rect.render_stateful_widget(config_table, table_chunks[0], &mut app.state.config_state);
+
+    let current_index = app.state.config_state.selected().unwrap_or(0);
+    let total_rows = get_config_items().len();
+    let visible_rows = (table_chunks[1].height - 1) as usize;
+    let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
+    let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
+
+    // render blocks VERTICAL_SCROLL_BAR_SYMBOL
+    for i in 0..blocks_to_render {
+        let block_x = table_chunks[1].right() - 2;
+        let block_y = table_chunks[1].top() + i as u16;
+        let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
+            .style(progress_bar_style)
+            .block(Block::default().borders(Borders::NONE));
+        rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
+    }
 
     let reset_both_button = Paragraph::new("Reset Config and Keybinds to Default")
         .block(
@@ -445,34 +496,8 @@ where
 }
 
 /// Draws config list selector
-fn draw_config_table_selector(app: &mut App, render_area: Rect) -> Table<'static> {
-    let popup_mode = app.state.popup_mode.is_some();
-    let mouse_coordinates = app.state.current_mouse_coordinates;
-    let focus = app.state.focus;
+fn draw_config_table_selector(app: &mut App) -> Table<'static> {
     let config_list = get_config_items();
-    let default_style = if popup_mode {
-        app.theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
-        app.state.mouse_focus = Some(Focus::ConfigTable);
-        app.state.focus = Focus::ConfigTable;
-        let top_of_list = render_area.top() + 1;
-        let mut bottom_of_list = top_of_list + config_list.len() as u16;
-        if bottom_of_list > render_area.bottom() {
-            bottom_of_list = render_area.bottom() - 1;
-        }
-        let mouse_y = mouse_coordinates.1;
-        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-            app.state
-                .config_state
-                .select(Some((mouse_y - top_of_list) as usize));
-        }
-        app.theme.mouse_focus_style
-    } else if focus == Focus::ConfigTable {
-        app.theme.keyboard_focus_style
-    } else {
-        app.theme.general_style
-    };
-
     let rows = config_list.iter().map(|item| {
         let height = item
             .iter()
@@ -484,36 +509,15 @@ fn draw_config_table_selector(app: &mut App, render_area: Rect) -> Table<'static
         Row::new(cells).height(height as u16)
     });
 
-    let config_text_style = if popup_mode {
+    let highlight_style = if app.state.popup_mode.is_some() {
         app.theme.inactive_text_style
     } else {
-        app.theme.general_style
-    };
-
-    let current_element_style = if popup_mode {
-        app.theme.inactive_text_style
-    } else {
-        let mouse_row = mouse_coordinates.1 as usize;
-        let current_selected_row = app.state.config_state.selected().unwrap_or(0);
-        let current_selected_row_in_terminal_area =
-            current_selected_row + render_area.y as usize + 1; // +1 for border
-        if mouse_row == current_selected_row_in_terminal_area || focus == Focus::ConfigTable {
-            app.theme.list_select_style
-        } else {
-            app.theme.general_style
-        }
+        app.theme.list_select_style
     };
 
     Table::new(rows)
-        .block(
-            Block::default()
-                .title("Config Editor")
-                .borders(Borders::ALL)
-                .style(config_text_style)
-                .border_style(default_style)
-                .border_type(BorderType::Rounded),
-        )
-        .highlight_style(current_element_style)
+        .block(Block::default())
+        .highlight_style(highlight_style)
         .highlight_symbol(">> ")
         .widths(&[Constraint::Percentage(40), Constraint::Percentage(60)])
 }
@@ -1406,7 +1410,8 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
         Span::styled(up_key, help_key_style),
         Span::styled("and ", help_text_style),
         Span::styled(down_key, help_key_style),
-        Span::styled("to navigate. To edit a value press ", help_text_style),
+        Span::styled("or scroll with the mouse", help_text_style),
+        Span::styled(" to navigate. To edit a value press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" or ", help_text_style),
         Span::styled("<Mouse Left Click>", help_key_style),
@@ -1912,12 +1917,45 @@ where
             } else {
                 let card_due_date = card.date_due.clone();
                 let parsed_due_date =
-                    NaiveDateTime::parse_from_str(&card_due_date, DEFAULT_DATE_FORMAT);
-                // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
+                    date_format_converter(card_due_date.trim(), app.config.date_format);
                 let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-                    let today = Local::now().naive_local();
-                    let days_left = parsed_due_date.signed_duration_since(today).num_days();
-                    let parsed_due_date = parsed_due_date.format(DEFAULT_DATE_FORMAT).to_string();
+                    let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
+                    let (days_left, parsed_due_date) = match formatted_date_format {
+                        DateFormat::DayMonthYear
+                        | DateFormat::MonthDayYear
+                        | DateFormat::YearMonthDay => {
+                            let today = Local::now().date_naive();
+                            let string_to_naive_date_format = NaiveDate::parse_from_str(
+                                &parsed_due_date,
+                                app.config.date_format.to_parser_string(),
+                            )
+                            .unwrap();
+                            let days_left = string_to_naive_date_format
+                                .signed_duration_since(today)
+                                .num_days();
+                            let parsed_due_date = string_to_naive_date_format
+                                .format(app.config.date_format.to_parser_string())
+                                .to_string();
+                            (days_left, parsed_due_date)
+                        }
+                        DateFormat::DayMonthYearTime
+                        | DateFormat::MonthDayYearTime
+                        | DateFormat::YearMonthDayTime {} => {
+                            let today = Local::now().naive_local();
+                            let string_to_naive_date_format = NaiveDateTime::parse_from_str(
+                                &parsed_due_date,
+                                app.config.date_format.to_parser_string(),
+                            )
+                            .unwrap();
+                            let days_left = string_to_naive_date_format
+                                .signed_duration_since(today)
+                                .num_days();
+                            let parsed_due_date = string_to_naive_date_format
+                                .format(app.config.date_format.to_parser_string())
+                                .to_string();
+                            (days_left, parsed_due_date)
+                        }
+                    };
                     if app.state.popup_mode.is_some() {
                         Spans::from(Span::styled(
                             format!("Due: {}", parsed_due_date),
@@ -2558,21 +2596,8 @@ where
         );
     rect.render_widget(card_description, chunks[2]);
 
-    let mut show_warning = false;
-    let parsed_date_ymd_t =
-        NaiveDateTime::parse_from_str(&app.state.new_card_form[2], "%Y/%m/%d-%H:%M:%S");
-    let parsed_date_ymd = NaiveDate::parse_from_str(&app.state.new_card_form[2], "%Y/%m/%d");
-    let parsed_date_dmy_t =
-        NaiveDateTime::parse_from_str(&app.state.new_card_form[2], DEFAULT_DATE_FORMAT);
-    let parsed_date_dmy = NaiveDate::parse_from_str(&app.state.new_card_form[2], "%d/%m/%Y");
-    if !(parsed_date_dmy.is_ok()
-        || parsed_date_dmy_t.is_ok()
-        || parsed_date_ymd.is_ok()
-        || parsed_date_ymd_t.is_ok()
-        || app.state.new_card_form[2].is_empty())
-    {
-        show_warning = true;
-    }
+    let parsed_due_date =
+        date_format_converter(&app.state.new_card_form[2], app.config.date_format);
     let card_due_date = Paragraph::new(card_due_date_field)
         .alignment(Alignment::Left)
         .block(
@@ -2582,7 +2607,7 @@ where
                 .border_type(BorderType::Rounded)
                 .title("Card Due Date (DD/MM/YYYY-HH:MM:SS), (DD/MM/YYYY), (YYYY/MM/DD-HH:MM:SS), or (YYYY/MM/DD)"),
         );
-    if show_warning {
+    if parsed_due_date.is_err() && !app.state.new_card_form[2].is_empty() {
         let new_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(70), Constraint::Length(20)].as_ref())
@@ -3226,11 +3251,36 @@ where
     );
     let card_priority = format!("Priority: {}", card.priority);
     let card_status = format!("Status: {}", card.card_status);
-    let parsed_due_date = NaiveDateTime::parse_from_str(&card.date_due, DEFAULT_DATE_FORMAT);
-    // card due date is in the format dd/mm/yyyy check if the due date is within WARNING_DUE_DATE_DAYS if so highlight it
+    let card_due_date = card.date_due.clone();
+    let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
     let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-        let today = Local::now().naive_local();
-        let days_left = parsed_due_date.signed_duration_since(today).num_days();
+        let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
+        let days_left = match formatted_date_format {
+            DateFormat::DayMonthYear | DateFormat::MonthDayYear | DateFormat::YearMonthDay => {
+                let today = Local::now().date_naive();
+                let string_to_naive_date_format = NaiveDate::parse_from_str(
+                    &parsed_due_date,
+                    app.config.date_format.to_parser_string(),
+                )
+                .unwrap();
+                string_to_naive_date_format
+                    .signed_duration_since(today)
+                    .num_days()
+            }
+            DateFormat::DayMonthYearTime
+            | DateFormat::MonthDayYearTime
+            | DateFormat::YearMonthDayTime {} => {
+                let today = Local::now().naive_local();
+                let string_to_naive_date_format = NaiveDateTime::parse_from_str(
+                    &parsed_due_date,
+                    app.config.date_format.to_parser_string(),
+                )
+                .unwrap();
+                string_to_naive_date_format
+                    .signed_duration_since(today)
+                    .num_days()
+            }
+        };
         if app.state.focus == Focus::CardDueDate {
             Span::styled(
                 format!("Due: {}", card.date_due),
@@ -4194,6 +4244,59 @@ where
 
     render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_stateful_widget(ui_modes, popup_area, &mut app.state.default_view_state);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app);
+    }
+}
+
+pub fn render_change_date_format_popup<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    let all_date_formats = DateFormat::get_all_date_formats();
+    let all_date_formats = all_date_formats
+        .iter()
+        .map(|s| ListItem::new(vec![Spans::from(s.to_human_readable_string().to_string())]))
+        .collect::<Vec<ListItem>>();
+
+    let percent_height =
+        (((all_date_formats.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
+
+    let popup_area = centered_rect(50, percent_height, rect.size());
+
+    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+        app.state.mouse_focus = Some(Focus::ChangeDateFormatPopup);
+        app.state.focus = Focus::ChangeDateFormatPopup;
+        let top_of_list = popup_area.y + 1;
+        let mut bottom_of_list = popup_area.y + all_date_formats.len() as u16;
+        if bottom_of_list > popup_area.bottom() {
+            bottom_of_list = popup_area.bottom();
+        }
+        let mouse_y = app.state.current_mouse_coordinates.1;
+        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+            app.state
+                .date_format_selector_state
+                .select(Some((mouse_y - top_of_list) as usize));
+        }
+    }
+    let date_formats = List::new(all_date_formats)
+        .block(
+            Block::default()
+                .title("Change Date Format")
+                .style(app.theme.general_style)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(app.theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+
+    render_blank_styled_canvas(rect, app, popup_area, false);
+    rect.render_stateful_widget(
+        date_formats,
+        popup_area,
+        &mut app.state.date_format_selector_state,
+    );
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app);

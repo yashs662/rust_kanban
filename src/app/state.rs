@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::{fmt, str::FromStr, vec};
 
 use log::error;
 use serde::{Deserialize, Serialize};
@@ -75,6 +75,7 @@ pub enum Focus {
     CardTags,
     CardComments,
     ChangeCardPriorityPopup,
+    ChangeDateFormatPopup,
     FilterByTagPopup,
     #[default]
     NoFocus,
@@ -92,6 +93,7 @@ pub struct KeyBindings {
     pub next_focus: Vec<Key>,
     pub prev_focus: Vec<Key>,
     pub take_user_input: Vec<Key>,
+    pub stop_user_input: Vec<Key>,
     pub hide_ui_element: Vec<Key>,
     pub save_state: Vec<Key>,
     pub new_board: Vec<Key>,
@@ -279,6 +281,7 @@ impl Focus {
             Self::CardTags => "Card Tags",
             Self::CardComments => "Card Comments",
             Self::ChangeCardPriorityPopup => "Change Card Priority Popup",
+            Self::ChangeDateFormatPopup => "Change Date Format Popup",
             Self::FilterByTagPopup => "Filter By Tag Popup",
             Self::NoFocus => "No Focus",
             Self::ExtraFocus => "Extra Focus",
@@ -372,6 +375,7 @@ impl KeyBindings {
             ("right", &self.right),
             ("left", &self.left),
             ("take_user_input", &self.take_user_input),
+            ("stop_user_input", &self.stop_user_input),
             ("hide_ui_element", &self.hide_ui_element),
             ("save_state", &self.save_state),
             ("new_board", &self.new_board),
@@ -411,6 +415,7 @@ impl KeyBindings {
                     "right" => return Some(&Action::Right),
                     "left" => return Some(&Action::Left),
                     "take_user_input" => return Some(&Action::TakeUserInput),
+                    "stop_user_input" => return Some(&Action::StopUserInput),
                     "hide_ui_element" => return Some(&Action::HideUiElement),
                     "save_state" => return Some(&Action::SaveState),
                     "new_board" => return Some(&Action::NewBoard),
@@ -446,6 +451,7 @@ impl KeyBindings {
             "right" => Some(&Action::Right),
             "left" => Some(&Action::Left),
             "take_user_input" => Some(&Action::TakeUserInput),
+            "stop_user_input" => Some(&Action::StopUserInput),
             "hide_ui_element" => Some(&Action::HideUiElement),
             "save_state" => Some(&Action::SaveState),
             "new_board" => Some(&Action::NewBoard),
@@ -476,6 +482,7 @@ impl Default for KeyBindings {
             right: vec![Key::Right],
             left: vec![Key::Left],
             take_user_input: vec![Key::Char('i')],
+            stop_user_input: vec![Key::Ins],
             hide_ui_element: vec![Key::Char('h')],
             save_state: vec![Key::Ctrl('s')],
             new_board: vec![Key::Char('b')],

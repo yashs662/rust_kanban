@@ -32,7 +32,6 @@ pub const NEW_BOARD_FORM_DEFAULT_STATE: [&str; 2] = ["", ""];
 pub const SAMPLE_TEXT: &str = "Sample Text";
 pub const THEME_DIR_NAME: &str = "themes";
 pub const THEME_FILE_NAME: &str = "kanban_theme";
-pub const DEFAULT_DATE_FORMAT: &str = "%d/%m/%Y-%H:%M:%S";
 pub const RANDOM_SEARCH_TERM: &str = "iibnigivirneiivure";
 
 // Style
