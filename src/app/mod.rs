@@ -53,6 +53,33 @@ pub enum AppReturn {
     Continue,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ActionHistory {
+    DeleteCard(Card, u128),
+    CreateCard(Card, u128),
+    DeleteBoard(Board),
+    MoveCardBetweenBoards(Card, u128, u128),
+    MoveCardWithinBoard(u128, usize, usize),
+    CreateBoard(Board),
+    EditCard(Card, Card, u128),
+}
+
+#[derive(Default)]
+pub struct ActionHistoryManager {
+    pub history: Vec<ActionHistory>,
+    pub history_index: usize,
+}
+
+impl ActionHistoryManager {
+    pub fn new_action(&mut self, action: ActionHistory) {
+        if self.history_index != self.history.len() {
+            self.history.truncate(self.history_index);
+        }
+        self.history.push(action);
+        self.history_index += 1;
+    }
+}
+
 /// The main application, containing the state
 pub struct App {
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
@@ -69,6 +96,7 @@ pub struct App {
     pub last_io_event_time: Option<Instant>,
     pub all_themes: Vec<Theme>,
     pub theme: Theme,
+    pub action_history_manager: ActionHistoryManager,
 }
 
 impl App {
@@ -104,6 +132,7 @@ impl App {
             last_io_event_time: None,
             all_themes,
             theme,
+            action_history_manager: ActionHistoryManager::default(),
         }
     }
 
@@ -911,6 +940,233 @@ impl App {
         };
         self.state.date_format_selector_state.select(Some(i));
     }
+    pub fn undo(&mut self) {
+        if self.action_history_manager.history_index == 0 {
+            self.send_error_toast("No more actions to undo", None);
+        } else {
+            let history_index = self.action_history_manager.history_index - 1;
+            let history = self.action_history_manager.history[history_index].clone();
+            match history {
+                ActionHistory::DeleteCard(card, board_id) => {
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        board.cards.push(card.clone());
+                        self.action_history_manager.history_index -= 1;
+                        refresh_visible_boards_and_cards(self);
+                        self.send_info_toast(&format!("Undo Delete Card '{}'", card.name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not undo delete card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                    }
+                }
+                ActionHistory::CreateCard(card, board_id) => {
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        board.cards.retain(|c| c.id != card.id);
+                        refresh_visible_boards_and_cards(self);
+                        self.action_history_manager.history_index -= 1;
+                        self.send_info_toast(&format!("Undo Create Card '{}'", card.name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not undo create card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                    }
+                }
+                ActionHistory::MoveCardBetweenBoards(
+                    card,
+                    moved_from_board_id,
+                    moved_to_board_id,
+                ) => {
+                    // find the card in the moved_to_board_id and remove it
+                    if let Some(moved_to_board) =
+                        self.boards.iter_mut().find(|b| b.id == moved_to_board_id)
+                    {
+                        moved_to_board.cards.retain(|c| c.id != card.id);
+                    } else {
+                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{}' was not found", card.name, moved_to_board_id), None);
+                        return;
+                    }
+                    // find the card in the moved_from_board_id and add it
+                    if let Some(moved_from_board) =
+                        self.boards.iter_mut().find(|b| b.id == moved_from_board_id)
+                    {
+                        moved_from_board.cards.push(card.clone());
+                        refresh_visible_boards_and_cards(self);
+                        self.action_history_manager.history_index -= 1;
+                        self.send_info_toast(&format!("Undo Move Card '{}'", card.name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{}' was not found", card.name, moved_from_board_id), None);
+                    }
+                }
+                ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        // check if both the index's are valid if so swap the card
+                        if moved_from_index >= board.cards.len()
+                            || moved_to_index >= board.cards.len()
+                        {
+                            self.send_error_toast(
+                                "Could not undo move card 'N/A' as the index's were invalid",
+                                None,
+                            );
+                            return;
+                        }
+                        let card_name = board.cards[moved_to_index].name.clone();
+                        board.cards.swap(moved_from_index, moved_to_index);
+                        refresh_visible_boards_and_cards(self);
+                        self.action_history_manager.history_index -= 1;
+                        self.send_info_toast(&format!("Undo Move Card '{}'", card_name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not undo move card 'N/A' as the board with id '{}' was not found", board_id), None);
+                    }
+                }
+                ActionHistory::DeleteBoard(board) => {
+                    self.boards.push(board.clone());
+                    refresh_visible_boards_and_cards(self);
+                    self.action_history_manager.history_index -= 1;
+                    self.send_info_toast(&format!("Undo Delete Board '{}'", board.name), None);
+                }
+                ActionHistory::CreateBoard(board) => {
+                    self.boards.retain(|b| b.id != board.id);
+                    refresh_visible_boards_and_cards(self);
+                    self.action_history_manager.history_index -= 1;
+                    self.send_info_toast(&format!("Undo Create Board '{}'", board.name), None);
+                }
+                ActionHistory::EditCard(old_card, _, board_id) => {
+                    let mut card_name = String::new();
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        if let Some(card) = board.cards.iter_mut().find(|c| c.id == old_card.id) {
+                            *card = old_card.clone();
+                            self.action_history_manager.history_index -= 1;
+                            card_name = card.name.clone();
+                        } else {
+                            self.send_error_toast(
+                                &format!(
+                                    "Could not undo edit card '{}' as the card was not found",
+                                    old_card.name
+                                ),
+                                None,
+                            );
+                        }
+                        if !card_name.is_empty() {
+                            self.send_info_toast(&format!("Undo Edit Card '{}'", card_name), None);
+                            refresh_visible_boards_and_cards(self);
+                        }
+                    } else {
+                        self.send_error_toast(&format!("Could not undo edit card '{}' as the board with id '{}' was not found", old_card.name, board_id), None);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn redo(&mut self) {
+        if self.action_history_manager.history_index == self.action_history_manager.history.len() {
+            self.send_error_toast("No more actions to redo", None);
+        } else {
+            let history_index = self.action_history_manager.history_index;
+            let history = self.action_history_manager.history[history_index].clone();
+            match history {
+                ActionHistory::DeleteCard(card, board_id) => {
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        board.cards.retain(|c| c.id != card.id);
+                        refresh_visible_boards_and_cards(self);
+                        self.action_history_manager.history_index += 1;
+                        self.send_info_toast(&format!("Redo Delete Card '{}'", card.name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not redo delete card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                    }
+                }
+                ActionHistory::CreateCard(card, board_id) => {
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        board.cards.push(card.clone());
+                        refresh_visible_boards_and_cards(self);
+                        self.action_history_manager.history_index += 1;
+                        self.send_info_toast(&format!("Redo Create Card '{}'", card.name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not redo create card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                    }
+                }
+                ActionHistory::MoveCardBetweenBoards(
+                    card,
+                    moved_from_board_id,
+                    moved_to_board_id,
+                ) => {
+                    // find the card in the moved_to_board_id and remove it
+                    if let Some(moved_to_board) =
+                        self.boards.iter_mut().find(|b| b.id == moved_to_board_id)
+                    {
+                        moved_to_board.cards.push(card.clone());
+                    } else {
+                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{}' was not found", card.name, moved_to_board_id), None);
+                        return;
+                    }
+                    // find the card in the moved_from_board_id and add it
+                    if let Some(moved_from_board) =
+                        self.boards.iter_mut().find(|b| b.id == moved_from_board_id)
+                    {
+                        moved_from_board.cards.retain(|c| c.id != card.id);
+                        refresh_visible_boards_and_cards(self);
+                        self.action_history_manager.history_index += 1;
+                        self.send_info_toast(&format!("Redo Move Card '{}'", card.name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{}' was not found", card.name, moved_from_board_id), None);
+                    }
+                }
+                ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        // check if both the index's are valid if so swap the card
+                        if moved_from_index >= board.cards.len()
+                            || moved_to_index >= board.cards.len()
+                        {
+                            self.send_error_toast(
+                                "Could not redo move card 'N/A' as the index's were invalid",
+                                None,
+                            );
+                            return;
+                        }
+                        let card_name = board.cards[moved_to_index].name.clone();
+                        board.cards.swap(moved_from_index, moved_to_index);
+                        refresh_visible_boards_and_cards(self);
+                        self.action_history_manager.history_index += 1;
+                        self.send_info_toast(&format!("Redo Move Card '{}'", card_name), None);
+                    } else {
+                        self.send_error_toast(&format!("Could not redo move card 'N/A' as the board with id '{}' was not found", board_id), None);
+                    }
+                }
+                ActionHistory::DeleteBoard(board) => {
+                    self.boards.retain(|b| b.id != board.id);
+                    refresh_visible_boards_and_cards(self);
+                    self.action_history_manager.history_index += 1;
+                    self.send_info_toast(&format!("Redo Delete Board '{}'", board.name), None);
+                }
+                ActionHistory::CreateBoard(board) => {
+                    self.boards.push(board.clone());
+                    refresh_visible_boards_and_cards(self);
+                    self.action_history_manager.history_index += 1;
+                    self.send_info_toast(&format!("Redo Create Board '{}'", board.name), None);
+                }
+                ActionHistory::EditCard(_, new_card, board_id) => {
+                    let mut card_name = String::new();
+                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                        if let Some(card) = board.cards.iter_mut().find(|c| c.id == new_card.id) {
+                            *card = new_card.clone();
+                            self.action_history_manager.history_index += 1;
+                            card_name = card.name.clone();
+                        } else {
+                            self.send_error_toast(
+                                &format!(
+                                    "Could not redo edit card '{}' as the card was not found",
+                                    new_card.name
+                                ),
+                                None,
+                            );
+                        }
+                        if !card_name.is_empty() {
+                            self.send_info_toast(&format!("Redo Edit Card '{}'", card_name), None);
+                            refresh_visible_boards_and_cards(self);
+                        }
+                    } else {
+                        self.send_error_toast(&format!("Could not redo edit card '{}' as the board with id '{}' was not found", new_card.name, board_id), None);
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1008,6 +1264,7 @@ impl PopupMode {
     fn get_available_targets(&self) -> Vec<Focus> {
         match self {
             PopupMode::ViewCard => vec![
+                Focus::CardName,
                 Focus::CardDescription,
                 Focus::CardDueDate,
                 Focus::CardPriority,
@@ -1595,6 +1852,8 @@ impl AppConfig {
             "go_to_main_menu" => self.keybindings.go_to_main_menu = value,
             "toggle_command_palette" => self.keybindings.toggle_command_palette = value,
             "clear_all_toasts" => self.keybindings.clear_all_toasts = value,
+            "undo" => self.keybindings.undo = value,
+            "redo" => self.keybindings.redo = value,
             _ => {
                 debug!("Invalid key: {}", key);
                 error!("Unable to edit keybinding");
@@ -1702,5 +1961,11 @@ pub fn date_format_converter(date_string: &str, date_format: DateFormat) -> Resu
         }
     } else {
         Err("Invalid date format".to_string())
+    }
+}
+
+pub async fn handle_exit(app: &mut App) {
+    if app.config.save_on_exit {
+        app.dispatch(IoEvent::AutoSave).await;
     }
 }

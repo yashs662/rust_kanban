@@ -1,4 +1,3 @@
-use log::debug;
 use std::{
     collections::HashMap,
     fmt::{self, Display},
@@ -6,7 +5,7 @@ use std::{
 };
 
 use super::state::KeyBindings;
-use crate::{app::AppConfig, inputs::key::Key, io::data_handler::get_config};
+use crate::{app::AppConfig, inputs::key::Key};
 
 /// We define all available action
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -39,13 +38,15 @@ pub enum Action {
     ResetUI,
     GoToMainMenu,
     ToggleCommandPalette,
+    Undo,
+    Redo,
     ClearAllToasts,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 29] = [
+        static ACTIONS: [Action; 31] = [
             Action::Quit,
             Action::NextFocus,
             Action::PrvFocus,
@@ -74,6 +75,8 @@ impl Action {
             Action::ResetUI,
             Action::GoToMainMenu,
             Action::ToggleCommandPalette,
+            Action::Undo,
+            Action::Redo,
             Action::ClearAllToasts,
         ];
         ACTIONS.iter()
@@ -110,6 +113,8 @@ impl Action {
             Action::ResetUI => &[Key::Char('r')],
             Action::GoToMainMenu => &[Key::Char('m')],
             Action::ToggleCommandPalette => &[Key::Ctrl('p')],
+            Action::Undo => &[Key::Ctrl('z')],
+            Action::Redo => &[Key::Ctrl('y')],
             Action::ClearAllToasts => &[Key::Char('t')],
         }
     }
@@ -151,6 +156,8 @@ impl Display for Action {
             Action::ResetUI => "Reset UI",
             Action::GoToMainMenu => "Go to main menu",
             Action::ToggleCommandPalette => "Open command palette",
+            Action::Undo => "Undo",
+            Action::Redo => "Redo",
             Action::ClearAllToasts => "Clear all toasts",
         };
         write!(f, "{}", str)
@@ -163,20 +170,13 @@ pub struct Actions(Vec<Action>);
 
 impl Actions {
     /// Given a key, find the corresponding action
-    pub fn find(&self, key: Key) -> Option<&Action> {
-        let get_config_status = get_config(false);
-        let config = if let Ok(config) = get_config_status {
-            config
-        } else {
-            debug!("Error getting config: {}", get_config_status.unwrap_err());
-            AppConfig::default()
-        };
+    pub fn find(&self, key: Key, config: &AppConfig) -> Option<&Action> {
         let current_bindings = config.keybindings.clone();
         let action_list = &mut Vec::new();
         for (k, _v) in current_bindings.iter() {
             action_list.push(KeyBindings::str_to_action(current_bindings.clone(), k));
         }
-        let binding_action = KeyBindings::key_to_action(config.keybindings, key);
+        let binding_action = KeyBindings::key_to_action(current_bindings, key);
         if binding_action.is_some() {
             binding_action
         } else {
@@ -245,14 +245,14 @@ mod tests {
     #[test]
     fn should_find_action_by_key() {
         let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
-        let result = actions.find(Key::Ctrl('c'));
+        let result = actions.find(Key::Ctrl('c'), &AppConfig::default());
         assert_eq!(result, Some(&Action::Quit));
     }
 
     #[test]
     fn should_find_action_by_key_not_found() {
         let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
-        let result = actions.find(Key::Alt('w'));
+        let result = actions.find(Key::Alt('w'), &AppConfig::default());
         assert_eq!(result, None);
     }
 

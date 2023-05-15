@@ -10,6 +10,7 @@ use tokio::{sync::MutexGuard, time::Instant};
 
 use crate::{
     app::{
+        handle_exit,
         state::{AppStatus, Focus, UiMode},
         App, AppReturn, PopupMode,
     },
@@ -239,6 +240,7 @@ impl CommandPaletteWidget {
                         app.state.popup_mode = None;
                     }
                     CommandPaletteActions::Quit => {
+                        handle_exit(app).await;
                         info!("Quitting");
                         return AppReturn::Exit;
                     }
@@ -289,7 +291,7 @@ impl CommandPaletteWidget {
                             app.state.popup_mode = None;
                             app.state.prev_ui_mode = Some(app.state.ui_mode);
                             app.state.ui_mode = UiMode::NewCard;
-                            app.state.focus = Focus::NewCardName;
+                            app.state.focus = Focus::CardName;
                         } else {
                             app.state.popup_mode = None;
                             app.send_error_toast("Cannot create a new card in this view", None);

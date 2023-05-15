@@ -49,7 +49,7 @@ pub enum Focus {
     MainMenuHelp,
     NewBoardName,
     NewBoardDescription,
-    NewCardName,
+    CardName,
     CardDescription,
     CardDueDate,
     SubmitButton,
@@ -107,6 +107,8 @@ pub struct KeyBindings {
     pub go_to_main_menu: Vec<Key>,
     pub toggle_command_palette: Vec<Key>,
     pub clear_all_toasts: Vec<Key>,
+    pub undo: Vec<Key>,
+    pub redo: Vec<Key>,
 }
 
 impl UiMode {
@@ -176,7 +178,7 @@ impl UiMode {
                 Focus::SubmitButton,
             ],
             UiMode::NewCard => vec![
-                Focus::NewCardName,
+                Focus::CardName,
                 Focus::CardDescription,
                 Focus::CardDueDate,
                 Focus::SubmitButton,
@@ -255,7 +257,7 @@ impl Focus {
             Self::MainMenuHelp => "Main Menu Help",
             Self::NewBoardName => "New Board Name",
             Self::NewBoardDescription => "New Board Description",
-            Self::NewCardName => "New Card Name",
+            Self::CardName => "New Card Name",
             Self::CardDescription => "Card Description",
             Self::CardDueDate => "Card Due Date",
             Self::SubmitButton => "Submit Button",
@@ -330,7 +332,7 @@ impl FromStr for Focus {
             "No Focus" => Ok(Self::NoFocus),
             "New Board Name" => Ok(Self::NewBoardName),
             "New Board Description" => Ok(Self::NewBoardDescription),
-            "New Card Name" => Ok(Self::NewCardName),
+            "New Card Name" => Ok(Self::CardName),
             "Card Description" => Ok(Self::CardDescription),
             "Card Due Date" => Ok(Self::CardDueDate),
             "Edit Keybindings Table" => Ok(Self::EditKeybindingsTable),
@@ -398,6 +400,8 @@ impl KeyBindings {
             ("go_to_main_menu", &self.go_to_main_menu),
             ("toggle_command_palette", &self.toggle_command_palette),
             ("clear_all_toasts", &self.clear_all_toasts),
+            ("undo", &self.undo),
+            ("redo", &self.redo),
         ]
         .into_iter()
     }
@@ -433,6 +437,8 @@ impl KeyBindings {
                     "go_to_main_menu" => return Some(&Action::GoToMainMenu),
                     "toggle_command_palette" => return Some(&Action::ToggleCommandPalette),
                     "clear_all_toasts" => return Some(&Action::ClearAllToasts),
+                    "undo" => return Some(&Action::Undo),
+                    "redo" => return Some(&Action::Redo),
                     _ => return None,
                 }
             }
@@ -465,6 +471,8 @@ impl KeyBindings {
             "go_to_main_menu" => Some(&Action::GoToMainMenu),
             "toggle_command_palette" => Some(&Action::ToggleCommandPalette),
             "clear_all_toasts" => Some(&Action::ClearAllToasts),
+            "undo" => Some(&Action::Undo),
+            "redo" => Some(&Action::Redo),
             _ => None,
         }
     }
@@ -496,6 +504,8 @@ impl Default for KeyBindings {
             go_to_main_menu: vec![Key::Char('m')],
             toggle_command_palette: vec![Key::Ctrl('p')],
             clear_all_toasts: vec![Key::Char('t')],
+            undo: vec![Key::Ctrl('z')],
+            redo: vec![Key::Ctrl('y')],
         }
     }
 }

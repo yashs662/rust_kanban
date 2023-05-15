@@ -5,7 +5,7 @@ use ratatui::{style::Color, widgets::ListState};
 use std::{str::FromStr, time::Duration};
 
 use crate::{
-    app::{state::KeyBindings, AppConfig},
+    app::{state::KeyBindings, ActionHistory, AppConfig},
     constants::{
         DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MOUSE_OUT_OF_BOUNDS_COORDINATES,
         NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
@@ -17,7 +17,6 @@ use crate::{
         IoEvent,
     },
     ui::{
-        ui_helper::get_config_items,
         widgets::{CommandPaletteWidget, ToastType, ToastWidget},
         TextColorOptions, TextModifierOptions, Theme,
     },
@@ -25,7 +24,7 @@ use crate::{
 
 use super::{
     actions::Action,
-    date_format_converter,
+    date_format_converter, handle_exit,
     kanban::{Board, Card, CardPriority, CardStatus},
     state::{AppStatus, Focus, UiMode},
     App, AppReturn, AppState, DateFormat, MainMenu, MainMenuItem, PopupMode,
@@ -560,7 +559,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
         match app.state.focus {
             Focus::NewBoardName => app.state.new_board_form[0] = "".to_string(),
             Focus::NewBoardDescription => app.state.new_board_form[1] = "".to_string(),
-            Focus::NewCardName => app.state.new_card_form[0] = "".to_string(),
+            Focus::CardName => app.state.new_card_form[0] = "".to_string(),
             Focus::CardDescription => app.state.new_card_form[1] = "".to_string(),
             Focus::CardDueDate => app.state.new_card_form[2] = "".to_string(),
             _ => app.state.current_user_input = "".to_string(),
@@ -722,8 +721,10 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                     let card_being_edited = app.card_being_edited.as_mut().unwrap();
                     match key {
                         Key::Enter => match app.state.focus {
+                            Focus::CardName => {
+                                return AppReturn::Continue;
+                            }
                             Focus::CardTags => {
-                                let card_being_edited = app.card_being_edited.as_mut().unwrap();
                                 card_being_edited.1.tags.push(String::new());
                                 app.state.current_cursor_position = Some(0);
                                 app.state
@@ -732,7 +733,6 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                                 return AppReturn::Continue;
                             }
                             Focus::CardComments => {
-                                let card_being_edited = app.card_being_edited.as_mut().unwrap();
                                 card_being_edited.1.comments.push(String::new());
                                 app.state.current_cursor_position = Some(0);
                                 app.state
@@ -744,16 +744,10 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                                 return AppReturn::Continue;
                             }
                             Focus::CardStatus => {
-                                if app.card_being_edited.is_none() {
-                                    handle_edit_new_card(app);
-                                }
                                 app.state.popup_mode = Some(PopupMode::CardStatusSelector);
                                 return AppReturn::Continue;
                             }
                             Focus::CardPriority => {
-                                if app.card_being_edited.is_none() {
-                                    handle_edit_new_card(app);
-                                }
                                 app.state.popup_mode = Some(PopupMode::CardPrioritySelector);
                                 return AppReturn::Continue;
                             }
@@ -778,6 +772,27 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                         Key::Backspace => {
                             match app.state.focus {
+                                Focus::CardName => {
+                                    if app.state.current_cursor_position.is_some() {
+                                        let current_cursor_position =
+                                            app.state.current_cursor_position.unwrap();
+                                        if current_cursor_position > 0 {
+                                            card_being_edited
+                                                .1
+                                                .name
+                                                .remove(current_cursor_position - 1);
+                                            app.state.current_cursor_position =
+                                                Some(current_cursor_position - 1);
+                                        }
+                                    } else {
+                                        card_being_edited
+                                            .1
+                                            .name
+                                            .remove(card_being_edited.1.name.len() - 1);
+                                        app.state.current_cursor_position =
+                                            Some(card_being_edited.1.name.len());
+                                    }
+                                }
                                 Focus::CardDescription => {
                                     if app.state.current_cursor_position.is_some() {
                                         let current_cursor_position =
@@ -935,6 +950,20 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                         Key::Left => {
                             match app.state.focus {
+                                Focus::CardName => {
+                                    if !card_being_edited.1.name.is_empty() {
+                                        if app.state.current_cursor_position.is_none() {
+                                            app.state.current_cursor_position =
+                                                Some(card_being_edited.1.name.len());
+                                        } else if app.state.current_cursor_position.unwrap() > 0 {
+                                            app.state.current_cursor_position = Some(
+                                                app.state.current_cursor_position.unwrap() - 1,
+                                            );
+                                        } else {
+                                            app.state.current_cursor_position = Some(0);
+                                        }
+                                    }
+                                }
                                 Focus::CardDescription => {
                                     if !card_being_edited.1.description.is_empty() {
                                         if app.state.current_cursor_position.is_none() {
@@ -1030,6 +1059,22 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                         Key::Right => {
                             match app.state.focus {
+                                Focus::CardName => {
+                                    if !card_being_edited.1.name.is_empty() {
+                                        if app.state.current_cursor_position.is_none() {
+                                            app.state.current_cursor_position = Some(0);
+                                        } else if app.state.current_cursor_position.unwrap()
+                                            < card_being_edited.1.name.len()
+                                        {
+                                            app.state.current_cursor_position = Some(
+                                                app.state.current_cursor_position.unwrap() + 1,
+                                            );
+                                        } else {
+                                            app.state.current_cursor_position =
+                                                Some(card_being_edited.1.name.len());
+                                        }
+                                    }
+                                }
                                 Focus::CardDescription => {
                                     if !card_being_edited.1.description.is_empty() {
                                         if app.state.current_cursor_position.is_none() {
@@ -1119,7 +1164,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                         Key::Home => {
                             match app.state.focus {
-                                Focus::CardDescription | Focus::CardDueDate => {
+                                Focus::CardDescription | Focus::CardDueDate | Focus::CardName => {
                                     app.state.current_cursor_position = Some(0);
                                 }
                                 Focus::CardTags => {
@@ -1156,6 +1201,10 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                         Key::End => {
                             match app.state.focus {
+                                Focus::CardName => {
+                                    app.state.current_cursor_position =
+                                        Some(card_being_edited.1.name.len());
+                                }
                                 Focus::CardDescription => {
                                     app.state.current_cursor_position =
                                         Some(card_being_edited.1.description.len());
@@ -1491,7 +1540,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         }
                     },
                     UiMode::NewCard => match app.state.focus {
-                        Focus::NewCardName => {
+                        Focus::CardName => {
                             if app.state.current_cursor_position.is_some() {
                                 let current_cursor_position =
                                     app.state.current_cursor_position.unwrap();
@@ -1592,7 +1641,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         _ => {}
                     },
                     UiMode::NewCard => match app.state.focus {
-                        Focus::NewCardName => {
+                        Focus::CardName => {
                             if app.state.current_cursor_position.is_none() {
                                 app.state.current_cursor_position =
                                     Some(app.state.new_card_form[0].len());
@@ -1673,7 +1722,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         _ => {}
                     },
                     UiMode::NewCard => match app.state.focus {
-                        Focus::NewCardName => {
+                        Focus::CardName => {
                             if app.state.current_cursor_position.is_none() {
                                 app.state.current_cursor_position = Some(0);
                             } else if app.state.current_cursor_position.unwrap()
@@ -1739,7 +1788,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         _ => {}
                     },
                     UiMode::NewCard => match app.state.focus {
-                        Focus::NewCardName | Focus::CardDescription | Focus::CardDueDate => {
+                        Focus::CardName | Focus::CardDescription | Focus::CardDueDate => {
                             app.state.current_cursor_position = Some(0);
                         }
                         _ => {}
@@ -1764,7 +1813,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         _ => {}
                     },
                     UiMode::NewCard => match app.state.focus {
-                        Focus::NewCardName => {
+                        Focus::CardName => {
                             app.state.current_cursor_position =
                                 Some(app.state.new_card_form[0].len());
                         }
@@ -1809,6 +1858,18 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                     PopupMode::ViewCard => {
                         let card_being_edited = app.card_being_edited.as_mut().unwrap();
                         match app.state.focus {
+                            Focus::CardName => {
+                                let current_cursor_position =
+                                    app.state.current_cursor_position.unwrap_or(0);
+                                for (i, char) in current_key.chars().enumerate() {
+                                    card_being_edited
+                                        .1
+                                        .name
+                                        .insert(current_cursor_position + i, char);
+                                }
+                                app.state.current_cursor_position =
+                                    Some(current_cursor_position + 1);
+                            }
                             Focus::CardDescription => {
                                 let current_cursor_position =
                                     app.state.current_cursor_position.unwrap_or(0);
@@ -1918,7 +1979,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                     }
                     app.state.current_cursor_position = Some(cursor_position + 1);
                 }
-                Focus::NewCardName => {
+                Focus::CardName => {
                     let cursor_position = app.state.current_cursor_position.unwrap_or(0);
                     for (i, char) in current_key.chars().enumerate() {
                         app.state.new_card_form[0].insert(cursor_position + i, char);
@@ -1979,7 +2040,7 @@ pub async fn handle_keybind_mode(app: &mut App, key: Key) -> AppReturn {
 }
 
 pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
-    if let Some(action) = app.actions.find(key) {
+    if let Some(action) = app.actions.find(key, &app.config) {
         // check if the current focus is in the available focus list for the current ui mode if not assign it to the first
         if app.state.popup_mode.is_some() {
             if !PopupMode::get_available_targets(&app.state.popup_mode.unwrap())
@@ -2003,16 +2064,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
         }
         match action {
             Action::Quit => {
-                let get_config_status = get_config(false);
-                let config = if get_config_status.is_err() {
-                    debug!("Error getting config: {}", get_config_status.unwrap_err());
-                    AppConfig::default()
-                } else {
-                    get_config_status.unwrap()
-                };
-                if config.save_on_exit {
-                    app.dispatch(IoEvent::AutoSave).await;
-                }
+                handle_exit(app).await;
                 AppReturn::Exit
             }
             Action::NextFocus => {
@@ -2374,7 +2426,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 info!("Exiting user input mode");
                 AppReturn::Continue
             }
-            Action::GoToPreviousUIMode => handle_go_to_previous_ui_mode(app),
+            Action::GoToPreviousUIMode => handle_go_to_previous_ui_mode(app).await,
             Action::Enter => {
                 if app.state.popup_mode.is_some() {
                     let popup_mode = app.state.popup_mode.as_ref().unwrap();
@@ -2417,7 +2469,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 app.state.popup_mode = Some(PopupMode::CardStatusSelector);
                                 return AppReturn::Continue;
                             }
-                            Focus::CardDescription
+                            Focus::CardName
+                            | Focus::CardDescription
                             | Focus::CardDueDate
                             | Focus::CardTags
                             | Focus::CardComments => return handle_edit_new_card(app),
@@ -2467,7 +2520,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 match app.state.ui_mode {
                     UiMode::ConfigMenu => handle_config_menu_action(app),
                     UiMode::MainMenu => match app.state.focus {
-                        Focus::MainMenu => handle_main_menu_action(app),
+                        Focus::MainMenu => handle_main_menu_action(app).await,
                         Focus::MainMenuHelp => {
                             app.state.ui_mode = UiMode::HelpMenu;
                             AppReturn::Continue
@@ -2707,10 +2760,9 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             .iter()
                                             .position(|card| card.id == current_card);
                                         if let Some(card_index) = card_index {
-                                            let card_name = app.boards[index.unwrap()].cards
-                                                [card_index]
-                                                .name
+                                            let card = app.boards[index.unwrap()].cards[card_index]
                                                 .clone();
+                                            let card_name = card.name.clone();
                                             app.boards[index.unwrap()].cards.remove(card_index);
                                             // if index is > 0, set current card to previous card, else set to next card, else set to None
                                             if card_index > 0 {
@@ -2726,6 +2778,9 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                                 app.state.current_card_id = None;
                                             }
                                             warn!("Deleted card {}", card_name);
+                                            app.action_history_manager.new_action(
+                                                ActionHistory::DeleteCard(card, current_board),
+                                            );
                                             app.send_warning_toast(
                                                 &format!("Deleted card {}", card_name),
                                                 None,
@@ -2750,7 +2805,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             .iter()
                                             .position(|board| board.id == current_board);
                                         if let Some(index) = index {
-                                            let board_name = app.boards[index].name.clone();
+                                            let board = app.boards[index].clone();
+                                            let board_name = board.name.clone();
                                             app.boards.remove(index);
                                             // if index is > 0, set current board to previous board, else set to next board, else set to None
                                             if index > 0 {
@@ -2762,6 +2818,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                                 app.state.current_board_id = None;
                                             }
                                             warn!("Deleted board {}", board_name);
+                                            app.action_history_manager
+                                                .new_action(ActionHistory::DeleteBoard(board));
                                             app.send_warning_toast(
                                                 &format!("Deleted board {}", board_name),
                                                 None,
@@ -2793,7 +2851,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 .iter()
                                 .position(|board| board.id == current_board);
                             if let Some(index) = index {
-                                let board_name = app.boards[index].name.clone();
+                                let board = app.boards[index].clone();
+                                let board_name = board.name.clone();
                                 app.boards.remove(index);
                                 // if index is > 0, set current board to previous board, else set to next board, else set to None
                                 if index > 0 {
@@ -2805,6 +2864,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 }
                                 app.visible_boards_and_cards.remove(&current_board);
                                 warn!("Deleted board: {}", board_name);
+                                app.action_history_manager
+                                    .new_action(ActionHistory::DeleteBoard(board));
                                 app.send_warning_toast(
                                     &format!("Deleted board: {}", board_name),
                                     None,
@@ -2837,10 +2898,19 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             .iter()
                             .position(|card| card.id == current_card);
                         if let Some(card_index) = card_index {
+                            let temp_old_card =
+                                app.boards[index.unwrap()].cards[card_index].clone();
                             app.boards[index.unwrap()].cards[card_index].card_status =
                                 CardStatus::Complete;
                             app.boards[index.unwrap()].cards[card_index].date_completed =
                                 Utc::now().to_string();
+                            let new_card = app.boards[index.unwrap()].cards[card_index].clone();
+                            app.action_history_manager
+                                .new_action(ActionHistory::EditCard(
+                                    temp_old_card,
+                                    new_card,
+                                    current_board,
+                                ));
                             info!(
                                 "Changed status to Completed for card {}",
                                 app.boards[index.unwrap()].cards[card_index].name
@@ -2878,10 +2948,19 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             .iter()
                             .position(|card| card.id == current_card);
                         if let Some(card_index) = card_index {
+                            let temp_old_card =
+                                app.boards[index.unwrap()].cards[card_index].clone();
                             app.boards[index.unwrap()].cards[card_index].card_status =
                                 CardStatus::Active;
                             app.boards[index.unwrap()].cards[card_index].date_completed =
                                 "N/A".to_string();
+                            let new_card = app.boards[index.unwrap()].cards[card_index].clone();
+                            app.action_history_manager
+                                .new_action(ActionHistory::EditCard(
+                                    temp_old_card,
+                                    new_card,
+                                    current_board,
+                                ));
                             info!(
                                 "Changed status to Active for card {}",
                                 app.boards[index.unwrap()].cards[card_index].name
@@ -2919,10 +2998,19 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             .iter()
                             .position(|card| card.id == current_card);
                         if let Some(card_index) = card_index {
+                            let temp_old_card =
+                                app.boards[index.unwrap()].cards[card_index].clone();
                             app.boards[index.unwrap()].cards[card_index].card_status =
                                 CardStatus::Stale;
                             app.boards[index.unwrap()].cards[card_index].date_completed =
                                 "N/A".to_string();
+                            let new_card = app.boards[index.unwrap()].cards[card_index].clone();
+                            app.action_history_manager
+                                .new_action(ActionHistory::EditCard(
+                                    temp_old_card,
+                                    new_card,
+                                    current_board,
+                                ));
                             info!(
                                 "Changed status to Stale for card {}",
                                 app.boards[index.unwrap()].cards[card_index].name
@@ -3039,6 +3127,12 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         boards[current_board_index_in_all_boards.unwrap()]
                             .cards
                             .swap(current_card_index_in_all, current_card_index_in_all - 1);
+                        app.action_history_manager
+                            .new_action(ActionHistory::MoveCardWithinBoard(
+                                current_board_id,
+                                current_card_index_in_all,
+                                current_card_index_in_all - 1,
+                            ));
                     }
                 }
                 AppReturn::Continue
@@ -3142,6 +3236,12 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         boards[current_board_index_in_all_boards.unwrap()]
                             .cards
                             .swap(current_card_index_in_all, current_card_index_in_all + 1);
+                        app.action_history_manager
+                            .new_action(ActionHistory::MoveCardWithinBoard(
+                                current_board_id,
+                                current_card_index_in_all,
+                                current_card_index_in_all + 1,
+                            ));
                     }
                 }
                 AppReturn::Continue
@@ -3233,6 +3333,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                     let info_msg = &format!(
                                         "Moved card {} to board \"{}\"",
                                         card_name, boards[moved_to_board_index].name
+                                    );
+                                    app.action_history_manager.new_action(
+                                        ActionHistory::MoveCardBetweenBoards(
+                                            card.clone(),
+                                            moved_from_board_id,
+                                            moved_to_board_id,
+                                        ),
                                     );
 
                                     // handling for filtered boards
@@ -3364,6 +3471,13 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                         "Moved card {} to board \"{}\"",
                                         card_name, boards[moved_to_board_index].name
                                     );
+                                    app.action_history_manager.new_action(
+                                        ActionHistory::MoveCardBetweenBoards(
+                                            card.clone(),
+                                            moved_from_board_id,
+                                            moved_to_board_id,
+                                        ),
+                                    );
 
                                     // handling for filtered boards
                                     if filter_mode {
@@ -3450,6 +3564,14 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 }
                 AppReturn::Continue
             }
+            Action::Undo => {
+                app.undo();
+                AppReturn::Continue
+            }
+            Action::Redo => {
+                app.redo();
+                AppReturn::Continue
+            }
             Action::ClearAllToasts => {
                 app.state.toasts.clear();
                 info!("Cleared toast messages");
@@ -3492,7 +3614,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
         app.state.current_mouse_coordinates = (x, y);
     }
     if right_button_pressed {
-        return handle_go_to_previous_ui_mode(app);
+        return handle_go_to_previous_ui_mode(app).await;
     }
 
     if middle_button_pressed {
@@ -3860,6 +3982,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     if app.state.mouse_focus == Some(Focus::Body) {
                         app.state.popup_mode = Some(PopupMode::ViewCard);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
@@ -3883,6 +4006,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::Body) {
                         app.state.popup_mode = Some(PopupMode::ViewCard);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
@@ -3903,6 +4027,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                         app.state.ui_mode = UiMode::HelpMenu;
                         app.state.prev_ui_mode = Some(UiMode::BodyHelp);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up {
@@ -3931,6 +4056,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                         app.state.ui_mode = UiMode::LogsOnly;
                         app.state.prev_ui_mode = Some(UiMode::BodyLog);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
@@ -3957,6 +4083,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::Body) {
                         app.state.popup_mode = Some(PopupMode::ViewCard);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up {
@@ -3991,6 +4118,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::Body) {
                         app.state.popup_mode = Some(PopupMode::ViewCard);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
@@ -4020,6 +4148,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::Body) {
                         app.state.popup_mode = Some(PopupMode::ViewCard);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up {
@@ -4051,6 +4180,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                         app.state.ui_mode = UiMode::LogsOnly;
                         app.state.prev_ui_mode = Some(UiMode::BodyHelpLog);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 } else if mouse_scroll_up {
@@ -4131,8 +4261,9 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                         app.state.ui_mode = UiMode::LogsOnly;
                         app.state.prev_ui_mode = Some(UiMode::MainMenu);
                     } else if app.state.mouse_focus == Some(Focus::MainMenu) {
-                        return handle_main_menu_action(app);
+                        return handle_main_menu_action(app).await;
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_exit(app).await;
                         return AppReturn::Exit;
                     }
                 }
@@ -4178,7 +4309,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                             .iter()
                             .map(|s| s.to_string())
                             .collect();
-                    } else if app.state.mouse_focus == Some(Focus::NewCardName)
+                    } else if app.state.mouse_focus == Some(Focus::CardName)
                         || app.state.mouse_focus == Some(Focus::CardDescription)
                         || app.state.mouse_focus == Some(Focus::CardDueDate)
                     {
@@ -4403,12 +4534,15 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
     AppReturn::Continue
 }
 
-fn handle_main_menu_action(app: &mut App) -> AppReturn {
+async fn handle_main_menu_action(app: &mut App) -> AppReturn {
     if app.state.main_menu_state.selected().is_some() {
         let selected_index = app.state.main_menu_state.selected().unwrap();
         let selected_item = MainMenu::from_index(selected_index);
         match selected_item {
-            MainMenuItem::Quit => return AppReturn::Exit,
+            MainMenuItem::Quit => {
+                handle_exit(app).await;
+                return AppReturn::Exit;
+            }
             MainMenuItem::Config => {
                 app.state.prev_ui_mode = Some(UiMode::MainMenu);
                 app.state.ui_mode = UiMode::ConfigMenu;
@@ -4560,7 +4694,7 @@ fn handle_edit_keybindings_action(app: &mut App) {
     }
 }
 
-fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
+async fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
     if app.state.popup_mode.is_some() {
         match app.state.popup_mode.unwrap() {
             PopupMode::EditGeneralConfig => {
@@ -4643,7 +4777,10 @@ fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
             }
             AppReturn::Continue
         }
-        UiMode::MainMenu => AppReturn::Exit,
+        UiMode::MainMenu => {
+            handle_exit(app).await;
+            AppReturn::Exit
+        }
         UiMode::EditKeybindings => {
             app.state.ui_mode = UiMode::ConfigMenu;
             if app.state.config_state.selected().is_none() {
@@ -4700,7 +4837,14 @@ fn handle_change_card_status(app: &mut App) -> AppReturn {
                     .iter_mut()
                     .find(|c| c.id == current_card_id)
                 {
+                    let temp_old_card = current_card.clone();
                     current_card.card_status = selected_status;
+                    app.action_history_manager
+                        .new_action(ActionHistory::EditCard(
+                            temp_old_card,
+                            current_card.clone(),
+                            current_board_id,
+                        ));
                     app.state.popup_mode = None;
                     return AppReturn::Continue;
                 }
@@ -4866,6 +5010,8 @@ fn handle_new_board_action(app: &mut App) {
         if !new_board_name.is_empty() && !same_name_exists {
             let new_board = Board::new(new_board_name, new_board_description);
             app.boards.push(new_board.clone());
+            app.action_history_manager
+                .new_action(ActionHistory::CreateBoard(new_board.clone()));
             app.state.current_board_id = Some(new_board.id);
             app.state.ui_mode = *app
                 .state
@@ -4963,6 +5109,8 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
             if let Some(current_board) = current_board {
                 current_board.cards.push(new_card.clone());
                 app.state.current_card_id = Some(new_card.id);
+                app.action_history_manager
+                    .new_action(ActionHistory::CreateCard(new_card, current_board.id));
             } else {
                 debug!("Current board not found");
                 app.send_error_toast("Something went wrong", None);
@@ -5254,7 +5402,7 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
         let config_index = app.state.config_state.selected();
         if config_index.is_some() {
             let config_item_index = &app.config_item_being_edited;
-            let list_items = get_config_items();
+            let list_items = app.config.to_list();
             let config_item_name = if config_item_index.is_some() {
                 list_items[config_item_index.unwrap()].first().unwrap()
             } else {
@@ -5983,6 +6131,12 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
         }
     };
     edited_card.date_due = parsed_date;
+    app.action_history_manager
+        .new_action(ActionHistory::EditCard(
+            card.clone(),
+            edited_card.clone(),
+            board.id,
+        ));
     *card = edited_card;
 
     let card_name = card.name.clone();

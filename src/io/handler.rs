@@ -17,7 +17,7 @@ use crate::{
     app::{kanban::Board, state::UiMode, App, AppConfig},
     constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME},
     io::data_handler::{
-        get_config, get_default_save_directory, get_saved_themes, reset_config,
+        get_default_save_directory, get_saved_themes, reset_config,
         save_kanban_state_locally,
     },
     ui::TextColorOptions,
@@ -209,14 +209,7 @@ impl IoAsyncHandler {
         }
         let file_name = file_list[selected].clone();
         info!("🚀 Deleting save file: {}", file_name);
-        let get_config_status = get_config(false);
-        let config = if get_config_status.is_err() {
-            debug!("Error getting config: {}", get_config_status.unwrap_err());
-            AppConfig::default()
-        } else {
-            get_config_status.unwrap()
-        };
-        let path = config.save_directory.join(file_name);
+        let path = app.config.save_directory.join(file_name);
         // check if the file exists
         if !Path::new(&path).exists() {
             error!("Cannot delete save file: file not found");
@@ -411,14 +404,7 @@ fn prepare_save_dir() -> bool {
 }
 
 fn prepare_boards(app: &mut App) -> Vec<Board> {
-    let get_config_status = get_config(false);
-    let config = if let Ok(config) = get_config_status {
-        config
-    } else {
-        debug!("Error getting config: {}", get_config_status.unwrap_err());
-        AppConfig::default()
-    };
-    if config.always_load_last_save {
+    if app.config.always_load_last_save {
         let latest_save_file_info = get_latest_save_file();
         if let Ok(latest_save_file_info) = latest_save_file_info {
             let latest_save_file = latest_save_file_info.0;
@@ -555,18 +541,11 @@ pub fn make_file_system_safe_name(name: &str) -> String {
 pub async fn auto_save(app: &mut App) -> Result<()> {
     let mut file_version = 0;
     let latest_save_file_info = get_latest_save_file();
-    let get_config_status = get_config(false);
-    let config = if get_config_status.is_err() {
-        debug!("Error getting config: {}", get_config_status.unwrap_err());
-        AppConfig::default()
-    } else {
-        get_config_status.unwrap()
-    };
     let save_required = if latest_save_file_info.is_ok() {
         let latest_save_file_info = latest_save_file_info.unwrap();
         let save_file_name = latest_save_file_info.0;
         file_version = latest_save_file_info.1;
-        let file_path = config.save_directory.join(save_file_name);
+        let file_path = app.config.save_directory.join(save_file_name);
         let boards: Vec<Board> = load_file(file_path, file_version)?;
         app.boards != boards
     } else {
@@ -579,7 +558,7 @@ pub async fn auto_save(app: &mut App) -> Result<()> {
             chrono::Local::now().format("%d-%m-%Y"),
             file_version + 1
         );
-        let file_path = config.save_directory.join(file_name);
+        let file_path = app.config.save_directory.join(file_name);
         let save_status = save_file(file_path, file_version, &app.boards);
         match save_status {
             Ok(_) => Ok(()),

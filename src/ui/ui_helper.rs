@@ -18,7 +18,7 @@ use crate::{
         date_format_converter, date_format_finder,
         kanban::{CardPriority, CardStatus},
         state::{AppStatus, Focus, UiMode},
-        App, AppConfig, DateFormat, MainMenu, PopupMode,
+        App, DateFormat, MainMenu, PopupMode,
     },
     calculate_cursor_position,
     constants::{
@@ -26,7 +26,7 @@ use crate::{
         LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
         SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
     },
-    io::data_handler::{get_available_local_savefiles, get_config},
+    io::data_handler::get_available_local_savefiles,
 };
 
 use super::{
@@ -447,7 +447,7 @@ where
     rect.render_stateful_widget(config_table, table_chunks[0], &mut app.state.config_state);
 
     let current_index = app.state.config_state.selected().unwrap_or(0);
-    let total_rows = get_config_items().len();
+    let total_rows = app.config.to_list().len();
     let visible_rows = (table_chunks[1].height - 1) as usize;
     let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
     let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
@@ -497,7 +497,7 @@ where
 
 /// Draws config list selector
 fn draw_config_table_selector(app: &mut App) -> Table<'static> {
-    let config_list = get_config_items();
+    let config_list = app.config.to_list();
     let rows = config_list.iter().map(|item| {
         let height = item
             .iter()
@@ -520,18 +520,6 @@ fn draw_config_table_selector(app: &mut App) -> Table<'static> {
         .highlight_style(highlight_style)
         .highlight_symbol(">> ")
         .widths(&[Constraint::Percentage(40), Constraint::Percentage(60)])
-}
-
-/// returns a list of all config items as a vector of strings
-pub fn get_config_items() -> Vec<Vec<String>> {
-    let get_config_status = get_config(false);
-    let config = if let Ok(config) = get_config_status {
-        config
-    } else {
-        debug!("Error getting config: {}", get_config_status.unwrap_err());
-        AppConfig::default()
-    };
-    config.to_list()
 }
 
 pub fn render_edit_config<B>(rect: &mut Frame<B>, app: &mut App)
@@ -588,7 +576,7 @@ where
         };
 
     let config_item_index = &app.config_item_being_edited;
-    let list_items = get_config_items();
+    let list_items = app.config.to_list();
     let config_item_name = if config_item_index.is_some() {
         list_items[config_item_index.unwrap()].first().unwrap()
     } else {
@@ -2480,14 +2468,14 @@ where
     let name_style = if app.state.popup_mode.is_some() {
         app.theme.inactive_text_style
     } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
-        if app.state.mouse_focus != Some(Focus::NewCardName) {
+        if app.state.mouse_focus != Some(Focus::CardName) {
             app.state.current_cursor_position = None;
             app.state.app_status = AppStatus::Initialized;
         }
-        app.state.mouse_focus = Some(Focus::NewCardName);
-        app.state.focus = Focus::NewCardName;
+        app.state.mouse_focus = Some(Focus::CardName);
+        app.state.focus = Focus::CardName;
         app.theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::NewCardName) {
+    } else if matches!(app.state.focus, Focus::CardName) {
         app.theme.keyboard_focus_style
     } else {
         app.theme.general_style
@@ -2686,7 +2674,7 @@ where
     );
     rect.render_widget(submit_button, chunks[5]);
 
-    if app.state.focus == Focus::NewCardName && app.state.app_status == AppStatus::UserInput {
+    if app.state.focus == Focus::CardName && app.state.app_status == AppStatus::UserInput {
         if app.state.current_cursor_position.is_some() {
             let (x_pos, y_pos) = calculate_cursor_position(
                 wrapped_card_name_text,
@@ -3132,8 +3120,9 @@ where
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(5),
-                Constraint::Length(16),
+                Constraint::Length(3),
+                Constraint::Min(3),
+                Constraint::Min(14),
                 Constraint::Length(3),
             ])
             .margin(1)
@@ -3141,7 +3130,11 @@ where
     } else {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(5), Constraint::Length(16)])
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(5),
+                Constraint::Length(16),
+            ])
             .margin(1)
             .split(popup_area)
     };
@@ -3210,7 +3203,7 @@ where
     let card_name = card.name.clone();
     let card_description = card.description.clone();
     let wrapped_description =
-        textwrap::wrap(&card_description, (card_chunks[0].width - 2) as usize);
+        textwrap::wrap(&card_description, (card_chunks[1].width - 2) as usize);
     let wrapped_description_spans = wrapped_description
         .iter()
         .map(|x| Spans::from(Span::styled(&**x, app.theme.general_style)))
@@ -3221,6 +3214,21 @@ where
         .border_type(BorderType::Rounded)
         .border_style(app.theme.general_style);
     rect.render_widget(main_block, popup_area);
+
+    let name_style = if app.state.focus == Focus::CardName {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let name_paragraph = Paragraph::new(card_name).block(
+        Block::default()
+            .title("Name")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(name_style),
+    );
+    rect.render_widget(name_paragraph, card_chunks[0]);
 
     let description_style = if app.state.focus == Focus::CardDescription {
         app.theme.keyboard_focus_style
@@ -3235,7 +3243,7 @@ where
             .border_type(BorderType::Rounded)
             .border_style(description_style),
     );
-    rect.render_widget(description_paragraph, card_chunks[0]);
+    rect.render_widget(description_paragraph, card_chunks[1]);
 
     let card_date_created = Span::styled(
         format!("Created: {}", card.date_created),
@@ -3343,11 +3351,11 @@ where
         ListItem::new(vec![Spans::from(card_priority_styled)]),
         ListItem::new(vec![Spans::from(card_status_styled)]),
     ];
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[1]) {
-        let top_of_list = card_chunks[1].y + 1;
-        let mut bottom_of_list = card_chunks[1].y + card_extra_info_items.len() as u16;
-        if bottom_of_list > card_chunks[1].bottom() {
-            bottom_of_list = card_chunks[1].bottom();
+    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[2]) {
+        let top_of_list = card_chunks[2].y + 1;
+        let mut bottom_of_list = card_chunks[2].y + card_extra_info_items.len() as u16;
+        if bottom_of_list > card_chunks[2].bottom() {
+            bottom_of_list = card_chunks[2].bottom();
         }
         let mouse_y = app.state.current_mouse_coordinates.1;
         if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
@@ -3386,6 +3394,13 @@ where
         }
     };
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[0]) {
+        app.state.focus = Focus::CardName;
+        app.state.mouse_focus = Some(Focus::CardName);
+        app.state.card_view_comment_list_state.select(None);
+        app.state.card_view_tag_list_state.select(None);
+        app.state.current_cursor_position = None;
+    }
+    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[1]) {
         app.state.focus = Focus::CardDescription;
         app.state.mouse_focus = Some(Focus::CardDescription);
         app.state.card_view_comment_list_state.select(None);
@@ -3491,7 +3506,7 @@ where
     let mut collector_end = 0;
     for (i, tag) in card.tags.iter().enumerate() {
         let tag_string = format!("{}) {} ", i + 1, tag);
-        if (collector.len() + tag_string.len()) < card_chunks[1].width as usize {
+        if (collector.len() + tag_string.len()) < card_chunks[2].width as usize {
             collector.push_str(&tag_string);
             collector_end = i + 1;
         } else {
@@ -3516,7 +3531,7 @@ where
     let mut collector_end = 0;
     for (i, comment) in card.comments.iter().enumerate() {
         let comment_string = format!("{}) {} ", i + 1, comment);
-        if (collector.len() + comment_string.len()) < card_chunks[1].width as usize {
+        if (collector.len() + comment_string.len()) < card_chunks[2].width as usize {
             collector.push_str(&comment_string);
             collector_end = i + 1;
         } else {
@@ -3567,16 +3582,16 @@ where
             .map(|span| span.content.to_string())
             .collect::<String>();
 
-        let available_height = card_chunks[1].height - 8;
+        let available_height = card_chunks[2].height - 8;
         let tags_height = if card_tags.is_empty() {
             0
         } else {
-            textwrap::wrap(&card_tags, card_chunks[1].width as usize).len() as u16
+            textwrap::wrap(&card_tags, card_chunks[2].width as usize).len() as u16
         };
         let comments_height = if card_comments.is_empty() {
             0
         } else {
-            textwrap::wrap(&card_comments, card_chunks[1].width as usize).len() as u16
+            textwrap::wrap(&card_comments, card_chunks[2].width as usize).len() as u16
         };
 
         let mut tags_height = tags_height + 2;
@@ -3599,7 +3614,7 @@ where
                 Constraint::Length(tags_height),
                 Constraint::Length(comments_height),
             ])
-            .split(card_chunks[1])
+            .split(card_chunks[2])
     };
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, extra_info_chunks[1]) {
@@ -3620,19 +3635,27 @@ where
 
     if app.state.app_status == AppStatus::UserInput {
         match app.state.focus {
-            Focus::CardDescription => {
+            Focus::CardName => {
                 let (x_pos, y_pos) = calculate_cursor_position(
-                    wrapped_description,
+                    textwrap::wrap(&card.name, card_chunks[0].width as usize),
                     app.state.current_cursor_position.unwrap_or(0),
                     card_chunks[0],
                 );
                 rect.set_cursor(x_pos, y_pos);
             }
-            Focus::CardDueDate => {
+            Focus::CardDescription => {
                 let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(&card.date_due, card_chunks[1].width as usize),
+                    wrapped_description,
                     app.state.current_cursor_position.unwrap_or(0),
                     card_chunks[1],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            Focus::CardDueDate => {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(&card.date_due, card_chunks[2].width as usize),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    card_chunks[2],
                 );
                 rect.set_cursor(x_pos + 5, y_pos + 2); // +5 and +2 are to account for the "Due: " text and extra info position offset
             }
@@ -3716,7 +3739,7 @@ where
     }
 
     if app.card_being_edited.is_some() {
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[2]) {
+        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[3]) {
             app.state.focus = Focus::SubmitButton;
             app.state.mouse_focus = Some(Focus::SubmitButton);
             app.state.card_view_comment_list_state.select(None);
@@ -3737,7 +3760,7 @@ where
                     .border_style(save_changes_style),
             )
             .alignment(Alignment::Center);
-        rect.render_widget(save_changes_button, card_chunks[2]);
+        rect.render_widget(save_changes_button, card_chunks[3]);
     }
 
     if app.config.enable_mouse_support {
