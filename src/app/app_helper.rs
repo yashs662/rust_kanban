@@ -2809,11 +2809,9 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             let board_name = board.name.clone();
                                             app.boards.remove(index);
                                             // if index is > 0, set current board to previous board, else set to next board, else set to None
-                                            if index > 0 {
+                                            if index > 0 && !app.boards.is_empty() {
                                                 app.state.current_board_id =
                                                     Some(app.boards[index - 1].id);
-                                            } else if app.boards.is_empty() {
-                                                app.state.current_board_id = Some(app.boards[0].id);
                                             } else {
                                                 app.state.current_board_id = None;
                                             }
