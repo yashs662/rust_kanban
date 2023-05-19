@@ -23,9 +23,9 @@ use crate::{
     app::{actions::Action, kanban::CardStatus},
     constants::{
         DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
-        IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE,
-        MIN_NO_CARDS_PER_BOARD, MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE,
-        NO_OF_CARDS_PER_BOARD,
+        FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD,
+        MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD, MOUSE_OUT_OF_BOUNDS_COORDINATES,
+        NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
@@ -1892,6 +1892,9 @@ pub fn date_format_finder(date_string: &str) -> Result<DateFormat, String> {
 }
 
 pub fn date_format_converter(date_string: &str, date_format: DateFormat) -> Result<String, String> {
+    if date_string == FIELD_NOT_SET || date_string.is_empty() {
+        return Ok(date_string.to_string());
+    }
     let given_date_format = date_format_finder(date_string)?;
     let all_formats_with_time = DateFormat::all_formats_with_time();
     let all_formats_without_time = DateFormat::all_formats_without_time();

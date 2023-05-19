@@ -1884,7 +1884,7 @@ where
             };
 
             let card_description = if card.description == FIELD_NOT_SET {
-                "Description: Not Set".to_string()
+                format!("Description: {}", FIELD_NOT_SET)
             } else {
                 card.description.clone()
             };
@@ -1893,12 +1893,12 @@ where
             if card.date_due == FIELD_NOT_SET {
                 if app.state.popup_mode.is_some() {
                     card_extra_info.push(Spans::from(Span::styled(
-                        "Due: Not Set",
+                        format!("Due: {}", FIELD_NOT_SET),
                         app.theme.inactive_text_style,
                     )))
                 } else {
                     card_extra_info.push(Spans::from(Span::styled(
-                        "Due: Not Set",
+                        format!("Due: {}", FIELD_NOT_SET),
                         app.theme.card_due_default_style,
                     )))
                 }
@@ -1907,64 +1907,75 @@ where
                 let parsed_due_date =
                     date_format_converter(card_due_date.trim(), app.config.date_format);
                 let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-                    let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
-                    let (days_left, parsed_due_date) = match formatted_date_format {
-                        DateFormat::DayMonthYear
-                        | DateFormat::MonthDayYear
-                        | DateFormat::YearMonthDay => {
-                            let today = Local::now().date_naive();
-                            let string_to_naive_date_format = NaiveDate::parse_from_str(
-                                &parsed_due_date,
-                                app.config.date_format.to_parser_string(),
-                            )
-                            .unwrap();
-                            let days_left = string_to_naive_date_format
-                                .signed_duration_since(today)
-                                .num_days();
-                            let parsed_due_date = string_to_naive_date_format
-                                .format(app.config.date_format.to_parser_string())
-                                .to_string();
-                            (days_left, parsed_due_date)
-                        }
-                        DateFormat::DayMonthYearTime
-                        | DateFormat::MonthDayYearTime
-                        | DateFormat::YearMonthDayTime {} => {
-                            let today = Local::now().naive_local();
-                            let string_to_naive_date_format = NaiveDateTime::parse_from_str(
-                                &parsed_due_date,
-                                app.config.date_format.to_parser_string(),
-                            )
-                            .unwrap();
-                            let days_left = string_to_naive_date_format
-                                .signed_duration_since(today)
-                                .num_days();
-                            let parsed_due_date = string_to_naive_date_format
-                                .format(app.config.date_format.to_parser_string())
-                                .to_string();
-                            (days_left, parsed_due_date)
-                        }
-                    };
                     if app.state.popup_mode.is_some() {
                         Spans::from(Span::styled(
                             format!("Due: {}", parsed_due_date),
                             app.theme.inactive_text_style,
                         ))
-                    } else if days_left >= 0 {
-                        match days_left.cmp(&(app.config.warning_delta as i64)) {
-                            Ordering::Less | Ordering::Equal => Spans::from(Span::styled(
-                                format!("Due: {}", parsed_due_date),
-                                app.theme.card_due_warning_style,
-                            )),
-                            Ordering::Greater => Spans::from(Span::styled(
+                    } else {
+                        if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+                            Spans::from(Span::styled(
                                 format!("Due: {}", parsed_due_date),
                                 app.theme.card_due_default_style,
-                            )),
+                            ))
+                        } else {
+                            let formatted_date_format =
+                                date_format_finder(&parsed_due_date).unwrap();
+                            let (days_left, parsed_due_date) = match formatted_date_format {
+                                DateFormat::DayMonthYear
+                                | DateFormat::MonthDayYear
+                                | DateFormat::YearMonthDay => {
+                                    let today = Local::now().date_naive();
+                                    let string_to_naive_date_format = NaiveDate::parse_from_str(
+                                        &parsed_due_date,
+                                        app.config.date_format.to_parser_string(),
+                                    )
+                                    .unwrap();
+                                    let days_left = string_to_naive_date_format
+                                        .signed_duration_since(today)
+                                        .num_days();
+                                    let parsed_due_date = string_to_naive_date_format
+                                        .format(app.config.date_format.to_parser_string())
+                                        .to_string();
+                                    (days_left, parsed_due_date)
+                                }
+                                DateFormat::DayMonthYearTime
+                                | DateFormat::MonthDayYearTime
+                                | DateFormat::YearMonthDayTime {} => {
+                                    let today = Local::now().naive_local();
+                                    let string_to_naive_date_format =
+                                        NaiveDateTime::parse_from_str(
+                                            &parsed_due_date,
+                                            app.config.date_format.to_parser_string(),
+                                        )
+                                        .unwrap();
+                                    let days_left = string_to_naive_date_format
+                                        .signed_duration_since(today)
+                                        .num_days();
+                                    let parsed_due_date = string_to_naive_date_format
+                                        .format(app.config.date_format.to_parser_string())
+                                        .to_string();
+                                    (days_left, parsed_due_date)
+                                }
+                            };
+                            if days_left >= 0 {
+                                match days_left.cmp(&(app.config.warning_delta as i64)) {
+                                    Ordering::Less | Ordering::Equal => Spans::from(Span::styled(
+                                        format!("Due: {}", parsed_due_date),
+                                        app.theme.card_due_warning_style,
+                                    )),
+                                    Ordering::Greater => Spans::from(Span::styled(
+                                        format!("Due: {}", parsed_due_date),
+                                        app.theme.card_due_default_style,
+                                    )),
+                                }
+                            } else {
+                                Spans::from(Span::styled(
+                                    format!("Due: {}", parsed_due_date),
+                                    app.theme.card_due_overdue_style,
+                                ))
+                            }
                         }
-                    } else {
-                        Spans::from(Span::styled(
-                            format!("Due: {}", parsed_due_date),
-                            app.theme.card_due_overdue_style,
-                        ))
                     }
                 } else if app.state.popup_mode.is_some() {
                     Spans::from(Span::styled(
@@ -3262,53 +3273,64 @@ where
     let card_due_date = card.date_due.clone();
     let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
     let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-        let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
-        let days_left = match formatted_date_format {
-            DateFormat::DayMonthYear | DateFormat::MonthDayYear | DateFormat::YearMonthDay => {
-                let today = Local::now().date_naive();
-                let string_to_naive_date_format = NaiveDate::parse_from_str(
-                    &parsed_due_date,
-                    app.config.date_format.to_parser_string(),
-                )
-                .unwrap();
-                string_to_naive_date_format
-                    .signed_duration_since(today)
-                    .num_days()
-            }
-            DateFormat::DayMonthYearTime
-            | DateFormat::MonthDayYearTime
-            | DateFormat::YearMonthDayTime {} => {
-                let today = Local::now().naive_local();
-                let string_to_naive_date_format = NaiveDateTime::parse_from_str(
-                    &parsed_due_date,
-                    app.config.date_format.to_parser_string(),
-                )
-                .unwrap();
-                string_to_naive_date_format
-                    .signed_duration_since(today)
-                    .num_days()
-            }
-        };
         if app.state.focus == Focus::CardDueDate {
             Span::styled(
                 format!("Due: {}", card.date_due),
                 app.theme.list_select_style,
             )
-        } else if days_left <= app.config.warning_delta.into() && days_left >= 0 {
-            Span::styled(
-                format!("Due: {}", card.date_due),
-                app.theme.card_due_warning_style,
-            )
-        } else if days_left < 0 {
-            Span::styled(
-                format!("Due: {}", card.date_due),
-                app.theme.card_due_overdue_style,
-            )
         } else {
-            Span::styled(
-                format!("Due: {}", card.date_due),
-                app.theme.card_due_default_style,
-            )
+            if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+                Span::styled(
+                    format!("Due: {}", card.date_due),
+                    app.theme.card_due_default_style,
+                )
+            } else {
+                let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
+                let days_left = match formatted_date_format {
+                    DateFormat::DayMonthYear
+                    | DateFormat::MonthDayYear
+                    | DateFormat::YearMonthDay => {
+                        let today = Local::now().date_naive();
+                        let string_to_naive_date_format = NaiveDate::parse_from_str(
+                            &parsed_due_date,
+                            app.config.date_format.to_parser_string(),
+                        )
+                        .unwrap();
+                        string_to_naive_date_format
+                            .signed_duration_since(today)
+                            .num_days()
+                    }
+                    DateFormat::DayMonthYearTime
+                    | DateFormat::MonthDayYearTime
+                    | DateFormat::YearMonthDayTime {} => {
+                        let today = Local::now().naive_local();
+                        let string_to_naive_date_format = NaiveDateTime::parse_from_str(
+                            &parsed_due_date,
+                            app.config.date_format.to_parser_string(),
+                        )
+                        .unwrap();
+                        string_to_naive_date_format
+                            .signed_duration_since(today)
+                            .num_days()
+                    }
+                };
+                if days_left <= app.config.warning_delta.into() && days_left >= 0 {
+                    Span::styled(
+                        format!("Due: {}", card.date_due),
+                        app.theme.card_due_warning_style,
+                    )
+                } else if days_left < 0 {
+                    Span::styled(
+                        format!("Due: {}", card.date_due),
+                        app.theme.card_due_overdue_style,
+                    )
+                } else {
+                    Span::styled(
+                        format!("Due: {}", card.date_due),
+                        app.theme.card_due_default_style,
+                    )
+                }
+            }
         }
     } else if app.state.focus == Focus::CardDueDate {
         Span::styled(

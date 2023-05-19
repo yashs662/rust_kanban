@@ -2422,8 +2422,10 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::StopUserInput => {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
+                if app.state.app_status == AppStatus::UserInput {
+                    app.state.app_status = AppStatus::Initialized;
+                    info!("Exiting user input mode");
+                }
                 AppReturn::Continue
             }
             Action::GoToPreviousUIMode => handle_go_to_previous_ui_mode(app).await,
@@ -2902,6 +2904,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 CardStatus::Complete;
                             app.boards[index.unwrap()].cards[card_index].date_completed =
                                 Utc::now().to_string();
+                            app.boards[index.unwrap()].cards[card_index].date_modified =
+                                Utc::now().to_string();
                             let new_card = app.boards[index.unwrap()].cards[card_index].clone();
                             app.action_history_manager
                                 .new_action(ActionHistory::EditCard(
@@ -2952,6 +2956,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 CardStatus::Active;
                             app.boards[index.unwrap()].cards[card_index].date_completed =
                                 "N/A".to_string();
+                            app.boards[index.unwrap()].cards[card_index].date_modified =
+                                Utc::now().to_string();
                             let new_card = app.boards[index.unwrap()].cards[card_index].clone();
                             app.action_history_manager
                                 .new_action(ActionHistory::EditCard(
@@ -3002,6 +3008,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 CardStatus::Stale;
                             app.boards[index.unwrap()].cards[card_index].date_completed =
                                 "N/A".to_string();
+                            app.boards[index.unwrap()].cards[card_index].date_modified =
+                                Utc::now().to_string();
                             let new_card = app.boards[index.unwrap()].cards[card_index].clone();
                             app.action_history_manager
                                 .new_action(ActionHistory::EditCard(
@@ -3862,7 +3870,8 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                                 app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
                             }
                         }
-                        Focus::CardDescription
+                        Focus::CardName
+                        | Focus::CardDescription
                         | Focus::CardTags
                         | Focus::CardComments
                         | Focus::CardDueDate => return handle_edit_new_card(app),
@@ -6121,7 +6130,13 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
     let card_due_date = edited_card.date_due.clone();
     let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
     let parsed_date = match parsed_due_date {
-        Ok(date) => date,
+        Ok(date) => {
+            if date.is_empty() {
+                FIELD_NOT_SET.to_string()
+            } else {
+                date
+            }
+        }
         Err(_) => {
             send_warning_toast = true;
             warning_date_due = card_due_date;
@@ -6129,6 +6144,7 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
         }
     };
     edited_card.date_due = parsed_date;
+    edited_card.date_modified = Utc::now().to_string();
     app.action_history_manager
         .new_action(ActionHistory::EditCard(
             card.clone(),
