@@ -2240,6 +2240,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             go_up(app);
                         } else if app.state.focus == Focus::Help {
                             app.help_prv();
+                        } else if app.state.focus == Focus::Log {
+                            app.log_prv();
                         }
                     }
                 }
@@ -2347,6 +2349,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             go_down(app);
                         } else if app.state.focus == Focus::Help {
                             app.help_next();
+                        } else if app.state.focus == Focus::Log {
+                            app.log_next();
                         }
                     }
                 }

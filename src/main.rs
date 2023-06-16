@@ -6,7 +6,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use rust_kanban::{
     app::App,
     constants::APP_TITLE,
-    io::{handler::IoAsyncHandler, IoEvent},
+    io::{handler::IoAsyncHandler, logger, IoEvent},
     start_ui,
 };
 use std::{io::stdout, sync::Arc};
@@ -58,8 +58,8 @@ async fn main() -> Result<()> {
     let app_widget_manager_instance = Arc::clone(&main_app_instance);
     let app_ui_instance = Arc::clone(&main_app_instance);
     // Configure log
-    tui_logger::init_logger(LevelFilter::Debug).unwrap();
-    tui_logger::set_default_level(log::LevelFilter::Debug);
+    logger::init_logger(LevelFilter::Debug).unwrap();
+    logger::set_default_level(log::LevelFilter::Debug);
 
     // Handle IO in a specifc thread
     tokio::spawn(async move {

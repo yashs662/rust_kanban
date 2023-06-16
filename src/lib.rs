@@ -13,6 +13,9 @@ pub mod inputs;
 pub mod io;
 pub mod ui;
 
+#[macro_use]
+extern crate lazy_static;
+
 pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     // Configure Crossterm backend for tui
     crossterm::terminal::enable_raw_mode()?;

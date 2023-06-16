@@ -1,9 +1,9 @@
 use chrono::{Local, NaiveDate, NaiveDateTime};
-use log::debug;
+use log::{debug, Level};
 use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Span, Spans},
     widgets::{
         Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table,
@@ -11,7 +11,6 @@ use ratatui::{
     Frame,
 };
 use std::cmp::Ordering;
-use tui_logger::TuiLoggerWidget;
 
 use crate::{
     app::{
@@ -26,7 +25,10 @@ use crate::{
         LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
         SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
     },
-    io::data_handler::get_available_local_savefiles,
+    io::{
+        data_handler::get_available_local_savefiles,
+        logger::{get_logs, get_selected_index, RUST_KANBAN_LOGGER},
+    },
 };
 
 use super::{
@@ -130,9 +132,7 @@ where
         .split(rect.size());
 
     render_body(rect, chunks[0], app, false);
-
-    let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[1]);
-    rect.render_widget(log, chunks[1]);
+    render_logs(app, true, chunks[1], rect, app.state.popup_mode.is_some());
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -226,9 +226,7 @@ where
     };
 
     render_body(rect, chunks[1], app, false);
-
-    let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[2]);
-    rect.render_widget(log, chunks[2]);
+    render_logs(app, true, chunks[2], rect, app.state.popup_mode.is_some());
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -280,8 +278,7 @@ where
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.help_state);
 
-    let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[2]);
-    rect.render_widget(log, chunks[2]);
+    render_logs(app, true, chunks[2], rect, app.state.popup_mode.is_some());
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -344,8 +341,7 @@ where
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.help_state);
 
-    let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[3]);
-    rect.render_widget(log, chunks[3]);
+    render_logs(app, true, chunks[3], rect, app.state.popup_mode.is_some());
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -487,8 +483,7 @@ where
     let config_help = draw_config_help(&app.state.focus, popup_mode, app);
     rect.render_widget(config_help, chunks[3]);
 
-    let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[4]);
-    rect.render_widget(log, chunks[4]);
+    render_logs(app, true, chunks[4], rect, app.state.popup_mode.is_some());
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -616,7 +611,7 @@ where
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
 
-    let log = draw_logs(app, true, false, chunks[2]);
+    render_logs(app, false, chunks[2], rect, false);
 
     if app.state.app_status == AppStatus::UserInput {
         let current_cursor_position = if app.state.current_cursor_position.is_some() {
@@ -632,7 +627,6 @@ where
     }
     rect.render_widget(config_item, chunks[0]);
     rect.render_widget(edit_item, chunks[1]);
-    rect.render_widget(log, chunks[2]);
 
     if app.config.enable_mouse_support {
         let submit_button_style =
@@ -1098,7 +1092,7 @@ where
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        let log = draw_logs(app, true, false, chunks[2]);
+        render_logs(app, false, chunks[2], rect, false);
 
         if app.state.app_status == AppStatus::KeyBindMode {
             let current_cursor_position = if app.state.current_cursor_position.is_some() {
@@ -1114,7 +1108,6 @@ where
         }
         rect.render_widget(config_item, chunks[0]);
         rect.render_widget(edit_item, chunks[1]);
-        rect.render_widget(log, chunks[2]);
     }
 
     if app.config.enable_mouse_support {
@@ -1197,8 +1190,7 @@ where
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(main_menu_help.2, help_chunks[2], &mut app.state.help_state);
 
-    let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[3]);
-    rect.render_widget(log, chunks[3]);
+    render_logs(app, true, chunks[3], rect, app.state.popup_mode.is_some());
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
@@ -1241,8 +1233,7 @@ where
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help_menu.2, help_chunks[2], &mut app.state.help_state);
 
-    let log = draw_logs(app, true, app.state.popup_mode.is_some(), chunks[1]);
-    rect.render_widget(log, chunks[1]);
+    render_logs(app, true, chunks[1], rect, app.state.popup_mode.is_some());
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -1256,8 +1247,8 @@ where
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(100)].as_ref())
         .split(rect.size());
-    let log = draw_logs(app, false, app.state.popup_mode.is_some(), chunks[0]);
-    rect.render_widget(log, chunks[0]);
+
+    render_logs(app, true, chunks[0], rect, app.state.popup_mode.is_some());
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -1431,70 +1422,6 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
         )
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true })
-}
-
-/// Draws logs
-fn draw_logs<'a>(
-    app: &mut App,
-    enable_focus_highlight: bool,
-    popup_mode: bool,
-    render_area: Rect,
-) -> TuiLoggerWidget<'a> {
-    let focus = app.state.focus;
-    let mouse_coordinates = app.state.current_mouse_coordinates;
-    let logbox_style = if popup_mode {
-        app.theme.inactive_text_style
-    } else {
-        app.theme.general_style
-    };
-    let logbox_border_style = if popup_mode {
-        app.theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
-        app.state.mouse_focus = Some(Focus::Log);
-        app.state.focus = Focus::Log;
-        app.theme.mouse_focus_style
-    } else if matches!(focus, Focus::Log) && enable_focus_highlight {
-        app.theme.keyboard_focus_style
-    } else {
-        app.theme.general_style
-    };
-    if popup_mode {
-        TuiLoggerWidget::default()
-            .style_error(app.theme.inactive_text_style)
-            .style_debug(app.theme.inactive_text_style)
-            .style_warn(app.theme.inactive_text_style)
-            .style_trace(app.theme.inactive_text_style)
-            .style_info(app.theme.inactive_text_style)
-            .output_file(false)
-            .output_line(false)
-            .output_target(false)
-            .block(
-                Block::default()
-                    .title("Logs")
-                    .style(logbox_style)
-                    .border_style(logbox_border_style)
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            )
-    } else {
-        TuiLoggerWidget::default()
-            .style_error(app.theme.log_error_style)
-            .style_debug(app.theme.log_debug_style)
-            .style_warn(app.theme.log_warn_style)
-            .style_trace(app.theme.log_trace_style)
-            .style_info(app.theme.log_info_style)
-            .output_file(false)
-            .output_line(false)
-            .output_target(false)
-            .block(
-                Block::default()
-                    .title("Logs")
-                    .style(logbox_style)
-                    .border_style(logbox_border_style)
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            )
-    }
 }
 
 /// Draws Main menu
@@ -1912,69 +1839,65 @@ where
                             format!("Due: {}", parsed_due_date),
                             app.theme.inactive_text_style,
                         ))
+                    } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+                        Spans::from(Span::styled(
+                            format!("Due: {}", parsed_due_date),
+                            app.theme.card_due_default_style,
+                        ))
                     } else {
-                        if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+                        let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
+                        let (days_left, parsed_due_date) = match formatted_date_format {
+                            DateFormat::DayMonthYear
+                            | DateFormat::MonthDayYear
+                            | DateFormat::YearMonthDay => {
+                                let today = Local::now().date_naive();
+                                let string_to_naive_date_format = NaiveDate::parse_from_str(
+                                    &parsed_due_date,
+                                    app.config.date_format.to_parser_string(),
+                                )
+                                .unwrap();
+                                let days_left = string_to_naive_date_format
+                                    .signed_duration_since(today)
+                                    .num_days();
+                                let parsed_due_date = string_to_naive_date_format
+                                    .format(app.config.date_format.to_parser_string())
+                                    .to_string();
+                                (days_left, parsed_due_date)
+                            }
+                            DateFormat::DayMonthYearTime
+                            | DateFormat::MonthDayYearTime
+                            | DateFormat::YearMonthDayTime {} => {
+                                let today = Local::now().naive_local();
+                                let string_to_naive_date_format = NaiveDateTime::parse_from_str(
+                                    &parsed_due_date,
+                                    app.config.date_format.to_parser_string(),
+                                )
+                                .unwrap();
+                                let days_left = string_to_naive_date_format
+                                    .signed_duration_since(today)
+                                    .num_days();
+                                let parsed_due_date = string_to_naive_date_format
+                                    .format(app.config.date_format.to_parser_string())
+                                    .to_string();
+                                (days_left, parsed_due_date)
+                            }
+                        };
+                        if days_left >= 0 {
+                            match days_left.cmp(&(app.config.warning_delta as i64)) {
+                                Ordering::Less | Ordering::Equal => Spans::from(Span::styled(
+                                    format!("Due: {}", parsed_due_date),
+                                    app.theme.card_due_warning_style,
+                                )),
+                                Ordering::Greater => Spans::from(Span::styled(
+                                    format!("Due: {}", parsed_due_date),
+                                    app.theme.card_due_default_style,
+                                )),
+                            }
+                        } else {
                             Spans::from(Span::styled(
                                 format!("Due: {}", parsed_due_date),
-                                app.theme.card_due_default_style,
+                                app.theme.card_due_overdue_style,
                             ))
-                        } else {
-                            let formatted_date_format =
-                                date_format_finder(&parsed_due_date).unwrap();
-                            let (days_left, parsed_due_date) = match formatted_date_format {
-                                DateFormat::DayMonthYear
-                                | DateFormat::MonthDayYear
-                                | DateFormat::YearMonthDay => {
-                                    let today = Local::now().date_naive();
-                                    let string_to_naive_date_format = NaiveDate::parse_from_str(
-                                        &parsed_due_date,
-                                        app.config.date_format.to_parser_string(),
-                                    )
-                                    .unwrap();
-                                    let days_left = string_to_naive_date_format
-                                        .signed_duration_since(today)
-                                        .num_days();
-                                    let parsed_due_date = string_to_naive_date_format
-                                        .format(app.config.date_format.to_parser_string())
-                                        .to_string();
-                                    (days_left, parsed_due_date)
-                                }
-                                DateFormat::DayMonthYearTime
-                                | DateFormat::MonthDayYearTime
-                                | DateFormat::YearMonthDayTime {} => {
-                                    let today = Local::now().naive_local();
-                                    let string_to_naive_date_format =
-                                        NaiveDateTime::parse_from_str(
-                                            &parsed_due_date,
-                                            app.config.date_format.to_parser_string(),
-                                        )
-                                        .unwrap();
-                                    let days_left = string_to_naive_date_format
-                                        .signed_duration_since(today)
-                                        .num_days();
-                                    let parsed_due_date = string_to_naive_date_format
-                                        .format(app.config.date_format.to_parser_string())
-                                        .to_string();
-                                    (days_left, parsed_due_date)
-                                }
-                            };
-                            if days_left >= 0 {
-                                match days_left.cmp(&(app.config.warning_delta as i64)) {
-                                    Ordering::Less | Ordering::Equal => Spans::from(Span::styled(
-                                        format!("Due: {}", parsed_due_date),
-                                        app.theme.card_due_warning_style,
-                                    )),
-                                    Ordering::Greater => Spans::from(Span::styled(
-                                        format!("Due: {}", parsed_due_date),
-                                        app.theme.card_due_default_style,
-                                    )),
-                                }
-                            } else {
-                                Spans::from(Span::styled(
-                                    format!("Due: {}", parsed_due_date),
-                                    app.theme.card_due_overdue_style,
-                                ))
-                            }
                         }
                     }
                 } else if app.state.popup_mode.is_some() {
@@ -3072,6 +2995,10 @@ where
             .alignment(Alignment::Left)
             .wrap(ratatui::widgets::Wrap { trim: true })
             .style(toast_style);
+        if toast_height + total_height_rendered > rect.size().height {
+            debug!("Toast height is greater than the height of the screen");
+            break;
+        }
         rect.render_widget(
             Clear,
             Rect::new(
@@ -3102,6 +3029,10 @@ where
             ),
         );
         total_height_rendered += toast_height;
+        if total_height_rendered >= rect.size().height {
+            debug!("Toast height is greater than the height of the screen");
+            break;
+        }
     }
 
     // display a total count of toasts on the top right corner
@@ -3278,58 +3209,54 @@ where
                 format!("Due: {}", card.date_due),
                 app.theme.list_select_style,
             )
+        } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+            Span::styled(
+                format!("Due: {}", card.date_due),
+                app.theme.card_due_default_style,
+            )
         } else {
-            if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+            let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
+            let days_left = match formatted_date_format {
+                DateFormat::DayMonthYear | DateFormat::MonthDayYear | DateFormat::YearMonthDay => {
+                    let today = Local::now().date_naive();
+                    let string_to_naive_date_format = NaiveDate::parse_from_str(
+                        &parsed_due_date,
+                        app.config.date_format.to_parser_string(),
+                    )
+                    .unwrap();
+                    string_to_naive_date_format
+                        .signed_duration_since(today)
+                        .num_days()
+                }
+                DateFormat::DayMonthYearTime
+                | DateFormat::MonthDayYearTime
+                | DateFormat::YearMonthDayTime {} => {
+                    let today = Local::now().naive_local();
+                    let string_to_naive_date_format = NaiveDateTime::parse_from_str(
+                        &parsed_due_date,
+                        app.config.date_format.to_parser_string(),
+                    )
+                    .unwrap();
+                    string_to_naive_date_format
+                        .signed_duration_since(today)
+                        .num_days()
+                }
+            };
+            if days_left <= app.config.warning_delta.into() && days_left >= 0 {
+                Span::styled(
+                    format!("Due: {}", card.date_due),
+                    app.theme.card_due_warning_style,
+                )
+            } else if days_left < 0 {
+                Span::styled(
+                    format!("Due: {}", card.date_due),
+                    app.theme.card_due_overdue_style,
+                )
+            } else {
                 Span::styled(
                     format!("Due: {}", card.date_due),
                     app.theme.card_due_default_style,
                 )
-            } else {
-                let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
-                let days_left = match formatted_date_format {
-                    DateFormat::DayMonthYear
-                    | DateFormat::MonthDayYear
-                    | DateFormat::YearMonthDay => {
-                        let today = Local::now().date_naive();
-                        let string_to_naive_date_format = NaiveDate::parse_from_str(
-                            &parsed_due_date,
-                            app.config.date_format.to_parser_string(),
-                        )
-                        .unwrap();
-                        string_to_naive_date_format
-                            .signed_duration_since(today)
-                            .num_days()
-                    }
-                    DateFormat::DayMonthYearTime
-                    | DateFormat::MonthDayYearTime
-                    | DateFormat::YearMonthDayTime {} => {
-                        let today = Local::now().naive_local();
-                        let string_to_naive_date_format = NaiveDateTime::parse_from_str(
-                            &parsed_due_date,
-                            app.config.date_format.to_parser_string(),
-                        )
-                        .unwrap();
-                        string_to_naive_date_format
-                            .signed_duration_since(today)
-                            .num_days()
-                    }
-                };
-                if days_left <= app.config.warning_delta.into() && days_left >= 0 {
-                    Span::styled(
-                        format!("Due: {}", card.date_due),
-                        app.theme.card_due_warning_style,
-                    )
-                } else if days_left < 0 {
-                    Span::styled(
-                        format!("Due: {}", card.date_due),
-                        app.theme.card_due_overdue_style,
-                    )
-                } else {
-                    Span::styled(
-                        format!("Due: {}", card.date_due),
-                        app.theme.card_due_default_style,
-                    )
-                }
             }
         }
     } else if app.state.focus == Focus::CardDueDate {
@@ -4765,7 +4692,7 @@ where
     rect.render_widget(debug_panel, menu_area);
 }
 
-fn check_if_mouse_is_in_area(mouse_coordinates: (u16, u16), rect_to_check: Rect) -> bool {
+pub fn check_if_mouse_is_in_area(mouse_coordinates: (u16, u16), rect_to_check: Rect) -> bool {
     let (x, y) = mouse_coordinates;
     let (x1, y1, x2, y2) = (
         rect_to_check.x,
@@ -5574,4 +5501,89 @@ pub fn render_blank_styled_canvas<B>(
             .block(Block::default())
     };
     rect.render_widget(styled_text, render_area);
+}
+
+pub fn render_logs<B>(
+    app: &mut App,
+    enable_focus_highlight: bool,
+    render_area: Rect,
+    rect: &mut Frame<B>,
+    popup_mode: bool,
+) where
+    B: Backend,
+{
+    let date_format = app.config.date_format.to_parser_string();
+    let theme = &app.theme;
+    let logs = get_logs();
+    let mut highlight_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.list_select_style
+    };
+    let mut items = vec![];
+    for (i, log) in logs.buffer.iter().enumerate() {
+        let mut item = ListItem::new(Span::raw(format!(
+            "[{}] - {}",
+            log.timestamp.format(date_format),
+            log.msg
+        )));
+        if popup_mode {
+            item = item.style(theme.inactive_text_style);
+        } else {
+            if i == get_selected_index() {
+                highlight_style = match log.level {
+                    Level::Error => theme.log_error_style.add_modifier(Modifier::REVERSED),
+                    Level::Warn => theme.log_warn_style.add_modifier(Modifier::REVERSED),
+                    Level::Info => theme.log_info_style.add_modifier(Modifier::REVERSED),
+                    Level::Debug => theme.log_debug_style.add_modifier(Modifier::REVERSED),
+                    Level::Trace => theme.log_trace_style.add_modifier(Modifier::REVERSED),
+                };
+            }
+            item = match log.level {
+                Level::Error => item.style(theme.log_error_style),
+                Level::Warn => item.style(theme.log_warn_style),
+                Level::Info => item.style(theme.log_info_style),
+                Level::Debug => item.style(theme.log_debug_style),
+                Level::Trace => item.style(theme.log_trace_style),
+            };
+        }
+        items.push(item);
+    }
+
+    let focus = app.state.focus;
+    let mouse_coordinates = app.state.current_mouse_coordinates;
+    let logbox_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.general_style
+    };
+    let logbox_border_style = if popup_mode {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
+        app.state.mouse_focus = Some(Focus::Log);
+        app.state.focus = Focus::Log;
+        app.theme.mouse_focus_style
+    } else if matches!(focus, Focus::Log) && enable_focus_highlight {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let log_list = List::new(items)
+        .block(
+            Block::default()
+                .title("Logs")
+                .style(logbox_style)
+                .border_style(logbox_border_style)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(highlight_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+
+    rect.render_stateful_widget(
+        log_list,
+        render_area,
+        &mut RUST_KANBAN_LOGGER.hot_log.lock().state,
+    );
 }

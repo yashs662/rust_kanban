@@ -18,6 +18,7 @@
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Ability to scroll through logs
 - [x] Ability to Undo and Redo actions
 - [x] Ability to change date formats
 - [x] Ability to search for cards and boards in the command palette

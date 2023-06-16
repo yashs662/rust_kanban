@@ -34,6 +34,7 @@ use crate::{
             get_default_ui_mode,
         },
         handler::refresh_visible_boards_and_cards,
+        logger::{get_logs, RUST_KANBAN_LOGGER},
         IoEvent,
     },
     ui::{
@@ -1167,6 +1168,36 @@ impl App {
             }
         }
     }
+    pub fn log_next(&mut self) {
+        let total_logs = get_logs().len();
+        let mut hot_log = RUST_KANBAN_LOGGER.hot_log.lock();
+        let i = match hot_log.state.selected() {
+            Some(i) => {
+                if i >= total_logs - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        hot_log.state.select(Some(i));
+    }
+    pub fn log_prv(&mut self) {
+        let total_logs = get_logs().len();
+        let mut hot_log = RUST_KANBAN_LOGGER.hot_log.lock();
+        let i = match hot_log.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    total_logs - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        hot_log.state.select(Some(i));
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1353,6 +1384,7 @@ pub struct AppState {
     pub filter_tags: Option<Vec<String>>,
     pub filter_by_tag_list_state: ListState,
     pub date_format_selector_state: ListState,
+    pub log_state: ListState,
 }
 
 impl Default for AppState {
@@ -1412,6 +1444,7 @@ impl Default for AppState {
             filter_tags: None,
             filter_by_tag_list_state: ListState::default(),
             date_format_selector_state: ListState::default(),
+            log_state: ListState::default(),
         }
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "rust-kanban"
-version = "0.6.5"
+version = "0.6.6"
 authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -14,21 +14,22 @@ log = { version = "0.4.17", features = [
     "max_level_debug",
     "release_max_level_info"
 ] }
-tui-logger = { version = "0.9.1", features = ["ratatui", "ratatui-support"], default-features = false }
 ratatui = { version = "0.20.1", features = ["serde"] }
 crossterm = "0.26.1"
-tokio = { version = "1.28.0", features = ["full"] }
+tokio = { version = "1.28.1", features = ["full"] }
 chrono = "0.4.24"
 textwrap = "0.16"
 eyre = "0.6.8"
 home = "0.5.5"
-serde = { version = "1.0.162", features = ["derive"] }
+serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
-clap = { version = "4.2.7", features = ["derive"] }
+clap = { version = "4.3.0", features = ["derive"] }
 savefile-derive = "0.13.0"
 savefile = "0.13.0"
-uuid = { version = "1.3.2", features = ["v4"] }
-regex = "1.8.1"
+uuid = { version = "1.3.3", features = ["v4"] }
+regex = "1.8.2"
 linked-hash-map = "0.5.6"
 ngrammatic = "0.4.0"
-reqwest = "0.11.17"
+lazy_static = "1.4.0"
+fxhash = "0.2.1"
+parking_lot = "0.12.1"

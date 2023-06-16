@@ -17,8 +17,7 @@ use crate::{
     app::{kanban::Board, state::UiMode, App, AppConfig},
     constants::{CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME},
     io::data_handler::{
-        get_default_save_directory, get_saved_themes, reset_config,
-        save_kanban_state_locally,
+        get_default_save_directory, get_saved_themes, reset_config, save_kanban_state_locally,
     },
     ui::TextColorOptions,
 };
