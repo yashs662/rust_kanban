@@ -7,8 +7,9 @@ use std::{str::FromStr, time::Duration};
 use crate::{
     app::{state::KeyBindings, ActionHistory, AppConfig},
     constants::{
-        DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MOUSE_OUT_OF_BOUNDS_COORDINATES,
-        NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
+        DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, LOGIN_FORM_DEFAULT_STATE,
+        MOUSE_OUT_OF_BOUNDS_COORDINATES, NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
+        RESET_PASSWORD_FORM_DEFAULT_STATE, SIGNUP_FORM_DEFAULT_STATE,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
@@ -84,7 +85,7 @@ pub fn go_right(app: &mut App) {
         // get the next NO_OF_BOARDS_PER_PAGE boards
         let next_board_index = current_board_index_in_all_boards + 1;
         let next_board = &boards[next_board_index];
-        let next_board_card_ids: Vec<u128> = next_board
+        let next_board_card_ids: Vec<(u64, u64)> = next_board
             .cards
             .clone()
             .iter()
@@ -174,13 +175,14 @@ pub fn go_left(app: &mut App) {
         // get the previous NO_OF_BOARDS_PER_PAGE boards
         let previous_board_index = current_board_index_in_all_boards - 1;
         let previous_board = &boards[previous_board_index];
-        let previous_board_card_ids: Vec<u128> = previous_board
+        let previous_board_card_ids: Vec<(u64, u64)> = previous_board
             .cards
             .clone()
             .iter()
             .map(|card| card.id)
             .collect();
-        let mut new_visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>> = LinkedHashMap::new();
+        let mut new_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
+            LinkedHashMap::new();
         new_visible_boards_and_cards.insert(previous_board.id, previous_board_card_ids.clone());
         for (board_id, card_ids) in current_visible_boards
             .iter()
@@ -311,7 +313,7 @@ pub fn go_up(app: &mut App) {
                 *cards = previous_cards
                     .iter()
                     .map(|card| card.id)
-                    .collect::<Vec<u128>>()
+                    .collect::<Vec<(u64, u64)>>()
             });
         app.visible_boards_and_cards = visible_boards_and_cards;
         app.state.current_card_id = Some(previous_card_id);
@@ -323,9 +325,9 @@ pub fn go_up(app: &mut App) {
             .unwrap()
             .1
             .get(current_card_index - 1)
-            .unwrap_or(&0);
+            .unwrap_or(&(0, 0));
         // check if previous_card_id is 0
-        if previous_card_id == 0 {
+        if previous_card_id == (0, 0) {
             debug!("Cannot go up: previous card not found");
             app.send_error_toast("Cannot go up: Something went wrong", None);
         } else {
@@ -454,7 +456,7 @@ pub fn go_down(app: &mut App) {
             .cards[start_index..end_index]
             .iter()
             .map(|card| card.id)
-            .collect::<Vec<u128>>();
+            .collect::<Vec<(u64, u64)>>();
         // if next_card_ids are less tha app.config.no_of_cards_to_show, then add cards before the start index till we have app.config.no_of_cards_to_show cards or we have reached index 0
         let next_card_ids = if next_card_ids.len() < app.config.no_of_cards_to_show as usize {
             let mut next_card_ids = next_card_ids;
@@ -489,30 +491,36 @@ pub fn go_down(app: &mut App) {
             .unwrap()
             .1
             .get(current_card_index + 1)
-            .unwrap_or(&0);
+            .unwrap_or(&(0, 0));
         // check if next_card_id is not 0
-        if next_card_id != 0 {
+        if next_card_id != (0, 0) {
             app.state.current_card_id = Some(next_card_id);
         }
     }
 }
 
-pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConfig {
+pub fn prepare_config_for_new_app(
+    state: &mut AppState,
+    theme: Theme,
+) -> (AppConfig, Vec<&str>, &mut AppState) {
+    let mut errors = vec![];
     let get_config_status = get_config(false);
     if let Err(config_error_msg) = get_config_status {
-        if config_error_msg.contains("Overlapped keybinds found") {
-            error!("Keybinds overlap detected. Please check your config file and fix the keybinds. Using default keybinds for now.");
+        if config_error_msg.contains("Overlapped keybindings found") {
+            error!("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
+            errors.push("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
             state.toasts.push(ToastWidget::new(
                 config_error_msg,
                 Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                 ToastType::Error,
                 theme.clone(),
             ));
-            state.toasts.push(ToastWidget::new("Please check your config file and fix the keybinds. Using default keybinds for now.".to_owned(),
+            state.toasts.push(ToastWidget::new("Please check your config file and fix the keybindings. Using default keybindings for now.".to_owned(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning, theme.clone()));
             let new_config = get_config(true);
             if let Err(new_config_error) = new_config {
-                error!("Unable to fix keybinds. Please check your config file. Using default config for now.");
+                error!("Unable to fix keybindings. Please check your config file. Using default config for now.");
+                errors.push("Unable to fix keybindings. Please check your config file. Using default config for now.");
                 state.toasts.push(ToastWidget::new(
                     new_config_error,
                     Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
@@ -525,11 +533,11 @@ pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConf
                     ToastType::Warning,
                     theme,
                 ));
-                AppConfig::default()
+                (AppConfig::default(), errors, state)
             } else {
                 let mut unwrapped_new_config = new_config.unwrap();
                 unwrapped_new_config.keybindings = KeyBindings::default();
-                unwrapped_new_config
+                (unwrapped_new_config, errors, state)
             }
         } else {
             state.toasts.push(ToastWidget::new(
@@ -544,10 +552,10 @@ pub fn prepare_config_for_new_app(state: &mut AppState, theme: Theme) -> AppConf
                 ToastType::Info,
                 theme,
             ));
-            AppConfig::default()
+            (AppConfig::default(), errors, state)
         }
     } else {
-        get_config_status.unwrap()
+        (get_config_status.unwrap(), errors, state)
     }
 }
 
@@ -562,13 +570,45 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
             Focus::CardName => app.state.new_card_form[0] = "".to_string(),
             Focus::CardDescription => app.state.new_card_form[1] = "".to_string(),
             Focus::CardDueDate => app.state.new_card_form[2] = "".to_string(),
+            Focus::EmailIDField => {
+                if app.state.ui_mode == UiMode::Login {
+                    app.state.login_form.0[0] = "".to_string()
+                } else if app.state.ui_mode == UiMode::SignUp {
+                    app.state.signup_form.0[0] = "".to_string()
+                } else if app.state.ui_mode == UiMode::ResetPassword {
+                    app.state.reset_password_form.0[0] = "".to_string()
+                }
+            }
+            Focus::PasswordField => {
+                if app.state.ui_mode == UiMode::Login {
+                    app.state.login_form.0[1] = "".to_string()
+                } else if app.state.ui_mode == UiMode::SignUp {
+                    app.state.signup_form.0[1] = "".to_string()
+                } else if app.state.ui_mode == UiMode::ResetPassword {
+                    app.state.reset_password_form.0[1] = "".to_string()
+                }
+            }
+            Focus::ConfirmPasswordField => {
+                if app.state.ui_mode == UiMode::SignUp {
+                    app.state.signup_form.0[2] = "".to_string()
+                } else if app.state.ui_mode == UiMode::ResetPassword {
+                    app.state.reset_password_form.0[2] = "".to_string()
+                }
+            }
+            Focus::ResetPasswordLinkField => app.state.reset_password_form.0[3] = "".to_string(),
             _ => app.state.current_user_input = "".to_string(),
         }
         if app.state.popup_mode.is_some() {
             match app.state.popup_mode.unwrap() {
                 PopupMode::CommandPalette => {
                     app.state.popup_mode = None;
-                    app.state.app_status = AppStatus::Initialized;
+                    if app.command_palette.already_in_user_input_mode {
+                        app.command_palette.already_in_user_input_mode = false;
+                        if app.command_palette.last_focus.is_some() {
+                            app.state.focus = app.command_palette.last_focus.unwrap();
+                        }
+                        return AppReturn::Continue;
+                    }
                 }
                 PopupMode::ConfirmDiscardCardChanges => {
                     if app.card_being_edited.is_some() {
@@ -613,6 +653,10 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
         app.state.app_status = AppStatus::Initialized;
         app.state.current_cursor_position = None;
         info!("Exiting user input mode");
+    } else if app.config.keybindings.toggle_command_palette.contains(&key) {
+        app.command_palette.already_in_user_input_mode = true;
+        app.command_palette.last_focus = Some(app.state.focus);
+        app.state.popup_mode = Some(PopupMode::CommandPalette);
     } else {
         // parsing keys to account for actions
 
@@ -773,67 +817,25 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         Key::Backspace => {
                             match app.state.focus {
                                 Focus::CardName => {
-                                    if app.state.current_cursor_position.is_some() {
-                                        let current_cursor_position =
-                                            app.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            card_being_edited
-                                                .1
-                                                .name
-                                                .remove(current_cursor_position - 1);
-                                            app.state.current_cursor_position =
-                                                Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        card_being_edited
-                                            .1
-                                            .name
-                                            .remove(card_being_edited.1.name.len() - 1);
-                                        app.state.current_cursor_position =
-                                            Some(card_being_edited.1.name.len());
-                                    }
+                                    app.state.current_cursor_position =
+                                        handle_cursor_pos_for_backspace(
+                                            app.state.current_cursor_position,
+                                            &mut card_being_edited.1.name,
+                                        );
                                 }
                                 Focus::CardDescription => {
-                                    if app.state.current_cursor_position.is_some() {
-                                        let current_cursor_position =
-                                            app.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            card_being_edited
-                                                .1
-                                                .description
-                                                .remove(current_cursor_position - 1);
-                                            app.state.current_cursor_position =
-                                                Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        card_being_edited
-                                            .1
-                                            .description
-                                            .remove(card_being_edited.1.description.len() - 1);
-                                        app.state.current_cursor_position =
-                                            Some(card_being_edited.1.description.len());
-                                    }
+                                    app.state.current_cursor_position =
+                                        handle_cursor_pos_for_backspace(
+                                            app.state.current_cursor_position,
+                                            &mut card_being_edited.1.description,
+                                        );
                                 }
                                 Focus::CardDueDate => {
-                                    if app.state.current_cursor_position.is_some() {
-                                        let current_cursor_position =
-                                            app.state.current_cursor_position.unwrap();
-                                        if current_cursor_position > 0 {
-                                            card_being_edited
-                                                .1
-                                                .date_due
-                                                .remove(current_cursor_position - 1);
-                                            app.state.current_cursor_position =
-                                                Some(current_cursor_position - 1);
-                                        }
-                                    } else {
-                                        card_being_edited
-                                            .1
-                                            .date_due
-                                            .remove(card_being_edited.1.date_due.len() - 1);
-                                        app.state.current_cursor_position =
-                                            Some(card_being_edited.1.date_due.len());
-                                    }
+                                    app.state.current_cursor_position =
+                                        handle_cursor_pos_for_backspace(
+                                            app.state.current_cursor_position,
+                                            &mut card_being_edited.1.due_date,
+                                        );
                                 }
                                 Focus::CardTags => {
                                     if app.state.card_view_tag_list_state.selected().is_some() {
@@ -951,46 +953,22 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         Key::Left => {
                             match app.state.focus {
                                 Focus::CardName => {
-                                    if !card_being_edited.1.name.is_empty() {
-                                        if app.state.current_cursor_position.is_none() {
-                                            app.state.current_cursor_position =
-                                                Some(card_being_edited.1.name.len());
-                                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                                            app.state.current_cursor_position = Some(
-                                                app.state.current_cursor_position.unwrap() - 1,
-                                            );
-                                        } else {
-                                            app.state.current_cursor_position = Some(0);
-                                        }
-                                    }
+                                    app.state.current_cursor_position = move_cursor_left(
+                                        app.state.current_cursor_position,
+                                        &card_being_edited.1.name,
+                                    );
                                 }
                                 Focus::CardDescription => {
-                                    if !card_being_edited.1.description.is_empty() {
-                                        if app.state.current_cursor_position.is_none() {
-                                            app.state.current_cursor_position =
-                                                Some(card_being_edited.1.description.len());
-                                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                                            app.state.current_cursor_position = Some(
-                                                app.state.current_cursor_position.unwrap() - 1,
-                                            );
-                                        } else {
-                                            app.state.current_cursor_position = Some(0);
-                                        }
-                                    }
+                                    app.state.current_cursor_position = move_cursor_left(
+                                        app.state.current_cursor_position,
+                                        &card_being_edited.1.description,
+                                    );
                                 }
                                 Focus::CardDueDate => {
-                                    if !card_being_edited.1.date_due.is_empty() {
-                                        if app.state.current_cursor_position.is_none() {
-                                            app.state.current_cursor_position =
-                                                Some(card_being_edited.1.date_due.len());
-                                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                                            app.state.current_cursor_position = Some(
-                                                app.state.current_cursor_position.unwrap() - 1,
-                                            );
-                                        } else {
-                                            app.state.current_cursor_position = Some(0);
-                                        }
-                                    }
+                                    app.state.current_cursor_position = move_cursor_left(
+                                        app.state.current_cursor_position,
+                                        &card_being_edited.1.due_date,
+                                    );
                                 }
                                 Focus::CardTags => {
                                     if app.state.card_view_tag_list_state.selected().is_some() {
@@ -1060,52 +1038,22 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         Key::Right => {
                             match app.state.focus {
                                 Focus::CardName => {
-                                    if !card_being_edited.1.name.is_empty() {
-                                        if app.state.current_cursor_position.is_none() {
-                                            app.state.current_cursor_position = Some(0);
-                                        } else if app.state.current_cursor_position.unwrap()
-                                            < card_being_edited.1.name.len()
-                                        {
-                                            app.state.current_cursor_position = Some(
-                                                app.state.current_cursor_position.unwrap() + 1,
-                                            );
-                                        } else {
-                                            app.state.current_cursor_position =
-                                                Some(card_being_edited.1.name.len());
-                                        }
-                                    }
+                                    app.state.current_cursor_position = move_cursor_right(
+                                        app.state.current_cursor_position,
+                                        &card_being_edited.1.name,
+                                    );
                                 }
                                 Focus::CardDescription => {
-                                    if !card_being_edited.1.description.is_empty() {
-                                        if app.state.current_cursor_position.is_none() {
-                                            app.state.current_cursor_position = Some(0);
-                                        } else if app.state.current_cursor_position.unwrap()
-                                            < card_being_edited.1.description.len()
-                                        {
-                                            app.state.current_cursor_position = Some(
-                                                app.state.current_cursor_position.unwrap() + 1,
-                                            );
-                                        } else {
-                                            app.state.current_cursor_position =
-                                                Some(card_being_edited.1.description.len());
-                                        }
-                                    }
+                                    app.state.current_cursor_position = move_cursor_right(
+                                        app.state.current_cursor_position,
+                                        &card_being_edited.1.description,
+                                    );
                                 }
                                 Focus::CardDueDate => {
-                                    if !card_being_edited.1.date_due.is_empty() {
-                                        if app.state.current_cursor_position.is_none() {
-                                            app.state.current_cursor_position = Some(0);
-                                        } else if app.state.current_cursor_position.unwrap()
-                                            < card_being_edited.1.date_due.len()
-                                        {
-                                            app.state.current_cursor_position = Some(
-                                                app.state.current_cursor_position.unwrap() + 1,
-                                            );
-                                        } else {
-                                            app.state.current_cursor_position =
-                                                Some(card_being_edited.1.date_due.len());
-                                        }
-                                    }
+                                    app.state.current_cursor_position = move_cursor_right(
+                                        app.state.current_cursor_position,
+                                        &card_being_edited.1.due_date,
+                                    );
                                 }
                                 Focus::CardTags => {
                                     if app.state.card_view_tag_list_state.selected().is_some() {
@@ -1211,7 +1159,7 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                                 }
                                 Focus::CardDueDate => {
                                     app.state.current_cursor_position =
-                                        Some(card_being_edited.1.date_due.len());
+                                        Some(card_being_edited.1.due_date.len());
                                 }
                                 Focus::CardTags => {
                                     if app.state.card_view_tag_list_state.selected().is_some() {
@@ -1491,124 +1439,181 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
         let mut current_key = key.to_string();
         match key {
             Key::Char(' ') => current_key = " ".to_string(),
-            Key::Enter => current_key = "\n".to_string(),
-            Key::Tab => current_key = "  ".to_string(),
-            Key::BackTab => current_key = "".to_string(),
+            Key::Enter => {
+                if app.state.popup_mode.is_none() {
+                    if app.state.ui_mode == UiMode::Login || app.state.ui_mode == UiMode::SignUp {
+                        current_key = "".to_string();
+                        app.state.current_cursor_position = None;
+                        handle_next_focus(app);
+                    } else if app.state.ui_mode == UiMode::ResetPassword {
+                        if app.state.focus != Focus::SendResetPasswordLinkButton
+                            || app.state.focus != Focus::SubmitButton
+                        {
+                            handle_next_focus(app);
+                        }
+                        current_key = "".to_string();
+                    } else {
+                        current_key = "\n".to_string();
+                    }
+                } else {
+                    current_key = "\n".to_string();
+                }
+            }
+            Key::Tab => {
+                if (app.state.ui_mode == UiMode::Login
+                    || app.state.ui_mode == UiMode::SignUp
+                    || app.state.ui_mode == UiMode::ResetPassword)
+                    && app.state.popup_mode.is_none()
+                {
+                    handle_next_focus(app);
+                    app.state.current_cursor_position = None;
+                    current_key = "".to_string();
+                } else {
+                    current_key = "  ".to_string();
+                }
+            }
+            Key::BackTab => {
+                if (app.state.ui_mode == UiMode::Login
+                    || app.state.ui_mode == UiMode::SignUp
+                    || app.state.ui_mode == UiMode::ResetPassword)
+                    && app.state.popup_mode.is_none()
+                {
+                    handle_prv_focus(app);
+                    app.state.current_cursor_position = None;
+                }
+                current_key = "".to_string();
+            }
             Key::Backspace => {
                 match app.state.ui_mode {
                     UiMode::NewBoard => match app.state.focus {
                         Focus::NewBoardName => {
-                            if app.state.current_cursor_position.is_some() {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap();
-                                if current_cursor_position > 0 {
-                                    app.state.new_board_form[0].remove(current_cursor_position - 1);
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position - 1);
-                                }
-                            } else {
-                                app.state.new_board_form[0].pop();
-                            }
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.new_board_form[0],
+                            );
                         }
                         Focus::NewBoardDescription => {
-                            if app.state.current_cursor_position.is_some() {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap();
-                                if current_cursor_position > 0 {
-                                    app.state.new_board_form[1].remove(current_cursor_position - 1);
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position - 1);
-                                }
-                            } else {
-                                app.state.new_board_form[1].pop();
-                            }
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.new_board_form[1],
+                            );
                         }
                         _ => {
-                            if app.state.current_cursor_position.is_some() {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap();
-                                if current_cursor_position > 0 {
-                                    app.state
-                                        .current_user_input
-                                        .remove(current_cursor_position - 1);
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position - 1);
-                                }
-                            } else {
-                                app.state.current_user_input.pop();
-                            }
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.current_user_input,
+                            );
                         }
                     },
                     UiMode::NewCard => match app.state.focus {
                         Focus::CardName => {
-                            if app.state.current_cursor_position.is_some() {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap();
-                                if current_cursor_position > 0 {
-                                    app.state.new_card_form[0].remove(current_cursor_position - 1);
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position - 1);
-                                }
-                            } else {
-                                app.state.new_card_form[0].pop();
-                            }
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.new_card_form[0],
+                            );
                         }
                         Focus::CardDescription => {
-                            if app.state.current_cursor_position.is_some() {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap();
-                                if current_cursor_position > 0 {
-                                    app.state.new_card_form[1].remove(current_cursor_position - 1);
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position - 1);
-                                }
-                            } else {
-                                app.state.new_card_form[1].pop();
-                            }
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.new_card_form[1],
+                            );
                         }
                         Focus::CardDueDate => {
-                            if app.state.current_cursor_position.is_some() {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap();
-                                if current_cursor_position > 0 {
-                                    app.state.new_card_form[2].remove(current_cursor_position - 1);
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position - 1);
-                                }
-                            } else {
-                                app.state.new_card_form[2].pop();
-                            }
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.new_card_form[2],
+                            );
                         }
                         _ => {
-                            if app.state.current_cursor_position.is_some() {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap();
-                                if current_cursor_position > 0 {
-                                    app.state
-                                        .current_user_input
-                                        .remove(current_cursor_position - 1);
-                                    app.state.current_cursor_position =
-                                        Some(current_cursor_position - 1);
-                                }
-                            } else {
-                                app.state.current_user_input.pop();
-                            }
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::Login => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.login_form.0[0],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.login_form.0[1],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::SignUp => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.signup_form.0[0],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.signup_form.0[1],
+                            );
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.signup_form.0[2],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::ResetPassword => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.reset_password_form.0[0],
+                            );
+                        }
+                        Focus::ResetPasswordLinkField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.reset_password_form.0[1],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.reset_password_form.0[2],
+                            );
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.reset_password_form.0[3],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                                app.state.current_cursor_position,
+                                &mut app.state.current_user_input,
+                            );
                         }
                     },
                     _ => {
-                        if app.state.current_cursor_position.is_some() {
-                            let current_cursor_position =
-                                app.state.current_cursor_position.unwrap();
-                            if current_cursor_position > 0 {
-                                app.state
-                                    .current_user_input
-                                    .remove(current_cursor_position - 1);
-                                app.state.current_cursor_position =
-                                    Some(current_cursor_position - 1);
-                            }
-                        } else {
-                            app.state.current_user_input.pop();
-                        }
+                        app.state.current_cursor_position = handle_cursor_pos_for_backspace(
+                            app.state.current_cursor_position,
+                            &mut app.state.current_user_input,
+                        );
                     }
                 };
                 current_key = "".to_string();
@@ -1617,75 +1622,133 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                 match app.state.ui_mode {
                     UiMode::NewBoard => match app.state.focus {
                         Focus::NewBoardName => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_board_form[0].len());
-                            } else if app.state.current_cursor_position.unwrap() > 0 {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() - 1);
-                            } else {
-                                app.state.current_cursor_position = Some(0);
-                            }
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.new_board_form[0],
+                            );
                         }
                         Focus::NewBoardDescription => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_board_form[1].len());
-                            } else if app.state.current_cursor_position.unwrap() > 0 {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() - 1);
-                            } else {
-                                app.state.current_cursor_position = Some(0);
-                            }
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.new_board_form[1],
+                            );
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
                     },
                     UiMode::NewCard => match app.state.focus {
                         Focus::CardName => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_card_form[0].len());
-                            } else if app.state.current_cursor_position.unwrap() > 0 {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() - 1);
-                            } else {
-                                app.state.current_cursor_position = Some(0);
-                            }
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.new_card_form[0],
+                            );
                         }
                         Focus::CardDescription => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_card_form[1].len());
-                            } else if app.state.current_cursor_position.unwrap() > 0 {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() - 1);
-                            } else {
-                                app.state.current_cursor_position = Some(0);
-                            }
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.new_card_form[1],
+                            );
                         }
                         Focus::CardDueDate => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_card_form[2].len());
-                            } else if app.state.current_cursor_position.unwrap() > 0 {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() - 1);
-                            } else {
-                                app.state.current_cursor_position = Some(0);
-                            }
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.new_card_form[2],
+                            );
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::Login => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.login_form.0[0],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.login_form.0[1],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::SignUp => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.signup_form.0[0],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.signup_form.0[1],
+                            );
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.signup_form.0[2],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::ResetPassword => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[0],
+                            );
+                        }
+                        Focus::ResetPasswordLinkField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[1],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[2],
+                            );
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[3],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_left(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
                     },
                     _ => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_user_input.len());
-                        } else if app.state.current_cursor_position.unwrap() > 0 {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() - 1);
-                        } else {
-                            app.state.current_cursor_position = Some(0);
-                        }
+                        app.state.current_cursor_position = move_cursor_left(
+                            app.state.current_cursor_position,
+                            &app.state.current_user_input,
+                        );
                     }
                 };
                 current_key = "".to_string();
@@ -1694,87 +1757,133 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                 match app.state.ui_mode {
                     UiMode::NewBoard => match app.state.focus {
                         Focus::NewBoardName => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position = Some(0);
-                            } else if app.state.current_cursor_position.unwrap()
-                                < app.state.new_board_form[0].len()
-                            {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() + 1);
-                            } else {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_board_form[0].len());
-                            }
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.new_board_form[0],
+                            );
                         }
                         Focus::NewBoardDescription => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position = Some(0);
-                            } else if app.state.current_cursor_position.unwrap()
-                                < app.state.new_board_form[1].len()
-                            {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() + 1);
-                            } else {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_board_form[1].len());
-                            }
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.new_board_form[1],
+                            );
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
                     },
                     UiMode::NewCard => match app.state.focus {
                         Focus::CardName => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position = Some(0);
-                            } else if app.state.current_cursor_position.unwrap()
-                                < app.state.new_card_form[0].len()
-                            {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() + 1);
-                            } else {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_card_form[0].len());
-                            }
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.new_card_form[0],
+                            );
                         }
                         Focus::CardDescription => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position = Some(0);
-                            } else if app.state.current_cursor_position.unwrap()
-                                < app.state.new_card_form[1].len()
-                            {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() + 1);
-                            } else {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_card_form[1].len());
-                            }
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.new_card_form[1],
+                            );
                         }
                         Focus::CardDueDate => {
-                            if app.state.current_cursor_position.is_none() {
-                                app.state.current_cursor_position = Some(0);
-                            } else if app.state.current_cursor_position.unwrap()
-                                < app.state.new_card_form[2].len()
-                            {
-                                app.state.current_cursor_position =
-                                    Some(app.state.current_cursor_position.unwrap() + 1);
-                            } else {
-                                app.state.current_cursor_position =
-                                    Some(app.state.new_card_form[2].len());
-                            }
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.new_card_form[2],
+                            );
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::Login => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.login_form.0[0],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.login_form.0[1],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::SignUp => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.signup_form.0[0],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.signup_form.0[1],
+                            );
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.signup_form.0[2],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
+                    },
+                    UiMode::ResetPassword => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[0],
+                            );
+                        }
+                        Focus::ResetPasswordLinkField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[1],
+                            );
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[2],
+                            );
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.reset_password_form.0[3],
+                            );
+                        }
+                        _ => {
+                            app.state.current_cursor_position = move_cursor_right(
+                                app.state.current_cursor_position,
+                                &app.state.current_user_input,
+                            );
+                        }
                     },
                     _ => {
-                        if app.state.current_cursor_position.is_none() {
-                            app.state.current_cursor_position = Some(0);
-                        } else if app.state.current_cursor_position.unwrap()
-                            < app.state.current_user_input.len()
-                        {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_cursor_position.unwrap() + 1);
-                        } else {
-                            app.state.current_cursor_position =
-                                Some(app.state.current_user_input.len());
-                        }
+                        app.state.current_cursor_position = move_cursor_right(
+                            app.state.current_cursor_position,
+                            &app.state.current_user_input,
+                        );
                     }
                 };
                 current_key = "".to_string();
@@ -1785,14 +1894,45 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         Focus::NewBoardName | Focus::NewBoardDescription => {
                             app.state.current_cursor_position = Some(0);
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position = Some(0);
+                        }
                     },
                     UiMode::NewCard => match app.state.focus {
                         Focus::CardName | Focus::CardDescription | Focus::CardDueDate => {
                             app.state.current_cursor_position = Some(0);
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position = Some(0);
+                        }
                     },
+                    UiMode::Login => match app.state.focus {
+                        Focus::EmailIDField | Focus::PasswordField => {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                        _ => {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                    },
+                    UiMode::SignUp => match app.state.focus {
+                        Focus::EmailIDField
+                        | Focus::PasswordField
+                        | Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                        _ => {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                    },
+                    UiMode::ResetPassword => {
+                        if app.state.focus == Focus::EmailIDField
+                            || app.state.focus == Focus::ResetPasswordLinkField
+                            || app.state.focus == Focus::PasswordField
+                            || app.state.focus == Focus::ConfirmPasswordField
+                        {
+                            app.state.current_cursor_position = Some(0);
+                        }
+                    }
                     _ => {
                         app.state.current_cursor_position = Some(0);
                     }
@@ -1810,7 +1950,10 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                             app.state.current_cursor_position =
                                 Some(app.state.new_board_form[1].len());
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_user_input.len());
+                        }
                     },
                     UiMode::NewCard => match app.state.focus {
                         Focus::CardName => {
@@ -1825,7 +1968,64 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                             app.state.current_cursor_position =
                                 Some(app.state.new_card_form[2].len());
                         }
-                        _ => {}
+                        _ => {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_user_input.len());
+                        }
+                    },
+                    UiMode::Login => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.login_form.0[0].len());
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.login_form.0[1].len());
+                        }
+                        _ => {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_user_input.len());
+                        }
+                    },
+                    UiMode::SignUp => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.signup_form.0[0].len());
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.signup_form.0[1].len());
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.signup_form.0[2].len());
+                        }
+                        _ => {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_user_input.len());
+                        }
+                    },
+                    UiMode::ResetPassword => match app.state.focus {
+                        Focus::EmailIDField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.reset_password_form.0[0].len());
+                        }
+                        Focus::ResetPasswordLinkField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.reset_password_form.0[1].len());
+                        }
+                        Focus::PasswordField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.reset_password_form.0[2].len());
+                        }
+                        Focus::ConfirmPasswordField => {
+                            app.state.current_cursor_position =
+                                Some(app.state.reset_password_form.0[3].len());
+                        }
+                        _ => {
+                            app.state.current_cursor_position =
+                                Some(app.state.current_user_input.len());
+                        }
                     },
                     _ => {
                         app.state.current_cursor_position =
@@ -1859,40 +2059,28 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                         let card_being_edited = app.card_being_edited.as_mut().unwrap();
                         match app.state.focus {
                             Focus::CardName => {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap_or(0);
-                                for (i, char) in current_key.chars().enumerate() {
-                                    card_being_edited
-                                        .1
-                                        .name
-                                        .insert(current_cursor_position + i, char);
-                                }
                                 app.state.current_cursor_position =
-                                    Some(current_cursor_position + 1);
+                                    handle_cursor_pos_for_insert_string(
+                                        app.state.current_cursor_position,
+                                        &mut card_being_edited.1.name,
+                                        current_key,
+                                    );
                             }
                             Focus::CardDescription => {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap_or(0);
-                                for (i, char) in current_key.chars().enumerate() {
-                                    card_being_edited
-                                        .1
-                                        .description
-                                        .insert(current_cursor_position + i, char);
-                                }
                                 app.state.current_cursor_position =
-                                    Some(current_cursor_position + 1);
+                                    handle_cursor_pos_for_insert_string(
+                                        app.state.current_cursor_position,
+                                        &mut card_being_edited.1.description,
+                                        current_key,
+                                    );
                             }
                             Focus::CardDueDate => {
-                                let current_cursor_position =
-                                    app.state.current_cursor_position.unwrap_or(0);
-                                for (i, char) in current_key.chars().enumerate() {
-                                    card_being_edited
-                                        .1
-                                        .date_due
-                                        .insert(current_cursor_position + i, char);
-                                }
                                 app.state.current_cursor_position =
-                                    Some(current_cursor_position + 1);
+                                    handle_cursor_pos_for_insert_string(
+                                        app.state.current_cursor_position,
+                                        &mut card_being_edited.1.due_date,
+                                        current_key,
+                                    );
                             }
                             Focus::CardTags => {
                                 let mut current_cursor_position =
@@ -1946,14 +2134,11 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                     | PopupMode::CustomRGBPromptFG
                     | PopupMode::CustomRGBPromptBG
                     | PopupMode::EditGeneralConfig => {
-                        let current_cursor_position =
-                            app.state.current_cursor_position.unwrap_or(0);
-                        for (i, char) in current_key.chars().enumerate() {
-                            app.state
-                                .current_user_input
-                                .insert(current_cursor_position + i, char);
-                        }
-                        app.state.current_cursor_position = Some(current_cursor_position + 1);
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.current_user_input,
+                            current_key,
+                        );
                     }
                     _ => {
                         debug!(
@@ -1964,50 +2149,156 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
                 }
                 return AppReturn::Continue;
             }
-            match app.state.focus {
-                Focus::NewBoardName => {
-                    let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                    for (i, char) in current_key.chars().enumerate() {
-                        app.state.new_board_form[0].insert(cursor_position + i, char);
+            match app.state.ui_mode {
+                UiMode::NewBoard => match app.state.focus {
+                    Focus::NewBoardName => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.new_board_form[0],
+                            current_key,
+                        );
                     }
-                    app.state.current_cursor_position = Some(cursor_position + 1);
-                }
-                Focus::NewBoardDescription => {
-                    let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                    for (i, char) in current_key.chars().enumerate() {
-                        app.state.new_board_form[1].insert(cursor_position + i, char);
+                    Focus::NewBoardDescription => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.new_board_form[1],
+                            current_key,
+                        );
                     }
-                    app.state.current_cursor_position = Some(cursor_position + 1);
-                }
-                Focus::CardName => {
-                    let cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                    for (i, char) in current_key.chars().enumerate() {
-                        app.state.new_card_form[0].insert(cursor_position + i, char);
+                    _ => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.current_user_input,
+                            current_key,
+                        );
                     }
-                    app.state.current_cursor_position = Some(cursor_position + 1);
-                }
-                Focus::CardDescription => {
-                    let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                    for (i, char) in current_key.chars().enumerate() {
-                        app.state.new_card_form[1].insert(current_cursor_position + i, char);
+                },
+                UiMode::NewCard => match app.state.focus {
+                    Focus::CardName => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.new_card_form[0],
+                            current_key,
+                        );
                     }
-                    app.state.current_cursor_position = Some(current_cursor_position + 1);
-                }
-                Focus::CardDueDate => {
-                    let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                    for (i, char) in current_key.chars().enumerate() {
-                        app.state.new_card_form[2].insert(current_cursor_position + i, char);
+                    Focus::CardDescription => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.new_card_form[1],
+                            current_key,
+                        );
                     }
-                    app.state.current_cursor_position = Some(current_cursor_position + 1);
-                }
+                    Focus::CardDueDate => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.new_card_form[2],
+                            current_key,
+                        );
+                    }
+                    _ => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.current_user_input,
+                            current_key,
+                        );
+                    }
+                },
+                UiMode::Login => match app.state.focus {
+                    Focus::EmailIDField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.login_form.0[0],
+                            current_key,
+                        );
+                    }
+                    Focus::PasswordField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.login_form.0[1],
+                            current_key,
+                        );
+                    }
+                    _ => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.current_user_input,
+                            current_key,
+                        );
+                    }
+                },
+                UiMode::SignUp => match app.state.focus {
+                    Focus::EmailIDField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.signup_form.0[0],
+                            current_key,
+                        );
+                    }
+                    Focus::PasswordField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.signup_form.0[1],
+                            current_key,
+                        );
+                    }
+                    Focus::ConfirmPasswordField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.signup_form.0[2],
+                            current_key,
+                        );
+                    }
+                    _ => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.current_user_input,
+                            current_key,
+                        );
+                    }
+                },
+                UiMode::ResetPassword => match app.state.focus {
+                    Focus::EmailIDField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.reset_password_form.0[0],
+                            current_key,
+                        );
+                    }
+                    Focus::ResetPasswordLinkField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.reset_password_form.0[1],
+                            current_key,
+                        );
+                    }
+                    Focus::PasswordField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.reset_password_form.0[2],
+                            current_key,
+                        );
+                    }
+                    Focus::ConfirmPasswordField => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.reset_password_form.0[3],
+                            current_key,
+                        );
+                    }
+                    _ => {
+                        app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                            app.state.current_cursor_position,
+                            &mut app.state.current_user_input,
+                            current_key,
+                        );
+                    }
+                },
                 _ => {
-                    let current_cursor_position = app.state.current_cursor_position.unwrap_or(0);
-                    for (i, char) in current_key.chars().enumerate() {
-                        app.state
-                            .current_user_input
-                            .insert(current_cursor_position + i, char);
-                    }
-                    app.state.current_cursor_position = Some(current_cursor_position + 1);
+                    app.state.current_cursor_position = handle_cursor_pos_for_insert_string(
+                        app.state.current_cursor_position,
+                        &mut app.state.current_user_input,
+                        current_key,
+                    );
                 }
             }
         }
@@ -2015,17 +2306,17 @@ pub async fn handle_user_input_mode(app: &mut App, key: Key) -> AppReturn {
     AppReturn::Continue
 }
 
-pub async fn handle_keybind_mode(app: &mut App, key: Key) -> AppReturn {
+pub async fn handle_keybinding_mode(app: &mut App, key: Key) -> AppReturn {
     match key {
         Key::Esc => {
             app.state.app_status = AppStatus::Initialized;
             app.state.edited_keybinding = None;
-            info!("Exiting user keybind input mode");
+            info!("Exiting user Keybinding input mode");
         }
         _ => {
             if app.config.keybindings.stop_user_input.contains(&key) {
                 app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user keybind input mode");
+                info!("Exiting user Keybinding input mode");
                 return AppReturn::Continue;
             }
             if app.state.edited_keybinding.is_some() {
@@ -2208,8 +2499,12 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                     }
                     UiMode::LoadSave => {
-                        app.load_save_prv();
-                        app.dispatch(IoEvent::LoadPreview).await;
+                        app.load_save_prv(false);
+                        app.dispatch(IoEvent::LoadLocalPreview).await;
+                    }
+                    UiMode::LoadCloudSave => {
+                        app.load_save_prv(true);
+                        app.dispatch(IoEvent::LoadCloudPreview).await;
                     }
                     UiMode::EditKeybindings => {
                         app.edit_keybindings_prv();
@@ -2236,7 +2531,9 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                     }
                     _ => {
-                        if app.state.focus == Focus::Body {
+                        if app.state.focus == Focus::Body
+                            && UiMode::view_modes().contains(&app.state.ui_mode)
+                        {
                             go_up(app);
                         } else if app.state.focus == Focus::Help {
                             app.help_prv();
@@ -2317,8 +2614,12 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         }
                     }
                     UiMode::LoadSave => {
-                        app.load_save_next();
-                        app.dispatch(IoEvent::LoadPreview).await;
+                        app.load_save_next(false);
+                        app.dispatch(IoEvent::LoadLocalPreview).await;
+                    }
+                    UiMode::LoadCloudSave => {
+                        app.load_save_next(true);
+                        app.dispatch(IoEvent::LoadCloudPreview).await;
                     }
                     UiMode::EditKeybindings => {
                         app.edit_keybindings_next();
@@ -2393,7 +2694,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 }
                                 PopupMode::EditSpecificKeyBinding => {
                                     app.state.app_status = AppStatus::KeyBindMode;
-                                    info!("Taking user keybind input");
+                                    info!("Taking user Keybinding input");
                                 }
                                 PopupMode::ViewCard => {
                                     if app.state.current_board_id.is_some()
@@ -2543,7 +2844,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     }
                     UiMode::NewCard => handle_new_card_action(app),
                     UiMode::LoadSave => {
-                        app.dispatch(IoEvent::LoadSave).await;
+                        app.dispatch(IoEvent::LoadSaveLocal).await;
                         AppReturn::Continue
                     }
                     UiMode::EditKeybindings => {
@@ -2552,6 +2853,22 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     }
                     UiMode::CreateTheme => {
                         handle_create_theme_action(app);
+                        AppReturn::Continue
+                    }
+                    UiMode::Login => {
+                        handle_login_action(app).await;
+                        AppReturn::Continue
+                    }
+                    UiMode::SignUp => {
+                        handle_signup_action(app).await;
+                        AppReturn::Continue
+                    }
+                    UiMode::ResetPassword => {
+                        handle_reset_password_action(app).await;
+                        AppReturn::Continue
+                    }
+                    UiMode::LoadCloudSave => {
+                        app.dispatch(IoEvent::LoadSaveCloud).await;
                         AppReturn::Continue
                     }
                     _ => {
@@ -2563,6 +2880,10 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             Focus::Log => {
                                 app.state.prev_ui_mode = Some(app.state.ui_mode);
                                 app.state.ui_mode = UiMode::LogsOnly;
+                            }
+                            Focus::Title => {
+                                app.state.prev_ui_mode = Some(app.state.ui_mode);
+                                app.state.ui_mode = UiMode::MainMenu;
                             }
                             _ => {}
                         }
@@ -2611,7 +2932,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                     };
                 let current_ui_mode = app.state.ui_mode;
                 // hide the current focus by switching to a view where it is not available
-                // for example if current uimode is Title and focus is on Title then switch to Zen
+                // for example if current ui mode is Title and focus is on Title then switch to Zen
                 if current_ui_mode == UiMode::Zen {
                     app.state.ui_mode = UiMode::MainMenu;
                     if app.state.main_menu_state.selected().is_none() {
@@ -2706,16 +3027,15 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::SaveState => {
-                app.dispatch(IoEvent::SaveLocalData).await;
+                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                    app.dispatch(IoEvent::SaveLocalData).await;
+                }
                 AppReturn::Continue
             }
             Action::NewBoard => {
                 // check if current ui_mode is in UiMode::view_modes()
                 if UiMode::view_modes().contains(&app.state.ui_mode) {
-                    app.state.new_board_form = NEW_BOARD_FORM_DEFAULT_STATE
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect();
+                    reset_new_board_form(app);
                     app.set_ui_mode(UiMode::NewBoard);
                     app.state.previous_focus = Some(app.state.focus);
                 }
@@ -2729,10 +3049,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         app.send_warning_toast("No board available to add card to", None);
                         return AppReturn::Continue;
                     }
-                    app.state.new_card_form = NEW_CARD_FORM_DEFAULT_STATE
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect();
+                    reset_new_card_form(app);
                     app.set_ui_mode(UiMode::NewCard);
                     app.state.previous_focus = Some(app.state.focus);
                 }
@@ -2744,7 +3061,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         // run delete task in background
                         app.dispatch(IoEvent::DeleteSave).await;
                         tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
-                        app.dispatch(IoEvent::LoadPreview).await;
+                        app.dispatch(IoEvent::LoadLocalPreview).await;
                         AppReturn::Continue
                     }
                     _ => {
@@ -3038,6 +3355,24 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::GoToMainMenu => {
+                match app.state.ui_mode {
+                    UiMode::NewBoard => {
+                        reset_new_board_form(app);
+                    }
+                    UiMode::NewCard => {
+                        reset_new_card_form(app);
+                    }
+                    UiMode::Login => {
+                        reset_login_form(app);
+                    }
+                    UiMode::SignUp => {
+                        reset_signup_form(app);
+                    }
+                    UiMode::ResetPassword => {
+                        reset_reset_password_form(app);
+                    }
+                    _ => {}
+                }
                 app.state.current_board_id = None;
                 app.state.current_card_id = None;
                 app.state.focus = Focus::MainMenu;
@@ -3111,7 +3446,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             let card_above_id = boards[current_board_index_in_all_boards.unwrap()]
                                 .cards[current_card_index_in_all - 1]
                                 .id;
-                            let mut visible_cards: Vec<u128> = vec![];
+                            let mut visible_cards: Vec<(u64, u64)> = vec![];
                             visible_cards.push(current_card_id);
                             visible_cards.push(card_above_id);
 
@@ -3218,7 +3553,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             let card_below_id = boards[current_board_index_in_all_boards.unwrap()]
                                 .cards[current_card_index_in_all + 1]
                                 .id;
-                            let mut visible_cards: Vec<u128> = vec![];
+                            let mut visible_cards: Vec<(u64, u64)> = vec![];
                             visible_cards.push(card_below_id);
                             visible_cards.push(current_card_id);
                             // insert in reverse order till we reach the no of cards to show
@@ -3313,8 +3648,9 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             cards.retain(|card_id| *card_id != current_card)
                                         });
                                     // set the visible cards to the last no_of_cards_to_show cards
-                                    let mut moved_to_board_visible_cards: Vec<u128> = vec![];
-                                    let mut moved_from_board_visible_cards: Vec<u128> = vec![];
+                                    let mut moved_to_board_visible_cards: Vec<(u64, u64)> = vec![];
+                                    let mut moved_from_board_visible_cards: Vec<(u64, u64)> =
+                                        vec![];
                                     for card in boards[moved_to_board_index].cards.iter().rev() {
                                         if moved_to_board_visible_cards.len()
                                             < app.config.no_of_cards_to_show as usize
@@ -3450,8 +3786,9 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                             cards.retain(|card_id| *card_id != current_card)
                                         });
                                     // set the visible cards to the last no_of_cards_to_show cards
-                                    let mut moved_to_board_visible_cards: Vec<u128> = vec![];
-                                    let mut moved_from_board_visible_cards: Vec<u128> = vec![];
+                                    let mut moved_to_board_visible_cards: Vec<(u64, u64)> = vec![];
+                                    let mut moved_from_board_visible_cards: Vec<(u64, u64)> =
+                                        vec![];
                                     for card in boards[moved_to_board_index].cards.iter().rev() {
                                         if moved_to_board_visible_cards.len()
                                             < app.config.no_of_cards_to_show as usize
@@ -3575,11 +3912,15 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::Undo => {
-                app.undo();
+                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                    app.undo();
+                }
                 AppReturn::Continue
             }
             Action::Redo => {
-                app.redo();
+                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                    app.redo();
+                }
                 AppReturn::Continue
             }
             Action::ClearAllToasts => {
@@ -3589,8 +3930,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
             }
         }
     } else {
-        warn!("No action accociated to {}", key);
-        app.send_warning_toast(&format!("No action accociated to {}", key), None);
+        warn!("No action associated to {}", key);
+        app.send_warning_toast(&format!("No action associated to {}", key), None);
         AppReturn::Continue
     }
 }
@@ -3625,6 +3966,15 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
     }
     if right_button_pressed {
         return handle_go_to_previous_ui_mode(app).await;
+    }
+
+    if app.state.focus == Focus::Log {
+        if mouse_scroll_down {
+            app.log_next();
+        }
+        if mouse_scroll_up {
+            app.log_prv();
+        }
     }
 
     if middle_button_pressed {
@@ -4298,10 +4648,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::CloseButton) {
                         handle_go_to_prv_ui_mode(app);
-                        app.state.new_board_form = NEW_BOARD_FORM_DEFAULT_STATE
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect();
+                        reset_new_board_form(app);
                     } else if app.state.mouse_focus == Some(Focus::NewBoardName)
                         || app.state.mouse_focus == Some(Focus::NewBoardDescription)
                     {
@@ -4316,10 +4663,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::CloseButton) {
                         handle_go_to_prv_ui_mode(app);
-                        app.state.new_board_form = NEW_CARD_FORM_DEFAULT_STATE
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect();
+                        reset_new_card_form(app);
                     } else if app.state.mouse_focus == Some(Focus::CardName)
                         || app.state.mouse_focus == Some(Focus::CardDescription)
                         || app.state.mouse_focus == Some(Focus::CardDueDate)
@@ -4338,7 +4682,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     } else if app.state.mouse_focus == Some(Focus::LoadSave)
                         && app.state.load_save_state.selected().is_some()
                     {
-                        app.dispatch(IoEvent::LoadPreview).await;
+                        app.dispatch(IoEvent::LoadLocalPreview).await;
                     }
                 }
             }
@@ -4354,6 +4698,33 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                             }
                             _ => {}
                         }
+                    }
+                }
+            }
+            UiMode::Login => {
+                if left_button_pressed && app.state.mouse_focus.is_some() {
+                    handle_login_action(app).await
+                }
+            }
+            UiMode::SignUp => {
+                if left_button_pressed && app.state.mouse_focus.is_some() {
+                    handle_signup_action(app).await
+                }
+            }
+            UiMode::ResetPassword => {
+                if left_button_pressed && app.state.mouse_focus.is_some() {
+                    handle_reset_password_action(app).await
+                }
+            }
+            UiMode::LoadCloudSave => {
+                if left_button_pressed {
+                    if app.state.mouse_focus == Some(Focus::CloseButton) {
+                        handle_go_to_prv_ui_mode(app);
+                    } else if app.state.mouse_focus == Some(Focus::LoadSave)
+                        && app.state.load_save_state.selected().is_some()
+                        && app.state.cloud_data_preview.is_some()
+                    {
+                        app.dispatch(IoEvent::LoadCloudPreview).await;
                     }
                 }
             }
@@ -4381,16 +4752,16 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
                 None,
             );
         } else {
-            warn!("Reset Config and Keybinds to default");
-            app.send_warning_toast("Reset Config and Keybinds to default", None);
+            warn!("Reset Config and KeyBindings to default");
+            app.send_warning_toast("Reset Config and KeyBindings to default", None);
         }
-        app.keybind_list_maker();
+        app.keybinding_list_maker();
         return AppReturn::Continue;
     } else if app.state.focus == Focus::ExtraFocus {
-        // make a copy of the keybinds and reset only config and then write the config
-        let keybinds = app.config.keybindings.clone();
+        // make a copy of the keybindings and reset only config and then write the config
+        let keybindings = app.config.keybindings.clone();
         app.config = AppConfig::default();
-        app.config.keybindings = keybinds;
+        app.config.keybindings = keybindings;
         app.state.focus = Focus::ConfigTable;
         app.state.config_state.select(Some(0));
         let write_config_status = write_config(&app.config);
@@ -4414,7 +4785,7 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
     }
     app.config_item_being_edited = Some(app.state.config_state.selected().unwrap_or(0));
     // check if the config_item_being_edited index is in the AppConfig list and the value in the list is Edit Keybindings
-    let app_config_list = &app.config.to_list();
+    let app_config_list = &app.config.to_view_list();
     if app.config_item_being_edited.unwrap_or(0) < app_config_list.len() {
         let default_config_item = String::from("");
         let config_item = &app_config_list[app.config_item_being_edited.unwrap_or(0)]
@@ -4477,12 +4848,12 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
             } else {
                 app.send_info_toast("Config updated Successfully", None);
             }
-        } else if *config_item == "Disable Scrollbars" {
-            let disable_scrollbars = app.config.disable_scrollbars;
-            app.config.disable_scrollbars = !disable_scrollbars;
+        } else if *config_item == "Disable Scroll Bar" {
+            let disable_scroll_bar = app.config.disable_scroll_bar;
+            app.config.disable_scroll_bar = !disable_scroll_bar;
             let config_string = format!(
                 "{}: {}",
-                "Disable Scrollbars", app.config.disable_scrollbars
+                "Disable Scroll Bar", app.config.disable_scroll_bar
             );
             let app_config = AppConfig::edit_with_string(&config_string, app);
             app.config = app_config.clone();
@@ -4579,7 +4950,7 @@ async fn handle_main_menu_action(app: &mut App) -> AppReturn {
 }
 
 fn handle_default_view_selection(app: &mut App) {
-    let all_ui_modes = UiMode::all();
+    let all_ui_modes = UiMode::view_modes_as_string();
     let current_selected_mode = app.state.default_view_state.selected().unwrap_or(0);
     if current_selected_mode < all_ui_modes.len() {
         let selected_mode = &all_ui_modes[current_selected_mode];
@@ -4670,7 +5041,7 @@ fn handle_change_date_format(app: &mut App) {
 fn handle_change_ui_mode(app: &mut App) {
     let current_index = app.state.default_view_state.selected().unwrap_or(0);
     // UiMode::all() has strings map all of them to UiMode using UiMode::from_string which returns an option<UiMode>
-    let all_ui_modes = UiMode::all()
+    let all_ui_modes = UiMode::view_modes_as_string()
         .iter()
         .filter_map(|s| UiMode::from_string(s))
         .collect::<Vec<UiMode>>();
@@ -4701,11 +5072,11 @@ fn handle_edit_keybindings_action(app: &mut App) {
             error!("Error writing config: {}", error_message);
             app.send_error_toast(&format!("Error writing config: {}", error_message), None);
         }
-        app.keybind_list_maker();
+        app.keybinding_list_maker();
     }
 }
 
-async fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
+pub async fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
     if app.state.popup_mode.is_some() {
         match app.state.popup_mode.unwrap() {
             PopupMode::EditGeneralConfig => {
@@ -4799,10 +5170,67 @@ async fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
             }
             AppReturn::Continue
         }
-        _ => {
-            if app.state.ui_mode == UiMode::LoadSave {
-                app.state.load_save_state = ListState::default();
+        UiMode::LoadSave => {
+            app.state.load_save_state = ListState::default();
+            if app.state.prev_ui_mode == Some(app.state.ui_mode) {
+                app.state.ui_mode = UiMode::MainMenu;
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
+            } else {
+                app.state.ui_mode = *app.state.prev_ui_mode.as_ref().unwrap_or(&UiMode::MainMenu);
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
             }
+            AppReturn::Continue
+        }
+        UiMode::Login => {
+            reset_login_form(app);
+            if app.state.prev_ui_mode == Some(app.state.ui_mode) {
+                app.state.ui_mode = UiMode::MainMenu;
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
+            } else {
+                app.state.ui_mode = *app.state.prev_ui_mode.as_ref().unwrap_or(&UiMode::MainMenu);
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
+            }
+            AppReturn::Continue
+        }
+        UiMode::SignUp => {
+            reset_signup_form(app);
+            if app.state.prev_ui_mode == Some(app.state.ui_mode) {
+                app.state.ui_mode = UiMode::MainMenu;
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
+            } else {
+                app.state.ui_mode = *app.state.prev_ui_mode.as_ref().unwrap_or(&UiMode::MainMenu);
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
+            }
+            AppReturn::Continue
+        }
+        UiMode::ResetPassword => {
+            reset_reset_password_form(app);
+            if app.state.prev_ui_mode == Some(app.state.ui_mode) {
+                app.state.ui_mode = UiMode::MainMenu;
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
+            } else {
+                app.state.ui_mode = *app.state.prev_ui_mode.as_ref().unwrap_or(&UiMode::MainMenu);
+                if app.state.main_menu_state.selected().is_none() {
+                    app.main_menu_next();
+                }
+            }
+            AppReturn::Continue
+        }
+        _ => {
             // check if previous ui mode is the same as the current ui mode
             if app.state.prev_ui_mode == Some(app.state.ui_mode) {
                 app.state.ui_mode = UiMode::MainMenu;
@@ -4911,7 +5339,7 @@ fn handle_change_card_priority(app: &mut App) -> AppReturn {
 
 fn handle_edit_general_config(app: &mut App) {
     let config_item_index = app.state.config_state.selected().unwrap_or(0);
-    let config_item_list = AppConfig::to_list(&app.config);
+    let config_item_list = AppConfig::to_view_list(&app.config);
     let config_item = config_item_list[config_item_index].clone();
     // key is the second item in the list
     let default_key = String::from("");
@@ -4962,7 +5390,7 @@ fn handle_edit_specific_keybinding(app: &mut App) {
                 app.state.edited_keybinding.clone().unwrap_or(vec![]),
             );
             if let Err(e) = result {
-                app.send_error_toast(&format!("Error editing keybind: {}", e), None);
+                app.send_error_toast(&format!("Error editing Keybinding: {}", e), None);
             } else {
                 let mut key_list = vec![];
                 for (k, v) in app.config.keybindings.iter() {
@@ -4977,13 +5405,13 @@ fn handle_edit_specific_keybinding(app: &mut App) {
                     .collect::<Vec<String>>()
                     .join(" ");
                 app.send_info_toast(
-                    &format!("Keybind for {} updated to {}", key_string, value),
+                    &format!("Keybinding for {} updated to {}", key_string, value),
                     None,
                 );
             }
         } else {
-            error!("Selected keybind with id {} not found", selected);
-            app.send_error_toast("Selected keybind not found", None);
+            error!("Selected Keybinding with id {} not found", selected);
+            app.send_error_toast("Selected Keybinding not found", None);
             app.state.edited_keybinding = None;
             app.state.edit_keybindings_state.select(None);
         }
@@ -5003,7 +5431,7 @@ fn handle_edit_specific_keybinding(app: &mut App) {
             app.edit_keybindings_next()
         }
     }
-    app.keybind_list_maker();
+    app.keybinding_list_maker();
 }
 
 fn handle_new_board_action(app: &mut App) {
@@ -5042,10 +5470,7 @@ fn handle_new_board_action(app: &mut App) {
             app.state.focus = *previous_focus;
         }
         refresh_visible_boards_and_cards(app);
-        app.state.new_board_form = NEW_BOARD_FORM_DEFAULT_STATE
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        reset_new_board_form(app);
     } else if app.state.app_status == AppStatus::Initialized {
         app.state.app_status = AppStatus::UserInput;
     }
@@ -5062,7 +5487,7 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
         let new_card_description = app.state.new_card_form[1].clone();
         let new_card_due_date = app.state.new_card_form[2].clone();
         let mut same_name_exists = false;
-        let current_board_id = app.state.current_board_id.unwrap_or(0);
+        let current_board_id = app.state.current_board_id.unwrap_or((0, 0));
         let current_board = app.boards.iter().find(|board| board.id == current_board_id);
         if let Some(current_board) = current_board {
             for card in current_board.cards.iter() {
@@ -5146,10 +5571,7 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
             app.state.focus = *previous_focus;
         }
         refresh_visible_boards_and_cards(app);
-        app.state.new_card_form = NEW_CARD_FORM_DEFAULT_STATE
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        reset_new_card_form(app);
     } else if app.state.app_status == AppStatus::Initialized {
         app.state.app_status = AppStatus::UserInput;
     }
@@ -5198,7 +5620,7 @@ fn scroll_up(app: &mut App) {
         .cards
         .iter()
         .map(|c| c.id)
-        .collect::<Vec<u128>>();
+        .collect::<Vec<(u64, u64)>>();
     // the current_visible_cards is a window of all_card_ids. check if another window can be created one card above the current window
     let current_window_start_index = all_card_ids
         .iter()
@@ -5259,7 +5681,7 @@ fn scroll_down(app: &mut App) {
         .cards
         .iter()
         .map(|c| c.id)
-        .collect::<Vec<u128>>();
+        .collect::<Vec<(u64, u64)>>();
     // the current_visible_cards is a window of all_card_ids. check if another window can be created one card below the current window
     let current_window_end_index = all_card_ids
         .iter()
@@ -5318,7 +5740,11 @@ fn scroll_right(app: &mut App) {
         return;
     }
     let next_board = next_board.unwrap();
-    let next_board_card_ids = next_board.cards.iter().map(|c| c.id).collect::<Vec<u128>>();
+    let next_board_card_ids = next_board
+        .cards
+        .iter()
+        .map(|c| c.id)
+        .collect::<Vec<(u64, u64)>>();
     let next_board_card_ids = if next_board_card_ids.len() > app.config.no_of_cards_to_show as usize
     {
         next_board_card_ids[0..app.config.no_of_cards_to_show as usize].to_vec()
@@ -5377,7 +5803,7 @@ fn scroll_left(app: &mut App) {
         .cards
         .iter()
         .map(|c| c.id)
-        .collect::<Vec<u128>>();
+        .collect::<Vec<(u64, u64)>>();
     let previous_board_card_ids =
         if previous_board_card_ids.len() > app.config.no_of_cards_to_show as usize {
             previous_board_card_ids[0..app.config.no_of_cards_to_show as usize].to_vec()
@@ -5413,7 +5839,7 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
         let config_index = app.state.config_state.selected();
         if config_index.is_some() {
             let config_item_index = &app.config_item_being_edited;
-            let list_items = app.config.to_list();
+            let list_items = app.config.to_view_list();
             let config_item_name = if config_item_index.is_some() {
                 list_items[config_item_index.unwrap()].first().unwrap()
             } else {
@@ -6092,7 +6518,7 @@ fn handle_edit_new_card(app: &mut App) -> AppReturn {
             }
         }
         Focus::CardDueDate => {
-            if !card.date_due.is_empty() {
+            if !card.due_date.is_empty() {
                 app.state.current_cursor_position = Some(0);
             }
         }
@@ -6106,7 +6532,7 @@ fn handle_edit_new_card(app: &mut App) -> AppReturn {
 
 fn handle_edit_card_submit(app: &mut App) -> AppReturn {
     let mut send_warning_toast = false;
-    let mut warning_date_due = String::new();
+    let mut warning_due_date = String::new();
     if app.state.current_board_id.is_none() {
         return AppReturn::Continue;
     }
@@ -6131,7 +6557,7 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
     }
     let card = card.unwrap();
     let mut edited_card = app.card_being_edited.as_ref().unwrap().1.clone();
-    let card_due_date = edited_card.date_due.clone();
+    let card_due_date = edited_card.due_date.clone();
     let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
     let parsed_date = match parsed_due_date {
         Ok(date) => {
@@ -6143,11 +6569,11 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
         }
         Err(_) => {
             send_warning_toast = true;
-            warning_date_due = card_due_date;
+            warning_due_date = card_due_date;
             FIELD_NOT_SET.to_string()
         }
     };
-    edited_card.date_due = parsed_date;
+    edited_card.due_date = parsed_date;
     edited_card.date_modified = Utc::now().to_string();
     app.action_history_manager
         .new_action(ActionHistory::EditCard(
@@ -6168,13 +6594,13 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
         app.send_warning_toast(
             &format!(
                 "Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
-                warning_date_due, all_date_formats
+                warning_due_date, all_date_formats
             ),
             Some(Duration::from_secs(10)),
         );
         warn!(
             "Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
-            warning_date_due, all_date_formats
+            warning_due_date, all_date_formats
         );
     }
     app.send_info_toast(&format!("Changes to Card '{}' saved", card_name), None);
@@ -6186,7 +6612,9 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
     } else {
         app.state.all_available_tags = Some(calculated_tags);
     };
-    filter_boards(app);
+    if !app.filtered_boards.is_empty() {
+        filter_boards(app);
+    }
     AppReturn::Continue
 }
 
@@ -6354,4 +6782,268 @@ fn handle_command_palette_board_selection(app: &mut App) {
         go_right(app);
     }
     app.state.focus = Focus::Body;
+}
+
+pub async fn handle_login_submit_action(app: &mut App) {
+    app.dispatch(IoEvent::Login(
+        app.state.login_form.0[0].to_string(),
+        app.state.login_form.0[1].to_string(),
+    ))
+    .await;
+}
+
+pub async fn handle_signup_submit_action(app: &mut App) {
+    app.dispatch(IoEvent::SignUp(
+        app.state.signup_form.0[0].to_string(),
+        app.state.signup_form.0[1].to_string(),
+        app.state.signup_form.0[2].to_string(),
+    ))
+    .await;
+}
+
+pub async fn handle_reset_password_submit_action(app: &mut App) {
+    app.dispatch(IoEvent::ResetPassword(
+        app.state.reset_password_form.0[1].to_string(),
+        app.state.reset_password_form.0[2].to_string(),
+        app.state.reset_password_form.0[3].to_string(),
+    ))
+    .await;
+}
+
+pub async fn handle_send_reset_password_link_action(app: &mut App) {
+    app.dispatch(IoEvent::SendResetPasswordEmail(
+        app.state.reset_password_form.0[0].to_string(),
+    ))
+    .await;
+}
+
+fn reset_new_board_form(app: &mut App) {
+    app.state.new_board_form = NEW_BOARD_FORM_DEFAULT_STATE
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+}
+
+fn reset_new_card_form(app: &mut App) {
+    app.state.new_card_form = NEW_CARD_FORM_DEFAULT_STATE
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+}
+
+fn reset_login_form(app: &mut App) {
+    app.state.login_form = (
+        LOGIN_FORM_DEFAULT_STATE
+            .0
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        false,
+    );
+}
+
+fn reset_signup_form(app: &mut App) {
+    app.state.signup_form = (
+        SIGNUP_FORM_DEFAULT_STATE
+            .0
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        false,
+    );
+}
+
+fn reset_reset_password_form(app: &mut App) {
+    app.state.reset_password_form = (
+        RESET_PASSWORD_FORM_DEFAULT_STATE
+            .0
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        false,
+    );
+}
+
+async fn handle_login_action(app: &mut App) {
+    match app.state.focus {
+        Focus::CloseButton => {
+            app.state.theme_being_edited = Theme::default();
+            reset_login_form(app);
+            handle_go_to_prv_ui_mode(app);
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::SubmitButton => {
+            handle_login_submit_action(app).await;
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::ExtraFocus => {
+            app.state.login_form.1 = !app.state.login_form.1;
+        }
+        Focus::Title => {
+            app.state.prev_ui_mode = Some(app.state.ui_mode);
+            app.state.ui_mode = UiMode::MainMenu;
+            reset_login_form(app);
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::EmailIDField | Focus::PasswordField => {
+            if app.state.app_status != AppStatus::UserInput {
+                app.state.app_status = AppStatus::UserInput;
+                info!("Taking user input");
+            }
+        }
+        _ => {}
+    };
+}
+
+async fn handle_signup_action(app: &mut App) {
+    match app.state.focus {
+        Focus::CloseButton => {
+            reset_signup_form(app);
+            handle_go_to_prv_ui_mode(app);
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::SubmitButton => {
+            handle_signup_submit_action(app).await;
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::ExtraFocus => {
+            app.state.signup_form.1 = !app.state.signup_form.1;
+        }
+        Focus::Title => {
+            app.state.prev_ui_mode = Some(app.state.ui_mode);
+            app.state.ui_mode = UiMode::MainMenu;
+            reset_signup_form(app);
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::EmailIDField | Focus::PasswordField | Focus::ConfirmPasswordField => {
+            if app.state.app_status != AppStatus::UserInput {
+                app.state.app_status = AppStatus::UserInput;
+                info!("Taking user input");
+            }
+        }
+        _ => {}
+    }
+}
+
+async fn handle_reset_password_action(app: &mut App) {
+    match app.state.focus {
+        Focus::CloseButton => {
+            reset_reset_password_form(app);
+            handle_go_to_prv_ui_mode(app);
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::Title => {
+            app.state.prev_ui_mode = Some(app.state.ui_mode);
+            app.state.ui_mode = UiMode::MainMenu;
+            reset_reset_password_form(app);
+            if app.state.app_status == AppStatus::UserInput {
+                app.state.app_status = AppStatus::Initialized;
+                info!("Exiting user input mode");
+            }
+        }
+        Focus::EmailIDField
+        | Focus::ResetPasswordLinkField
+        | Focus::PasswordField
+        | Focus::ConfirmPasswordField => {
+            if app.state.app_status != AppStatus::UserInput {
+                app.state.app_status = AppStatus::UserInput;
+                info!("Taking user input");
+            }
+        }
+        Focus::ExtraFocus => {
+            app.state.reset_password_form.1 = !app.state.reset_password_form.1;
+        }
+        Focus::SubmitButton => {
+            handle_reset_password_submit_action(app).await;
+        }
+        Focus::SendResetPasswordLinkButton => {
+            handle_send_reset_password_link_action(app).await;
+        }
+        _ => {}
+    }
+}
+
+fn handle_cursor_pos_for_backspace(
+    cursor_position: Option<usize>,
+    field: &mut String,
+) -> Option<usize> {
+    if cursor_position.is_none() {
+        return Some(field.len());
+    }
+    let cursor_position = cursor_position.unwrap();
+    if cursor_position == 0 {
+        return Some(0);
+    }
+    let string_before_cursor = field.chars().take(cursor_position - 1);
+    let string_after_cursor = field.chars().skip(cursor_position);
+    let new_field = string_before_cursor.chain(string_after_cursor).collect();
+    *field = new_field;
+    Some(cursor_position - 1)
+}
+
+fn move_cursor_left(cursor_position: Option<usize>, field: &String) -> Option<usize> {
+    if let Some(cursor_position) = cursor_position {
+        Some(clamp_cursor_position(
+            Some(cursor_position.saturating_sub(1)),
+            field,
+        ))
+    } else {
+        Some(field.len())
+    }
+}
+
+fn move_cursor_right(cursor_position: Option<usize>, field: &String) -> Option<usize> {
+    if let Some(cursor_position) = cursor_position {
+        Some(clamp_cursor_position(
+            Some(cursor_position.saturating_add(1)),
+            field,
+        ))
+    } else {
+        Some(field.len())
+    }
+}
+
+fn handle_cursor_pos_for_insert_string(
+    cursor_position: Option<usize>,
+    field: &mut String,
+    current_key: String,
+) -> Option<usize> {
+    let cursor_position = clamp_cursor_position(cursor_position, field);
+    let string_before_cursor = field.chars().take(cursor_position);
+    let string_after_cursor = field.chars().skip(cursor_position);
+    let new_field = string_before_cursor
+        .chain(current_key.chars())
+        .chain(string_after_cursor)
+        .collect();
+    *field = new_field;
+    Some(cursor_position + 1)
+}
+
+fn clamp_cursor_position(cursor_position: Option<usize>, field: &String) -> usize {
+    if let Some(cursor_position) = cursor_position {
+        cursor_position.clamp(0, field.len())
+    } else {
+        field.len()
+    }
 }

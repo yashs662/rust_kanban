@@ -11,7 +11,6 @@ use rust_kanban::{
 };
 use std::{io::stdout, sync::Arc};
 
-extern crate savefile_derive;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct CliArgs {
@@ -48,6 +47,9 @@ async fn main() -> Result<()> {
         }
     }));
 
+    // Configure log
+    logger::init_logger(LevelFilter::Debug).unwrap();
+    logger::set_default_level(log::LevelFilter::Debug);
     // parse cli args
     let args = CliArgs::parse();
 
@@ -57,9 +59,6 @@ async fn main() -> Result<()> {
     let main_app_instance = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
     let app_widget_manager_instance = Arc::clone(&main_app_instance);
     let app_ui_instance = Arc::clone(&main_app_instance);
-    // Configure log
-    logger::init_logger(LevelFilter::Debug).unwrap();
-    logger::set_default_level(log::LevelFilter::Debug);
 
     // Handle IO in a specifc thread
     tokio::spawn(async move {

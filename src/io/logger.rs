@@ -5,7 +5,7 @@
 use chrono::{DateTime, Local};
 use log::{Level, LevelFilter, Log, Metadata, Record};
 use parking_lot::Mutex;
-use ratatui::widgets::ListState;
+use ratatui::widgets::TableState;
 use std::{
     collections::{
         hash_map::{Iter, Keys},
@@ -43,7 +43,7 @@ struct HotSelect {
 #[derive(Debug)]
 pub struct HotLog {
     pub events: CircularBuffer<ExtLogRecord>,
-    pub state: ListState,
+    pub state: TableState,
 }
 
 #[derive(Debug)]
@@ -275,7 +275,7 @@ lazy_static! {
         };
         let hl = HotLog {
             events: CircularBuffer::new(1000),
-            state: ListState::default(),
+            state: TableState::default(),
         };
         let tli = RustKanbanLoggerInner {
             hot_depth: 1000,

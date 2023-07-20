@@ -1,5 +1,6 @@
 use crossterm::event;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::fmt::{self, Display, Formatter};
 
 /// Represents an key.
@@ -218,6 +219,88 @@ impl From<event::KeyEvent> for Key {
                 ..
             } => Key::Char(c),
             _ => Key::Unknown,
+        }
+    }
+}
+
+impl From<&str> for Key {
+    fn from(s: &str) -> Self {
+        match s {
+            "Enter" => Key::Enter,
+            "Tab" => Key::Tab,
+            "Backspace" => Key::Backspace,
+            "Esc" => Key::Esc,
+            "Space" => Key::Space,
+            "Left" => Key::Left,
+            "Right" => Key::Right,
+            "Up" => Key::Up,
+            "Down" => Key::Down,
+            "Ins" => Key::Ins,
+            "Delete" => Key::Delete,
+            "Home" => Key::Home,
+            "End" => Key::End,
+            "PageUp" => Key::PageUp,
+            "PageDown" => Key::PageDown,
+            "F0" => Key::F0,
+            "F1" => Key::F1,
+            "F2" => Key::F2,
+            "F3" => Key::F3,
+            "F4" => Key::F4,
+            "F5" => Key::F5,
+            "F6" => Key::F6,
+            "F7" => Key::F7,
+            "F8" => Key::F8,
+            "F9" => Key::F9,
+            "F10" => Key::F10,
+            "F11" => Key::F11,
+            "F12" => Key::F12,
+            "BackTab" => Key::BackTab,
+            "ShiftUp" => Key::ShiftUp,
+            "ShiftDown" => Key::ShiftDown,
+            "ShiftLeft" => Key::ShiftLeft,
+            "ShiftRight" => Key::ShiftRight,
+            _ => Key::Unknown,
+        }
+    }
+}
+
+impl From<&Map<String, Value>> for Key {
+    fn from(value: &Map<String, Value>) -> Self {
+        if value.get("Char").is_some() {
+            Key::Char(
+                value
+                    .get("Char")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .chars()
+                    .next()
+                    .unwrap(),
+            )
+        } else if value.get("Alt").is_some() {
+            Key::Alt(
+                value
+                    .get("Alt")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .chars()
+                    .next()
+                    .unwrap(),
+            )
+        } else if value.get("Ctrl").is_some() {
+            Key::Ctrl(
+                value
+                    .get("Ctrl")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .chars()
+                    .next()
+                    .unwrap(),
+            )
+        } else {
+            Key::Unknown
         }
     }
 }

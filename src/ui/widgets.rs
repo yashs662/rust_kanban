@@ -15,7 +15,7 @@ use crate::{
         App, AppReturn, PopupMode,
     },
     constants::{RANDOM_SEARCH_TERM, TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
-    io::{data_handler::export_kanban_to_json, handler::refresh_visible_boards_and_cards, IoEvent},
+    io::{handler::refresh_visible_boards_and_cards, IoEvent},
     lerp_between,
 };
 
@@ -172,10 +172,12 @@ impl WidgetManager {
 #[derive(Debug)]
 pub struct CommandPaletteWidget {
     pub command_search_results: Option<Vec<CommandPaletteActions>>,
-    pub card_search_results: Option<Vec<(String, u128)>>,
-    pub board_search_results: Option<Vec<(String, u128)>>,
+    pub card_search_results: Option<Vec<(String, (u64, u64))>>,
+    pub board_search_results: Option<Vec<(String, (u64, u64))>>,
     pub last_search_string: String,
     pub available_commands: Vec<CommandPaletteActions>,
+    pub already_in_user_input_mode: bool,
+    pub last_focus: Option<Focus>,
     pub command_palette_actions_corpus: Corpus,
 }
 
@@ -197,6 +199,8 @@ impl CommandPaletteWidget {
             card_search_results: None,
             board_search_results: None,
             last_search_string: RANDOM_SEARCH_TERM.to_string(), // random string that will never be typed as the selected index jumps around when a mouse is used with an empty search string
+            already_in_user_input_mode: false,
+            last_focus: None,
             available_commands: CommandPaletteActions::all(),
             command_palette_actions_corpus: corpus,
         }
@@ -225,20 +229,6 @@ impl CommandPaletteWidget {
             };
             if command.is_some() {
                 match command.unwrap() {
-                    CommandPaletteActions::ExportToJSON => {
-                        let export_result = export_kanban_to_json(&app.boards);
-                        if export_result.is_ok() {
-                            let msg = format!("Exported JSON to {}", export_result.unwrap());
-                            app.send_info_toast(&msg, None);
-                            info!("{}", msg);
-                        } else {
-                            let msg =
-                                format!("Failed to export JSON: {}", export_result.unwrap_err());
-                            app.send_error_toast(&msg, None);
-                            error!("{}", msg);
-                        }
-                        app.state.popup_mode = None;
-                    }
                     CommandPaletteActions::Quit => {
                         handle_exit(app).await;
                         info!("Quitting");
@@ -332,7 +322,7 @@ impl CommandPaletteWidget {
                             app.send_error_toast("Cannot change card status in this view", None);
                         }
                     }
-                    CommandPaletteActions::LoadASave => {
+                    CommandPaletteActions::LoadASaveLocal => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::LoadSave;
@@ -378,6 +368,44 @@ impl CommandPaletteWidget {
                     CommandPaletteActions::NoCommandsFound => {
                         return AppReturn::Continue;
                     }
+                    CommandPaletteActions::Login => {
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.ui_mode = UiMode::Login;
+                        app.state.popup_mode = None;
+                        app.state.focus = Focus::EmailIDField;
+                    }
+                    CommandPaletteActions::Logout => {
+                        app.dispatch(IoEvent::Logout).await;
+                        app.state.popup_mode = None;
+                    }
+                    CommandPaletteActions::SignUp => {
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.focus = Focus::EmailIDField;
+                        app.state.ui_mode = UiMode::SignUp;
+                        app.state.popup_mode = None;
+                    }
+                    CommandPaletteActions::ResetPassword => {
+                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.state.focus = Focus::EmailIDField;
+                        app.state.ui_mode = UiMode::ResetPassword;
+                        app.state.popup_mode = None;
+                    }
+                    CommandPaletteActions::SyncLocalData => {
+                        app.dispatch(IoEvent::SyncLocalData).await;
+                        app.state.popup_mode = None;
+                    }
+                    CommandPaletteActions::LoadASaveCloud => {
+                        if app.state.user_login_data.auth_token.is_some() {
+                            app.state.prev_ui_mode = Some(app.state.ui_mode);
+                            app.state.ui_mode = UiMode::LoadCloudSave;
+                            app.dispatch(IoEvent::GetCloudData).await;
+                            app.state.popup_mode = None;
+                        } else {
+                            error!("Not logged in");
+                            app.send_error_toast("Not logged in", None);
+                            return AppReturn::Continue;
+                        }
+                    }
                 }
                 app.state.current_user_input = "".to_string();
             } else {
@@ -385,6 +413,10 @@ impl CommandPaletteWidget {
             }
         } else {
             return AppReturn::Continue;
+        }
+        if app.command_palette.already_in_user_input_mode {
+            app.command_palette.already_in_user_input_mode = false;
+            app.command_palette.last_focus = None;
         }
         app.state.app_status = AppStatus::Initialized;
         app.state.current_user_input = String::new();
@@ -452,7 +484,7 @@ impl CommandPaletteWidget {
             }
 
             // search for cards
-            let mut card_search_results: Vec<(String, u128)> = vec![];
+            let mut card_search_results: Vec<(String, (u64, u64))> = vec![];
             if !current_search_string.is_empty() {
                 for board in &app.boards {
                     for card in &board.cards {
@@ -489,7 +521,7 @@ impl CommandPaletteWidget {
             }
 
             // search for boards
-            let mut board_search_results: Vec<(String, u128)> = vec![];
+            let mut board_search_results: Vec<(String, (u64, u64))> = vec![];
             if !current_search_string.is_empty() {
                 for board in &app.boards {
                     let search_helper =
@@ -566,10 +598,9 @@ impl CommandPaletteWidget {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandPaletteActions {
-    ExportToJSON,
     OpenConfigMenu,
     SaveKanbanState,
-    LoadASave,
+    LoadASaveLocal,
     NewBoard,
     NewCard,
     ResetUI,
@@ -584,16 +615,21 @@ pub enum CommandPaletteActions {
     ClearFilter,
     NoCommandsFound,
     ChangeDateFormat,
+    Login,
+    SyncLocalData,
+    LoadASaveCloud,
+    Logout,
+    SignUp,
+    ResetPassword,
     Quit,
 }
 
 impl Display for CommandPaletteActions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ExportToJSON => write!(f, "Export to JSON"),
             Self::OpenConfigMenu => write!(f, "Configure"),
             Self::SaveKanbanState => write!(f, "Save Kanban State"),
-            Self::LoadASave => write!(f, "Load a Save"),
+            Self::LoadASaveLocal => write!(f, "Load a Save (Local)"),
             Self::NewBoard => write!(f, "New Board"),
             Self::NewCard => write!(f, "New Card"),
             Self::ResetUI => write!(f, "Reset UI"),
@@ -606,8 +642,14 @@ impl Display for CommandPaletteActions {
             Self::CreateATheme => write!(f, "Create a Theme"),
             Self::FilterByTag => write!(f, "Filter by Tag"),
             Self::ClearFilter => write!(f, "Clear Filter"),
-            Self::ChangeDateFormat => write!(f, "Change Date Format"),
             Self::NoCommandsFound => write!(f, "No Commands Found"),
+            Self::ChangeDateFormat => write!(f, "Change Date Format"),
+            Self::Login => write!(f, "Login"),
+            Self::SyncLocalData => write!(f, "Sync Local Data"),
+            Self::LoadASaveCloud => write!(f, "Load a Save (Cloud)"),
+            Self::Logout => write!(f, "Logout"),
+            Self::SignUp => write!(f, "Sign Up"),
+            Self::ResetPassword => write!(f, "Reset Password"),
             Self::Quit => write!(f, "Quit"),
         }
     }
@@ -616,10 +658,11 @@ impl Display for CommandPaletteActions {
 impl CommandPaletteActions {
     pub fn all() -> Vec<Self> {
         let all = vec![
-            Self::ExportToJSON,
             Self::OpenConfigMenu,
             Self::SaveKanbanState,
-            Self::LoadASave,
+            Self::SyncLocalData,
+            Self::LoadASaveLocal,
+            Self::LoadASaveCloud,
             Self::NewBoard,
             Self::NewCard,
             Self::ResetUI,
@@ -632,6 +675,10 @@ impl CommandPaletteActions {
             Self::FilterByTag,
             Self::ClearFilter,
             Self::ChangeDateFormat,
+            Self::Login,
+            Self::Logout,
+            Self::SignUp,
+            Self::ResetPassword,
             Self::Quit,
         ];
 
@@ -647,10 +694,9 @@ impl CommandPaletteActions {
     pub fn from_string(s: &str, lowercase_match: bool) -> Option<Self> {
         if lowercase_match {
             match s.to_lowercase().as_str() {
-                "export to json" => Some(Self::ExportToJSON),
                 "configure" => Some(Self::OpenConfigMenu),
                 "save kanban state" => Some(Self::SaveKanbanState),
-                "load a save" => Some(Self::LoadASave),
+                "load a save (local)" => Some(Self::LoadASaveLocal),
                 "new board" => Some(Self::NewBoard),
                 "new card" => Some(Self::NewCard),
                 "reset ui" => Some(Self::ResetUI),
@@ -664,15 +710,20 @@ impl CommandPaletteActions {
                 "filter by tag" => Some(Self::FilterByTag),
                 "clear filter" => Some(Self::ClearFilter),
                 "change date format" => Some(Self::ChangeDateFormat),
+                "login" => Some(Self::Login),
+                "sign up" => Some(Self::SignUp),
+                "reset password" => Some(Self::ResetPassword),
+                "logout" => Some(Self::Logout),
+                "sync local data" => Some(Self::SyncLocalData),
+                "load a save (cloud)" => Some(Self::LoadASaveCloud),
                 "quit" => Some(Self::Quit),
                 _ => None,
             }
         } else {
             match s {
-                "Export to JSON" => Some(Self::ExportToJSON),
                 "Configure" => Some(Self::OpenConfigMenu),
                 "Save Kanban State" => Some(Self::SaveKanbanState),
-                "Load a Save" => Some(Self::LoadASave),
+                "Load a Save (Local)" => Some(Self::LoadASaveLocal),
                 "New Board" => Some(Self::NewBoard),
                 "New Card" => Some(Self::NewCard),
                 "Reset UI" => Some(Self::ResetUI),
@@ -686,6 +737,12 @@ impl CommandPaletteActions {
                 "Filter by Tag" => Some(Self::FilterByTag),
                 "Clear Filter" => Some(Self::ClearFilter),
                 "Change Date Format" => Some(Self::ChangeDateFormat),
+                "Login" => Some(Self::Login),
+                "Sign Up" => Some(Self::SignUp),
+                "Reset Password" => Some(Self::ResetPassword),
+                "Logout" => Some(Self::Logout),
+                "Sync Local Data" => Some(Self::SyncLocalData),
+                "Load a Save (Cloud)" => Some(Self::LoadASaveCloud),
                 "Quit" => Some(Self::Quit),
                 _ => None,
             }

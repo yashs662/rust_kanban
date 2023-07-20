@@ -79,7 +79,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<()> {
     Ok(())
 }
 
-/// Takes wrapped text and the current cursor position (1D) and the avaiable space to return the x and y position of the cursor (2D)
+/// Takes wrapped text and the current cursor position (1D) and the available space to return the x and y position of the cursor (2D)
 fn calculate_cursor_position(
     text: Vec<Cow<str>>,
     current_cursor_position: usize,
@@ -93,7 +93,7 @@ fn calculate_cursor_position(
     for (i, line) in wrapped_text_iter.enumerate() {
         x_pos = view_box.x + 1 + cursor_pos as u16;
         y_pos = view_box.y + 1 + i as u16;
-        if cursor_pos <= line.len() {
+        if cursor_pos <= line.chars().count() {
             // if x_pos is > i subtract i
             let x_pos = if x_pos > i as u16 {
                 x_pos - i as u16
@@ -102,7 +102,7 @@ fn calculate_cursor_position(
             };
             return (x_pos, y_pos);
         }
-        cursor_pos -= line.len();
+        cursor_pos -= line.chars().count();
     }
     (x_pos, y_pos)
 }

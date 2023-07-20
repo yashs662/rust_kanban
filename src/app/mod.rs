@@ -1,8 +1,13 @@
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info};
-use ratatui::widgets::{ListState, TableState};
+use ratatui::{
+    backend::Backend,
+    widgets::{ListState, TableState},
+    Frame,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     fmt::{self, Display, Formatter},
     path::PathBuf,
@@ -13,8 +18,8 @@ use std::{
 use self::{
     actions::Actions,
     app_helper::{
-        handle_general_actions, handle_keybind_mode, handle_mouse_action, handle_user_input_mode,
-        prepare_config_for_new_app,
+        handle_general_actions, handle_keybinding_mode, handle_mouse_action,
+        handle_user_input_mode, prepare_config_for_new_app,
     },
     kanban::{Board, Card, CardPriority},
     state::{AppStatus, Focus, KeyBindings, UiMode},
@@ -23,21 +28,19 @@ use crate::{
     app::{actions::Action, kanban::CardStatus},
     constants::{
         DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
-        FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD,
-        MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD, MOUSE_OUT_OF_BOUNDS_COORDINATES,
-        NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
+        DEFAULT_UI_MODE, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE,
+        MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD,
+        MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
-        data_handler::{
-            get_available_local_savefiles, get_config, get_default_save_directory,
-            get_default_ui_mode,
-        },
-        handler::refresh_visible_boards_and_cards,
+        data_handler::{get_available_local_save_files, get_default_save_directory},
+        handler::{refresh_visible_boards_and_cards, CloudData},
         logger::{get_logs, RUST_KANBAN_LOGGER},
         IoEvent,
     },
     ui::{
+        ui_helper,
         widgets::{CommandPaletteWidget, ToastType, ToastWidget},
         TextColorOptions, TextModifierOptions, Theme,
     },
@@ -56,13 +59,13 @@ pub enum AppReturn {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ActionHistory {
-    DeleteCard(Card, u128),
-    CreateCard(Card, u128),
+    DeleteCard(Card, (u64, u64)),
+    CreateCard(Card, (u64, u64)),
     DeleteBoard(Board),
-    MoveCardBetweenBoards(Card, u128, u128),
-    MoveCardWithinBoard(u128, usize, usize),
+    MoveCardBetweenBoards(Card, (u64, u64), (u64, u64)),
+    MoveCardWithinBoard((u64, u64), usize, usize),
     CreateBoard(Board),
-    EditCard(Card, Card, u128),
+    EditCard(Card, Card, (u64, u64)),
 }
 
 #[derive(Default)]
@@ -91,8 +94,8 @@ pub struct App {
     pub filtered_boards: Vec<Board>,
     pub config: AppConfig,
     pub config_item_being_edited: Option<usize>,
-    pub card_being_edited: Option<(u128, Card)>, // (board_id, card)
-    pub visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
+    pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
+    pub visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
     pub command_palette: CommandPaletteWidget,
     pub last_io_event_time: Option<Instant>,
     pub all_themes: Vec<Theme>,
@@ -109,7 +112,7 @@ impl App {
         let filtered_boards = vec![];
         let all_themes = Theme::all_default_themes();
         let mut theme = Theme::default();
-        let config = prepare_config_for_new_app(&mut state, theme.clone());
+        let (config, config_errors, state) = prepare_config_for_new_app(&mut state, theme.clone());
         let default_theme = config.default_theme.clone();
         for t in all_themes.iter() {
             if t.name == default_theme {
@@ -118,11 +121,11 @@ impl App {
             }
         }
 
-        Self {
+        let mut app = Self {
             io_tx,
             actions,
             is_loading,
-            state,
+            state: state.to_owned(),
             boards,
             filtered_boards,
             config,
@@ -134,7 +137,13 @@ impl App {
             all_themes,
             theme,
             action_history_manager: ActionHistoryManager::default(),
+        };
+        if !config_errors.is_empty() {
+            for error in config_errors {
+                app.send_error_toast(error, None);
+            }
         }
+        app
     }
 
     /// Handle a user action
@@ -143,7 +152,7 @@ impl App {
         if self.state.app_status == AppStatus::UserInput {
             handle_user_input_mode(self, key).await
         } else if self.state.app_status == AppStatus::KeyBindMode {
-            handle_keybind_mode(self, key).await
+            handle_keybinding_mode(self, key).await
         } else {
             handle_general_actions(self, key).await
         }
@@ -214,7 +223,7 @@ impl App {
     pub fn config_next(&mut self) {
         let i = match self.state.config_state.selected() {
             Some(i) => {
-                if i >= self.config.to_list().len() - 1 {
+                if i >= self.config.to_view_list().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -228,7 +237,7 @@ impl App {
         let i = match self.state.config_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.config.to_list().len() - 1
+                    self.config.to_view_list().len() - 1
                 } else {
                     i - 1
                 }
@@ -263,40 +272,74 @@ impl App {
         };
         self.state.main_menu_state.select(Some(i));
     }
-    pub fn load_save_next(&mut self) {
+    pub fn load_save_next(&mut self, cloud_mode: bool) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                let local_save_files = get_available_local_savefiles();
-                let local_save_files_len = if let Some(local_save_files_len) = local_save_files {
-                    local_save_files_len.len()
+                if cloud_mode {
+                    let cloud_save_files = self.state.cloud_data_preview.clone();
+                    let cloud_save_files_len = if let Some(cloud_save_files_len) = cloud_save_files
+                    {
+                        cloud_save_files_len.len()
+                    } else {
+                        0
+                    };
+                    if cloud_save_files_len == 0 || i >= cloud_save_files_len - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
                 } else {
-                    0
-                };
-                if local_save_files_len == 0 || i >= local_save_files_len - 1 {
-                    0
-                } else {
-                    i + 1
+                    let local_save_files = get_available_local_save_files(&self.config);
+                    let local_save_files_len = if let Some(local_save_files_len) = local_save_files
+                    {
+                        local_save_files_len.len()
+                    } else {
+                        0
+                    };
+                    if local_save_files_len == 0 || i >= local_save_files_len - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
                 }
             }
             None => 0,
         };
         self.state.load_save_state.select(Some(i));
     }
-    pub fn load_save_prv(&mut self) {
+    pub fn load_save_prv(&mut self, cloud_mode: bool) {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
-                let local_save_files = get_available_local_savefiles();
-                let local_save_files_len = if let Some(local_save_files_len) = local_save_files {
-                    local_save_files_len.len()
+                if cloud_mode {
+                    let cloud_save_files = self.state.cloud_data_preview.clone();
+                    let cloud_save_files_len = if let Some(cloud_save_files_len) = cloud_save_files
+                    {
+                        cloud_save_files_len.len()
+                    } else {
+                        0
+                    };
+                    if i == 0 && cloud_save_files_len != 0 {
+                        cloud_save_files_len - 1
+                    } else if cloud_save_files_len == 0 {
+                        0
+                    } else {
+                        i - 1
+                    }
                 } else {
-                    0
-                };
-                if local_save_files_len == 0 {
-                    0
-                } else if i == 0 {
-                    local_save_files_len - 1
-                } else {
-                    i - 1
+                    let local_save_files = get_available_local_save_files(&self.config);
+                    let local_save_files_len = if let Some(local_save_files_len) = local_save_files
+                    {
+                        local_save_files_len.len()
+                    } else {
+                        0
+                    };
+                    if i == 0 && local_save_files_len != 0 {
+                        local_save_files_len - 1
+                    } else if local_save_files_len == 0 {
+                        0
+                    } else {
+                        i - 1
+                    }
                 }
             }
             None => 0,
@@ -320,10 +363,10 @@ impl App {
         }
     }
     pub fn edit_keybindings_next(&mut self) {
-        let keybind_iterator = self.config.keybindings.iter();
+        let keybinding_iterator = self.config.keybindings.iter();
         let i = match self.state.edit_keybindings_state.selected() {
             Some(i) => {
-                if i >= keybind_iterator.count() - 1 {
+                if i >= keybinding_iterator.count() - 1 {
                     0
                 } else {
                     i + 1
@@ -334,11 +377,11 @@ impl App {
         self.state.edit_keybindings_state.select(Some(i));
     }
     pub fn edit_keybindings_prv(&mut self) {
-        let keybind_iterator = self.config.keybindings.iter();
+        let keybinding_iterator = self.config.keybindings.iter();
         let i = match self.state.edit_keybindings_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    keybind_iterator.count() - 1
+                    keybinding_iterator.count() - 1
                 } else {
                     i - 1
                 }
@@ -348,11 +391,11 @@ impl App {
         self.state.edit_keybindings_state.select(Some(i));
     }
     pub fn help_next(&mut self) {
-        // as the help menu is split into two use only half the length of the keybind store
+        // as the help menu is split into two use only half the length of the keybinding store
         let i = match self.state.help_state.selected() {
             Some(i) => {
-                if !self.state.keybind_store.is_empty() {
-                    if i >= (self.state.keybind_store.len() / 2) - 1 {
+                if !self.state.keybinding_store.is_empty() {
+                    if i >= (self.state.keybinding_store.len() / 2) - 1 {
                         0
                     } else {
                         i + 1
@@ -368,9 +411,9 @@ impl App {
     pub fn help_prv(&mut self) {
         let i = match self.state.help_state.selected() {
             Some(i) => {
-                if !self.state.keybind_store.is_empty() {
+                if !self.state.keybinding_store.is_empty() {
                     if i == 0 {
-                        (self.state.keybind_store.len() / 2) - 1
+                        (self.state.keybinding_store.len() / 2) - 1
                     } else {
                         i - 1
                     }
@@ -385,7 +428,7 @@ impl App {
     pub fn select_default_view_next(&mut self) {
         let i = match self.state.default_view_state.selected() {
             Some(i) => {
-                if i >= UiMode::all().len() - 1 {
+                if i >= UiMode::view_modes_as_string().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -399,7 +442,7 @@ impl App {
         let i = match self.state.default_view_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    UiMode::all().len() - 1
+                    UiMode::view_modes_as_string().len() - 1
                 } else {
                     i - 1
                 }
@@ -574,45 +617,45 @@ impl App {
             .command_palette_board_search_list_state
             .select(Some(i));
     }
-    pub fn keybind_list_maker(&mut self) {
-        let keybinds = &self.config.keybindings;
+    pub fn keybinding_list_maker(&mut self) {
+        let keybindings = &self.config.keybindings;
         let default_actions = &self.actions;
-        let keybind_action_iter = keybinds.iter();
-        let mut keybind_action_list: Vec<Vec<String>> = Vec::new();
+        let keybinding_action_iter = keybindings.iter();
+        let mut keybinding_action_list: Vec<Vec<String>> = Vec::new();
 
-        for (action, keys) in keybind_action_iter {
-            let mut keybind_action = Vec::new();
-            let mut keybind_string = String::new();
+        for (action, keys) in keybinding_action_iter {
+            let mut keybinding_action = Vec::new();
+            let mut keybinding_string = String::new();
             for key in keys {
-                keybind_string.push_str(&key.to_string());
-                keybind_string.push(' ');
+                keybinding_string.push_str(&key.to_string());
+                keybinding_string.push(' ');
             }
-            keybind_action.push(keybind_string);
-            let action_translated_string = KeyBindings::str_to_action(keybinds.clone(), action)
+            keybinding_action.push(keybinding_string);
+            let action_translated_string = KeyBindings::str_to_action(keybindings.clone(), action)
                 .unwrap_or(&Action::Quit)
                 .to_string();
-            keybind_action.push(action_translated_string);
-            keybind_action_list.push(keybind_action);
+            keybinding_action.push(action_translated_string);
+            keybinding_action_list.push(keybinding_action);
         }
 
         let default_action_iter = default_actions.actions().iter();
-        // append to keybind_action_list if the keybind is not already in the list
+        // append to keybinding_action_list if the keybinding is not already in the list
         for action in default_action_iter {
             let str_action = action.to_string();
-            if !keybind_action_list.iter().any(|x| x[1] == str_action) {
-                let mut keybind_action = Vec::new();
+            if !keybinding_action_list.iter().any(|x| x[1] == str_action) {
+                let mut keybinding_action = Vec::new();
                 let action_keys = action
                     .keys()
                     .iter()
                     .map(|x| x.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
-                keybind_action.push(action_keys);
-                keybind_action.push(str_action);
-                keybind_action_list.push(keybind_action);
+                keybinding_action.push(action_keys);
+                keybinding_action.push(str_action);
+                keybinding_action_list.push(keybinding_action);
             }
         }
-        self.state.keybind_store = keybind_action_list;
+        self.state.keybinding_store = keybinding_action_list;
     }
     pub fn send_info_toast(&mut self, message: &str, duration: Option<Duration>) {
         if let Some(duration) = duration {
@@ -955,7 +998,7 @@ impl App {
                         refresh_visible_boards_and_cards(self);
                         self.send_info_toast(&format!("Undo Delete Card '{}'", card.name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not undo delete card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                        self.send_error_toast(&format!("Could not undo delete card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
                     }
                 }
                 ActionHistory::CreateCard(card, board_id) => {
@@ -965,7 +1008,7 @@ impl App {
                         self.action_history_manager.history_index -= 1;
                         self.send_info_toast(&format!("Undo Create Card '{}'", card.name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not undo create card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                        self.send_error_toast(&format!("Could not undo create card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
                     }
                 }
                 ActionHistory::MoveCardBetweenBoards(
@@ -979,7 +1022,7 @@ impl App {
                     {
                         moved_to_board.cards.retain(|c| c.id != card.id);
                     } else {
-                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{}' was not found", card.name, moved_to_board_id), None);
+                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{:?}' was not found", card.name, moved_to_board_id), None);
                         return;
                     }
                     // find the card in the moved_from_board_id and add it
@@ -991,7 +1034,7 @@ impl App {
                         self.action_history_manager.history_index -= 1;
                         self.send_info_toast(&format!("Undo Move Card '{}'", card.name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{}' was not found", card.name, moved_from_board_id), None);
+                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{:?}' was not found", card.name, moved_from_board_id), None);
                     }
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
@@ -1012,7 +1055,7 @@ impl App {
                         self.action_history_manager.history_index -= 1;
                         self.send_info_toast(&format!("Undo Move Card '{}'", card_name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not undo move card 'N/A' as the board with id '{}' was not found", board_id), None);
+                        self.send_error_toast(&format!("Could not undo move card 'N/A' as the board with id '{:?}' was not found", board_id), None);
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
@@ -1048,7 +1091,7 @@ impl App {
                             refresh_visible_boards_and_cards(self);
                         }
                     } else {
-                        self.send_error_toast(&format!("Could not undo edit card '{}' as the board with id '{}' was not found", old_card.name, board_id), None);
+                        self.send_error_toast(&format!("Could not undo edit card '{}' as the board with id '{:?}' was not found", old_card.name, board_id), None);
                     }
                 }
             }
@@ -1069,7 +1112,7 @@ impl App {
                         self.action_history_manager.history_index += 1;
                         self.send_info_toast(&format!("Redo Delete Card '{}'", card.name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not redo delete card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                        self.send_error_toast(&format!("Could not redo delete card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
                     }
                 }
                 ActionHistory::CreateCard(card, board_id) => {
@@ -1079,7 +1122,7 @@ impl App {
                         self.action_history_manager.history_index += 1;
                         self.send_info_toast(&format!("Redo Create Card '{}'", card.name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not redo create card '{}' as the board with id '{}' was not found", card.name, board_id), None);
+                        self.send_error_toast(&format!("Could not redo create card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
                     }
                 }
                 ActionHistory::MoveCardBetweenBoards(
@@ -1093,7 +1136,7 @@ impl App {
                     {
                         moved_to_board.cards.push(card.clone());
                     } else {
-                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{}' was not found", card.name, moved_to_board_id), None);
+                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{:?}' was not found", card.name, moved_to_board_id), None);
                         return;
                     }
                     // find the card in the moved_from_board_id and add it
@@ -1105,7 +1148,7 @@ impl App {
                         self.action_history_manager.history_index += 1;
                         self.send_info_toast(&format!("Redo Move Card '{}'", card.name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{}' was not found", card.name, moved_from_board_id), None);
+                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{:?}' was not found", card.name, moved_from_board_id), None);
                     }
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
@@ -1126,7 +1169,7 @@ impl App {
                         self.action_history_manager.history_index += 1;
                         self.send_info_toast(&format!("Redo Move Card '{}'", card_name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not redo move card 'N/A' as the board with id '{}' was not found", board_id), None);
+                        self.send_error_toast(&format!("Could not redo move card 'N/A' as the board with id '{:?}' was not found", board_id), None);
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
@@ -1162,7 +1205,7 @@ impl App {
                             refresh_visible_boards_and_cards(self);
                         }
                     } else {
-                        self.send_error_toast(&format!("Could not redo edit card '{}' as the board with id '{}' was not found", new_card.name, board_id), None);
+                        self.send_error_toast(&format!("Could not redo edit card '{}' as the board with id '{:?}' was not found", new_card.name, board_id), None);
                     }
                 }
             }
@@ -1330,13 +1373,66 @@ impl PopupMode {
             PopupMode::FilterByTag => vec![Focus::FilterByTagPopup, Focus::SubmitButton],
         }
     }
+
+    pub fn render<B>(self, rect: &mut Frame<B>, app: &mut App)
+    where
+        B: Backend,
+    {
+        match self {
+            PopupMode::ViewCard => {
+                ui_helper::render_view_card(rect, app);
+            }
+            PopupMode::CardStatusSelector => {
+                ui_helper::render_change_card_status_popup(rect, app);
+            }
+            PopupMode::ChangeUIMode => {
+                ui_helper::render_change_ui_mode_popup(rect, app);
+            }
+            PopupMode::CommandPalette => {
+                ui_helper::render_command_palette(rect, app);
+            }
+            PopupMode::EditGeneralConfig => {
+                ui_helper::render_edit_config(rect, app);
+            }
+            PopupMode::EditSpecificKeyBinding => {
+                ui_helper::render_edit_specific_keybinding(rect, app);
+            }
+            PopupMode::SelectDefaultView => {
+                ui_helper::render_select_default_view(rect, app);
+            }
+            PopupMode::ChangeTheme => {
+                ui_helper::render_change_theme_popup(rect, app);
+            }
+            PopupMode::EditThemeStyle => {
+                ui_helper::render_edit_specific_style_popup(rect, app);
+            }
+            PopupMode::SaveThemePrompt => {
+                ui_helper::render_save_theme_prompt(rect, app);
+            }
+            PopupMode::CustomRGBPromptFG | PopupMode::CustomRGBPromptBG => {
+                ui_helper::render_custom_rgb_color_prompt(rect, app);
+            }
+            PopupMode::ConfirmDiscardCardChanges => {
+                ui_helper::render_confirm_discard_card_changes(rect, app);
+            }
+            PopupMode::CardPrioritySelector => {
+                ui_helper::render_card_priority_selector(rect, app);
+            }
+            PopupMode::FilterByTag => {
+                ui_helper::render_filter_by_tag_popup(rect, app);
+            }
+            PopupMode::ChangeDateFormatPopup => {
+                ui_helper::render_change_date_format_popup(rect, app);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub app_status: AppStatus,
-    pub current_board_id: Option<u128>,
-    pub current_card_id: Option<u128>,
+    pub current_board_id: Option<(u64, u64)>,
+    pub current_card_id: Option<(u64, u64)>,
     pub focus: Focus,
     pub previous_focus: Option<Focus>,
     pub current_user_input: String,
@@ -1344,17 +1440,20 @@ pub struct AppState {
     pub config_state: TableState,
     pub new_board_form: Vec<String>,
     pub new_card_form: Vec<String>,
+    pub login_form: (Vec<String>, bool),
+    pub signup_form: (Vec<String>, bool),
+    pub reset_password_form: (Vec<String>, bool),
     pub load_save_state: ListState,
     pub edit_keybindings_state: TableState,
     pub edited_keybinding: Option<Vec<Key>>,
     pub help_state: TableState,
-    pub keybind_store: Vec<Vec<String>>,
+    pub keybinding_store: Vec<Vec<String>>,
     pub default_view_state: ListState,
     pub current_cursor_position: Option<usize>,
     pub toasts: Vec<ToastWidget>,
     pub term_background_color: (u8, u8, u8),
     pub preview_boards_and_cards: Option<Vec<Board>>,
-    pub preview_visible_boards_and_cards: LinkedHashMap<u128, Vec<u128>>,
+    pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
     pub preview_file_name: Option<String>,
     pub popup_mode: Option<PopupMode>,
     pub ui_mode: UiMode,
@@ -1385,6 +1484,9 @@ pub struct AppState {
     pub filter_by_tag_list_state: ListState,
     pub date_format_selector_state: ListState,
     pub log_state: ListState,
+    pub user_login_data: UserLoginData,
+    pub cloud_data_preview: Option<Vec<CloudData>>,
+    pub last_reset_password_link_sent_time: Option<Instant>,
 }
 
 impl Default for AppState {
@@ -1400,11 +1502,17 @@ impl Default for AppState {
             config_state: TableState::default(),
             new_board_form: vec![String::new(), String::new()],
             new_card_form: vec![String::new(), String::new(), String::new()],
+            login_form: (vec![String::new(), String::new()], false),
+            signup_form: (vec![String::new(), String::new(), String::new()], false),
+            reset_password_form: (
+                vec![String::new(), String::new(), String::new(), String::new()],
+                false,
+            ),
             load_save_state: ListState::default(),
             edit_keybindings_state: TableState::default(),
             edited_keybinding: None,
             help_state: TableState::default(),
-            keybind_store: Vec::new(),
+            keybinding_store: Vec::new(),
             default_view_state: ListState::default(),
             current_cursor_position: None,
             toasts: Vec::new(),
@@ -1413,7 +1521,7 @@ impl Default for AppState {
             preview_visible_boards_and_cards: LinkedHashMap::new(),
             preview_file_name: None,
             popup_mode: None,
-            ui_mode: get_default_ui_mode(),
+            ui_mode: DEFAULT_UI_MODE,
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
             command_palette_command_search_list_state: ListState::default(),
             command_palette_card_search_list_state: ListState::default(),
@@ -1445,8 +1553,22 @@ impl Default for AppState {
             filter_by_tag_list_state: ListState::default(),
             date_format_selector_state: ListState::default(),
             log_state: ListState::default(),
+            user_login_data: UserLoginData {
+                email_id: None,
+                auth_token: None,
+                user_id: None,
+            },
+            cloud_data_preview: None,
+            last_reset_password_link_sent_time: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UserLoginData {
+    pub email_id: Option<String>,
+    pub auth_token: Option<String>,
+    pub user_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq)]
@@ -1513,7 +1635,7 @@ pub struct AppConfig {
     pub default_view: UiMode,
     pub always_load_last_save: bool,
     pub save_on_exit: bool,
-    pub disable_scrollbars: bool,
+    pub disable_scroll_bar: bool,
     pub warning_delta: u16,
     pub keybindings: KeyBindings,
     pub tickrate: u64,
@@ -1526,14 +1648,14 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        let default_view = UiMode::TitleBodyHelpLog;
+        let default_view = DEFAULT_UI_MODE;
         let default_theme = Theme::default();
         Self {
             save_directory: get_default_save_directory(),
             default_view,
             always_load_last_save: true,
             save_on_exit: true,
-            disable_scrollbars: false,
+            disable_scroll_bar: false,
             warning_delta: DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
             keybindings: KeyBindings::default(),
             tickrate: DEFAULT_TICKRATE,
@@ -1547,7 +1669,7 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    pub fn to_list(&self) -> Vec<Vec<String>> {
+    pub fn to_view_list(&self) -> Vec<Vec<String>> {
         vec![
             vec![
                 String::from("Save Directory"),
@@ -1566,8 +1688,8 @@ impl AppConfig {
                 self.save_on_exit.to_string(),
             ],
             vec![
-                String::from("Disable Scrollbars"),
-                self.disable_scrollbars.to_string(),
+                String::from("Disable Scroll Bar"),
+                self.disable_scroll_bar.to_string(),
             ],
             vec![
                 String::from("Number of Days to Warn Before Due Date"),
@@ -1624,7 +1746,7 @@ impl AppConfig {
                     } else {
                         error!("Invalid UiMode: {}", value);
                         app.send_error_toast(&format!("Invalid UiMode: {}", value), None);
-                        info!("Valid UiModes are: {:?}", UiMode::all());
+                        info!("Valid UiModes are: {:?}", UiMode::view_modes_as_string());
                     }
                 }
                 "Auto Load Last Save" => {
@@ -1647,11 +1769,11 @@ impl AppConfig {
                         app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
                     }
                 }
-                "Disable Scrollbars" => {
+                "Disable Scroll Bar" => {
                     if value.to_lowercase() == "true" {
-                        config.disable_scrollbars = true;
+                        config.disable_scroll_bar = true;
                     } else if value.to_lowercase() == "false" {
-                        config.disable_scrollbars = false;
+                        config.disable_scroll_bar = false;
                     } else {
                         error!("Invalid boolean: {}", value);
                         app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
@@ -1817,16 +1939,7 @@ impl AppConfig {
     }
 
     pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) -> Result<(), String> {
-        // make sure key is not empty, or already assigned
-
-        let get_config_status = get_config(false);
-        let config = if let Ok(config) = get_config_status {
-            config
-        } else {
-            debug!("Error getting config: {}", get_config_status.unwrap_err());
-            AppConfig::default()
-        };
-        let current_bindings = config.keybindings;
+        let current_bindings = &self.keybindings;
 
         // make a list from the keybindings
         let mut key_list = vec![];
@@ -1894,6 +2007,238 @@ impl AppConfig {
             }
         }
         Ok(())
+    }
+
+    pub fn from_json_string(json_string: &str) -> Result<Self, String> {
+        let root = serde_json::from_str(json_string);
+        if root.is_err() {
+            error!("Unable to recover old config. Resetting to default config");
+            debug!("Error: {}", root.unwrap_err());
+            return Err("Unable to recover old config. Resetting to default config".to_string());
+        }
+        let serde_json_object: Value = root.unwrap();
+        let save_directory = match serde_json_object["save_directory"].as_str() {
+            Some(path) => {
+                let path = PathBuf::from(path);
+                if path.exists() {
+                    path
+                } else {
+                    error!(
+                        "Invalid path: {}, Resetting to default save directory",
+                        path.to_str().unwrap()
+                    );
+                    get_default_save_directory()
+                }
+            }
+            None => {
+                error!("Save Directory is not a string, Resetting to default save directory");
+                get_default_save_directory()
+            }
+        };
+        let default_view = match serde_json_object["default_view"].as_str() {
+            Some(ui_mode) => {
+                let ui_mode = UiMode::from_json_string(ui_mode);
+                if let Some(ui_mode) = ui_mode {
+                    ui_mode
+                } else {
+                    error!("Invalid UiMode: {:?}, Resetting to default UiMode", ui_mode);
+                    DEFAULT_UI_MODE
+                }
+            }
+            None => {
+                error!("Default View is not a string, Resetting to default UiMode");
+                DEFAULT_UI_MODE
+            }
+        };
+        let always_load_last_save = match serde_json_object["always_load_last_save"].as_bool() {
+            Some(always_load_last_save) => always_load_last_save,
+            None => {
+                error!("Always Load Last Save is not a boolean, Resetting to default value");
+                true
+            }
+        };
+        let save_on_exit = match serde_json_object["save_on_exit"].as_bool() {
+            Some(save_on_exit) => save_on_exit,
+            None => {
+                error!("Save on Exit is not a boolean, Resetting to default value");
+                true
+            }
+        };
+        let disable_scroll_bar = match serde_json_object["disable_scroll_bar"].as_bool() {
+            Some(disable_scroll_bar) => disable_scroll_bar,
+            None => {
+                error!("Disable Scroll Bar is not a boolean, Resetting to default value");
+                false
+            }
+        };
+        let warning_delta = match serde_json_object["warning_delta"].as_u64() {
+            Some(warning_delta) => warning_delta as u16,
+            None => {
+                error!("Warning Delta is not a number, Resetting to default value");
+                DEFAULT_CARD_WARNING_DUE_DATE_DAYS
+            }
+        };
+        let keybindings = match serde_json_object["keybindings"].as_object() {
+            Some(keybindings) => {
+                let mut keybindings = keybindings.clone();
+                let mut keybindings_object = KeyBindings::default();
+                for (key, value) in keybindings.iter_mut() {
+                    let mut keybinding = vec![];
+                    // the value can be either in the format [{"Char":"2"}] or ["Tab", "Shift"]
+                    let value_array = value.as_array_mut();
+                    if value_array.is_none() {
+                        error!(
+                            "Invalid keybinding: {} for key {}, Resetting to default keybinding",
+                            value, key
+                        );
+                        keybindings_object.edit_keybinding(key, vec![Key::Unknown]);
+                        continue;
+                    }
+                    for keybinding_value in value_array.unwrap().iter_mut() {
+                        let keybinding_value_str = keybinding_value.as_str();
+                        let keybinding_value_obj = keybinding_value.as_object();
+                        if let Some(keybinding_value_str) = keybinding_value_str {
+                            let keybinding_value = Key::from(keybinding_value_str);
+                            if keybinding_value != Key::Unknown {
+                                keybinding.push(keybinding_value);
+                            } else {
+                                error!(
+                                    "Invalid keybinding: {} for key {}, Resetting to default keybinding",
+                                    keybinding_value_str, key
+                                );
+                                keybinding = match keybindings_object.get_keybinding(key) {
+                                    Some(keybinding) => keybinding.to_vec(),
+                                    None => vec![Key::Unknown],
+                                }
+                            }
+                        } else if let Some(keybinding_value_obj) = keybinding_value_obj {
+                            let keybinding_value = Key::from(keybinding_value_obj);
+                            if keybinding_value != Key::Unknown {
+                                keybinding.push(keybinding_value);
+                            } else {
+                                error!(
+                                    "Invalid keybinding: {:?} for key {}, Resetting to default keybinding",
+                                    keybinding_value_obj, key
+                                );
+                                keybinding = match keybindings_object.get_keybinding(key) {
+                                    Some(keybinding) => keybinding.to_vec(),
+                                    None => vec![Key::Unknown],
+                                }
+                            }
+                        } else {
+                            error!(
+                                "Invalid keybinding for key {}, Resetting to default keybinding",
+                                key
+                            );
+                            keybinding = match keybindings_object.get_keybinding(key) {
+                                Some(keybinding) => keybinding.to_vec(),
+                                None => vec![Key::Unknown],
+                            }
+                        }
+                    }
+                    keybindings_object.edit_keybinding(key, keybinding);
+                }
+                keybindings_object
+            }
+            None => KeyBindings::default(),
+        };
+        let tickrate = match serde_json_object["tickrate"].as_u64() {
+            Some(tickrate) => {
+                // make sure tickrate is not too low or too high
+                if !(10..=1000).contains(&tickrate) {
+                    error!("Invalid tickrate: {}, It must be between 10 and 1000, Resetting to default tickrate", tickrate);
+                    DEFAULT_TICKRATE
+                } else {
+                    tickrate
+                }
+            }
+            None => {
+                error!("Tickrate is not a number, Resetting to default tickrate");
+                DEFAULT_TICKRATE
+            }
+        };
+        let no_of_cards_to_show = match serde_json_object["no_of_cards_to_show"].as_u64() {
+            Some(no_of_cards_to_show) => {
+                if no_of_cards_to_show < MIN_NO_CARDS_PER_BOARD.into()
+                    || no_of_cards_to_show > MAX_NO_CARDS_PER_BOARD.into()
+                {
+                    error!("Invalid number of cards to show: {}, Resetting to default number of cards to show", no_of_cards_to_show);
+                    NO_OF_CARDS_PER_BOARD
+                } else {
+                    no_of_cards_to_show as u16
+                }
+            }
+            None => {
+                error!("Number of cards to show is not a number, Resetting to default number of cards to show");
+                NO_OF_CARDS_PER_BOARD
+            }
+        };
+        let no_of_boards_to_show = match serde_json_object["no_of_boards_to_show"].as_u64() {
+            Some(no_of_boards_to_show) => {
+                if no_of_boards_to_show < MIN_NO_BOARDS_PER_PAGE.into()
+                    || no_of_boards_to_show > MAX_NO_BOARDS_PER_PAGE.into()
+                {
+                    error!("Invalid number of boards to show: {}, Resetting to default number of boards to show", no_of_boards_to_show);
+                    NO_OF_BOARDS_PER_PAGE
+                } else {
+                    no_of_boards_to_show as u16
+                }
+            }
+            None => {
+                error!("Number of boards to show is not a number, Resetting to default number of boards to show");
+                NO_OF_BOARDS_PER_PAGE
+            }
+        };
+        let enable_mouse_support = match serde_json_object["enable_mouse_support"].as_bool() {
+            Some(enable_mouse_support) => enable_mouse_support,
+            None => {
+                error!("Enable Mouse Support is not a boolean, Resetting to default value");
+                true
+            }
+        };
+        let default_theme = match serde_json_object["default_theme"].as_str() {
+            Some(default_theme) => default_theme.to_string(),
+            None => {
+                error!("Default Theme is not a string, Resetting to default theme");
+                Theme::default().name
+            }
+        };
+        let date_format = match serde_json_object["date_format"].as_str() {
+            Some(date_format) => match date_format {
+                "DayMonthYear" => DateFormat::DayMonthYear,
+                "MonthDayYear" => DateFormat::MonthDayYear,
+                "YearMonthDay" => DateFormat::YearMonthDay,
+                "DayMonthYearTime" => DateFormat::DayMonthYearTime,
+                "MonthDayYearTime" => DateFormat::MonthDayYearTime,
+                "YearMonthDayTime" => DateFormat::YearMonthDayTime,
+                _ => {
+                    error!(
+                        "Invalid date format: {}, Resetting to default date format",
+                        date_format
+                    );
+                    DateFormat::default()
+                }
+            },
+            None => {
+                error!("Date Format is not a string, Resetting to default date format");
+                DateFormat::default()
+            }
+        };
+        Ok(Self {
+            save_directory,
+            default_view,
+            always_load_last_save,
+            save_on_exit,
+            disable_scroll_bar,
+            warning_delta,
+            keybindings,
+            tickrate,
+            no_of_cards_to_show,
+            no_of_boards_to_show,
+            enable_mouse_support,
+            default_theme,
+            date_format,
+        })
     }
 }
 

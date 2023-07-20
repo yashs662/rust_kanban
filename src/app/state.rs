@@ -1,10 +1,11 @@
 use std::{fmt, str::FromStr, vec};
 
-use log::error;
+use log::{debug, error};
+use ratatui::{backend::Backend, Frame};
 use serde::{Deserialize, Serialize};
 
-use super::actions::Action;
-use crate::inputs::key::Key;
+use super::{actions::Action, App};
+use crate::{inputs::key::Key, ui::ui_helper};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default)]
 pub enum UiMode {
@@ -26,6 +27,10 @@ pub enum UiMode {
     NewCard,
     LoadSave,
     CreateTheme,
+    Login,
+    SignUp,
+    ResetPassword,
+    LoadCloudSave,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -80,6 +85,11 @@ pub enum Focus {
     #[default]
     NoFocus,
     ExtraFocus, // Used in cases where defining a new focus is not necessary
+    EmailIDField,
+    PasswordField,
+    ConfirmPasswordField,
+    SendResetPasswordLinkButton,
+    ResetPasswordLinkField,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -135,6 +145,29 @@ impl UiMode {
         }
     }
 
+    pub fn from_json_string(s: &str) -> Option<UiMode> {
+        match s {
+            "Zen" => Some(UiMode::Zen),
+            "TitleBody" => Some(UiMode::TitleBody),
+            "BodyHelp" => Some(UiMode::BodyHelp),
+            "BodyLog" => Some(UiMode::BodyLog),
+            "TitleBodyHelp" => Some(UiMode::TitleBodyHelp),
+            "TitleBodyLog" => Some(UiMode::TitleBodyLog),
+            "BodyHelpLog" => Some(UiMode::BodyHelpLog),
+            "TitleBodyHelpLog" => Some(UiMode::TitleBodyHelpLog),
+            "ConfigMenu" => Some(UiMode::ConfigMenu),
+            "EditKeybindings" => Some(UiMode::EditKeybindings),
+            "MainMenu" => Some(UiMode::MainMenu),
+            "HelpMenu" => Some(UiMode::HelpMenu),
+            "LogsOnly" => Some(UiMode::LogsOnly),
+            "NewBoard" => Some(UiMode::NewBoard),
+            "NewCard" => Some(UiMode::NewCard),
+            "LoadSave" => Some(UiMode::LoadSave),
+            "CreateTheme" => Some(UiMode::CreateTheme),
+            _ => None,
+        }
+    }
+
     pub fn from_number(n: u8) -> UiMode {
         match n {
             1 => UiMode::Zen,
@@ -164,11 +197,7 @@ impl UiMode {
             UiMode::BodyHelpLog => vec![Focus::Body, Focus::Help, Focus::Log],
             UiMode::TitleBodyHelpLog => vec![Focus::Title, Focus::Body, Focus::Help, Focus::Log],
             UiMode::ConfigMenu => vec![Focus::ConfigTable, Focus::SubmitButton, Focus::ExtraFocus],
-            UiMode::EditKeybindings => vec![
-                Focus::Title,
-                Focus::EditKeybindingsTable,
-                Focus::SubmitButton,
-            ],
+            UiMode::EditKeybindings => vec![Focus::EditKeybindingsTable, Focus::SubmitButton],
             UiMode::MainMenu => vec![Focus::MainMenu, Focus::MainMenuHelp, Focus::Log],
             UiMode::HelpMenu => vec![Focus::Help, Focus::Log],
             UiMode::LogsOnly => vec![Focus::Log],
@@ -185,15 +214,37 @@ impl UiMode {
             ],
             UiMode::LoadSave => vec![Focus::Body],
             UiMode::CreateTheme => vec![Focus::ThemeEditor, Focus::SubmitButton, Focus::ExtraFocus],
+            UiMode::Login => vec![
+                Focus::Title,
+                Focus::EmailIDField,
+                Focus::PasswordField,
+                Focus::ExtraFocus,
+                Focus::SubmitButton,
+            ],
+            UiMode::SignUp => vec![
+                Focus::Title,
+                Focus::EmailIDField,
+                Focus::PasswordField,
+                Focus::ConfirmPasswordField,
+                Focus::ExtraFocus,
+                Focus::SubmitButton,
+            ],
+            UiMode::ResetPassword => vec![
+                Focus::Title,
+                Focus::EmailIDField,
+                Focus::SendResetPasswordLinkButton,
+                Focus::ResetPasswordLinkField,
+                Focus::PasswordField,
+                Focus::ConfirmPasswordField,
+                Focus::ExtraFocus,
+                Focus::SubmitButton,
+            ],
+            UiMode::LoadCloudSave => vec![Focus::Body],
         }
     }
 
-    pub fn all() -> Vec<String> {
-        let mut s = vec![];
-        for i in 1..10 {
-            s.push(UiMode::from_number(i).to_string());
-        }
-        s
+    pub fn view_modes_as_string() -> Vec<String> {
+        UiMode::view_modes().iter().map(|x| x.to_string()).collect()
     }
 
     pub fn view_modes() -> Vec<UiMode> {
@@ -207,6 +258,65 @@ impl UiMode {
             UiMode::BodyHelpLog,
             UiMode::TitleBodyHelpLog,
         ]
+    }
+
+    pub fn render<B>(self, rect: &mut Frame<B>, app: &mut App)
+    where
+        B: Backend,
+    {
+        match self {
+            UiMode::Zen => {
+                ui_helper::render_zen_mode(rect, app);
+            }
+            UiMode::TitleBody => {
+                ui_helper::render_title_body(rect, app);
+            }
+            UiMode::BodyHelp => {
+                ui_helper::render_body_help(rect, app);
+            }
+            UiMode::BodyLog => {
+                ui_helper::render_body_log(rect, app);
+            }
+            UiMode::TitleBodyHelp => {
+                ui_helper::render_title_body_help(rect, app);
+            }
+            UiMode::TitleBodyLog => {
+                ui_helper::render_title_body_log(rect, app);
+            }
+            UiMode::BodyHelpLog => {
+                ui_helper::render_body_help_log(rect, app);
+            }
+            UiMode::TitleBodyHelpLog => {
+                ui_helper::render_title_body_help_log(rect, app);
+            }
+            UiMode::ConfigMenu => {
+                ui_helper::render_config(rect, app);
+            }
+            UiMode::EditKeybindings => {
+                ui_helper::render_edit_keybindings(rect, app);
+            }
+            UiMode::MainMenu => {
+                ui_helper::render_main_menu(rect, app);
+            }
+            UiMode::HelpMenu => {
+                ui_helper::render_help_menu(rect, app);
+            }
+            UiMode::LogsOnly => {
+                ui_helper::render_logs_only(rect, app);
+            }
+            UiMode::NewBoard => {
+                ui_helper::render_new_board_form(rect, app);
+            }
+            UiMode::NewCard => ui_helper::render_new_card_form(rect, app),
+            UiMode::LoadSave => {
+                ui_helper::render_load_a_save(rect, app);
+            }
+            UiMode::CreateTheme => ui_helper::render_create_theme(rect, app),
+            UiMode::Login => ui_helper::render_login(rect, app),
+            UiMode::SignUp => ui_helper::render_signup(rect, app),
+            UiMode::ResetPassword => ui_helper::render_reset_password(rect, app),
+            UiMode::LoadCloudSave => ui_helper::render_load_cloud_save(rect, app),
+        }
     }
 }
 
@@ -228,8 +338,12 @@ impl fmt::Display for UiMode {
             UiMode::LogsOnly => write!(f, "Logs Only"),
             UiMode::NewBoard => write!(f, "New Board"),
             UiMode::NewCard => write!(f, "New Card"),
-            UiMode::LoadSave => write!(f, "Load a Save"),
+            UiMode::LoadSave => write!(f, "Load a Save (Local)"),
             UiMode::CreateTheme => write!(f, "Create Theme"),
+            UiMode::Login => write!(f, "Login"),
+            UiMode::SignUp => write!(f, "Sign Up"),
+            UiMode::ResetPassword => write!(f, "Reset Password"),
+            UiMode::LoadCloudSave => write!(f, "Load a Save (Cloud)"),
         }
     }
 }
@@ -287,6 +401,11 @@ impl Focus {
             Self::FilterByTagPopup => "Filter By Tag Popup",
             Self::NoFocus => "No Focus",
             Self::ExtraFocus => "Extra Focus",
+            Self::EmailIDField => "Email ID Field",
+            Self::PasswordField => "Password Field",
+            Self::ConfirmPasswordField => "Confirm Password Field",
+            Self::SendResetPasswordLinkButton => "Send Reset Password Link Button",
+            Self::ResetPasswordLinkField => "OTP Field",
         }
     }
     pub fn next(&self, available_tabs: &Vec<Focus>) -> Self {
@@ -473,6 +592,73 @@ impl KeyBindings {
             "clear_all_toasts" => Some(&Action::ClearAllToasts),
             "undo" => Some(&Action::Undo),
             "redo" => Some(&Action::Redo),
+            _ => None,
+        }
+    }
+
+    pub fn edit_keybinding(&mut self, key: &str, keybinding: Vec<Key>) -> &mut Self {
+        // remove duplicate keys in keybinding without sorting
+        let mut keybinding = keybinding;
+        keybinding.dedup();
+
+        match key {
+            "quit" => self.quit = keybinding,
+            "next_focus" => self.next_focus = keybinding,
+            "prev_focus" => self.prev_focus = keybinding,
+            "open_config_menu" => self.open_config_menu = keybinding,
+            "up" => self.up = keybinding,
+            "down" => self.down = keybinding,
+            "right" => self.right = keybinding,
+            "left" => self.left = keybinding,
+            "take_user_input" => self.take_user_input = keybinding,
+            "stop_user_input" => self.stop_user_input = keybinding,
+            "hide_ui_element" => self.hide_ui_element = keybinding,
+            "save_state" => self.save_state = keybinding,
+            "new_board" => self.new_board = keybinding,
+            "new_card" => self.new_card = keybinding,
+            "delete_card" => self.delete_card = keybinding,
+            "delete_board" => self.delete_board = keybinding,
+            "change_card_status_to_completed" => self.change_card_status_to_completed = keybinding,
+            "change_card_status_to_active" => self.change_card_status_to_active = keybinding,
+            "change_card_status_to_stale" => self.change_card_status_to_stale = keybinding,
+            "reset_ui" => self.reset_ui = keybinding,
+            "go_to_main_menu" => self.go_to_main_menu = keybinding,
+            "toggle_command_palette" => self.toggle_command_palette = keybinding,
+            "clear_all_toasts" => self.clear_all_toasts = keybinding,
+            "undo" => self.undo = keybinding,
+            "redo" => self.redo = keybinding,
+            _ => debug!("Invalid keybinding: {}", key),
+        }
+        self
+    }
+
+    pub fn get_keybinding(&self, action: &str) -> Option<&Vec<Key>> {
+        match action {
+            "quit" => Some(&self.quit),
+            "next_focus" => Some(&self.next_focus),
+            "prev_focus" => Some(&self.prev_focus),
+            "open_config_menu" => Some(&self.open_config_menu),
+            "up" => Some(&self.up),
+            "down" => Some(&self.down),
+            "right" => Some(&self.right),
+            "left" => Some(&self.left),
+            "take_user_input" => Some(&self.take_user_input),
+            "stop_user_input" => Some(&self.stop_user_input),
+            "hide_ui_element" => Some(&self.hide_ui_element),
+            "save_state" => Some(&self.save_state),
+            "new_board" => Some(&self.new_board),
+            "new_card" => Some(&self.new_card),
+            "delete_card" => Some(&self.delete_card),
+            "delete_board" => Some(&self.delete_board),
+            "change_card_status_to_completed" => Some(&self.change_card_status_to_completed),
+            "change_card_status_to_active" => Some(&self.change_card_status_to_active),
+            "change_card_status_to_stale" => Some(&self.change_card_status_to_stale),
+            "reset_ui" => Some(&self.reset_ui),
+            "go_to_main_menu" => Some(&self.go_to_main_menu),
+            "toggle_command_palette" => Some(&self.toggle_command_palette),
+            "clear_all_toasts" => Some(&self.clear_all_toasts),
+            "undo" => Some(&self.undo),
+            "redo" => Some(&self.redo),
             _ => None,
         }
     }

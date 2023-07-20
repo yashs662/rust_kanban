@@ -10,15 +10,16 @@
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
+- [ ] End to End Encryption for Cloud Saves
 - [ ] Allow for vertical movement in text fields (e.g. card description)
 - [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
 - [ ] Allow for more mouse Interactions (Dragging cards maybe?)
-- [ ] Implement Cloud saves (Google drive maybe? as I am not going to host a server)
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Implement Cloud saves
 - [x] Ability to scroll through logs
 - [x] Ability to Undo and Redo actions
 - [x] Ability to change date formats
@@ -43,8 +44,11 @@
 - [x] Logging
   
 ## Known Issues
-- [ ] Cursor positioning in Card view is sometimes off by one or two spaces and is consistently on the previous line for comments and tags for the 2nd line or below
-- [ ] Emoticons or characters in other languages with special symbols can crash the app due to the way cursor position is handled
+- [ ] Cursor positioning is not correct for new lines, special characters in other languages, and emoticons
+
+## PSA
+<li>To migrate to v0.7 and above, you will have to export your saves to json from the command palette and then import them again, this is because the save format has changed and the old saves will not work with the new version.
+<li>Cloud saves are not encrypted for this current version i am working on implementing end to end encryption for cloud saves, if you are concerned about your data being leaked, please do not use the cloud save feature for now.
 
 ## How to use
 ### Default Keybindings

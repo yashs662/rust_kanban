@@ -3,14 +3,17 @@ use log::{debug, Level};
 use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
-    text::{Span, Spans},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{
         Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table,
     },
     Frame,
 };
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
     app::{
@@ -22,11 +25,12 @@ use crate::{
     calculate_cursor_position,
     constants::{
         APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
-        LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH,
-        SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
+        HIDDEN_PASSWORD_SYMBOL, LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT,
+        MIN_TERM_WIDTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK, SCREEN_TO_TOAST_WIDTH_RATIO,
+        SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
     },
     io::{
-        data_handler::get_available_local_savefiles,
+        data_handler::get_available_local_save_files,
         logger::{get_logs, get_selected_index, RUST_KANBAN_LOGGER},
     },
 };
@@ -443,7 +447,7 @@ where
     rect.render_stateful_widget(config_table, table_chunks[0], &mut app.state.config_state);
 
     let current_index = app.state.config_state.selected().unwrap_or(0);
-    let total_rows = app.config.to_list().len();
+    let total_rows = app.config.to_view_list().len();
     let visible_rows = (table_chunks[1].height - 1) as usize;
     let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
     let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
@@ -458,7 +462,7 @@ where
         rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
     }
 
-    let reset_both_button = Paragraph::new("Reset Config and Keybinds to Default")
+    let reset_both_button = Paragraph::new("Reset Config and KeyBindings to Default")
         .block(
             Block::default()
                 .title("Reset")
@@ -492,7 +496,7 @@ where
 
 /// Draws config list selector
 fn draw_config_table_selector(app: &mut App) -> Table<'static> {
-    let config_list = app.config.to_list();
+    let config_list = app.config.to_view_list();
     let rows = config_list.iter().map(|item| {
         let height = item
             .iter()
@@ -521,8 +525,8 @@ pub fn render_edit_config<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let area = centered_rect(70, 70, rect.size());
-    let clear_area = centered_rect(80, 80, rect.size());
+    let area = centered_rect_with_percentage(70, 70, rect.size());
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Config Editor")
         .style(app.theme.general_style)
@@ -571,7 +575,7 @@ where
         };
 
     let config_item_index = &app.config_item_being_edited;
-    let list_items = app.config.to_list();
+    let list_items = app.config.to_view_list();
     let config_item_name = if config_item_index.is_some() {
         list_items[config_item_index.unwrap()].first().unwrap()
     } else {
@@ -590,7 +594,7 @@ where
     };
     let paragraph_text = format!("Current Value is {}\n\n{}",config_item_value,
         "Press 'i' to edit, or 'Esc' to cancel, Press 'Ins' to stop editing and press 'Enter' on Submit to save");
-    let paragraph_title = Spans::from(vec![Span::raw(config_item_name)]);
+    let paragraph_title = Line::from(vec![Span::raw(config_item_name)]);
     let config_item = Paragraph::new(paragraph_text)
         .block(
             Block::default()
@@ -657,9 +661,9 @@ pub fn render_select_default_view<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let render_area = centered_rect(70, 70, rect.size());
+    let render_area = centered_rect_with_percentage(70, 70, rect.size());
     let mouse_coordinates = app.state.current_mouse_coordinates;
-    let clear_area = centered_rect(80, 80, rect.size());
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Default HomeScreen Editor")
         .style(app.theme.general_style)
@@ -673,7 +677,7 @@ where
         .constraints([Constraint::Min(8), Constraint::Length(5)].as_ref())
         .split(render_area);
 
-    let list_items = UiMode::all();
+    let list_items = UiMode::view_modes_as_string();
     let list_items: Vec<ListItem> = list_items
         .iter()
         .map(|s| ListItem::new(s.to_string()))
@@ -707,20 +711,20 @@ where
 
     let up_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let down_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let help_spans = Spans::from(vec![
+    let help_spans = Line::from(vec![
         Span::styled("Use ", app.theme.help_text_style),
         Span::styled(up_key, app.theme.help_key_style),
         Span::styled("or ", app.theme.help_text_style),
@@ -906,34 +910,34 @@ where
 
     let next_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let prev_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let up_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let down_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let edit_keybind_help_spans = Spans::from(vec![
+    let edit_keybinding_help_spans = Line::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(up_key, help_key_style),
         Span::styled("and ", help_text_style),
@@ -957,7 +961,7 @@ where
         Span::styled(" on the Reset Keybindings Button", help_text_style),
     ]);
 
-    let edit_keybind_help = Paragraph::new(edit_keybind_help_spans)
+    let edit_keybinding_help = Paragraph::new(edit_keybinding_help_spans)
         .block(
             Block::default()
                 .title("Help")
@@ -979,7 +983,7 @@ where
         .alignment(Alignment::Center);
 
     rect.render_stateful_widget(t, chunks[1], &mut app.state.edit_keybindings_state);
-    rect.render_widget(edit_keybind_help, chunks[2]);
+    rect.render_widget(edit_keybinding_help, chunks[2]);
     rect.render_widget(reset_button, chunks[3]);
 
     if app.config.enable_mouse_support {
@@ -991,8 +995,8 @@ pub fn render_edit_specific_keybinding<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let area = centered_rect(70, 70, rect.size());
-    let clear_area = centered_rect(80, 80, rect.size());
+    let area = centered_rect_with_percentage(70, 70, rect.size());
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Edit Keybindings")
         .borders(Borders::ALL)
@@ -1059,7 +1063,7 @@ where
         }
         let user_input_key = app
             .state
-            .keybind_store
+            .keybinding_store
             .iter()
             .find(|x| x[1] == "Enter input mode")
             .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
@@ -1179,7 +1183,60 @@ where
         rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
     };
 
-    draw_main_menu(app, chunks[1], rect);
+    if app.state.user_login_data.email_id.is_some() {
+        let email_id = app.state.user_login_data.email_id.clone().unwrap();
+        let email_id_len = email_id.len() as u16 + 4;
+        let sub_main_menu_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Length(chunks[1].width - email_id_len),
+                    Constraint::Length(email_id_len),
+                ]
+                .as_ref(),
+            )
+            .split(chunks[1]);
+
+        let border_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(app.theme.general_style.add_modifier(Modifier::RAPID_BLINK))
+            .border_type(BorderType::Rounded);
+
+        let email_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Length((sub_main_menu_chunks[1].height - 4) / 2),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length((sub_main_menu_chunks[1].height - 4) / 2),
+                ]
+                .as_ref(),
+            )
+            .split(sub_main_menu_chunks[1]);
+
+        let heading_text = Paragraph::new("Logged in as:")
+            .block(
+                Block::default().style(app.theme.general_style.add_modifier(Modifier::RAPID_BLINK)),
+            )
+            .alignment(Alignment::Center)
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        let email_id_text = Paragraph::new(email_id)
+            .block(
+                Block::default().style(app.theme.general_style.add_modifier(Modifier::RAPID_BLINK)),
+            )
+            .alignment(Alignment::Center)
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        draw_main_menu(app, sub_main_menu_chunks[0], rect);
+        rect.render_widget(border_block, sub_main_menu_chunks[1]);
+        rect.render_widget(heading_text, email_chunks[1]);
+        rect.render_widget(email_id_text, email_chunks[3]);
+    } else {
+        draw_main_menu(app, chunks[1], rect);
+    }
 
     let main_menu_help = draw_help(app, chunks[2]);
     let help_separator = Block::default()
@@ -1256,7 +1313,7 @@ where
 
 /// Draws Help section for normal mode
 fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Table<'a>) {
-    let keybind_store = &app.state.keybind_store;
+    let keybinding_store = &app.state.keybinding_store;
     let popup_mode = app.state.popup_mode.is_some();
     let mouse_coordinates = app.state.current_mouse_coordinates;
     let focus = &mut app.state.focus;
@@ -1293,7 +1350,7 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
         app.theme.help_text_style
     };
 
-    let rows = keybind_store.iter().map(|item| {
+    let rows = keybinding_store.iter().map(|item| {
         let height = item
             .iter()
             .map(|content| content.chars().filter(|c| *c == '\n').count())
@@ -1337,7 +1394,7 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
 
 /// Draws help section for config mode
 fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Paragraph<'a> {
-    let helpbox_style = if popup_mode {
+    let help_box_style = if popup_mode {
         app.theme.inactive_text_style
     } else if matches!(focus, Focus::ConfigHelp) {
         app.theme.keyboard_focus_style
@@ -1357,34 +1414,34 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
 
     let up_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let down_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let next_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let prev_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let help_spans = Spans::from(vec![
+    let help_spans = Line::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(up_key, help_key_style),
         Span::styled("and ", help_text_style),
@@ -1417,7 +1474,7 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
             Block::default()
                 .title("Help")
                 .borders(Borders::ALL)
-                .style(helpbox_style)
+                .style(help_box_style)
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
@@ -1516,11 +1573,11 @@ where
     } else {
         app.theme.error_text_style
     };
-    let current_board = &app.state.current_board_id.unwrap_or(0);
+    let current_board = &app.state.current_board_id.unwrap_or((0, 0));
 
     let add_board_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Create new board")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
@@ -1582,7 +1639,7 @@ where
     };
 
     // make a list of constraints depending on NO_OF_BOARDS_PER_PAGE constant
-    let chunks = if app.config.disable_scrollbars {
+    let chunks = if app.config.disable_scroll_bar {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(100)].as_ref())
@@ -1716,7 +1773,7 @@ where
             .border_type(BorderType::Rounded);
         rect.render_widget(board_block, board_chunks[board_index]);
 
-        let card_area_chunks = if app.config.disable_scrollbars {
+        let card_area_chunks = if app.config.disable_scroll_bar {
             Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(100)].as_ref())
@@ -1728,7 +1785,7 @@ where
                 .split(board_chunks[board_index])
         };
 
-        let card_chunks = if app.config.disable_scrollbars {
+        let card_chunks = if app.config.disable_scroll_bar {
             Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
@@ -1742,7 +1799,7 @@ where
                 .split(card_area_chunks[1])
         };
 
-        if !app.config.disable_scrollbars {
+        if !app.config.disable_scroll_bar {
             // calculate the current card scroll percentage
             // get the index of current card in board_cards
             let all_board_cards = boards
@@ -1753,7 +1810,7 @@ where
                 .clone();
             let current_card_index = all_board_cards
                 .iter()
-                .position(|c| c.id == app.state.current_card_id.unwrap_or(0));
+                .position(|c| c.id == app.state.current_card_id.unwrap_or((0, 0)));
             let cards_scroll_percentage =
                 (current_card_index.unwrap_or(0) + 1) as f64 / all_board_cards.len() as f64;
             let cards_scroll_percentage = cards_scroll_percentage.clamp(0.0, 1.0);
@@ -1804,7 +1861,7 @@ where
             } else {
                 card.name.clone()
             };
-            let card_title = if app.state.current_card_id.unwrap_or(0) == *card_id {
+            let card_title = if app.state.current_card_id.unwrap_or((0, 0)) == *card_id {
                 format!("{} {}", ">>", card_title)
             } else {
                 card_title
@@ -1816,31 +1873,31 @@ where
                 card.description.clone()
             };
 
-            let mut card_extra_info = vec![Spans::from("")];
-            if card.date_due == FIELD_NOT_SET {
+            let mut card_extra_info = vec![Line::from("")];
+            if card.due_date == FIELD_NOT_SET {
                 if app.state.popup_mode.is_some() {
-                    card_extra_info.push(Spans::from(Span::styled(
+                    card_extra_info.push(Line::from(Span::styled(
                         format!("Due: {}", FIELD_NOT_SET),
                         app.theme.inactive_text_style,
                     )))
                 } else {
-                    card_extra_info.push(Spans::from(Span::styled(
+                    card_extra_info.push(Line::from(Span::styled(
                         format!("Due: {}", FIELD_NOT_SET),
                         app.theme.card_due_default_style,
                     )))
                 }
             } else {
-                let card_due_date = card.date_due.clone();
+                let card_due_date = card.due_date.clone();
                 let parsed_due_date =
                     date_format_converter(card_due_date.trim(), app.config.date_format);
                 let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
                     if app.state.popup_mode.is_some() {
-                        Spans::from(Span::styled(
+                        Line::from(Span::styled(
                             format!("Due: {}", parsed_due_date),
                             app.theme.inactive_text_style,
                         ))
                     } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
-                        Spans::from(Span::styled(
+                        Line::from(Span::styled(
                             format!("Due: {}", parsed_due_date),
                             app.theme.card_due_default_style,
                         ))
@@ -1884,29 +1941,29 @@ where
                         };
                         if days_left >= 0 {
                             match days_left.cmp(&(app.config.warning_delta as i64)) {
-                                Ordering::Less | Ordering::Equal => Spans::from(Span::styled(
+                                Ordering::Less | Ordering::Equal => Line::from(Span::styled(
                                     format!("Due: {}", parsed_due_date),
                                     app.theme.card_due_warning_style,
                                 )),
-                                Ordering::Greater => Spans::from(Span::styled(
+                                Ordering::Greater => Line::from(Span::styled(
                                     format!("Due: {}", parsed_due_date),
                                     app.theme.card_due_default_style,
                                 )),
                             }
                         } else {
-                            Spans::from(Span::styled(
+                            Line::from(Span::styled(
                                 format!("Due: {}", parsed_due_date),
                                 app.theme.card_due_overdue_style,
                             ))
                         }
                     }
                 } else if app.state.popup_mode.is_some() {
-                    Spans::from(Span::styled(
+                    Line::from(Span::styled(
                         format!("Due: {}", card_due_date),
                         app.theme.inactive_text_style,
                     ))
                 } else {
-                    Spans::from(Span::styled(
+                    Line::from(Span::styled(
                         format!("Due: {}", card_due_date),
                         app.theme.card_due_default_style,
                     ))
@@ -1916,19 +1973,19 @@ where
 
             let card_status = format!("Status: {}", card.card_status.clone());
             let card_status = if app.state.popup_mode.is_some() {
-                Spans::from(Span::styled(card_status, app.theme.inactive_text_style))
+                Line::from(Span::styled(card_status, app.theme.inactive_text_style))
             } else {
                 match card.card_status {
-                    CardStatus::Active => Spans::from(Span::styled(
+                    CardStatus::Active => Line::from(Span::styled(
                         card_status,
                         app.theme.card_status_active_style,
                     )),
-                    CardStatus::Complete => Spans::from(Span::styled(
+                    CardStatus::Complete => Line::from(Span::styled(
                         card_status,
                         app.theme.card_status_completed_style,
                     )),
                     CardStatus::Stale => {
-                        Spans::from(Span::styled(card_status, app.theme.card_status_stale_style))
+                        Line::from(Span::styled(card_status, app.theme.card_status_stale_style))
                     }
                 }
             };
@@ -1945,7 +2002,7 @@ where
                 app.state.focus = Focus::Body;
                 app.state.current_card_id = Some(*card_id);
                 app.theme.mouse_focus_style
-            } else if app.state.current_card_id.unwrap_or(0) == *card_id
+            } else if app.state.current_card_id.unwrap_or((0, 0)) == *card_id
                 && matches!(focus, Focus::Body)
                 && *board_id == *current_board
             {
@@ -1972,10 +2029,10 @@ where
         }
     }
 
-    if !app.config.disable_scrollbars {
+    if !app.config.disable_scroll_bar {
         // draw line_gauge in chunks[1]
         // get the index of the current board in boards and set percentage
-        let current_board_id = app.state.current_board_id.unwrap_or(0);
+        let current_board_id = app.state.current_board_id.unwrap_or((0, 0));
         // get the index of the board with the id
         let current_board_index = boards
             .iter()
@@ -2002,7 +2059,7 @@ where
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+fn centered_rect_with_percentage(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -2022,6 +2079,32 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
                 Constraint::Percentage((100 - percent_x) / 2),
                 Constraint::Percentage(percent_x),
                 Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
+}
+
+fn centered_rect_with_length(length_x: u16, length_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length((r.height - length_y) / 2),
+                Constraint::Length(length_y),
+                Constraint::Length((r.height - length_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Length((r.width - length_x) / 2),
+                Constraint::Length(length_x),
+                Constraint::Length((r.width - length_x) / 2),
             ]
             .as_ref(),
         )
@@ -2068,8 +2151,8 @@ where
     rect.render_widget(title, chunks[0]);
 
     let error_text_spans = vec![
-        Spans::from(Span::styled(msg, app.theme.error_text_style)),
-        Spans::from(Span::styled(
+        Line::from(Span::styled(msg, app.theme.error_text_style)),
+        Line::from(Span::styled(
             "Resize the window to continue, or press 'q' to quit.",
             app.theme.general_style,
         )),
@@ -2093,7 +2176,7 @@ where
     let title = draw_title(app, *size);
     rect.render_widget(title, chunks[0]);
 
-    let text = Spans::from(vec![
+    let text = Line::from(vec![
         Span::styled("Loading......", app.theme.keyboard_focus_style),
         Span::styled("`(*>﹏<*)′", app.theme.keyboard_focus_style),
         Span::styled("Please wait", app.theme.keyboard_focus_style),
@@ -2251,14 +2334,14 @@ where
         textwrap::wrap(&app.state.new_board_form[0], (chunks[1].width - 2) as usize);
     let board_name_field = wrapped_title_text
         .iter()
-        .map(|x| Spans::from(Span::raw(&**x)))
-        .collect::<Vec<Spans>>();
+        .map(|x| Line::from(Span::raw(&**x)))
+        .collect::<Vec<Line>>();
     let wrapped_description_text =
         textwrap::wrap(&app.state.new_board_form[1], (chunks[2].width - 2) as usize);
     let board_description_field = wrapped_description_text
         .iter()
-        .map(|x| Spans::from(Span::raw(&**x)))
-        .collect::<Vec<Spans>>();
+        .map(|x| Line::from(Span::raw(&**x)))
+        .collect::<Vec<Line>>();
 
     let board_name = Paragraph::new(board_name_field)
         .alignment(Alignment::Left)
@@ -2284,27 +2367,27 @@ where
 
     let input_mode_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Enter input mode")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let next_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let prev_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let help_text = Spans::from(vec![
+    let help_text = Line::from(vec![
         Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
         Span::styled("or ", help_text_style),
@@ -2482,20 +2565,20 @@ where
         textwrap::wrap(&app.state.new_card_form[0], (chunks[1].width - 2) as usize);
     let card_name_field = wrapped_card_name_text
         .iter()
-        .map(|x| Spans::from(Span::raw(&**x)))
-        .collect::<Vec<Spans>>();
+        .map(|x| Line::from(Span::raw(&**x)))
+        .collect::<Vec<Line>>();
     let wrapped_card_description_text =
         textwrap::wrap(&app.state.new_card_form[1], (chunks[2].width - 2) as usize);
     let card_description_field = wrapped_card_description_text
         .iter()
-        .map(|x| Spans::from(Span::raw(&**x)))
-        .collect::<Vec<Spans>>();
+        .map(|x| Line::from(Span::raw(&**x)))
+        .collect::<Vec<Line>>();
     let wrapped_card_due_date_text =
         textwrap::wrap(&app.state.new_card_form[2], (chunks[3].width - 2) as usize);
     let card_due_date_field = wrapped_card_due_date_text
         .iter()
-        .map(|x| Spans::from(Span::raw(&**x)))
-        .collect::<Vec<Spans>>();
+        .map(|x| Line::from(Span::raw(&**x)))
+        .collect::<Vec<Line>>();
     let card_name = Paragraph::new(card_name_field)
         .alignment(Alignment::Left)
         .block(
@@ -2535,7 +2618,7 @@ where
             .constraints([Constraint::Percentage(70), Constraint::Length(20)].as_ref())
             .split(chunks[3]);
         rect.render_widget(card_due_date, new_chunks[0]);
-        let error_text = Spans::from(vec![Span::raw("Invalid date format")]);
+        let error_text = Line::from(vec![Span::raw("Invalid date format")]);
         let error_paragraph = Paragraph::new(error_text)
             .alignment(Alignment::Center)
             .block(
@@ -2551,27 +2634,27 @@ where
 
     let input_mode_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Enter input mode")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let next_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let prev_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let help_spans = Spans::from(vec![
+    let help_spans = Line::from(vec![
         Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
         Span::styled("or ", help_text_style),
@@ -2657,7 +2740,7 @@ where
     }
 }
 
-pub fn render_load_save<B>(rect: &mut Frame<B>, app: &mut App)
+pub fn render_load_a_save<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
@@ -2704,7 +2787,7 @@ where
         .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
         .split(preview_chunks[0]);
 
-    let title_paragraph = Paragraph::new("Load a Save")
+    let title_paragraph = Paragraph::new("Load a Save (Local)")
         .alignment(Alignment::Center)
         .block(
             Block::default()
@@ -2714,7 +2797,7 @@ where
         .style(default_style);
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let item_list = get_available_local_savefiles();
+    let item_list = get_available_local_save_files(&app.config);
     let item_list = if let Some(item_list) = item_list {
         item_list
     } else {
@@ -2731,7 +2814,7 @@ where
             .style(app.theme.error_text_style);
         rect.render_widget(no_saves_paragraph, chunks[1]);
     } else {
-        // make a list from the Vec<string> of savefiles
+        // make a list from the Vec<string> of save files
         let items: Vec<ListItem> = item_list
             .iter()
             .map(|i| ListItem::new(i.to_string()))
@@ -2770,7 +2853,7 @@ where
 
     let delete_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Delete focused element")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
@@ -2778,20 +2861,20 @@ where
 
     let up_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let down_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let help_text = Spans::from(vec![
+    let help_text = Line::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(&up_key, help_key_style),
         Span::styled("or ", help_text_style),
@@ -2982,8 +3065,8 @@ where
             ((rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) - 2) as usize,
         )
         .iter()
-        .map(|x| Spans::from(x.to_string()))
-        .collect::<Vec<Spans>>();
+        .map(|x| Line::from(x.to_string()))
+        .collect::<Vec<Line>>();
         let toast_height = lines.len() as u16 + 2;
         let toast_block = Block::default()
             .title(toast_title)
@@ -3056,7 +3139,7 @@ pub fn render_view_card<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let popup_area = centered_rect(90, 90, rect.size());
+    let popup_area = centered_rect_with_percentage(90, 90, rect.size());
     render_blank_styled_canvas(rect, app, popup_area, false);
     let card_chunks = if app.card_being_edited.is_some() {
         Layout::default()
@@ -3148,8 +3231,8 @@ where
         textwrap::wrap(&card_description, (card_chunks[1].width - 2) as usize);
     let wrapped_description_spans = wrapped_description
         .iter()
-        .map(|x| Spans::from(Span::styled(&**x, app.theme.general_style)))
-        .collect::<Vec<Spans>>();
+        .map(|x| Line::from(Span::styled(&**x, app.theme.general_style)))
+        .collect::<Vec<Line>>();
     let main_block = Block::default()
         .title(format!("{} >> Board({})", card_name, board_name))
         .borders(Borders::ALL)
@@ -3201,17 +3284,17 @@ where
     );
     let card_priority = format!("Priority: {}", card.priority);
     let card_status = format!("Status: {}", card.card_status);
-    let card_due_date = card.date_due.clone();
+    let card_due_date = card.due_date.clone();
     let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
     let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
         if app.state.focus == Focus::CardDueDate {
             Span::styled(
-                format!("Due: {}", card.date_due),
+                format!("Due: {}", card.due_date),
                 app.theme.list_select_style,
             )
         } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
             Span::styled(
-                format!("Due: {}", card.date_due),
+                format!("Due: {}", card.due_date),
                 app.theme.card_due_default_style,
             )
         } else {
@@ -3244,29 +3327,29 @@ where
             };
             if days_left <= app.config.warning_delta.into() && days_left >= 0 {
                 Span::styled(
-                    format!("Due: {}", card.date_due),
+                    format!("Due: {}", card.due_date),
                     app.theme.card_due_warning_style,
                 )
             } else if days_left < 0 {
                 Span::styled(
-                    format!("Due: {}", card.date_due),
+                    format!("Due: {}", card.due_date),
                     app.theme.card_due_overdue_style,
                 )
             } else {
                 Span::styled(
-                    format!("Due: {}", card.date_due),
+                    format!("Due: {}", card.due_date),
                     app.theme.card_due_default_style,
                 )
             }
         }
     } else if app.state.focus == Focus::CardDueDate {
         Span::styled(
-            format!("Due: {}", card.date_due),
+            format!("Due: {}", card.due_date),
             app.theme.list_select_style,
         )
     } else {
         Span::styled(
-            format!("Due: {}", card.date_due),
+            format!("Due: {}", card.due_date),
             app.theme.card_due_default_style,
         )
     };
@@ -3293,12 +3376,12 @@ where
         Span::styled(card_status, app.theme.general_style)
     };
     let card_extra_info_items = vec![
-        ListItem::new(vec![Spans::from(card_date_created)]),
-        ListItem::new(vec![Spans::from(card_date_modified)]),
-        ListItem::new(vec![Spans::from(card_due_date_styled)]),
-        ListItem::new(vec![Spans::from(card_date_completed)]),
-        ListItem::new(vec![Spans::from(card_priority_styled)]),
-        ListItem::new(vec![Spans::from(card_status_styled)]),
+        ListItem::new(vec![Line::from(card_date_created)]),
+        ListItem::new(vec![Line::from(card_date_modified)]),
+        ListItem::new(vec![Line::from(card_due_date_styled)]),
+        ListItem::new(vec![Line::from(card_date_completed)]),
+        ListItem::new(vec![Line::from(card_priority_styled)]),
+        ListItem::new(vec![Line::from(card_status_styled)]),
     ];
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[2]) {
         let top_of_list = card_chunks[2].y + 1;
@@ -3449,7 +3532,7 @@ where
         comments
     };
 
-    let mut card_tag_spans = vec![];
+    let mut card_tag_lines = vec![];
     let mut collector = String::new();
     let mut collector_start = 0;
     let mut collector_end = 0;
@@ -3459,7 +3542,7 @@ where
             collector.push_str(&tag_string);
             collector_end = i + 1;
         } else {
-            card_tag_spans.push(Spans::from(
+            card_tag_lines.push(Line::from(
                 card_tags[collector_start..collector_end].to_vec(),
             ));
             collector = String::new();
@@ -3469,12 +3552,12 @@ where
         }
     }
     if !collector.is_empty() {
-        card_tag_spans.push(Spans::from(
+        card_tag_lines.push(Line::from(
             card_tags[collector_start..collector_end].to_vec(),
         ));
     }
 
-    let mut card_comment_spans = vec![];
+    let mut card_comment_lines = vec![];
     let mut collector = String::new();
     let mut collector_start = 0;
     let mut collector_end = 0;
@@ -3484,7 +3567,7 @@ where
             collector.push_str(&comment_string);
             collector_end = i + 1;
         } else {
-            card_comment_spans.push(Spans::from(
+            card_comment_lines.push(Line::from(
                 card_comments[collector_start..collector_end].to_vec(),
             ));
             collector = String::new();
@@ -3494,12 +3577,12 @@ where
         }
     }
     if !collector.is_empty() {
-        card_comment_spans.push(Spans::from(
+        card_comment_lines.push(Line::from(
             card_comments[collector_start..collector_end].to_vec(),
         ));
     }
 
-    let card_tags_paragraph = Paragraph::new(card_tag_spans.clone())
+    let card_tags_paragraph = Paragraph::new(card_tag_lines.clone())
         .block(
             Block::default()
                 .title("Tags")
@@ -3509,7 +3592,7 @@ where
         )
         .alignment(Alignment::Left);
 
-    let card_comments_paragraph = Paragraph::new(card_comment_spans.clone())
+    let card_comments_paragraph = Paragraph::new(card_comment_lines.clone())
         .block(
             Block::default()
                 .title("Comments")
@@ -3602,7 +3685,7 @@ where
             }
             Focus::CardDueDate => {
                 let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(&card.date_due, card_chunks[2].width as usize),
+                    textwrap::wrap(&card.due_date, card_chunks[2].width as usize),
                     app.state.current_cursor_position.unwrap_or(0),
                     card_chunks[2],
                 );
@@ -3616,12 +3699,12 @@ where
                     let mut length_before_selected_tag = 0;
                     let mut prv_spans_length = 0;
                     let tag_offset = 3;
-                    for spans in card_tag_spans.iter() {
-                        for _ in spans.0.iter() {
+                    for line in card_tag_lines.iter() {
+                        for _ in line.spans.iter() {
                             if counter == selected_index {
                                 break;
                             } else {
-                                let element = spans.0.get(counter - prv_spans_length);
+                                let element = line.spans.get(counter - prv_spans_length);
                                 if let Some(element) = element {
                                     length_before_selected_tag += element.content.len();
                                 }
@@ -3632,7 +3715,7 @@ where
                             break;
                         }
                         y_index += 1;
-                        prv_spans_length += spans.0.iter().len();
+                        prv_spans_length += line.spans.iter().len();
                         length_before_selected_tag = 0;
                     }
                     let digits_in_counter = (counter + 1).to_string().len();
@@ -3654,12 +3737,12 @@ where
                     let mut length_before_selected_comment = 0;
                     let mut prv_spans_length = 0;
                     let comment_offset = 3;
-                    for spans in card_comment_spans.iter() {
-                        for _ in spans.0.iter() {
+                    for line in card_comment_lines.iter() {
+                        for _ in line.spans.iter() {
                             if counter == selected_index {
                                 break;
                             } else {
-                                let element = spans.0.get(counter - prv_spans_length);
+                                let element = line.spans.get(counter - prv_spans_length);
                                 if let Some(element) = element {
                                     length_before_selected_comment += element.content.len();
                                 }
@@ -3670,7 +3753,7 @@ where
                             break;
                         }
                         y_index += 1;
-                        prv_spans_length += spans.0.iter().len();
+                        prv_spans_length += line.spans.iter().len();
                         length_before_selected_comment = 0;
                     }
                     let digits_in_counter = (counter + 1).to_string().len();
@@ -3780,7 +3863,17 @@ where
                     .select(Some(0));
             }
         }
-        _ => {}
+        _ => {
+            if app.state.app_status != AppStatus::UserInput {
+                app.state.app_status = AppStatus::UserInput;
+            }
+            if app.state.focus != Focus::CommandPaletteCommand
+                && app.state.focus != Focus::CommandPaletteBoard
+                && app.state.focus != Focus::CommandPaletteCard
+            {
+                app.state.focus = Focus::CommandPaletteCommand;
+            }
+        }
     }
 
     let current_search_text_input = app.state.current_user_input.clone();
@@ -3799,47 +3892,65 @@ where
     let command_search_border_style = if app.state.focus == Focus::CommandPaletteCommand {
         app.theme.keyboard_focus_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let card_search_border_style = if app.state.focus == Focus::CommandPaletteCard {
         app.theme.keyboard_focus_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let board_search_border_style = if app.state.focus == Focus::CommandPaletteBoard {
         app.theme.keyboard_focus_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let command_search_text_style = if app.state.focus == Focus::CommandPaletteCommand {
         app.theme.general_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let card_search_text_style = if app.state.focus == Focus::CommandPaletteCard {
         app.theme.general_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let board_search_text_style = if app.state.focus == Focus::CommandPaletteBoard {
         app.theme.general_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let command_search_highlight_style = if app.state.focus == Focus::CommandPaletteCommand {
         app.theme.list_select_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let card_search_highlight_style = if app.state.focus == Focus::CommandPaletteCard {
         app.theme.list_select_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
     let board_search_highlight_style = if app.state.focus == Focus::CommandPaletteBoard {
         app.theme.list_select_style
     } else {
-        app.theme.inactive_text_style
+        app.theme
+            .inactive_text_style
+            .bg(app.theme.general_style.bg.unwrap_or(Color::Reset))
     };
 
     let command_search_results = if app.command_palette.command_search_results.is_some() {
@@ -3848,7 +3959,7 @@ where
 
         let mut list_items = vec![];
         // make a for loop and go through the raw search results and check if the current item has a character that is in the
-        // charaters of the search string highlight it with selected style using Span::Styled
+        // characters of the search string highlight it with selected style using Span::Styled
         for item in raw_search_results {
             let mut spans = vec![];
             for (_, c) in item.to_string().chars().enumerate() {
@@ -3861,14 +3972,14 @@ where
                     spans.push(Span::styled(c.to_string(), command_search_text_style));
                 }
             }
-            list_items.push(ListItem::new(Spans::from(spans)));
+            list_items.push(ListItem::new(Line::from(spans)));
         }
         list_items
     } else {
         app.command_palette
             .available_commands
             .iter()
-            .map(|c| ListItem::new(Spans::from(format!("Command - {}", c))))
+            .map(|c| ListItem::new(Line::from(format!("Command - {}", c))))
             .collect::<Vec<ListItem>>()
     };
 
@@ -3884,7 +3995,7 @@ where
             } else {
                 item.to_string()
             };
-            list_items.push(ListItem::new(Spans::from(Span::styled(
+            list_items.push(ListItem::new(Line::from(Span::styled(
                 item.to_string(),
                 card_search_text_style,
             ))));
@@ -3906,7 +4017,7 @@ where
             } else {
                 item.to_string()
             };
-            list_items.push(ListItem::new(Spans::from(Span::styled(
+            list_items.push(ListItem::new(Line::from(Span::styled(
                 item.to_string(),
                 board_search_text_style,
             ))));
@@ -3973,7 +4084,7 @@ where
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Length(2),
+                Constraint::Length(3),
                 Constraint::Length(3),
                 Constraint::Length(
                     ((command_search_results_length
@@ -3989,11 +4100,11 @@ where
         .split(horizontal_chunks[1]);
 
     let search_box_text = if app.state.current_user_input.is_empty() {
-        vec![Spans::from(
+        vec![Line::from(
             "Start typing to search for a command, card or board!",
         )]
     } else {
-        vec![Spans::from(app.state.current_user_input.clone())]
+        vec![Line::from(app.state.current_user_input.clone())]
     };
 
     let current_cursor_position = if app.state.current_cursor_position.is_some() {
@@ -4089,34 +4200,34 @@ where
 
     let up_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let down_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let next_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let prev_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
 
-    let help_spans = Spans::from(vec![
+    let help_spans = Line::from(vec![
         Span::styled("Use ", app.theme.help_text_style),
         Span::styled(up_key, app.theme.help_key_style),
         Span::styled("and ", app.theme.help_text_style),
@@ -4178,15 +4289,15 @@ pub fn render_change_ui_mode_popup<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let all_ui_modes = UiMode::all()
+    let all_ui_modes = UiMode::view_modes_as_string()
         .iter()
-        .map(|s| ListItem::new(vec![Spans::from(s.as_str().to_string())]))
+        .map(|s| ListItem::new(vec![Line::from(s.as_str().to_string())]))
         .collect::<Vec<ListItem>>();
 
     let percent_height =
         (((all_ui_modes.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
 
-    let popup_area = centered_rect(50, percent_height, rect.size());
+    let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeUiModePopup);
@@ -4229,13 +4340,13 @@ where
     let all_date_formats = DateFormat::get_all_date_formats();
     let all_date_formats = all_date_formats
         .iter()
-        .map(|s| ListItem::new(vec![Spans::from(s.to_human_readable_string().to_string())]))
+        .map(|s| ListItem::new(vec![Line::from(s.to_human_readable_string().to_string())]))
         .collect::<Vec<ListItem>>();
 
     let percent_height =
         (((all_date_formats.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
 
-    let popup_area = centered_rect(50, percent_height, rect.size());
+    let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeDateFormatPopup);
@@ -4300,11 +4411,11 @@ where
     }
     let all_statuses = CardStatus::all()
         .iter()
-        .map(|s| ListItem::new(vec![Spans::from(s.to_string())]))
+        .map(|s| ListItem::new(vec![Line::from(s.to_string())]))
         .collect::<Vec<ListItem>>();
     let percent_height =
         (((all_statuses.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
-    let popup_area = centered_rect(50, percent_height, rect.size());
+    let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeCardStatusPopup);
         app.state.focus = Focus::ChangeCardStatusPopup;
@@ -4371,11 +4482,11 @@ where
     }
     let all_priorities = CardPriority::all()
         .iter()
-        .map(|p| ListItem::new(vec![Spans::from(p.to_string())]))
+        .map(|p| ListItem::new(vec![Line::from(p.to_string())]))
         .collect::<Vec<ListItem>>();
     let percent_height =
         (((all_priorities.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
-    let popup_area = centered_rect(50, percent_height, rect.size());
+    let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeCardPriorityPopup);
         app.state.focus = Focus::ChangeCardPriorityPopup;
@@ -4434,7 +4545,7 @@ where
             app.theme.general_style
         };
 
-        let popup_area = centered_rect(80, 80, rect.size());
+        let popup_area = centered_rect_with_percentage(80, 80, rect.size());
         render_blank_styled_canvas(rect, app, popup_area, false);
         let all_available_tags = app.state.all_available_tags.as_ref().unwrap();
         let empty_vec = vec![];
@@ -4475,12 +4586,12 @@ where
             .iter()
             .map(|tag| {
                 if selected_tags.contains(&tag.0) {
-                    ListItem::new(vec![Spans::from(vec![Span::styled(
+                    ListItem::new(vec![Line::from(vec![Span::styled(
                         format!("(Selected) {} - {} occurrences", tag.0, tag.1),
                         app.theme.list_select_style,
                     )])])
                 } else {
-                    ListItem::new(vec![Spans::from(vec![Span::styled(
+                    ListItem::new(vec![Line::from(vec![Span::styled(
                         format!("{} - {} occurrences", tag.0, tag.1),
                         app.theme.general_style,
                     )])])
@@ -4511,34 +4622,34 @@ where
 
         let up_key = app
             .state
-            .keybind_store
+            .keybinding_store
             .iter()
             .find(|x| x[1] == "Go up")
             .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
             .clone();
         let down_key = app
             .state
-            .keybind_store
+            .keybinding_store
             .iter()
             .find(|x| x[1] == "Go down")
             .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
             .clone();
         let next_focus_key = app
             .state
-            .keybind_store
+            .keybinding_store
             .iter()
             .find(|x| x[1] == "Focus next")
             .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
             .clone();
         let prev_focus_key = app
             .state
-            .keybind_store
+            .keybinding_store
             .iter()
             .find(|x| x[1] == "Focus previous")
             .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
             .clone();
 
-        let help_spans = Spans::from(vec![
+        let help_spans = Line::from(vec![
             Span::styled("Use ", app.theme.help_text_style),
             Span::styled(up_key, app.theme.help_key_style),
             Span::styled("and ", app.theme.help_text_style),
@@ -4674,12 +4785,12 @@ where
         .iter()
         .map(|s| {
             if s.len() > menu_area.width as usize - 2 {
-                Spans::from(format!("{}{}", &s[..menu_area.width as usize - 5], "..."))
+                Line::from(format!("{}{}", &s[..menu_area.width as usize - 5], "..."))
             } else {
-                Spans::from(s.to_string())
+                Line::from(s.to_string())
             }
         })
-        .collect::<Vec<Spans>>();
+        .collect::<Vec<Line>>();
     let debug_panel = Paragraph::new(strings).block(
         Block::default()
             .title("Debug Panel")
@@ -4720,7 +4831,7 @@ where
             app.theme.error_text_style
         };
     // render a X in the top right corner of the rect
-    let close_btn = Paragraph::new(vec![Spans::from("X")])
+    let close_btn = Paragraph::new(vec![Line::from("X")])
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -4734,11 +4845,11 @@ pub fn render_change_theme_popup<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let popup_area = centered_rect(50, 50, rect.size());
+    let popup_area = centered_rect_with_percentage(50, 50, rect.size());
     let theme_list = app
         .all_themes
         .iter()
-        .map(|t| ListItem::new(vec![Spans::from(t.name.clone())]))
+        .map(|t| ListItem::new(vec![Line::from(t.name.clone())]))
         .collect::<Vec<ListItem>>();
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ThemeSelector);
@@ -4866,7 +4977,7 @@ where
         chunks[1],
         &mut app.state.theme_editor_state,
     );
-    let submit_button = Paragraph::new(vec![Spans::from("Create Theme")])
+    let submit_button = Paragraph::new(vec![Line::from("Create Theme")])
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -4875,7 +4986,7 @@ where
         .alignment(Alignment::Center);
     rect.render_widget(submit_button, button_chunks[0]);
 
-    let reset_button = Paragraph::new(vec![Spans::from("Reset")])
+    let reset_button = Paragraph::new(vec![Line::from("Reset")])
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -4900,7 +5011,7 @@ pub fn render_edit_specific_style_popup<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let popup_area = centered_rect(90, 80, rect.size());
+    let popup_area = centered_rect_with_percentage(90, 80, rect.size());
     // show the fg , bg, and modifiers in a table to be selected by the user
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -4998,7 +5109,7 @@ where
                         let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
                         let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
                         fg_style.fg = Some(ratatui::style::Color::Rgb(r, g, b));
-                        return ListItem::new(vec![Spans::from(vec![
+                        return ListItem::new(vec![Line::from(vec![
                             Span::styled("Sample Text", fg_style),
                             Span::styled(
                                 format!(" - RGB({},{},{})", r, g, b),
@@ -5010,12 +5121,12 @@ where
             }
             return if color.to_color().is_some() {
                 fg_style.fg = Some(color.to_color().unwrap());
-                ListItem::new(vec![Spans::from(vec![
+                ListItem::new(vec![Line::from(vec![
                     Span::styled("Sample Text", fg_style),
                     Span::styled(format!(" - {}", color), app.theme.general_style),
                 ])])
             } else {
-                ListItem::new(vec![Spans::from(vec![
+                ListItem::new(vec![Line::from(vec![
                     Span::raw("Sample Text"),
                     Span::styled(format!(" - {}", color), app.theme.general_style),
                 ])])
@@ -5055,7 +5166,7 @@ where
                         let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
                         let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
                         bg_style.bg = Some(ratatui::style::Color::Rgb(r, g, b));
-                        return ListItem::new(vec![Spans::from(vec![
+                        return ListItem::new(vec![Line::from(vec![
                             Span::styled("Sample Text", bg_style),
                             Span::styled(
                                 format!(" - RGB({},{},{})", r, g, b),
@@ -5067,12 +5178,12 @@ where
             }
             return if color.to_color().is_some() {
                 bg_style.bg = Some(color.to_color().unwrap());
-                ListItem::new(vec![Spans::from(vec![
+                ListItem::new(vec![Line::from(vec![
                     Span::styled("Sample Text", bg_style),
                     Span::styled(format!(" - {}", color), app.theme.general_style),
                 ])])
             } else {
-                ListItem::new(vec![Spans::from(vec![
+                ListItem::new(vec![Line::from(vec![
                     Span::raw("Sample Text"),
                     Span::styled(format!(" - {}", color), app.theme.general_style),
                 ])])
@@ -5094,7 +5205,7 @@ where
                 add_modifier: modifier.to_modifier(),
                 ..Style::default()
             };
-            ListItem::new(vec![Spans::from(vec![
+            ListItem::new(vec![Line::from(vec![
                 Span::styled("Sample Text", modifier_style),
                 Span::styled(format!(" - {}", modifier), app.theme.general_style),
             ])])
@@ -5138,28 +5249,28 @@ where
 
     let next_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let previous_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let up_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go up")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let down_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Go down")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
@@ -5188,7 +5299,7 @@ where
         Span::styled("to change focus.", app.theme.help_text_style),
     ];
 
-    let help_text = Paragraph::new(Spans::from(help_spans))
+    let help_text = Paragraph::new(Line::from(help_spans))
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -5225,7 +5336,7 @@ pub fn render_save_theme_prompt<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let popup_area = centered_rect(50, 50, rect.size());
+    let popup_area = centered_rect_with_percentage(50, 50, rect.size());
     // make two buttons save theme to file and only save for current session
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -5287,7 +5398,7 @@ pub fn render_confirm_discard_card_changes<B>(rect: &mut Frame<B>, app: &mut App
 where
     B: Backend,
 {
-    let popup_area = centered_rect(30, 25, rect.size());
+    let popup_area = centered_rect_with_percentage(30, 25, rect.size());
     render_blank_styled_canvas(rect, app, popup_area, true);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -5349,7 +5460,7 @@ where
     B: Backend,
 {
     // make a small popup with a text input field and a submit button
-    let popup_area = centered_rect(50, 60, rect.size());
+    let popup_area = centered_rect_with_percentage(50, 60, rect.size());
     let prompt_text = "Enter a custom RGB color in the format: r,g,b (0-254)";
 
     let chunks = Layout::default()
@@ -5407,21 +5518,21 @@ where
 
     let enter_user_input_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Enter input mode")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let next_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus next")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
         .clone();
     let previous_focus_key = app
         .state
-        .keybind_store
+        .keybinding_store
         .iter()
         .find(|x| x[1] == "Focus previous")
         .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
@@ -5440,7 +5551,7 @@ where
         Span::styled("<Enter>", app.theme.help_key_style),
         Span::styled(" to submit.", app.theme.help_text_style),
     ];
-    let help_text = Paragraph::new(Spans::from(help_spans))
+    let help_text = Paragraph::new(Line::from(help_spans))
         .block(Block::default().borders(Borders::ALL))
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
@@ -5503,6 +5614,46 @@ pub fn render_blank_styled_canvas<B>(
     rect.render_widget(styled_text, render_area);
 }
 
+pub fn render_blank_styled_canvas_with_margin<B>(
+    rect: &mut Frame<B>,
+    app: &mut App,
+    render_area: Rect,
+    popup_mode: bool,
+    margin: i16,
+) where
+    B: Backend,
+{
+    let x = render_area.x as i16 + margin;
+    let x = if x < 0 { 0 } else { x };
+    let y = render_area.y as i16 + margin;
+    let y = if y < 0 { 0 } else { y };
+    let width = render_area.width as i16 - margin * 2;
+    let width = if width < 0 { 0 } else { width };
+    let height = render_area.height as i16 - margin * 2;
+    let height = if height < 0 { 0 } else { height };
+
+    let new_render_area = Rect::new(x as u16, y as u16, width as u16, height as u16);
+
+    let mut styled_text = vec![];
+    for _ in 0..new_render_area.width + 1 {
+        styled_text.push(" ".to_string());
+    }
+    let mut render_text = vec![];
+    for _ in 0..new_render_area.height {
+        render_text.push(format!("{}\n", styled_text.join("")));
+    }
+    let styled_text = if popup_mode {
+        Paragraph::new(render_text.join(""))
+            .style(app.theme.inactive_text_style)
+            .block(Block::default())
+    } else {
+        Paragraph::new(render_text.join(""))
+            .style(app.theme.general_style)
+            .block(Block::default())
+    };
+    rect.render_widget(styled_text, new_render_area);
+}
+
 pub fn render_logs<B>(
     app: &mut App,
     enable_focus_highlight: bool,
@@ -5514,50 +5665,61 @@ pub fn render_logs<B>(
 {
     let date_format = app.config.date_format.to_parser_string();
     let theme = &app.theme;
-    let logs = get_logs();
+    let all_logs = get_logs();
     let mut highlight_style = if popup_mode {
         app.theme.inactive_text_style
     } else {
         app.theme.list_select_style
     };
     let mut items = vec![];
-    for (i, log) in logs.buffer.iter().enumerate() {
-        let mut item = ListItem::new(Span::raw(format!(
-            "[{}] - {}",
-            log.timestamp.format(date_format),
-            log.msg
-        )));
-        if popup_mode {
-            item = item.style(theme.inactive_text_style);
-        } else {
-            if i == get_selected_index() {
-                highlight_style = match log.level {
-                    Level::Error => theme.log_error_style.add_modifier(Modifier::REVERSED),
-                    Level::Warn => theme.log_warn_style.add_modifier(Modifier::REVERSED),
-                    Level::Info => theme.log_info_style.add_modifier(Modifier::REVERSED),
-                    Level::Debug => theme.log_debug_style.add_modifier(Modifier::REVERSED),
-                    Level::Trace => theme.log_trace_style.add_modifier(Modifier::REVERSED),
-                };
-            }
-            item = match log.level {
-                Level::Error => item.style(theme.log_error_style),
-                Level::Warn => item.style(theme.log_warn_style),
-                Level::Info => item.style(theme.log_info_style),
-                Level::Debug => item.style(theme.log_debug_style),
-                Level::Trace => item.style(theme.log_trace_style),
-            };
-        }
-        items.push(item);
+    let date_length = date_format.len() + 5;
+    let wrap_length = render_area.width as usize - date_length - 6; // Border + arrow + padding
+    for log_record in all_logs.buffer {
+        let mut push_vec = vec![format!("[{}] - ", log_record.timestamp.format(date_format))];
+        let wrapped_text = textwrap::fill(&log_record.msg, wrap_length);
+        push_vec.push(wrapped_text);
+        push_vec.push(log_record.level.to_string());
+        items.push(push_vec);
     }
+    let rows = items.iter().enumerate().map(|(index, item_og)| {
+        let mut item = item_og.clone();
+        let mut height = item
+            .iter()
+            .map(|content| content.chars().filter(|c| *c == '\n').count())
+            .max()
+            .unwrap_or(0)
+            + 1;
+        if height > (render_area.height as usize - 2) {
+            height = render_area.height as usize - 2;
+        }
+        let style = if popup_mode {
+            theme.inactive_text_style
+        } else {
+            let style = match item[2].parse::<Level>().unwrap() {
+                Level::Error => theme.log_error_style,
+                Level::Warn => theme.log_warn_style,
+                Level::Info => theme.log_info_style,
+                Level::Debug => theme.log_debug_style,
+                Level::Trace => theme.log_trace_style,
+            };
+            if index == get_selected_index() {
+                highlight_style = style.add_modifier(Modifier::REVERSED);
+            };
+            style
+        };
+        item.remove(2);
+        let cells = item.iter().map(|c| Cell::from(c.to_string()).style(style));
+        Row::new(cells).height(height as u16)
+    });
 
     let focus = app.state.focus;
     let mouse_coordinates = app.state.current_mouse_coordinates;
-    let logbox_style = if popup_mode {
+    let log_box_style = if popup_mode {
         app.theme.inactive_text_style
     } else {
         app.theme.general_style
     };
-    let logbox_border_style = if popup_mode {
+    let log_box_border_style = if popup_mode {
         app.theme.inactive_text_style
     } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
         app.state.mouse_focus = Some(Focus::Log);
@@ -5569,21 +5731,1595 @@ pub fn render_logs<B>(
         app.theme.general_style
     };
 
-    let log_list = List::new(items)
+    let table_constraints = [
+        Constraint::Length(date_length as u16),
+        Constraint::Length(wrap_length as u16),
+    ];
+    let log_list = Table::new(rows)
         .block(
             Block::default()
                 .title("Logs")
-                .style(logbox_style)
-                .border_style(logbox_border_style)
+                .style(log_box_style)
+                .border_style(log_box_border_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
         .highlight_style(highlight_style)
-        .highlight_symbol(LIST_SELECTED_SYMBOL);
+        .highlight_symbol(LIST_SELECTED_SYMBOL)
+        .widths(&table_constraints);
 
     rect.render_stateful_widget(
         log_list,
         render_area,
         &mut RUST_KANBAN_LOGGER.hot_log.lock().state,
     );
+}
+
+pub fn render_login<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    if app.state.popup_mode.is_none() {
+        if app.state.focus == Focus::EmailIDField || app.state.focus == Focus::PasswordField {
+            if app.state.app_status != AppStatus::UserInput {
+                app.state.app_status = AppStatus::UserInput;
+            }
+        } else if app.state.app_status != AppStatus::Initialized {
+            app.state.app_status = AppStatus::Initialized;
+        }
+    }
+
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .split(rect.size());
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Min(10),
+            Constraint::Length(2),
+            Constraint::Length(50),
+        ])
+        .split(main_chunks[1]);
+
+    let info_box = centered_rect_with_length(30, 10, chunks[0]);
+
+    let info_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(info_box);
+
+    let form_chunks = if app.state.user_login_data.auth_token.is_some() {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Length((chunks[2].height - 15) / 2),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length((chunks[2].height - 15) / 2),
+            ])
+            .margin(1)
+            .split(chunks[2])
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length((chunks[2].height - 12) / 2),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length((chunks[2].height - 12) / 2),
+            ])
+            .margin(1)
+            .split(chunks[2])
+    };
+
+    let email_id_field_chunk = if app.state.user_login_data.auth_token.is_some() {
+        form_chunks[2]
+    } else {
+        form_chunks[1]
+    };
+
+    let password_field_chunk = if app.state.user_login_data.auth_token.is_some() {
+        form_chunks[3]
+    } else {
+        form_chunks[2]
+    };
+
+    let show_password_main_chunk = if app.state.user_login_data.auth_token.is_some() {
+        form_chunks[4]
+    } else {
+        form_chunks[3]
+    };
+
+    let submit_button_chunk = if app.state.user_login_data.auth_token.is_some() {
+        form_chunks[5]
+    } else {
+        form_chunks[4]
+    };
+
+    let show_password_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(form_chunks[3].width - 7),
+            Constraint::Length(5),
+        ])
+        .margin(1)
+        .split(show_password_main_chunk);
+
+    let submit_button_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length((form_chunks[4].width - 12) / 2),
+            Constraint::Length(12),
+            Constraint::Length((form_chunks[4].width - 12) / 2),
+        ])
+        .split(submit_button_chunk);
+
+    let email_id_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, email_id_field_chunk) {
+        if app.state.mouse_focus != Some(Focus::EmailIDField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::EmailIDField);
+        app.state.focus = Focus::EmailIDField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::EmailIDField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let password_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, password_field_chunk) {
+        if app.state.mouse_focus != Some(Focus::PasswordField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::PasswordField);
+        app.state.focus = Focus::PasswordField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::PasswordField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let show_password_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        show_password_main_chunk,
+    ) {
+        app.state.mouse_focus = Some(Focus::ExtraFocus);
+        app.state.focus = Focus::ExtraFocus;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::ExtraFocus {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let submit_button_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        submit_button_chunks[1],
+    ) {
+        app.state.mouse_focus = Some(Focus::SubmitButton);
+        app.state.focus = Focus::SubmitButton;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::SubmitButton {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let separator_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.general_style
+    };
+
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(main_chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, main_chunks[0]), main_chunks[0]);
+    };
+
+    let crab_paragraph = if app.state.popup_mode.is_some() {
+        draw_crab_pattern(chunks[0], app.theme.inactive_text_style, true)
+    } else {
+        draw_crab_pattern(chunks[0], app.theme.general_style, false)
+    };
+
+    let info_border = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(separator_style);
+
+    let info_paragraph = Paragraph::new("Log In")
+        .style(app.theme.general_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+
+    let help_spans = vec![
+        Span::styled("Press ", app.theme.help_text_style),
+        Span::styled("<Tab>", app.theme.help_key_style),
+        Span::styled(" to change focus. Press ", app.theme.help_text_style),
+        Span::styled("<Enter>", app.theme.help_key_style),
+        Span::styled(" to submit.", app.theme.help_text_style),
+    ];
+
+    let help_paragraph = Paragraph::new(Line::from(help_spans))
+        .style(app.theme.general_style)
+        .block(Block::default())
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
+    let separator = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(separator_style);
+
+    let form_email_id_text = app.state.login_form.0[0].clone();
+    let email_id_text = if app.state.login_form.0[0].is_empty() {
+        "Email ID"
+    } else {
+        &form_email_id_text
+    };
+
+    let form_password_text = app.state.login_form.0[1].clone();
+    let mut hidden_password = String::new();
+    for _ in 0..app.state.login_form.0[1].len() {
+        hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
+    }
+    let password_text = if app.state.login_form.0[1].is_empty() {
+        "Password"
+    } else if app.state.login_form.1 {
+        &form_password_text
+    } else {
+        hidden_password.as_str()
+    };
+
+    let email_id_paragraph = Paragraph::new(email_id_text)
+        .style(email_id_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let password_paragraph = Paragraph::new(password_text)
+        .style(password_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let show_password_paragraph = Paragraph::new("Show Password")
+        .style(show_password_style)
+        .block(Block::default())
+        .alignment(Alignment::Right);
+
+    let show_password_checkbox_value = if app.state.login_form.1 { "[X]" } else { "[ ]" };
+
+    let show_password_checkbox_paragraph = Paragraph::new(show_password_checkbox_value)
+        .style(show_password_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+
+    let submit_button = Paragraph::new("Submit")
+        .style(submit_button_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .alignment(Alignment::Center);
+
+    rect.render_widget(crab_paragraph, chunks[0]);
+    rect.render_widget(Clear, info_box);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
+    rect.render_widget(info_border, info_box);
+    rect.render_widget(info_paragraph, info_chunks[0]);
+    rect.render_widget(help_paragraph, info_chunks[2]);
+    rect.render_widget(separator, chunks[1]);
+    rect.render_widget(show_password_paragraph, show_password_chunks[0]);
+    rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
+    rect.render_widget(submit_button, submit_button_chunks[1]);
+    rect.render_widget(email_id_paragraph, email_id_field_chunk);
+    rect.render_widget(password_paragraph, password_field_chunk);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
+
+    if app.state.user_login_data.auth_token.is_some() {
+        let email_id = if app.state.user_login_data.email_id.is_some() {
+            app.state.user_login_data.email_id.clone().unwrap()
+        } else {
+            "Unknown".to_string()
+        };
+        let already_logged_in_indicator =
+            Paragraph::new(format!("Already logged in! {}", email_id))
+                .style(app.theme.general_style)
+                .block(Block::default())
+                .alignment(Alignment::Center);
+
+        rect.render_widget(already_logged_in_indicator, form_chunks[0]);
+    }
+
+    if app.state.app_status == AppStatus::UserInput {
+        if app.state.focus == Focus::EmailIDField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.login_form.0[0],
+                        email_id_field_chunk.width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    email_id_field_chunk,
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    email_id_field_chunk.x + 1 + app.state.login_form.0[0].len() as u16,
+                    email_id_field_chunk.y + 1,
+                );
+            }
+        } else if app.state.focus == Focus::PasswordField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.login_form.0[1],
+                        password_field_chunk.width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    password_field_chunk,
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    password_field_chunk.x + 1 + app.state.login_form.0[1].len() as u16,
+                    password_field_chunk.y + 1,
+                );
+            }
+        }
+    }
+}
+
+pub fn render_signup<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    if app.state.popup_mode.is_none() {
+        if app.state.focus == Focus::EmailIDField
+            || app.state.focus == Focus::PasswordField
+            || app.state.focus == Focus::ConfirmPasswordField
+        {
+            if app.state.app_status != AppStatus::UserInput {
+                app.state.app_status = AppStatus::UserInput;
+            }
+        } else if app.state.app_status != AppStatus::Initialized {
+            app.state.app_status = AppStatus::Initialized;
+        }
+    }
+
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .split(rect.size());
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Min(10),
+            Constraint::Length(2),
+            Constraint::Length(50),
+        ])
+        .split(main_chunks[1]);
+
+    let info_box = centered_rect_with_length(30, 10, chunks[0]);
+
+    let info_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(info_box);
+
+    let form_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length((chunks[2].height - 15) / 2),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length((chunks[2].height - 15) / 2),
+        ])
+        .margin(1)
+        .split(chunks[2]);
+
+    let show_password_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(form_chunks[3].width - 7),
+            Constraint::Length(5),
+        ])
+        .margin(1)
+        .split(form_chunks[4]);
+
+    let submit_button_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length((form_chunks[4].width - 12) / 2),
+            Constraint::Length(12),
+            Constraint::Length((form_chunks[4].width - 12) / 2),
+        ])
+        .split(form_chunks[5]);
+
+    let email_id_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, form_chunks[1]) {
+        if app.state.mouse_focus != Some(Focus::EmailIDField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::EmailIDField);
+        app.state.focus = Focus::EmailIDField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::EmailIDField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let password_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, form_chunks[2]) {
+        if app.state.mouse_focus != Some(Focus::PasswordField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::PasswordField);
+        app.state.focus = Focus::PasswordField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::PasswordField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let confirm_password_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, form_chunks[3]) {
+        if app.state.mouse_focus != Some(Focus::ConfirmPasswordField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::ConfirmPasswordField);
+        app.state.focus = Focus::ConfirmPasswordField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::ConfirmPasswordField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let show_password_checkbox_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        show_password_chunks[1],
+    ) {
+        app.state.mouse_focus = Some(Focus::ExtraFocus);
+        app.state.focus = Focus::ExtraFocus;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::ExtraFocus {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let submit_button_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        submit_button_chunks[1],
+    ) {
+        app.state.mouse_focus = Some(Focus::SubmitButton);
+        app.state.focus = Focus::SubmitButton;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::SubmitButton {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let separator_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.general_style
+    };
+
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(main_chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, main_chunks[0]), main_chunks[0]);
+    };
+
+    let crab_paragraph = if app.state.popup_mode.is_some() {
+        draw_crab_pattern(chunks[0], app.theme.inactive_text_style, true)
+    } else {
+        draw_crab_pattern(chunks[0], app.theme.general_style, false)
+    };
+
+    let info_border = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(separator_style);
+
+    let info_paragraph = Paragraph::new("Sign Up")
+        .style(app.theme.general_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+
+    let help_spans = vec![
+        Span::styled("Press ", app.theme.help_text_style),
+        Span::styled("<Tab>", app.theme.help_key_style),
+        Span::styled(" to change focus. Press ", app.theme.help_text_style),
+        Span::styled("<Enter>", app.theme.help_key_style),
+        Span::styled(" to submit.", app.theme.help_text_style),
+    ];
+
+    let help_paragraph = Paragraph::new(Line::from(help_spans))
+        .style(app.theme.general_style)
+        .block(Block::default())
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
+    let separator = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(separator_style);
+
+    let form_email_id_text = app.state.signup_form.0[0].clone();
+    let email_id_text = if app.state.signup_form.0[0].is_empty() {
+        "Email ID"
+    } else {
+        &form_email_id_text
+    };
+
+    let form_password_text = app.state.signup_form.0[1].clone();
+    let mut hidden_password = String::new();
+    for _ in 0..app.state.signup_form.0[1].len() {
+        hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
+    }
+    let password_text = if app.state.signup_form.0[1].is_empty() {
+        "Password"
+    } else if app.state.signup_form.1 {
+        &form_password_text
+    } else {
+        hidden_password.as_str()
+    };
+
+    let form_confirm_password_text = app.state.signup_form.0[2].clone();
+    let mut hidden_confirm_password = String::new();
+    for _ in 0..app.state.signup_form.0[2].len() {
+        hidden_confirm_password.push(HIDDEN_PASSWORD_SYMBOL);
+    }
+    let confirm_password_text = if app.state.signup_form.0[2].is_empty() {
+        "Confirm Password"
+    } else if app.state.signup_form.1 {
+        &form_confirm_password_text
+    } else {
+        hidden_confirm_password.as_str()
+    };
+
+    let email_id_paragraph = Paragraph::new(email_id_text)
+        .style(email_id_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let password_paragraph = Paragraph::new(password_text)
+        .style(password_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let confirm_password_paragraph = Paragraph::new(confirm_password_text)
+        .style(confirm_password_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let show_password_paragraph = Paragraph::new("Show Password")
+        .style(separator_style)
+        .block(Block::default())
+        .alignment(Alignment::Right);
+
+    let show_password_checkbox_value = if app.state.signup_form.1 {
+        "[X]"
+    } else {
+        "[ ]"
+    };
+
+    let show_password_checkbox_paragraph = Paragraph::new(show_password_checkbox_value)
+        .style(show_password_checkbox_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+
+    let submit_button = Paragraph::new("Submit")
+        .style(submit_button_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .alignment(Alignment::Center);
+
+    rect.render_widget(crab_paragraph, chunks[0]);
+    rect.render_widget(Clear, info_box);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
+    rect.render_widget(info_border, info_box);
+    rect.render_widget(info_paragraph, info_chunks[0]);
+    rect.render_widget(help_paragraph, info_chunks[2]);
+    rect.render_widget(separator, chunks[1]);
+    rect.render_widget(email_id_paragraph, form_chunks[1]);
+    rect.render_widget(password_paragraph, form_chunks[2]);
+    rect.render_widget(confirm_password_paragraph, form_chunks[3]);
+    rect.render_widget(show_password_paragraph, show_password_chunks[0]);
+    rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
+    rect.render_widget(submit_button, submit_button_chunks[1]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
+
+    if app.state.app_status == AppStatus::UserInput {
+        if app.state.focus == Focus::EmailIDField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.signup_form.0[0],
+                        form_chunks[1].width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    form_chunks[1],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    form_chunks[1].x + 1 + app.state.signup_form.0[0].len() as u16,
+                    form_chunks[1].y + 1,
+                );
+            }
+        } else if app.state.focus == Focus::PasswordField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.signup_form.0[1],
+                        form_chunks[2].width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    form_chunks[2],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    form_chunks[2].x + 1 + app.state.signup_form.0[1].len() as u16,
+                    form_chunks[2].y + 1,
+                );
+            }
+        } else if app.state.focus == Focus::ConfirmPasswordField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.signup_form.0[2],
+                        form_chunks[3].width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    form_chunks[3],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    form_chunks[3].x + 1 + app.state.signup_form.0[2].len() as u16,
+                    form_chunks[3].y + 1,
+                );
+            }
+        }
+    }
+}
+
+pub fn render_reset_password<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    if app.state.popup_mode.is_none() {
+        if app.state.focus == Focus::EmailIDField
+            || app.state.focus == Focus::ResetPasswordLinkField
+            || app.state.focus == Focus::PasswordField
+            || app.state.focus == Focus::ConfirmPasswordField
+        {
+            if app.state.app_status != AppStatus::UserInput {
+                app.state.app_status = AppStatus::UserInput;
+            }
+        } else if app.state.app_status != AppStatus::Initialized {
+            app.state.app_status = AppStatus::Initialized;
+        }
+    }
+
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .split(rect.size());
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Min(10),
+            Constraint::Length(2),
+            Constraint::Length(50),
+        ])
+        .split(main_chunks[1]);
+
+    let info_box = centered_rect_with_length(55, 12, chunks[0]);
+
+    let info_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(3),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(info_box);
+
+    let form_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length((chunks[2].height - 24) / 2),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length((chunks[2].height - 24) / 2),
+        ])
+        .margin(1)
+        .split(chunks[2]);
+
+    let email_id_chunk = form_chunks[1];
+    let send_reset_link_button_chunk = form_chunks[2];
+    let reset_link_chunk = form_chunks[4];
+    let new_password_chunk = form_chunks[5];
+    let confirm_new_password_chunk = form_chunks[6];
+    let show_password_main_chunk = form_chunks[7];
+    let submit_button_chunk = form_chunks[8];
+
+    let show_password_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(show_password_main_chunk.width - 7),
+            Constraint::Length(5),
+        ])
+        .margin(1)
+        .split(show_password_main_chunk);
+
+    let submit_button_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length((submit_button_chunk.width - 12) / 2),
+            Constraint::Length(12),
+            Constraint::Length((submit_button_chunk.width - 12) / 2),
+        ])
+        .split(submit_button_chunk);
+
+    let email_id_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, email_id_chunk) {
+        if app.state.mouse_focus != Some(Focus::EmailIDField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::EmailIDField);
+        app.state.focus = Focus::EmailIDField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::EmailIDField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let send_reset_link_button_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if app.state.last_reset_password_link_sent_time.is_some() {
+        let last_reset_password_link_sent_time =
+            app.state.last_reset_password_link_sent_time.unwrap();
+        if last_reset_password_link_sent_time.elapsed()
+            < Duration::from_secs(MIN_TIME_BETWEEN_SENDING_RESET_LINK)
+        {
+            app.theme.inactive_text_style
+        } else if check_if_mouse_is_in_area(
+            app.state.current_mouse_coordinates,
+            send_reset_link_button_chunk,
+        ) {
+            if app.state.mouse_focus != Some(Focus::SendResetPasswordLinkButton) {
+                app.state.current_cursor_position = None;
+                app.state.app_status = AppStatus::Initialized;
+            } else {
+                app.state.app_status = AppStatus::UserInput;
+            }
+            app.state.mouse_focus = Some(Focus::SendResetPasswordLinkButton);
+            app.state.focus = Focus::SendResetPasswordLinkButton;
+            app.theme.mouse_focus_style
+        } else if app.state.focus == Focus::SendResetPasswordLinkButton {
+            app.theme.keyboard_focus_style
+        } else {
+            app.theme.general_style
+        }
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        send_reset_link_button_chunk,
+    ) {
+        if app.state.mouse_focus != Some(Focus::SendResetPasswordLinkButton) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::SendResetPasswordLinkButton);
+        app.state.focus = Focus::SendResetPasswordLinkButton;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::SendResetPasswordLinkButton {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let separator_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.general_style
+    };
+
+    let reset_link_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, reset_link_chunk) {
+        if app.state.mouse_focus != Some(Focus::ResetPasswordLinkField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::ResetPasswordLinkField);
+        app.state.focus = Focus::ResetPasswordLinkField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::ResetPasswordLinkField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let new_password_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, new_password_chunk) {
+        if app.state.mouse_focus != Some(Focus::PasswordField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::PasswordField);
+        app.state.focus = Focus::PasswordField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::PasswordField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let confirm_new_password_field_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        confirm_new_password_chunk,
+    ) {
+        if app.state.mouse_focus != Some(Focus::ConfirmPasswordField) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        app.state.mouse_focus = Some(Focus::ConfirmPasswordField);
+        app.state.focus = Focus::ConfirmPasswordField;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::ConfirmPasswordField {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let show_password_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        show_password_main_chunk,
+    ) {
+        app.state.mouse_focus = Some(Focus::ExtraFocus);
+        app.state.focus = Focus::ExtraFocus;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::ExtraFocus {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    let submit_button_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(
+        app.state.current_mouse_coordinates,
+        submit_button_chunks[1],
+    ) {
+        app.state.mouse_focus = Some(Focus::SubmitButton);
+        app.state.focus = Focus::SubmitButton;
+        app.theme.mouse_focus_style
+    } else if app.state.focus == Focus::SubmitButton {
+        app.theme.keyboard_focus_style
+    } else {
+        app.theme.general_style
+    };
+
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(main_chunks[0]);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, main_chunks[0]), main_chunks[0]);
+    };
+
+    let crab_paragraph = if app.state.popup_mode.is_some() {
+        draw_crab_pattern(chunks[0], app.theme.inactive_text_style, true)
+    } else {
+        draw_crab_pattern(chunks[0], app.theme.general_style, false)
+    };
+
+    let info_border = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(separator_style);
+
+    let info_header = Paragraph::new("Reset Password")
+        .style(app.theme.general_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+
+    let help_lines = vec![
+        Line::from(Span::styled(
+            "1) Enter your email and send reset link first.",
+            app.theme.help_text_style,
+        )),
+        Line::from(Span::styled(
+            "2) Copy the reset link from your email and then paste the reset link.",
+            app.theme.help_text_style,
+        )),
+        Line::from(Span::styled(
+            "3) Enter new password and confirm the new password.",
+            app.theme.help_text_style,
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "### Check Spam folder if you don't see the email ###",
+            app.theme.help_text_style,
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Press ", app.theme.help_text_style),
+            Span::styled("<Tab>", app.theme.help_key_style),
+            Span::styled(" to change focus. Press ", app.theme.help_text_style),
+            Span::styled("<Enter>", app.theme.help_key_style),
+            Span::styled(" to submit.", app.theme.help_text_style),
+        ]),
+    ];
+
+    let help_paragraph = Paragraph::new(help_lines)
+        .style(app.theme.general_style)
+        .block(Block::default())
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
+    let separator = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(separator_style);
+
+    let form_email_id_text = app.state.reset_password_form.0[0].clone();
+    let email_id_text = if app.state.reset_password_form.0[0].is_empty() {
+        "Email ID"
+    } else {
+        &form_email_id_text
+    };
+
+    let send_reset_link_button_text = if app.state.last_reset_password_link_sent_time.is_some() {
+        let last_reset_password_link_sent_time =
+            app.state.last_reset_password_link_sent_time.unwrap();
+        if last_reset_password_link_sent_time.elapsed()
+            < Duration::from_secs(MIN_TIME_BETWEEN_SENDING_RESET_LINK)
+        {
+            let remaining_time = Duration::from_secs(MIN_TIME_BETWEEN_SENDING_RESET_LINK)
+                .checked_sub(last_reset_password_link_sent_time.elapsed())
+                .unwrap();
+            format!("Please wait for {} seconds", remaining_time.as_secs())
+        } else {
+            "Send Reset Link".to_string()
+        }
+    } else {
+        "Send Reset Link".to_string()
+    };
+
+    let reset_link_field_text = if app.state.reset_password_form.0[1].is_empty() {
+        "Reset Link".to_string()
+    } else {
+        app.state.reset_password_form.0[1].clone()
+    };
+
+    let new_password_field_text = if app.state.reset_password_form.0[2].is_empty() {
+        "New Password".to_string()
+    } else if app.state.reset_password_form.1 {
+        app.state.reset_password_form.0[2].clone()
+    } else {
+        let mut hidden_password = String::new();
+        for _ in 0..app.state.reset_password_form.0[2].len() {
+            hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
+        }
+        hidden_password
+    };
+
+    let confirm_new_password_field_text = if app.state.reset_password_form.0[3].is_empty() {
+        "Confirm New Password".to_string()
+    } else if app.state.reset_password_form.1 {
+        app.state.reset_password_form.0[3].clone()
+    } else {
+        let mut hidden_password = String::new();
+        for _ in 0..app.state.reset_password_form.0[3].len() {
+            hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
+        }
+        hidden_password
+    };
+
+    let show_password_paragraph = Paragraph::new("Show Password")
+        .style(show_password_style)
+        .block(Block::default())
+        .alignment(Alignment::Right);
+
+    let show_password_checkbox_value = if app.state.reset_password_form.1 {
+        "[X]"
+    } else {
+        "[ ]"
+    };
+
+    let email_id_paragraph = Paragraph::new(email_id_text)
+        .style(email_id_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let send_reset_link_button = Paragraph::new(send_reset_link_button_text)
+        .style(send_reset_link_button_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .alignment(Alignment::Center);
+
+    let reset_link_paragraph = Paragraph::new(reset_link_field_text)
+        .style(reset_link_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let new_password_paragraph = Paragraph::new(new_password_field_text)
+        .style(new_password_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let confirm_new_password_paragraph = Paragraph::new(confirm_new_password_field_text)
+        .style(confirm_new_password_field_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+    let show_password_checkbox_paragraph = Paragraph::new(show_password_checkbox_value)
+        .style(show_password_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+
+    let submit_button = Paragraph::new("Submit")
+        .style(submit_button_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .alignment(Alignment::Center);
+
+    rect.render_widget(crab_paragraph, chunks[0]);
+    rect.render_widget(Clear, info_box);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
+    rect.render_widget(info_border, info_box);
+    rect.render_widget(info_header, info_chunks[0]);
+    rect.render_widget(help_paragraph, info_chunks[2]);
+    rect.render_widget(separator, chunks[1]);
+    rect.render_widget(email_id_paragraph, email_id_chunk);
+    rect.render_widget(send_reset_link_button, send_reset_link_button_chunk);
+    rect.render_widget(reset_link_paragraph, reset_link_chunk);
+    rect.render_widget(new_password_paragraph, new_password_chunk);
+    rect.render_widget(confirm_new_password_paragraph, confirm_new_password_chunk);
+    rect.render_widget(show_password_paragraph, show_password_chunks[0]);
+    rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
+    rect.render_widget(submit_button, submit_button_chunks[1]);
+
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app)
+    }
+
+    if app.state.app_status == AppStatus::UserInput {
+        if app.state.focus == Focus::EmailIDField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.reset_password_form.0[0],
+                        email_id_chunk.width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    email_id_chunk,
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    email_id_chunk.x + 1 + app.state.reset_password_form.0[0].len() as u16,
+                    email_id_chunk.y + 1,
+                );
+            }
+        } else if app.state.focus == Focus::ResetPasswordLinkField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.reset_password_form.0[1],
+                        reset_link_chunk.width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    reset_link_chunk,
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    reset_link_chunk.x + 1 + app.state.reset_password_form.0[1].len() as u16,
+                    reset_link_chunk.y + 1,
+                );
+            }
+        } else if app.state.focus == Focus::PasswordField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.reset_password_form.0[2],
+                        new_password_chunk.width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    new_password_chunk,
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    new_password_chunk.x + 1 + app.state.reset_password_form.0[2].len() as u16,
+                    new_password_chunk.y + 1,
+                );
+            }
+        } else if app.state.focus == Focus::ConfirmPasswordField {
+            if app.state.current_cursor_position.is_some() {
+                let (x_pos, y_pos) = calculate_cursor_position(
+                    textwrap::wrap(
+                        &app.state.reset_password_form.0[3],
+                        confirm_new_password_chunk.width as usize - 2,
+                    ),
+                    app.state.current_cursor_position.unwrap_or(0),
+                    confirm_new_password_chunk,
+                );
+                rect.set_cursor(x_pos, y_pos);
+            } else {
+                rect.set_cursor(
+                    confirm_new_password_chunk.x
+                        + 1
+                        + app.state.reset_password_form.0[3].len() as u16,
+                    confirm_new_password_chunk.y + 1,
+                );
+            }
+        }
+    }
+}
+
+pub fn render_load_cloud_save<B>(rect: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    let default_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.general_style
+    };
+    let help_key_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_key_style
+    };
+    let help_text_style = if app.state.popup_mode.is_some() {
+        app.theme.inactive_text_style
+    } else {
+        app.theme.help_text_style
+    };
+    let main_chunks = {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+            .split(rect.size())
+    };
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Min(10),
+                Constraint::Length(9),
+            ]
+            .as_ref(),
+        )
+        .split(main_chunks[0]);
+
+    let preview_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+        .split(main_chunks[1]);
+
+    let title_bar_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
+        .split(preview_chunks[0]);
+
+    let title_paragraph = Paragraph::new("Load a Save (Cloud)")
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .style(default_style);
+    rect.render_widget(title_paragraph, chunks[0]);
+
+    let item_list = &app.state.cloud_data_preview;
+    let empty_item_list = Vec::new();
+    let item_list = if let Some(item_list) = item_list {
+        item_list
+    } else {
+        &empty_item_list
+    };
+    if item_list.is_empty() {
+        let no_saves_paragraph = Paragraph::new("Waiting for data from the cloud...")
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(app.theme.error_text_style);
+        rect.render_widget(no_saves_paragraph, chunks[1]);
+    } else {
+        // make a list from the Vec<string> of save files
+        let items: Vec<ListItem> = item_list
+            .iter()
+            .map(|i| ListItem::new(format!("cloud_save_{}", i.save_id)))
+            .collect();
+        let choice_list = List::new(items)
+            .block(
+                Block::default()
+                    .title("Available Saves")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .highlight_style(app.theme.list_select_style)
+            .highlight_symbol(LIST_SELECTED_SYMBOL)
+            .style(default_style);
+
+        if !(app.state.popup_mode.is_some()
+            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
+            && check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
+        {
+            app.state.mouse_focus = Some(Focus::LoadSave);
+            app.state.focus = Focus::LoadSave;
+            let top_of_list = chunks[1].y + 1;
+            let mut bottom_of_list = chunks[1].y + item_list.len() as u16;
+            if bottom_of_list > chunks[1].bottom() {
+                bottom_of_list = chunks[1].bottom();
+            }
+            let mouse_y = app.state.current_mouse_coordinates.1;
+            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+                app.state
+                    .load_save_state
+                    .select(Some((mouse_y - top_of_list) as usize));
+            }
+        }
+        rect.render_stateful_widget(choice_list, chunks[1], &mut app.state.load_save_state);
+    }
+
+    let delete_key = app
+        .state
+        .keybinding_store
+        .iter()
+        .find(|x| x[1] == "Delete focused element")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let up_key = app
+        .state
+        .keybinding_store
+        .iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app
+        .state
+        .keybinding_store
+        .iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let help_text = Line::from(vec![
+        Span::styled("Use ", help_text_style),
+        Span::styled(&up_key, help_key_style),
+        Span::styled("or ", help_text_style),
+        Span::styled(&down_key, help_key_style),
+        Span::styled("to navigate. Press ", help_text_style),
+        Span::styled("<Enter>", help_key_style),
+        Span::styled(" to Load the selected save file. Press ", help_text_style),
+        Span::styled("<Esc>", help_key_style),
+        Span::styled(" to cancel. Press ", help_text_style),
+        Span::styled(delete_key, help_key_style),
+        Span::styled(
+            "to delete a save file. If using a mouse click on a save file to preview",
+            help_text_style,
+        ),
+    ]);
+    let help_paragraph = Paragraph::new(help_text)
+        .alignment(Alignment::Center)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .style(default_style)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+    rect.render_widget(help_paragraph, chunks[2]);
+
+    // preview pane
+    if app.state.load_save_state.selected().is_none() {
+        let preview_paragraph =
+            Paragraph::new(format!("Select a save file with {}or {}to preview or Click on a save file to preview if using a mouse", up_key, down_key))
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                )
+                .style(default_style)
+                .wrap(ratatui::widgets::Wrap { trim: true });
+        rect.render_widget(preview_paragraph, preview_chunks[1]);
+    } else if app.state.preview_boards_and_cards.is_none() {
+        let loading_text = if app.config.enable_mouse_support {
+            "Click on a save file to preview"
+        } else {
+            "Loading preview..."
+        };
+        let preview_paragraph = Paragraph::new(loading_text)
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(default_style)
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        rect.render_widget(preview_paragraph, preview_chunks[1]);
+    } else {
+        render_body(rect, preview_chunks[1], app, true)
+    }
+
+    let preview_title_paragraph = if app.state.preview_file_name.is_some() {
+        Paragraph::new("Previewing: ".to_string() + &app.state.preview_file_name.clone().unwrap())
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(default_style)
+            .wrap(ratatui::widgets::Wrap { trim: true })
+    } else {
+        Paragraph::new("Select a file to preview")
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(default_style)
+            .wrap(ratatui::widgets::Wrap { trim: true })
+    };
+
+    if app.config.enable_mouse_support {
+        rect.render_widget(preview_title_paragraph, title_bar_chunks[0]);
+        render_close_button(rect, app);
+    } else {
+        rect.render_widget(preview_title_paragraph, preview_chunks[0]);
+    }
+}
+
+fn draw_crab_pattern(render_area: Rect, style: Style, popup_mode: bool) -> Paragraph<'static> {
+    let time_between_transitions = 3000; // 2 seconds
+
+    let crab_pattern = if popup_mode {
+        create_crab_pattern_1(render_area.width, render_area.height, popup_mode)
+    } else {
+        match get_time_offset() % time_between_transitions {
+            0..=999 => create_crab_pattern_1(render_area.width, render_area.height, popup_mode),
+            1000..=1999 => create_crab_pattern_2(render_area.width, render_area.height, popup_mode),
+            2000..=2999 => create_crab_pattern_3(render_area.width, render_area.height, popup_mode),
+            _ => create_crab_pattern_1(render_area.width, render_area.height, popup_mode),
+        }
+    };
+    Paragraph::new(crab_pattern)
+        .style(style)
+        .block(Block::default())
+}
+
+fn create_crab_pattern_1(width: u16, height: u16, popup_mode: bool) -> String {
+    let mut pattern = String::new();
+    for row in 0..height {
+        for col in 0..width {
+            if (row + col) % 2 == 0 {
+                if popup_mode {
+                    pattern.push_str(HIDDEN_PASSWORD_SYMBOL.to_string().as_str());
+                } else {
+                    pattern.push('🦀');
+                }
+            } else {
+                pattern.push_str("  ");
+            }
+        }
+        pattern.push('\n');
+    }
+    pattern
+}
+
+fn create_crab_pattern_2(width: u16, height: u16, popup_mode: bool) -> String {
+    let mut pattern = String::new();
+    let block_size = 4; // Size of each block
+
+    for row in 0..height {
+        let block_row = row % block_size;
+
+        for col in 0..width {
+            let block_col = col % block_size;
+
+            if (block_row == 0 && block_col <= 1)
+                || (block_row == 1 && block_col >= 2)
+                || (block_row == 2 && block_col <= 1)
+            {
+                if popup_mode {
+                    pattern.push_str(HIDDEN_PASSWORD_SYMBOL.to_string().as_str());
+                } else {
+                    pattern.push_str(" 🦀 ");
+                }
+            } else {
+                pattern.push_str("   ");
+            }
+        }
+        pattern.push('\n');
+    }
+    pattern
+}
+
+fn create_crab_pattern_3(width: u16, height: u16, popup_mode: bool) -> String {
+    let mut pattern = String::new();
+    for row in 0..height {
+        for col in 0..width {
+            if (row % 2 == 0 && col % 2 == 0) || (row % 2 == 1 && col % 2 == 1) {
+                if popup_mode {
+                    pattern.push_str(HIDDEN_PASSWORD_SYMBOL.to_string().as_str());
+                } else {
+                    pattern.push_str(" 🦀 ");
+                }
+            } else {
+                pattern.push_str("   ");
+            }
+        }
+        pattern.push('\n');
+    }
+    pattern
+}
+
+fn get_time_offset() -> u64 {
+    let start_time = SystemTime::now();
+    let since_epoch = start_time.duration_since(UNIX_EPOCH).unwrap();
+    since_epoch.as_millis() as u64
 }

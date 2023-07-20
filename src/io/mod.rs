@@ -4,13 +4,21 @@ pub mod logger;
 // For this dummy application we only need two IO event
 #[derive(Debug, Clone)]
 pub enum IoEvent {
-    Initialize,   // Launch to initialize the application
-    GetCloudData, // Launch to get cloud data (Not implemented yet)
+    Initialize, // Launch to initialize the application
     Reset,
     SaveLocalData,
-    LoadSave,
+    LoadSaveLocal,
+    LoadSaveCloud,
     DeleteSave,
     ResetVisibleBoardsandCards,
     AutoSave,
-    LoadPreview,
+    LoadLocalPreview,
+    Login(String, String),
+    SignUp(String, String, String),
+    SendResetPasswordEmail(String),
+    ResetPassword(String, String, String),
+    SyncLocalData,
+    GetCloudData,
+    LoadCloudPreview,
+    Logout,
 }
