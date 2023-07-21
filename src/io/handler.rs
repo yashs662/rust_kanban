@@ -22,8 +22,8 @@ use crate::{
         UserLoginData,
     },
     constants::{
-        CONFIG_DIR_NAME, CONFIG_FILE_NAME, MIN_TIME_BETWEEN_SENDING_RESET_LINK,
-        SAVE_DIR_NAME, SAVE_FILE_REGEX, SUPABASE_URL, SUPABASE_ANON_KEY,
+        CONFIG_DIR_NAME, CONFIG_FILE_NAME, MIN_TIME_BETWEEN_SENDING_RESET_LINK, SAVE_DIR_NAME,
+        SAVE_FILE_REGEX, SUPABASE_ANON_KEY, SUPABASE_URL,
     },
     io::data_handler::{
         get_default_save_directory, get_saved_themes, reset_config, save_kanban_state_locally,
@@ -834,6 +834,9 @@ impl IoAsyncHandler {
         if status == StatusCode::CREATED {
             info!("👍 Local data synced to the cloud");
             app.send_info_toast("👍 Local data synced to the cloud", None);
+            if app.state.cloud_data_preview.is_some() {
+                app.dispatch(IoEvent::GetCloudData).await;
+            }
         } else {
             error!("Error syncing local data");
             app.send_error_toast("Error syncing local data", None);
