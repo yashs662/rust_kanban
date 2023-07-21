@@ -11,7 +11,7 @@ use std::{
     env,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use super::data_handler::{get_available_local_save_files, get_local_kanban_state};
@@ -22,8 +22,8 @@ use crate::{
         UserLoginData,
     },
     constants::{
-        CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_REGEX, SUPABASE_ANON_KEY,
-        SUPABASE_URL,
+        CONFIG_DIR_NAME, CONFIG_FILE_NAME, MIN_TIME_BETWEEN_SENDING_RESET_LINK,
+        SAVE_DIR_NAME, SAVE_FILE_REGEX, SUPABASE_URL, SUPABASE_ANON_KEY,
     },
     io::data_handler::{
         get_default_save_directory, get_saved_themes, reset_config, save_kanban_state_locally,
@@ -48,7 +48,7 @@ impl IoAsyncHandler {
             IoEvent::Reset => self.reset_config().await,
             IoEvent::SaveLocalData => self.save_local_data().await,
             IoEvent::LoadSaveLocal => self.load_save_file_local().await,
-            IoEvent::DeleteSave => self.delete_save_file().await,
+            IoEvent::DeleteLocalSave => self.delete_local_save_file().await,
             IoEvent::ResetVisibleBoardsandCards => self.refresh_visible_boards_and_cards().await,
             IoEvent::AutoSave => self.auto_save().await,
             IoEvent::LoadLocalPreview => self.load_local_preview().await,
@@ -69,6 +69,7 @@ impl IoAsyncHandler {
             IoEvent::GetCloudData => self.get_cloud_data().await,
             IoEvent::LoadSaveCloud => self.load_save_file_cloud().await,
             IoEvent::LoadCloudPreview => self.preview_cloud_save().await,
+            IoEvent::DeleteCloudSave => self.delete_cloud_save().await,
         };
 
         let mut app = self.app.lock().await;
@@ -193,7 +194,7 @@ impl IoAsyncHandler {
         Ok(())
     }
 
-    async fn delete_save_file(&mut self) -> Result<()> {
+    async fn delete_local_save_file(&mut self) -> Result<()> {
         // get app.state.load_save_state.selected() and delete the file
         let mut app = self.app.lock().await;
         let file_list = get_available_local_save_files(&app.config);
@@ -441,7 +442,11 @@ impl IoAsyncHandler {
                     app.send_error_toast("Error logging in", None);
                 }
             }
-            Ok(())
+        } else if status == StatusCode::TOO_MANY_REQUESTS {
+            error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
+            debug!("status code {}, response body: {:?}", status, body);
+            let mut app = self.app.lock().await;
+            app.send_error_toast("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢", None);
         } else {
             match body {
                 Ok(body) => {
@@ -469,8 +474,8 @@ impl IoAsyncHandler {
                     app.send_error_toast("Error logging in", None);
                 }
             }
-            Ok(())
         }
+        Ok(())
     }
 
     async fn cloud_logout(&mut self) -> Result<()> {
@@ -575,18 +580,19 @@ impl IoAsyncHandler {
         if status == StatusCode::OK {
             match body {
                 Ok(body) => {
-                    let access_token = body.get("access_token");
-                    match access_token {
-                        Some(access_token) => {
-                            let access_token = access_token.as_str().unwrap();
-                            let mut app = self.app.lock().await;
-                            app.state.user_login_data.auth_token = Some(access_token.to_string());
-                            app.state.user_login_data.email_id = Some(email_id);
-                            if app.state.ui_mode == UiMode::SignUp {
-                                handle_go_to_previous_ui_mode(&mut app).await;
+                    let confirmation_sent = body.get("confirmation_sent_at");
+                    match confirmation_sent {
+                        Some(confirmation_sent) => {
+                            let confirmation_sent = confirmation_sent.as_str();
+                            if confirmation_sent.is_none() {
+                                error!("Error signing up");
+                                let mut app = self.app.lock().await;
+                                app.send_error_toast("Error signing up", None);
+                                return Ok(());
                             }
-                            info!("👍 Signed up");
-                            app.send_info_toast("👍 Signed up", None);
+                            info!("👍 Confirmation email sent");
+                            let mut app = self.app.lock().await;
+                            app.send_info_toast("👍 Confirmation email sent", None);
                         }
                         None => {
                             error!("Error signing up");
@@ -601,8 +607,14 @@ impl IoAsyncHandler {
                     app.send_error_toast("Error signing up", None);
                 }
             }
+        } else if status == StatusCode::TOO_MANY_REQUESTS {
+            error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
+            debug!("status code {}, response body: {:?}", status, body);
+            let mut app = self.app.lock().await;
+            app.send_error_toast("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢", None);
         } else {
             error!("Error signing up");
+            debug!("status code {}, response body: {:?}", status, body);
             let mut app = self.app.lock().await;
             app.send_error_toast("Error signing up", None);
         }
@@ -611,14 +623,32 @@ impl IoAsyncHandler {
 
     async fn send_reset_password_email(&mut self, email_id: String) -> Result<()> {
         {
+            let mut app = self.app.lock().await;
+            if let Some(reset_time) = app.state.last_reset_password_link_sent_time {
+                if reset_time.elapsed() < Duration::from_secs(MIN_TIME_BETWEEN_SENDING_RESET_LINK) {
+                    let remaining_time = Duration::from_secs(MIN_TIME_BETWEEN_SENDING_RESET_LINK)
+                        .checked_sub(reset_time.elapsed())
+                        .unwrap();
+                    error!(
+                        "Please wait for {} seconds before sending another reset password email",
+                        remaining_time.as_secs()
+                    );
+                    app.send_error_toast(
+                        &format!(
+                        "Please wait for {} seconds before sending another reset password email",
+                        remaining_time.as_secs()
+                    ),
+                        None,
+                    );
+                    return Ok(());
+                }
+            }
             if email_id.is_empty() {
                 error!("Email cannot be empty");
-                let mut app = self.app.lock().await;
                 app.send_error_toast("Email cannot be empty", None);
                 return Ok(());
             } else {
                 info!("Sending reset password email, please wait...");
-                let mut app = self.app.lock().await;
                 app.send_info_toast("Sending reset password email, please wait...", None);
             }
         }
@@ -638,7 +668,14 @@ impl IoAsyncHandler {
         if status == StatusCode::OK {
             info!("👍 Reset password email sent");
             let mut app = self.app.lock().await;
+            app.state.last_reset_password_link_sent_time = Some(Instant::now());
             app.send_info_toast("👍 Reset password email sent", None);
+        } else if status == StatusCode::TOO_MANY_REQUESTS {
+            let body = response.json::<serde_json::Value>().await;
+            error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
+            debug!("status code {}, response body: {:?}", status, body);
+            let mut app = self.app.lock().await;
+            app.send_error_toast("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢", None);
         } else {
             error!("Error sending reset password email");
             let mut app = self.app.lock().await;
@@ -685,10 +722,10 @@ impl IoAsyncHandler {
             }
             Err(e) => {
                 // get the access_token from the redirect fragment
+                let mut app = self.app.lock().await;
                 let error_url = e.url();
                 if error_url.is_none() {
                     error!("Error verifying reset password link");
-                    let mut app = self.app.lock().await;
                     app.send_error_toast("Error verifying reset password link", None);
                     return Ok(());
                 }
@@ -699,7 +736,6 @@ impl IoAsyncHandler {
                 let access_token = access_token.last();
                 if access_token.is_none() {
                     error!("Error verifying reset password link");
-                    let mut app = self.app.lock().await;
                     app.send_error_toast("Error verifying reset password link", None);
                     return Ok(());
                 }
@@ -707,10 +743,10 @@ impl IoAsyncHandler {
                 let access_token = access_token.next();
                 if access_token.is_none() {
                     error!("Error verifying reset password link");
-                    let mut app = self.app.lock().await;
                     app.send_error_toast("Error verifying reset password link", None);
                     return Ok(());
                 }
+                drop(app);
                 let access_token = access_token.unwrap();
                 let request_body = json!({ "password": new_password });
                 let reset_client = reqwest::Client::new();
@@ -769,24 +805,21 @@ impl IoAsyncHandler {
             max_save_id.unwrap() + 1
         };
 
-        let mut app = self.app.lock().await;
-        let board_data = &app.boards;
+        let app = self.app.lock().await;
+        let board_data = app.boards.clone();
+        let auth_token = app.state.user_login_data.auth_token.clone().unwrap();
+        let user_id = app.state.user_login_data.user_id.clone().unwrap();
+        drop(app);
         let client = reqwest::Client::new();
         let response = client
             .post(format!("{}/rest/v1/user_data", SUPABASE_URL))
             .header("apikey", SUPABASE_ANON_KEY)
             .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!(
-                    "Bearer {}",
-                    app.state.user_login_data.auth_token.as_ref().unwrap()
-                ),
-            )
+            .header("Authorization", format!("Bearer {}", auth_token))
             .body(
                 json!(
                     {
-                        "user_id": app.state.user_login_data.user_id.as_ref().unwrap(),
+                        "user_id": user_id,
                         "board_data": board_data,
                         "save_id": max_save_id
                     }
@@ -797,6 +830,7 @@ impl IoAsyncHandler {
             .await?;
 
         let status = response.status();
+        let mut app = self.app.lock().await;
         if status == StatusCode::CREATED {
             info!("👍 Local data synced to the cloud");
             app.send_info_toast("👍 Local data synced to the cloud", None);
@@ -909,8 +943,8 @@ impl IoAsyncHandler {
                 app.send_error_toast("Not logged in", None);
                 return Ok(());
             } else {
-                info!("Getting cloud data, please wait...");
-                app.send_info_toast("Getting cloud data, please wait...", None);
+                info!("Refreshing cloud data, please wait...");
+                app.send_info_toast("Refreshing cloud data, please wait...", None);
             }
         }
 
@@ -938,15 +972,15 @@ impl IoAsyncHandler {
                     app.send_info_toast("👍 Cloud data loaded", None);
                 }
                 Err(e) => {
-                    error!("Error getting cloud data: {}", e);
+                    error!("Error Refreshing cloud data: {}", e);
                     let mut app = self.app.lock().await;
-                    app.send_error_toast("Error getting cloud data", None);
+                    app.send_error_toast("Error Refreshing cloud data", None);
                 }
             }
         } else {
-            error!("Error getting cloud data");
+            error!("Error Refreshing cloud data");
             let mut app = self.app.lock().await;
-            app.send_error_toast("Error getting cloud data", None);
+            app.send_error_toast("Error Refreshing cloud data", None);
         }
         Ok(())
     }
@@ -1032,13 +1066,13 @@ impl IoAsyncHandler {
     async fn load_save_file_cloud(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
         let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
-        let local_files = app.state.cloud_data_preview.clone();
-        let local_files = if local_files.is_none() {
+        let cloud_saves = app.state.cloud_data_preview.clone();
+        let local_files = if cloud_saves.is_none() {
             error!("Could not get local save files");
             app.send_error_toast("Could not get local save files", None);
             vec![]
         } else {
-            local_files.unwrap()
+            cloud_saves.unwrap()
         };
         // check if the file exists
         if save_file_index >= local_files.len() {
@@ -1051,12 +1085,75 @@ impl IoAsyncHandler {
         let board_data = &local_files[save_file_index].board_data;
         app.set_boards(board_data.to_vec());
         info!("👍 Save file cloud_save_{} loaded", save_file_number);
-        app.send_info_toast(&format!("👍 Save file cloud_save_{} loaded", save_file_number), None);
+        app.send_info_toast(
+            &format!("👍 Save file cloud_save_{} loaded", save_file_number),
+            None,
+        );
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         app.state.ui_mode = app.config.default_view;
         Ok(())
     }
 
+    async fn delete_cloud_save(&mut self) -> Result<()> {
+        {
+            let mut app = self.app.lock().await;
+            if app.state.user_login_data.auth_token.is_none() {
+                error!("Not logged in");
+                app.send_error_toast("Not logged in", None);
+                return Ok(());
+            } else {
+                info!("Deleting cloud save, please wait...");
+                app.send_info_toast("Deleting cloud save, please wait...", None);
+            }
+        }
+
+        let mut app = self.app.lock().await;
+        let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
+        let user_access_token = app.state.user_login_data.auth_token.clone().unwrap();
+        let cloud_saves = app.state.cloud_data_preview.clone();
+        let cloud_saves = if cloud_saves.is_none() {
+            error!("Could not get local save files");
+            app.send_error_toast("Could not get local save files", None);
+            return Ok(());
+        } else {
+            cloud_saves.unwrap()
+        };
+        // check if the file exists
+        if save_file_index >= cloud_saves.len() {
+            error!("Cannot delete save file: No such file");
+            app.send_error_toast("Cannot delete save file: No such file", None);
+            return Ok(());
+        }
+        drop(app);
+        let save_file_id = cloud_saves[save_file_index].id;
+        let save_number = cloud_saves[save_file_index].save_id;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .delete(format!(
+                "{}/rest/v1/user_data?id=eq.{}",
+                SUPABASE_URL, save_file_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", user_access_token))
+            .send()
+            .await?;
+
+        let status = response.status();
+        let mut app = self.app.lock().await;
+        if status == StatusCode::NO_CONTENT {
+            info!("👍 Cloud save {} deleted", save_number);
+            app.send_info_toast(&format!("👍 Cloud save {} deleted", save_number), None);
+        } else {
+            let body = response.json::<serde_json::Value>().await;
+            error!("Error deleting cloud save");
+            debug!("status code {}, response body: {:?}", status, body);
+            app.send_error_toast("Error deleting cloud save", None);
+        }
+
+        Ok(())
+    }
 }
 
 pub(crate) fn get_config_dir() -> Result<PathBuf, String> {
@@ -1145,7 +1242,7 @@ fn prepare_boards(app: &mut App) -> Vec<Board> {
             vec![]
         }
     } else {
-        app.set_ui_mode(UiMode::LoadSave);
+        app.set_ui_mode(UiMode::LoadLocalSave);
         vec![]
     }
 }

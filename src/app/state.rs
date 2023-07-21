@@ -25,7 +25,7 @@ pub enum UiMode {
     LogsOnly,
     NewBoard,
     NewCard,
-    LoadSave,
+    LoadLocalSave,
     CreateTheme,
     Login,
     SignUp,
@@ -139,7 +139,7 @@ impl UiMode {
             "Logs Only" => Some(UiMode::LogsOnly),
             "New Board" => Some(UiMode::NewBoard),
             "New Card" => Some(UiMode::NewCard),
-            "Load a Save" => Some(UiMode::LoadSave),
+            "Load a Save" => Some(UiMode::LoadLocalSave),
             "Create Theme" => Some(UiMode::CreateTheme),
             _ => None,
         }
@@ -162,7 +162,7 @@ impl UiMode {
             "LogsOnly" => Some(UiMode::LogsOnly),
             "NewBoard" => Some(UiMode::NewBoard),
             "NewCard" => Some(UiMode::NewCard),
-            "LoadSave" => Some(UiMode::LoadSave),
+            "LoadSave" => Some(UiMode::LoadLocalSave),
             "CreateTheme" => Some(UiMode::CreateTheme),
             _ => None,
         }
@@ -212,7 +212,7 @@ impl UiMode {
                 Focus::CardDueDate,
                 Focus::SubmitButton,
             ],
-            UiMode::LoadSave => vec![Focus::Body],
+            UiMode::LoadLocalSave => vec![Focus::Body],
             UiMode::CreateTheme => vec![Focus::ThemeEditor, Focus::SubmitButton, Focus::ExtraFocus],
             UiMode::Login => vec![
                 Focus::Title,
@@ -308,7 +308,7 @@ impl UiMode {
                 ui_helper::render_new_board_form(rect, app);
             }
             UiMode::NewCard => ui_helper::render_new_card_form(rect, app),
-            UiMode::LoadSave => {
+            UiMode::LoadLocalSave => {
                 ui_helper::render_load_a_save(rect, app);
             }
             UiMode::CreateTheme => ui_helper::render_create_theme(rect, app),
@@ -338,7 +338,7 @@ impl fmt::Display for UiMode {
             UiMode::LogsOnly => write!(f, "Logs Only"),
             UiMode::NewBoard => write!(f, "New Board"),
             UiMode::NewCard => write!(f, "New Card"),
-            UiMode::LoadSave => write!(f, "Load a Save (Local)"),
+            UiMode::LoadLocalSave => write!(f, "Load a Save (Local)"),
             UiMode::CreateTheme => write!(f, "Create Theme"),
             UiMode::Login => write!(f, "Login"),
             UiMode::SignUp => write!(f, "Sign Up"),

@@ -1,5 +1,4 @@
 [![Crates.io](https://img.shields.io/crates/v/rust-kanban.svg)](https://crates.io/crates/rust-kanban)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fyashs662%2Frust_kanban.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fyashs662%2Frust_kanban?ref=badge_shield)
 
 ![rust_kanban](https://user-images.githubusercontent.com/66156000/232308620-3e96d818-81f3-4229-b58e-c09bc0b067e4.png)
 ## Kanban App for the terminal written in rust
@@ -102,6 +101,3 @@
 ![Matrix](https://user-images.githubusercontent.com/66156000/232308312-56cebb9f-eb93-4a20-8758-4a1e9db96c35.png)
 - Cyberpunk
 ![Cyberpunk](https://user-images.githubusercontent.com/66156000/232308321-4eeec180-6f05-4b49-948a-1166792ad25e.png)
-
-## License
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fyashs662%2Frust_kanban.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fyashs662%2Frust_kanban?ref=badge_large)

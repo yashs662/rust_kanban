@@ -325,7 +325,7 @@ impl CommandPaletteWidget {
                     CommandPaletteActions::LoadASaveLocal => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.ui_mode = UiMode::LoadSave;
+                        app.state.ui_mode = UiMode::LoadLocalSave;
                     }
                     CommandPaletteActions::DebugMenu => {
                         app.state.debug_menu_toggled = !app.state.debug_menu_toggled;

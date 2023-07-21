@@ -2498,7 +2498,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::LoadSave => {
+                    UiMode::LoadLocalSave => {
                         app.load_save_prv(false);
                         app.dispatch(IoEvent::LoadLocalPreview).await;
                     }
@@ -2613,7 +2613,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::LoadSave => {
+                    UiMode::LoadLocalSave => {
                         app.load_save_next(false);
                         app.dispatch(IoEvent::LoadLocalPreview).await;
                     }
@@ -2843,7 +2843,7 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                         AppReturn::Continue
                     }
                     UiMode::NewCard => handle_new_card_action(app),
-                    UiMode::LoadSave => {
+                    UiMode::LoadLocalSave => {
                         app.dispatch(IoEvent::LoadSaveLocal).await;
                         AppReturn::Continue
                     }
@@ -3057,11 +3057,20 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
             }
             Action::DeleteCard => {
                 match app.state.ui_mode {
-                    UiMode::LoadSave => {
+                    UiMode::LoadLocalSave => {
                         // run delete task in background
-                        app.dispatch(IoEvent::DeleteSave).await;
+                        app.dispatch(IoEvent::DeleteLocalSave).await;
                         tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
                         app.dispatch(IoEvent::LoadLocalPreview).await;
+                        AppReturn::Continue
+                    }
+                    UiMode::LoadCloudSave => {
+                        // run delete task in background
+                        app.dispatch(IoEvent::DeleteCloudSave).await;
+                        tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
+                        app.dispatch(IoEvent::GetCloudData).await;
+                        tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
+                        app.dispatch(IoEvent::LoadCloudPreview).await;
                         AppReturn::Continue
                     }
                     _ => {
@@ -4675,7 +4684,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                     }
                 }
             }
-            UiMode::LoadSave => {
+            UiMode::LoadLocalSave => {
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::CloseButton) {
                         handle_go_to_prv_ui_mode(app);
@@ -4942,7 +4951,7 @@ async fn handle_main_menu_action(app: &mut App) -> AppReturn {
             }
             MainMenuItem::LoadSave => {
                 app.state.prev_ui_mode = Some(UiMode::MainMenu);
-                app.state.ui_mode = UiMode::LoadSave;
+                app.state.ui_mode = UiMode::LoadLocalSave;
             }
         }
     }
@@ -5170,7 +5179,7 @@ pub async fn handle_go_to_previous_ui_mode(app: &mut App) -> AppReturn {
             }
             AppReturn::Continue
         }
-        UiMode::LoadSave => {
+        UiMode::LoadLocalSave => {
             app.state.load_save_state = ListState::default();
             if app.state.prev_ui_mode == Some(app.state.ui_mode) {
                 app.state.ui_mode = UiMode::MainMenu;

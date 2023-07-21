@@ -4027,7 +4027,11 @@ where
         vec![]
     };
 
-    let max_height = (rect.size().height - 12) as usize;
+    let max_height = if app.state.user_login_data.auth_token.is_some() {
+        (rect.size().height - 14) as usize
+    } else {
+        (rect.size().height - 12) as usize
+    };
     let min_height = 2;
     let command_search_results_length = command_search_results.len() + 2;
     let card_search_results_length = card_search_results.len() + 2;
@@ -4080,24 +4084,80 @@ where
         min_height
     };
 
-    let vertical_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Length(
-                    ((command_search_results_length
-                        + card_search_results_length
-                        + board_search_results_length)
-                        + 2) as u16,
-                ),
-                Constraint::Min(1),
-                Constraint::Length(4),
-            ]
-            .as_ref(),
+    let vertical_chunks = if app.state.user_login_data.auth_token.is_some() {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Length(3),
+                    Constraint::Length(2),
+                    Constraint::Length(3),
+                    Constraint::Length(
+                        ((command_search_results_length
+                            + card_search_results_length
+                            + board_search_results_length)
+                            + 2) as u16,
+                    ),
+                    Constraint::Min(1),
+                    Constraint::Length(4),
+                ]
+                .as_ref(),
+            )
+            .split(horizontal_chunks[1])
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(
+                        ((command_search_results_length
+                            + card_search_results_length
+                            + board_search_results_length)
+                            + 2) as u16,
+                    ),
+                    Constraint::Min(1),
+                    Constraint::Length(4),
+                ]
+                .as_ref(),
+            )
+            .split(horizontal_chunks[1])
+    };
+
+    let search_box_chunk = if app.state.user_login_data.auth_token.is_some() {
+        vertical_chunks[2]
+    } else {
+        vertical_chunks[1]
+    };
+
+    let search_results_chunk = if app.state.user_login_data.auth_token.is_some() {
+        vertical_chunks[3]
+    } else {
+        vertical_chunks[2]
+    };
+
+    let help_chunk = if app.state.user_login_data.auth_token.is_some() {
+        vertical_chunks[5]
+    } else {
+        vertical_chunks[4]
+    };
+
+    if app.state.user_login_data.auth_token.is_some() {
+        let logged_in_indicator = Paragraph::new(format!(
+            "Logged in as: {}",
+            app.state.user_login_data.email_id.clone().unwrap()
+        ))
+        .style(app.theme.general_style.add_modifier(Modifier::RAPID_BLINK))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
         )
-        .split(horizontal_chunks[1]);
+        .alignment(Alignment::Center);
+        rect.render_widget(Clear, vertical_chunks[0]);
+        rect.render_widget(logged_in_indicator, vertical_chunks[0]);
+    }
 
     let search_box_text = if app.state.current_user_input.is_empty() {
         vec![Line::from(
@@ -4112,22 +4172,22 @@ where
     } else {
         app.state.current_user_input.len() as u16
     };
-    let x_offset = current_cursor_position % (vertical_chunks[1].width - 2);
-    let y_offset = current_cursor_position / (vertical_chunks[1].width - 2);
-    let x_cursor_position = vertical_chunks[1].x + x_offset + 1;
-    let y_cursor_position = vertical_chunks[1].y + y_offset + 1;
+    let x_offset = current_cursor_position % (search_box_chunk.width - 2);
+    let y_offset = current_cursor_position / (search_box_chunk.width - 2);
+    let x_cursor_position = search_box_chunk.x + x_offset + 1;
+    let y_cursor_position = search_box_chunk.y + y_offset + 1;
     rect.set_cursor(x_cursor_position, y_cursor_position);
 
     // make a search bar and display all the commands that match the search below it in a list
-    let search_bar = Paragraph::new(search_box_text).block(
+    let search_box = Paragraph::new(search_box_text).block(
         Block::default()
             .title("Command Palette")
             .borders(Borders::ALL)
             .style(app.theme.general_style)
             .border_type(BorderType::Rounded),
     );
-    render_blank_styled_canvas(rect, app, vertical_chunks[1], false);
-    rect.render_widget(search_bar, vertical_chunks[1]);
+    render_blank_styled_canvas(rect, app, search_box_chunk, false);
+    rect.render_widget(search_box, search_box_chunk);
 
     let results_border = Block::default()
         .style(app.theme.general_style)
@@ -4145,7 +4205,7 @@ where
             .as_ref(),
         )
         .margin(1)
-        .split(vertical_chunks[2]);
+        .split(search_results_chunk);
 
     let command_search_results = List::new(command_search_results)
         .block(
@@ -4180,8 +4240,8 @@ where
         .highlight_style(board_search_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    render_blank_styled_canvas(rect, app, vertical_chunks[2], false);
-    rect.render_widget(results_border, vertical_chunks[2]);
+    render_blank_styled_canvas(rect, app, search_results_chunk, false);
+    rect.render_widget(results_border, search_results_chunk);
     rect.render_stateful_widget(
         command_search_results,
         search_results_chunks[0],
@@ -4255,8 +4315,8 @@ where
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: false });
 
-    render_blank_styled_canvas(rect, app, vertical_chunks[4], false);
-    rect.render_widget(help_paragraph, vertical_chunks[4]);
+    render_blank_styled_canvas(rect, app, help_chunk, false);
+    rect.render_widget(help_paragraph, help_chunk);
 
     if check_if_mouse_is_in_area(
         app.state.current_mouse_coordinates,
