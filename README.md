@@ -9,7 +9,6 @@
   Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
   I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 ## TODO
-- [ ] End to End Encryption for Cloud Saves
 - [ ] Allow for vertical movement in text fields (e.g. card description)
 - [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
 - [ ] Allow for more mouse Interactions (Dragging cards maybe?)
@@ -18,6 +17,7 @@
 - [ ] Write Tests
 - [ ] Add a Tutorial for new users (Preferably in the app itself with animations and highlighting of UI elements)
 ## Completed Features
+- [x] Encryption for Cloud Saves
 - [x] Implement Cloud saves
 - [x] Ability to scroll through logs
 - [x] Ability to Undo and Redo actions
@@ -45,9 +45,10 @@
 ## Known Issues
 - [ ] Cursor positioning is not correct for new lines, special characters in other languages, and emoticons
 
-## PSA
-<li>To migrate to v0.7 and above, you will have to export your saves to json from the command palette and then import them again, this is because the save format has changed and the old saves will not work with the new version.
-<li>Cloud saves are not encrypted for this current version i am working on implementing end to end encryption for cloud saves, if you are concerned about your data being leaked, please do not use the cloud save feature for now.
+## PSA (i.e. Public service announcement)
+<li>Cloud saves are now encrypted. Please keep your generated key safe. It is usually located in "config/rust_kanban/kanban_encryption_key" after signing up. If you lose your key, you will not be able to access your data (I Cannot see your data nor edit it/decrypt it). If you have lost your key, you will have to delete your data after logging in and generate a new key using the -g flag.</li>
+<li>If you are not feeling safe to store your key on disk you can also provide the generated key with the --encryption-key flag when starting the app. This will allow you to store your key in a password manager or a file that is not on disk. by copying the generated key from the key location and deleting it thereafter</li>
+<li>linux example : rust-kanban --encryption-key $(cat ~/.config/rust_kanban/kanban_encryption_key)</li>
 
 ## How to use
 ### Default Keybindings

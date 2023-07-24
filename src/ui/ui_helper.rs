@@ -6883,6 +6883,13 @@ where
     } else {
         app.state.reset_password_form.0[1].clone()
     };
+    let (windowed_reset_link, reset_link_cursor_pos_x) = get_sliding_window_over_text(
+        &reset_link_field_text,
+        app.state
+            .current_cursor_position
+            .unwrap_or(reset_link_field_text.len()),
+        reset_link_chunk.width - 2,
+    );
 
     let new_password_field_text = if app.state.reset_password_form.0[2].is_empty() {
         "New Password".to_string()
@@ -6936,7 +6943,7 @@ where
         )
         .alignment(Alignment::Center);
 
-    let reset_link_paragraph = Paragraph::new(reset_link_field_text)
+    let reset_link_paragraph = Paragraph::new(windowed_reset_link)
         .style(reset_link_field_style)
         .block(
             Block::default()
@@ -7013,22 +7020,10 @@ where
                 );
             }
         } else if app.state.focus == Focus::ResetPasswordLinkField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.reset_password_form.0[1],
-                        reset_link_chunk.width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    reset_link_chunk,
-                );
-                rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    reset_link_chunk.x + 1 + app.state.reset_password_form.0[1].len() as u16,
-                    reset_link_chunk.y + 1,
-                );
-            }
+            rect.set_cursor(
+                reset_link_chunk.x + 1 + reset_link_cursor_pos_x,
+                reset_link_chunk.y + 1,
+            );
         } else if app.state.focus == Focus::PasswordField {
             if app.state.current_cursor_position.is_some() {
                 let (x_pos, y_pos) = calculate_cursor_position(
@@ -7126,60 +7121,68 @@ where
         .style(default_style);
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let item_list = &app.state.cloud_data_preview;
-    let empty_item_list = Vec::new();
-    let item_list = if let Some(item_list) = item_list {
-        item_list
-    } else {
-        &empty_item_list
-    };
-    if item_list.is_empty() {
-        let no_saves_paragraph = Paragraph::new("Waiting for data from the cloud...")
-            .alignment(Alignment::Center)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            )
-            .style(app.theme.error_text_style);
-        rect.render_widget(no_saves_paragraph, chunks[1]);
-    } else {
-        // make a list from the Vec<string> of save files
-        let items: Vec<ListItem> = item_list
-            .iter()
-            .map(|i| ListItem::new(format!("cloud_save_{}", i.save_id)))
-            .collect();
-        let choice_list = List::new(items)
-            .block(
-                Block::default()
-                    .title("Available Saves")
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            )
-            .highlight_style(app.theme.list_select_style)
-            .highlight_symbol(LIST_SELECTED_SYMBOL)
-            .style(default_style);
-
-        if !(app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
-            && check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
-        {
-            app.state.mouse_focus = Some(Focus::LoadSave);
-            app.state.focus = Focus::LoadSave;
-            let top_of_list = chunks[1].y + 1;
-            let mut bottom_of_list = chunks[1].y + item_list.len() as u16;
-            if bottom_of_list > chunks[1].bottom() {
-                bottom_of_list = chunks[1].bottom();
+    let item_list = &app.state.cloud_data;
+    if item_list.is_some() {
+        let item_list = item_list.as_ref().unwrap();
+        if item_list.is_empty() {
+            let no_saves_paragraph = Paragraph::new("No saves Found")
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                )
+                .style(app.theme.error_text_style);
+            rect.render_widget(no_saves_paragraph, chunks[1]);
+        } else {
+            // make a list from the Vec<string> of save files
+            let items: Vec<ListItem> = item_list
+                .iter()
+                .map(|i| ListItem::new(format!("cloud_save_{}", i.save_id)))
+                .collect();
+            let choice_list = List::new(items)
+                .block(
+                    Block::default()
+                        .title("Available Saves")
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                )
+                .highlight_style(app.theme.list_select_style)
+                .highlight_symbol(LIST_SELECTED_SYMBOL)
+                .style(default_style);
+    
+            if !(app.state.popup_mode.is_some()
+                && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
+                && check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
+            {
+                app.state.mouse_focus = Some(Focus::LoadSave);
+                app.state.focus = Focus::LoadSave;
+                let top_of_list = chunks[1].y + 1;
+                let mut bottom_of_list = chunks[1].y + item_list.len() as u16;
+                if bottom_of_list > chunks[1].bottom() {
+                    bottom_of_list = chunks[1].bottom();
+                }
+                let mouse_y = app.state.current_mouse_coordinates.1;
+                if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+                    app.state
+                        .load_save_state
+                        .select(Some((mouse_y - top_of_list) as usize));
+                }
             }
-            let mouse_y = app.state.current_mouse_coordinates.1;
-            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-                app.state
-                    .load_save_state
-                    .select(Some((mouse_y - top_of_list) as usize));
-            }
+            rect.render_stateful_widget(choice_list, chunks[1], &mut app.state.load_save_state);
         }
-        rect.render_stateful_widget(choice_list, chunks[1], &mut app.state.load_save_state);
+    } else {
+        let no_saves_paragraph = Paragraph::new("Waiting for data from the cloud...")
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                )
+                .style(app.theme.error_text_style);
+            rect.render_widget(no_saves_paragraph, chunks[1]);
     }
+    
 
     let delete_key = app
         .state
@@ -7382,4 +7385,30 @@ fn get_time_offset() -> u64 {
     let start_time = SystemTime::now();
     let since_epoch = start_time.duration_since(UNIX_EPOCH).unwrap();
     since_epoch.as_millis() as u64
+}
+
+fn get_sliding_window_over_text(
+    text: &str,
+    cursor_pos: usize,
+    display_box_width: u16,
+) -> (&str, u16) {
+    // take a long string and check if the text is extending beyond the
+    // display box if so get a sliding window over the text based on the cursor position
+    // also return cursor_pos with respect to the sliding window
+    let text_width = text.chars().count() as u16;
+    if text_width <= display_box_width {
+        return (text, cursor_pos as u16);
+    }
+    let mut start_pos = 0;
+    let mut end_pos = text_width;
+    if cursor_pos < display_box_width as usize / 2 {
+        end_pos = display_box_width;
+    } else if cursor_pos > text_width as usize - display_box_width as usize / 2 {
+        start_pos = text_width - display_box_width;
+    } else {
+        start_pos = cursor_pos as u16 - display_box_width / 2;
+        end_pos = cursor_pos as u16 + display_box_width / 2;
+    }
+    let text = &text[start_pos as usize..end_pos as usize];
+    (text, cursor_pos as u16 - start_pos)
 }

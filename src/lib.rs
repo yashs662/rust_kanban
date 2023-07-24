@@ -1,8 +1,16 @@
 use app::{App, AppReturn};
+use constants::ENCRYPTION_KEY_FILE_NAME;
 use crossterm::{event::EnableMouseCapture, execute};
 use eyre::Result;
 use inputs::{events::Events, InputEvent};
-use io::IoEvent;
+use io::{
+    data_handler::reset_config,
+    handler::{
+        generate_new_encryption_key, get_all_save_ids_for_user, get_config_dir, login_for_user,
+        save_user_encryption_key,
+    },
+    IoEvent,
+};
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::{borrow::Cow, io::stdout, sync::Arc, time::Duration};
 use ui::ui_main;
@@ -113,4 +121,82 @@ fn lerp_between(color_a: (u8, u8, u8), color_b: (u8, u8, u8), time_in_ms: f32) -
     let g = (color_a.1 as f32 * (1.0 - time_in_ms) + color_b.1 as f32 * time_in_ms) as u8;
     let b = (color_a.2 as f32 * (1.0 - time_in_ms) + color_b.2 as f32 * time_in_ms) as u8;
     (r, g, b)
+}
+
+pub async fn gen_new_key_main(email_id: String, password: String) -> Result<()> {
+    // only to be used as a cli argument function
+    let mut previous_key_lost = false;
+    // check if a key is already present
+    let mut key_default_path = get_config_dir().unwrap();
+    key_default_path.push(ENCRYPTION_KEY_FILE_NAME);
+    if key_default_path.exists() {
+        print_info(
+            "An encryption key already exists, are you sure you want to generate a new one? (y/n)",
+        );
+        println!("> ");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap();
+        let input = input.trim().to_lowercase();
+        if input == "y" || input == "yes" {
+            print_info("Preparing to generate new encryption key...");
+        } else {
+            print_info("Aborting...");
+            return Ok(());
+        }
+    } else {
+        print_warn(
+            "Previous encryption key not found, preparing to generate new encryption key...",
+        );
+        previous_key_lost = true;
+    }
+    print_info("Trying to login...");
+    let (access_token, user_id) = login_for_user(&email_id, &password, true).await?;
+    let save_ids = get_all_save_ids_for_user(user_id.to_owned(), &access_token).await?;
+    if save_ids.is_empty() {
+        print_warn("No Cloud save files found");
+        print_info("Generating new encryption key...");
+        let key = generate_new_encryption_key();
+        let save_status = save_user_encryption_key(&key);
+        if save_status.is_err() {
+            print_error("Error saving encryption key");
+            print_debug(&format!("Error: {:?}", save_status.err()));
+            return Ok(());
+        }
+        let save_location = save_status.unwrap();
+        print_info("Encryption key generated and saved");
+        print_info("Please keep this key safe as it will be required to access your save files");
+        print_info(&format!("New Key generated_at: {}", save_location));
+    } else {
+        print_info(&format!("{} save files found", save_ids.len()));
+        if previous_key_lost {
+            print_warn("It seems like the previous encryption key was lost as it could not be found");
+        }
+        print_warn("Please delete these files by logging in before generating a new encryption key as they will no longer be accessible");
+        print_info("Aborting...");
+    }
+    Ok(())
+}
+
+pub fn reset_app_main() {
+    print_info("🚀 Resetting config");
+    reset_config();
+    print_info("👍 Config reset");
+}
+
+pub fn print_error(error: &str) {
+    bunt::println!("{$red}[ERROR]{/$} - {}", error);
+}
+
+pub fn print_info(info: &str) {
+    bunt::println!("{$cyan}[INFO]{/$}  - {}", info);
+}
+
+pub fn print_debug(debug: &str) {
+    if cfg!(debug_assertions) {
+        bunt::println!("{$green}[DEBUG]{/$} - {}", debug);
+    }
+}
+
+pub fn print_warn(warn: &str) {
+    bunt::println!("{$yellow}[WARN]{/$}  - {}", warn);
 }

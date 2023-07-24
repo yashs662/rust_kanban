@@ -5,7 +5,6 @@ pub mod logger;
 #[derive(Debug, Clone)]
 pub enum IoEvent {
     Initialize, // Launch to initialize the application
-    Reset,
     SaveLocalData,
     LoadSaveLocal,
     LoadSaveCloud,

@@ -41,11 +41,16 @@ pub const RANDOM_SEARCH_TERM: &str = "iibnigivirneiivure";
 pub const DEFAULT_UI_MODE: UiMode = UiMode::TitleBodyHelpLog;
 pub const HIDDEN_PASSWORD_SYMBOL: char = '•';
 pub const SAVE_FILE_REGEX: &str = r"^kanban_\d{2}-\d{2}-\d{4}_v\d+.json";
+pub const ENCRYPTION_KEY_FILE_NAME: &str = "kanban_encryption_key";
+pub const ACCESS_TOKEN_FILE_NAME: &str = "kanban_access_token";
+pub const ACCESS_TOKEN_SEPARATOR: &str = "<<>>";
 
 // Cloud Stuff
 pub const MIN_TIME_BETWEEN_SENDING_RESET_LINK: u64 = 60; // seconds
 pub const SUPABASE_URL: &str = "https://kcpkbdobsyrtkawocudz.supabase.co";
 pub const SUPABASE_ANON_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjcGtiZG9ic3lydGthd29jdWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODA5NDkzOTksImV4cCI6MTk5NjUyNTM5OX0.N1jDZ2rFUDw9VtQbGQhBjonI0zy10lfJL-O2rBJlUOs";
+pub const MIN_PASSWORD_LENGTH: usize = 8;
+pub const MAX_PASSWORD_LENGTH: usize = 32;
 
 // Style
 pub const GENERAL_STYLE: Style = Style {
