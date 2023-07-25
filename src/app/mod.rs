@@ -276,7 +276,7 @@ impl App {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
                 if cloud_mode {
-                    let cloud_save_files = self.state.cloud_data_preview.clone();
+                    let cloud_save_files = self.state.cloud_data.clone();
                     let cloud_save_files_len = if let Some(cloud_save_files_len) = cloud_save_files
                     {
                         cloud_save_files_len.len()
@@ -311,7 +311,7 @@ impl App {
         let i = match self.state.load_save_state.selected() {
             Some(i) => {
                 if cloud_mode {
-                    let cloud_save_files = self.state.cloud_data_preview.clone();
+                    let cloud_save_files = self.state.cloud_data.clone();
                     let cloud_save_files_len = if let Some(cloud_save_files_len) = cloud_save_files
                     {
                         cloud_save_files_len.len()
@@ -1485,8 +1485,9 @@ pub struct AppState {
     pub date_format_selector_state: ListState,
     pub log_state: ListState,
     pub user_login_data: UserLoginData,
-    pub cloud_data_preview: Option<Vec<CloudData>>,
+    pub cloud_data: Option<Vec<CloudData>>,
     pub last_reset_password_link_sent_time: Option<Instant>,
+    pub encryption_key_from_arguments: Option<String>,
 }
 
 impl Default for AppState {
@@ -1558,8 +1559,9 @@ impl Default for AppState {
                 auth_token: None,
                 user_id: None,
             },
-            cloud_data_preview: None,
+            cloud_data: None,
             last_reset_password_link_sent_time: None,
+            encryption_key_from_arguments: None,
         }
     }
 }
@@ -1644,6 +1646,7 @@ pub struct AppConfig {
     pub enable_mouse_support: bool,
     pub default_theme: String,
     pub date_format: DateFormat,
+    pub auto_login: bool,
 }
 
 impl Default for AppConfig {
@@ -1664,6 +1667,7 @@ impl Default for AppConfig {
             enable_mouse_support: true,
             default_theme: default_theme.name,
             date_format: DateFormat::default(),
+            auto_login: true,
         }
     }
 }
@@ -1691,6 +1695,7 @@ impl AppConfig {
                 String::from("Disable Scroll Bar"),
                 self.disable_scroll_bar.to_string(),
             ],
+            vec![String::from("Auto Login"), self.auto_login.to_string()],
             vec![
                 String::from("Number of Days to Warn Before Due Date"),
                 self.warning_delta.to_string(),
@@ -1774,6 +1779,16 @@ impl AppConfig {
                         config.disable_scroll_bar = true;
                     } else if value.to_lowercase() == "false" {
                         config.disable_scroll_bar = false;
+                    } else {
+                        error!("Invalid boolean: {}", value);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
+                    }
+                }
+                "Auto Login" => {
+                    if value.to_lowercase() == "true" {
+                        config.auto_login = true;
+                    } else if value.to_lowercase() == "false" {
+                        config.auto_login = false;
                     } else {
                         error!("Invalid boolean: {}", value);
                         app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
@@ -2071,6 +2086,13 @@ impl AppConfig {
                 false
             }
         };
+        let auto_login = match serde_json_object["auto_login"].as_bool() {
+            Some(auto_login) => auto_login,
+            None => {
+                error!("Auto Login is not a boolean, Resetting to default value");
+                true
+            }
+        };
         let warning_delta = match serde_json_object["warning_delta"].as_u64() {
             Some(warning_delta) => warning_delta as u16,
             None => {
@@ -2230,6 +2252,7 @@ impl AppConfig {
             always_load_last_save,
             save_on_exit,
             disable_scroll_bar,
+            auto_login,
             warning_delta,
             keybindings,
             tickrate,

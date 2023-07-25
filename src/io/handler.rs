@@ -1,3 +1,8 @@
+use aes_gcm::{
+    aead::{generic_array::GenericArray, Aead, OsRng},
+    AeadCore, Aes256Gcm, Key, KeyInit,
+};
+use base64::Engine;
 use chrono::{NaiveDate, NaiveDateTime};
 use eyre::{anyhow, Result};
 use linked_hash_map::LinkedHashMap;
@@ -22,12 +27,13 @@ use crate::{
         UserLoginData,
     },
     constants::{
-        CONFIG_DIR_NAME, CONFIG_FILE_NAME, MIN_TIME_BETWEEN_SENDING_RESET_LINK, SAVE_DIR_NAME,
-        SAVE_FILE_REGEX, SUPABASE_ANON_KEY, SUPABASE_URL,
+        ACCESS_TOKEN_FILE_NAME, ACCESS_TOKEN_SEPARATOR, CONFIG_DIR_NAME, CONFIG_FILE_NAME,
+        ENCRYPTION_KEY_FILE_NAME, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH,
+        MIN_TIME_BETWEEN_SENDING_RESET_LINK, SAVE_DIR_NAME, SAVE_FILE_REGEX, SUPABASE_ANON_KEY,
+        SUPABASE_URL,
     },
-    io::data_handler::{
-        get_default_save_directory, get_saved_themes, reset_config, save_kanban_state_locally,
-    },
+    io::data_handler::{get_default_save_directory, get_saved_themes, save_kanban_state_locally},
+    print_debug, print_error, print_info,
     ui::TextColorOptions,
 };
 
@@ -45,7 +51,6 @@ impl IoAsyncHandler {
     pub async fn handle_io_event(&mut self, io_event: IoEvent) {
         let result = match io_event {
             IoEvent::Initialize => self.do_initialize().await,
-            IoEvent::Reset => self.reset_config().await,
             IoEvent::SaveLocalData => self.save_local_data().await,
             IoEvent::LoadSaveLocal => self.load_save_file_local().await,
             IoEvent::DeleteLocalSave => self.delete_local_save_file().await,
@@ -124,13 +129,44 @@ impl IoAsyncHandler {
             );
         }
         app.send_info_toast("Application initialized", None);
-        Ok(())
-    }
-
-    async fn reset_config(&mut self) -> Result<()> {
-        info!("🚀 Resetting config");
-        reset_config();
-        info!("👍 Config reset");
+        if app.config.auto_login {
+            app.send_info_toast("Attempting to auto login", None);
+            let user_login_data =
+                test_access_token_on_disk(app.state.encryption_key_from_arguments.clone()).await;
+            if user_login_data.is_err() {
+                // delete the access token file
+                let access_token_file_path = get_config_dir();
+                if access_token_file_path.is_err() {
+                    error!("Cannot get config directory");
+                    app.send_error_toast("Cannot get config directory", None);
+                    return Ok(());
+                }
+                let mut access_token_file_path = access_token_file_path.unwrap();
+                access_token_file_path.push(ACCESS_TOKEN_FILE_NAME);
+                if access_token_file_path.exists() {
+                    if let Err(err) = std::fs::remove_file(access_token_file_path) {
+                        error!("Cannot delete access token file: {:?}", err);
+                        app.send_error_toast("Cannot delete access token file", None);
+                        return Ok(());
+                    } else {
+                        warn!("Previous access token has expired or does not exist. Please login again");
+                        app.send_warning_toast("Previous access token has expired or does not exist. Please login again", None)
+                    }
+                } else {
+                    warn!(
+                        "Previous access token has expired or does not exist. Please login again"
+                    );
+                    app.send_warning_toast(
+                        "Previous access token has expired or does not exist. Please login again",
+                        None,
+                    )
+                }
+            } else {
+                let user_login_data = user_login_data.unwrap();
+                app.state.user_login_data = user_login_data;
+                app.send_info_toast("👍 Auto login successful", None);
+            }
+        }
         Ok(())
     }
 
@@ -362,119 +398,28 @@ impl IoAsyncHandler {
             }
         }
 
-        let request_body = json!(
-            {
-                "email": email_id,
-                "password": password
-            }
-        );
-        let client = reqwest::Client::new();
-        let response = client
-            .post(format!(
-                "{}/auth/v1/token?grant_type=password",
-                SUPABASE_URL
-            ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Content-Type", "application/json")
-            .body(request_body.to_string())
-            .send()
+        let (access_token, user_id) = login_for_user(&email_id, &password, false).await?;
+        let mut app = self.app.lock().await;
+        app.state.user_login_data.auth_token = Some(access_token.to_string());
+        app.state.user_login_data.email_id = Some(email_id.to_string());
+        app.state.user_login_data.user_id = Some(user_id.to_string());
+
+        if app.config.auto_login {
+            save_access_token_to_disk(
+                &access_token,
+                &email_id,
+                app.state.encryption_key_from_arguments.clone(),
+            )
             .await?;
-        let status = response.status();
-        let body = response.json::<serde_json::Value>().await;
-        if status == StatusCode::OK {
-            match body {
-                Ok(body) => {
-                    let access_token = body.get("access_token");
-                    match access_token {
-                        Some(access_token) => {
-                            let access_token = access_token.as_str().unwrap();
-                            let user_data_client = reqwest::Client::new();
-                            let user_data_response = user_data_client
-                                .get(format!("{}/auth/v1/user", SUPABASE_URL))
-                                .header("apikey", SUPABASE_ANON_KEY)
-                                .header("Content-Type", "application/json")
-                                .header("Authorization", format!("Bearer {}", access_token))
-                                .send()
-                                .await?;
-
-                            let user_data_status = user_data_response.status();
-                            let user_data_body =
-                                user_data_response.json::<serde_json::Value>().await;
-                            if user_data_status != StatusCode::OK {
-                                error!("Error logging in");
-                                let mut app = self.app.lock().await;
-                                app.send_error_toast("Error logging in", None);
-                                return Ok(());
-                            }
-                            let user_data_body = user_data_body.unwrap();
-                            let user_id = user_data_body.get("id");
-                            if user_id.is_none() {
-                                error!("Error logging in");
-                                let mut app = self.app.lock().await;
-                                app.send_error_toast("Error logging in", None);
-                                return Ok(());
-                            }
-                            let user_id = user_id.unwrap().as_str().unwrap();
-                            let mut app = self.app.lock().await;
-                            app.state.user_login_data.auth_token = Some(access_token.to_string());
-                            app.state.user_login_data.email_id = Some(email_id);
-                            app.state.user_login_data.user_id = Some(user_id.to_string());
-                            if app.state.ui_mode == UiMode::Login {
-                                handle_go_to_previous_ui_mode(&mut app).await;
-                            }
-
-                            info!("👍 Logged in");
-                            app.send_info_toast("👍 Logged in", None);
-                        }
-                        None => {
-                            error!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer");
-                            let mut app = self.app.lock().await;
-                            app.send_error_toast(
-                                "Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer",
-                                None,
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Error logging in: {}", e);
-                    let mut app = self.app.lock().await;
-                    app.send_error_toast("Error logging in", None);
-                }
-            }
-        } else if status == StatusCode::TOO_MANY_REQUESTS {
-            error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
-            debug!("status code {}, response body: {:?}", status, body);
-            let mut app = self.app.lock().await;
-            app.send_error_toast("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢", None);
-        } else {
-            match body {
-                Ok(body) => {
-                    let error_description = body.get("error_description");
-                    match error_description {
-                        Some(error_description) => {
-                            let error_description = error_description.as_str().unwrap();
-                            error!("Error logging in: {}", error_description);
-                            let mut app = self.app.lock().await;
-                            app.send_error_toast(
-                                &format!("Error logging in: {}", error_description),
-                                None,
-                            );
-                        }
-                        None => {
-                            error!("Error logging in");
-                            let mut app = self.app.lock().await;
-                            app.send_error_toast("Error logging in", None);
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Error logging in: {}", e);
-                    let mut app = self.app.lock().await;
-                    app.send_error_toast("Error logging in", None);
-                }
-            }
         }
+
+        if app.state.ui_mode == UiMode::Login {
+            handle_go_to_previous_ui_mode(&mut app).await;
+        }
+
+        info!("👍 Logged in");
+        app.send_info_toast("👍 Logged in", None);
+
         Ok(())
     }
 
@@ -538,27 +483,88 @@ impl IoAsyncHandler {
                 error!("Already logged in");
                 app.send_error_toast("Already logged in", None);
                 return Ok(());
-            } else {
-                info!("Signing up, please wait...");
-                app.send_info_toast("Signing up, please wait...", None);
             }
             if email_id.is_empty() {
                 error!("Email cannot be empty");
                 app.send_error_toast("Email cannot be empty", None);
                 return Ok(());
             }
-
             if password.is_empty() || confirm_password.is_empty() {
                 error!("Password cannot be empty");
                 app.send_error_toast("Password cannot be empty", None);
                 return Ok(());
             }
-
             if password != confirm_password {
                 error!("Passwords do not match");
                 app.send_error_toast("Passwords do not match", None);
                 return Ok(());
             }
+
+            let password_status = check_for_safe_password(&password);
+            match password_status {
+                PasswordStatus::Strong => {
+                    // do nothing
+                }
+                PasswordStatus::MissingLowercase => {
+                    error!("Password must contain atleast one lowercase character");
+                    app.send_error_toast(
+                        "Password must contain atleast one lowercase character",
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::MissingUppercase => {
+                    error!("Password must contain atleast one uppercase character");
+                    app.send_error_toast(
+                        "Password must contain atleast one uppercase character",
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::MissingNumber => {
+                    error!("Password must contain atleast one number");
+                    app.send_error_toast("Password must contain atleast one number", None);
+                    return Ok(());
+                }
+                PasswordStatus::MissingSpecialChar => {
+                    error!("Password must contain atleast one special character");
+                    app.send_error_toast(
+                        "Password must contain atleast one special character",
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::TooShort => {
+                    error!(
+                        "Password must be atleast {} characters long",
+                        MIN_PASSWORD_LENGTH
+                    );
+                    app.send_error_toast(
+                        &format!(
+                            "Password must be atleast {} characters long",
+                            MIN_PASSWORD_LENGTH
+                        ),
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::TooLong => {
+                    error!(
+                        "Password must be atmost {} characters long",
+                        MAX_PASSWORD_LENGTH
+                    );
+                    app.send_error_toast(
+                        &format!(
+                            "Password must be atmost {} characters long",
+                            MAX_PASSWORD_LENGTH
+                        ),
+                        None,
+                    );
+                }
+            }
+
+            info!("Signing up, please wait...");
+            app.send_info_toast("Signing up, please wait...", None);
         }
 
         let request_body = json!(
@@ -593,6 +599,26 @@ impl IoAsyncHandler {
                             info!("👍 Confirmation email sent");
                             let mut app = self.app.lock().await;
                             app.send_info_toast("👍 Confirmation email sent", None);
+                            let key = generate_new_encryption_key();
+                            let save_result = save_user_encryption_key(&key);
+                            if save_result.is_err() {
+                                error!("Error saving encryption key");
+                                debug!("Error saving encryption key: {:?}", save_result);
+                                app.send_error_toast("Error saving encryption key", None);
+                                return Ok(());
+                            } else {
+                                let save_path = save_result.unwrap();
+                                info!("👍 Encryption key saved at {}", save_path);
+                                app.send_info_toast(
+                                    &format!("👍 Encryption key saved at {}", save_path),
+                                    None,
+                                );
+                                warn!("Please keep this key safe, you will need it to decrypt your data, you will not be able to recover your data without it");
+                                app.send_warning_toast(
+                                    "Please keep this key safe, you will need it to decrypt your data, you will not be able to recover your data without it",
+                                    None,
+                                );
+                            }
                         }
                         None => {
                             error!("Error signing up");
@@ -697,18 +723,82 @@ impl IoAsyncHandler {
                 error!("Reset link cannot be empty");
                 app.send_error_toast("Reset link cannot be empty", None);
                 return Ok(());
-            } else if new_password != confirm_password {
-                error!("Passwords do not match");
-                app.send_error_toast("Passwords do not match", None);
-                return Ok(());
-            } else if new_password.is_empty() || confirm_password.is_empty() {
+            }
+            if new_password.is_empty() || confirm_password.is_empty() {
                 error!("Password cannot be empty");
                 app.send_error_toast("Password cannot be empty", None);
                 return Ok(());
-            } else {
-                info!("Resetting password, please wait...");
-                app.send_info_toast("Resetting password, please wait...", None);
             }
+            if new_password != confirm_password {
+                error!("Passwords do not match");
+                app.send_error_toast("Passwords do not match", None);
+                return Ok(());
+            }
+            let password_status = check_for_safe_password(&new_password);
+            match password_status {
+                PasswordStatus::Strong => {
+                    // do nothing
+                }
+                PasswordStatus::MissingLowercase => {
+                    error!("Password must contain atleast one lowercase character");
+                    app.send_error_toast(
+                        "Password must contain atleast one lowercase character",
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::MissingUppercase => {
+                    error!("Password must contain atleast one uppercase character");
+                    app.send_error_toast(
+                        "Password must contain atleast one uppercase character",
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::MissingNumber => {
+                    error!("Password must contain atleast one number");
+                    app.send_error_toast("Password must contain atleast one number", None);
+                    return Ok(());
+                }
+                PasswordStatus::MissingSpecialChar => {
+                    error!("Password must contain atleast one special character");
+                    app.send_error_toast(
+                        "Password must contain atleast one special character",
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::TooShort => {
+                    error!(
+                        "Password must be atleast {} characters long",
+                        MIN_PASSWORD_LENGTH
+                    );
+                    app.send_error_toast(
+                        &format!(
+                            "Password must be atleast {} characters long",
+                            MIN_PASSWORD_LENGTH
+                        ),
+                        None,
+                    );
+                    return Ok(());
+                }
+                PasswordStatus::TooLong => {
+                    error!(
+                        "Password must be atmost {} characters long",
+                        MAX_PASSWORD_LENGTH
+                    );
+                    app.send_error_toast(
+                        &format!(
+                            "Password must be atmost {} characters long",
+                            MAX_PASSWORD_LENGTH
+                        ),
+                        None,
+                    );
+                }
+            }
+
+            info!("Resetting password, please wait...");
+            app.send_info_toast("Resetting password, please wait...", None);
         }
 
         let client = reqwest::Client::new();
@@ -760,14 +850,27 @@ impl IoAsyncHandler {
                     .await?;
 
                 let status = reset_response.status();
+                let mut app = self.app.lock().await;
                 match status {
                     StatusCode::OK => {
                         info!("👍 Password reset successful");
-                        let mut app = self.app.lock().await;
                         if app.state.ui_mode == UiMode::ResetPassword {
                             handle_go_to_previous_ui_mode(&mut app).await;
                         }
                         app.send_info_toast("👍 Password reset successful", None);
+                    }
+                    StatusCode::UNPROCESSABLE_ENTITY => {
+                        error!(
+                            "Error resetting password, new password cannot be same as old password"
+                        );
+                        debug!(
+                            "Error resetting password: {:?}",
+                            reset_response.text().await
+                        );
+                        app.send_error_toast(
+                            "Error resetting password, new password cannot be same as old password",
+                            None,
+                        );
                     }
                     _ => {
                         error!("Error resetting password");
@@ -775,7 +878,6 @@ impl IoAsyncHandler {
                             "Error resetting password: {:?}",
                             reset_response.text().await
                         );
-                        let mut app = self.app.lock().await;
                         app.send_error_toast("Error resetting password", None);
                     }
                 }
@@ -805,8 +907,30 @@ impl IoAsyncHandler {
             max_save_id.unwrap() + 1
         };
 
-        let app = self.app.lock().await;
+        let mut app = self.app.lock().await;
         let board_data = app.boards.clone();
+        let key = get_user_encryption_key(app.state.encryption_key_from_arguments.clone());
+        if key.is_err() {
+            error!("Error syncing local data, Could not get encryption key, If you have lost it please generate a new one using the -g flag");
+            debug!(
+                "Error syncing local data: {:?}, Could not get encryption key",
+                key.err()
+            );
+            app.send_error_toast("Error syncing local data, Could not get encryption key, If you have lost it please generate a new one using the -g flag", None);
+            return Ok(());
+        }
+        let key = key.unwrap();
+        let encrypt_result = encrypt_save(board_data, &key);
+        if encrypt_result.is_err() {
+            error!("Error syncing local data");
+            debug!(
+                "Error syncing local data: {:?}, could not encrypt",
+                encrypt_result.err()
+            );
+            app.send_error_toast("Error syncing local data", None);
+            return Ok(());
+        }
+        let (encrypted_board_data, nonce) = encrypt_result.unwrap();
         let auth_token = app.state.user_login_data.auth_token.clone().unwrap();
         let user_id = app.state.user_login_data.user_id.clone().unwrap();
         drop(app);
@@ -820,8 +944,9 @@ impl IoAsyncHandler {
                 json!(
                     {
                         "user_id": user_id,
-                        "board_data": board_data,
-                        "save_id": max_save_id
+                        "board_data": encrypted_board_data,
+                        "save_id": max_save_id,
+                        "nonce": nonce
                     }
                 )
                 .to_string(),
@@ -834,11 +959,12 @@ impl IoAsyncHandler {
         if status == StatusCode::CREATED {
             info!("👍 Local data synced to the cloud");
             app.send_info_toast("👍 Local data synced to the cloud", None);
-            if app.state.cloud_data_preview.is_some() {
+            if app.state.cloud_data.is_some() {
                 app.dispatch(IoEvent::GetCloudData).await;
             }
         } else {
             error!("Error syncing local data");
+            debug!("Error syncing local data: {:?}", response.text().await);
             app.send_error_toast("Error syncing local data", None);
         }
         Ok(())
@@ -854,87 +980,29 @@ impl IoAsyncHandler {
             }
         }
 
-        let user_id = {
+        let (user_id, access_token) = {
             let app = self.app.lock().await;
-            app.state.user_login_data.user_id.as_ref().unwrap().clone()
+            let user_id = app.state.user_login_data.user_id.as_ref().unwrap().clone();
+            let access_token = app
+                .state
+                .user_login_data
+                .auth_token
+                .as_ref()
+                .unwrap()
+                .clone();
+            (user_id, access_token)
         };
 
-        let client = reqwest::Client::new();
-        let response = client
-            .get(format!(
-                "{}/rest/v1/user_data?user_id=eq.{}&select=save_id",
-                SUPABASE_URL, user_id
-            ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!(
-                    "Bearer {}",
-                    self.app
-                        .lock()
-                        .await
-                        .state
-                        .user_login_data
-                        .auth_token
-                        .as_ref()
-                        .unwrap()
-                ),
-            )
-            .header("Range", "0-9")
-            .send()
-            .await?;
-
-        let status = response.status();
-        if status == StatusCode::OK {
-            let body = response.json::<serde_json::Value>().await;
-            match body {
-                Ok(save_instances) => {
-                    // it will be an array of [Object {"save_id": Number(0)},
-                    let mut save_ids: Vec<usize> = Vec::new();
-                    let save_instances_as_array = save_instances.as_array();
-                    if save_instances_as_array.is_none() {
-                        error!("Error getting save ids");
-                        let mut app = self.app.lock().await;
-                        app.send_error_toast("Error getting save ids", None);
-                        return Ok(vec![]);
-                    }
-                    let save_instances_as_array = save_instances_as_array.unwrap();
-                    for save_instance in save_instances_as_array {
-                        let save_id = save_instance.get("save_id");
-                        if save_id.is_none() {
-                            error!("Error getting save ids");
-                            let mut app = self.app.lock().await;
-                            app.send_error_toast("Error getting save ids", None);
-                            return Ok(vec![]);
-                        }
-                        let save_id = save_id.unwrap().as_u64();
-                        if save_id.is_none() {
-                            error!("Error getting save ids");
-                            let mut app = self.app.lock().await;
-                            app.send_error_toast("Error getting save ids", None);
-                            return Ok(vec![]);
-                        }
-                        debug!("save_id: {:?}", save_id.unwrap() as usize);
-                        save_ids.push(save_id.unwrap() as usize);
-                    }
-                    debug!("save_instances: {:?}", save_instances);
-                    Ok(save_ids)
-                }
-                Err(e) => {
-                    error!("Error getting save ids: {}", e);
-                    let mut app = self.app.lock().await;
-                    app.send_error_toast("Error getting save ids", None);
-                    Ok(vec![])
-                }
-            }
-        } else {
-            debug!("Status: {:?}", status);
-            debug!("Error getting save ids: {:?}", response.text().await);
-            error!("Error getting save ids");
+        let result = get_all_save_ids_for_user(user_id, &access_token).await;
+        if result.is_err() {
+            let error_string = format!("{:?}", result.err());
+            error!("{}", error_string);
             let mut app = self.app.lock().await;
-            app.send_error_toast("Error getting save ids", None);
-            Ok(vec![])
+            app.send_error_toast(&error_string, None);
+            return Ok(vec![]);
+        } else {
+            let save_ids = result.unwrap();
+            return Ok(save_ids);
         }
     }
 
@@ -948,6 +1016,7 @@ impl IoAsyncHandler {
             } else {
                 info!("Refreshing cloud data, please wait...");
                 app.send_info_toast("Refreshing cloud data, please wait...", None);
+                app.state.cloud_data = None;
             }
         }
 
@@ -969,20 +1038,18 @@ impl IoAsyncHandler {
         if status == StatusCode::OK {
             let body = response.json::<Vec<CloudData>>().await;
             match body {
-                Ok(board_data) => {
-                    app.state.cloud_data_preview = Some(board_data);
+                Ok(cloud_data) => {
+                    app.state.cloud_data = Some(cloud_data);
                     info!("👍 Cloud data loaded");
                     app.send_info_toast("👍 Cloud data loaded", None);
                 }
                 Err(e) => {
                     error!("Error Refreshing cloud data: {}", e);
-                    let mut app = self.app.lock().await;
                     app.send_error_toast("Error Refreshing cloud data", None);
                 }
             }
         } else {
             error!("Error Refreshing cloud data");
-            let mut app = self.app.lock().await;
             app.send_error_toast("Error Refreshing cloud data", None);
         }
         Ok(())
@@ -1000,7 +1067,7 @@ impl IoAsyncHandler {
 
         let mut app = self.app.lock().await;
         let selected_index = app.state.load_save_state.selected().unwrap();
-        let cloud_data = app.state.cloud_data_preview.clone();
+        let cloud_data = app.state.cloud_data.clone();
         if cloud_data.is_none() {
             debug!("No cloud data preview found to select");
             return Ok(());
@@ -1011,7 +1078,25 @@ impl IoAsyncHandler {
             return Ok(());
         }
         let save = cloud_data[selected_index].clone();
-        app.state.preview_boards_and_cards = Some(save.board_data);
+        let key = get_user_encryption_key(app.state.encryption_key_from_arguments.clone());
+        if key.is_err() {
+            error!("Error loading save file, Could not get user Encryption key .If lost please generate a new one by using the -g flag");
+            debug!("Error loading save file: {:?}", key.err());
+            app.send_error_toast(
+                "Error loading save file, Could not get user Encryption key .If lost please generate a new one by using the -g flag",
+                None,
+            );
+            return Ok(());
+        }
+        let key = key.unwrap();
+        let decrypt_result = decrypt_save(save.board_data, key.as_slice(), &save.nonce);
+        if decrypt_result.is_err() {
+            error!("Error loading save file, Could not decrypt save file");
+            debug!("Error loading save file: {:?}", decrypt_result.err());
+            app.send_error_toast("Error loading save file, Could not decrypt save file", None);
+            return Ok(());
+        }
+        app.state.preview_boards_and_cards = Some(decrypt_result.unwrap());
         let mut visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
             LinkedHashMap::new();
         for (counter, board) in app
@@ -1069,7 +1154,7 @@ impl IoAsyncHandler {
     async fn load_save_file_cloud(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
         let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
-        let cloud_saves = app.state.cloud_data_preview.clone();
+        let cloud_saves = app.state.cloud_data.clone();
         let local_files = if cloud_saves.is_none() {
             error!("Could not get local save files");
             app.send_error_toast("Could not get local save files", None);
@@ -1085,8 +1170,31 @@ impl IoAsyncHandler {
         }
         let save_file_number = local_files[save_file_index].save_id;
         info!("🚀 Loading save file: cloud_save_{}", save_file_number);
-        let board_data = &local_files[save_file_index].board_data;
-        app.set_boards(board_data.to_vec());
+        let encrypted_board_data = &local_files[save_file_index].board_data;
+        let key = get_user_encryption_key(app.state.encryption_key_from_arguments.clone());
+        if key.is_err() {
+            error!("Error loading save file, Could not get user Encryption key. If lost please generate a new one by using the -g flag");
+            debug!("Error loading save file: {:?}", key.err());
+            app.send_error_toast(
+                "Error loading save file, Could not get user Encryption key. If lost please generate a new one by using the -g flag",
+                None,
+            );
+            return Ok(());
+        }
+        let key = key.unwrap();
+        let decrypt_result = decrypt_save(
+            encrypted_board_data.to_string(),
+            key.as_slice(),
+            &local_files[save_file_index].nonce,
+        );
+        if decrypt_result.is_err() {
+            error!("Error loading save file, Could not decrypt save file");
+            debug!("Error loading save file: {:?}", decrypt_result.err());
+            app.send_error_toast("Error loading save file, Could not decrypt save file", None);
+            return Ok(());
+        }
+        let decrypt_result = decrypt_result.unwrap();
+        app.set_boards(decrypt_result);
         info!("👍 Save file cloud_save_{} loaded", save_file_number);
         app.send_info_toast(
             &format!("👍 Save file cloud_save_{} loaded", save_file_number),
@@ -1113,7 +1221,7 @@ impl IoAsyncHandler {
         let mut app = self.app.lock().await;
         let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
         let user_access_token = app.state.user_login_data.auth_token.clone().unwrap();
-        let cloud_saves = app.state.cloud_data_preview.clone();
+        let cloud_saves = app.state.cloud_data.clone();
         let cloud_saves = if cloud_saves.is_none() {
             error!("Could not get local save files");
             app.send_error_toast("Could not get local save files", None);
@@ -1397,6 +1505,503 @@ pub struct CloudData {
     pub id: u64,
     pub created_at: String,
     pub user_id: String,
-    pub board_data: Vec<Board>,
+    pub board_data: String,
+    pub nonce: String,
     pub save_id: usize,
+}
+
+enum PasswordStatus {
+    Strong,
+    MissingUppercase,
+    MissingLowercase,
+    MissingNumber,
+    MissingSpecialChar,
+    TooShort,
+    TooLong,
+}
+
+fn check_for_safe_password(check_password: &str) -> PasswordStatus {
+    let mut password_status = PasswordStatus::Strong;
+    if check_password.len() < MIN_PASSWORD_LENGTH {
+        password_status = PasswordStatus::TooShort;
+    }
+    if !check_password.chars().any(|c| c.is_uppercase()) {
+        password_status = PasswordStatus::MissingUppercase;
+    }
+    if !check_password.chars().any(|c| c.is_lowercase()) {
+        password_status = PasswordStatus::MissingLowercase;
+    }
+    if !check_password.chars().any(|c| c.is_numeric()) {
+        password_status = PasswordStatus::MissingNumber;
+    }
+    if !check_password.chars().any(|c| c.is_ascii_punctuation()) {
+        password_status = PasswordStatus::MissingSpecialChar;
+    }
+    if check_password.len() > MAX_PASSWORD_LENGTH {
+        password_status = PasswordStatus::TooLong;
+    }
+    password_status
+}
+
+fn encrypt_save(boards: Vec<Board>, key: &[u8]) -> Result<(String, String), String> {
+    let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let boards_json = serde_json::to_string(&boards);
+    if boards_json.is_err() {
+        return Err("Error serializing boards".to_string());
+    }
+    let boards_json = boards_json.unwrap();
+    let key = Key::<Aes256Gcm>::from_slice(key);
+    let cipher = Aes256Gcm::new(key);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    // save the nonce as a string to be saved in the database
+    let nonce_vec = nonce.to_vec();
+    let nonce_encoded = base64_engine.encode(&nonce_vec);
+    let encrypted_boards = cipher.encrypt(&nonce, boards_json.as_bytes());
+    if encrypted_boards.is_err() {
+        return Err("Error encrypting boards".to_string());
+    }
+    let encrypted_boards = encrypted_boards.unwrap();
+    let encoded_boards = base64_engine.encode(&encrypted_boards);
+    Ok((encoded_boards, nonce_encoded))
+}
+
+fn decrypt_save(
+    encrypted_boards: String,
+    key: &[u8],
+    encoded_nonce: &str,
+) -> Result<Vec<Board>, String> {
+    let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let encrypted_boards = base64_engine.decode(encrypted_boards);
+    if encrypted_boards.is_err() {
+        return Err("Error decoding boards".to_string());
+    }
+    let encrypted_boards = encrypted_boards.unwrap();
+    let key = Key::<Aes256Gcm>::from_slice(key);
+    let cipher = Aes256Gcm::new(key);
+    let nonce = base64_engine.decode(encoded_nonce);
+    if nonce.is_err() {
+        return Err("Error decoding nonce".to_string());
+    }
+    let nonce = nonce.unwrap();
+    let nonce = GenericArray::from_slice(&nonce);
+    let decrypted_board_data = cipher.decrypt(nonce, encrypted_boards.as_slice());
+    if decrypted_board_data.is_err() {
+        return Err("Error decrypting boards".to_string());
+    }
+    let decrypted_board_data = decrypted_board_data.unwrap();
+    let decrypted_board_data = String::from_utf8(decrypted_board_data);
+    if decrypted_board_data.is_err() {
+        return Err("Error converting decrypted boards to string".to_string());
+    }
+    let decrypted_board_data = decrypted_board_data.unwrap();
+    let boards = serde_json::from_str(&decrypted_board_data);
+    if boards.is_err() {
+        return Err("Error deserializing boards".to_string());
+    }
+    Ok(boards.unwrap())
+}
+
+pub fn save_user_encryption_key(key: &[u8]) -> Result<String> {
+    let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let key = base64_engine.encode(key);
+    let mut config_dir = get_config_dir().unwrap();
+    config_dir.push(ENCRYPTION_KEY_FILE_NAME);
+    let file_creation_status = std::fs::write(&config_dir, key);
+    if file_creation_status.is_err() {
+        return Err(file_creation_status.unwrap_err().into());
+    } else {
+        Ok(config_dir.to_str().unwrap().to_string())
+    }
+}
+
+fn get_user_encryption_key(encryption_key_from_arguments: Option<String>) -> Result<Vec<u8>> {
+    let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    if encryption_key_from_arguments.is_some() {
+        let decoded_key = base64_engine.decode(&encryption_key_from_arguments.unwrap());
+        if decoded_key.is_err() {
+            return Err(decoded_key.unwrap_err().into());
+        }
+        let decoded_key = decoded_key.unwrap();
+        return Ok(decoded_key);
+    } else {
+        let mut config_dir = get_config_dir().unwrap();
+        config_dir.push(ENCRYPTION_KEY_FILE_NAME);
+        let key = std::fs::read_to_string(&config_dir);
+        if key.is_err() {
+            return Err(key.unwrap_err().into());
+        }
+        let key = key.unwrap();
+        let key = base64_engine.decode(&key);
+        if key.is_err() {
+            return Err(key.unwrap_err().into());
+        }
+        let key = key.unwrap();
+        Ok(key)
+    }
+}
+
+pub fn generate_new_encryption_key() -> Vec<u8> {
+    Aes256Gcm::generate_key(&mut OsRng).to_vec()
+}
+
+pub async fn get_all_save_ids_for_user(user_id: String, access_token: &str) -> Result<Vec<usize>> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!(
+            "{}/rest/v1/user_data?user_id=eq.{}&select=save_id",
+            SUPABASE_URL, user_id
+        ))
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Range", "0-9")
+        .send()
+        .await;
+    if response.is_err() {
+        debug!("Error getting save ids: {:?}", response.err());
+        return Err(anyhow!("Error getting save ids".to_string()));
+    }
+    let response = response.unwrap();
+    let status = response.status();
+    if status == StatusCode::OK {
+        let body = response.json::<serde_json::Value>().await;
+        match body {
+            Ok(save_instances) => {
+                // it will be an array of [Object {"save_id": Number(0)},
+                let mut save_ids: Vec<usize> = Vec::new();
+                let save_instances_as_array = save_instances.as_array();
+                if save_instances_as_array.is_none() {
+                    return Err(anyhow!("Error getting save ids".to_string()));
+                }
+                let save_instances_as_array = save_instances_as_array.unwrap();
+                for save_instance in save_instances_as_array {
+                    let save_id = save_instance.get("save_id");
+                    if save_id.is_none() {
+                        return Err(anyhow!("Error getting save ids".to_string()));
+                    }
+                    let save_id = save_id.unwrap().as_u64();
+                    if save_id.is_none() {
+                        return Err(anyhow!("Error getting save ids".to_string()));
+                    }
+                    debug!("save_id: {:?}", save_id.unwrap() as usize);
+                    save_ids.push(save_id.unwrap() as usize);
+                }
+                debug!("save_instances: {:?}", save_instances);
+                Ok(save_ids)
+            }
+            Err(e) => {
+                debug!("Error getting save ids: {:?}", e);
+                Err(anyhow!("Error getting save ids".to_string()))
+            }
+        }
+    } else {
+        debug!("Status: {:?}", status);
+        debug!("Error getting save ids: {:?}", response.text().await);
+        Err(anyhow!("Error getting save ids".to_string()))
+    }
+}
+
+pub async fn get_user_id_from_database(access_token: &str, cli_mode: bool) -> Result<String> {
+    let user_data_client = reqwest::Client::new();
+    let user_data_response = user_data_client
+        .get(format!("{}/auth/v1/user", SUPABASE_URL))
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Content-Type", "application/json")
+        .header(
+            "Authorization",
+            format!("Bearer {}", access_token.to_string()),
+        )
+        .send()
+        .await?;
+    let user_data_status = user_data_response.status();
+    let user_data_body = user_data_response.json::<serde_json::Value>().await;
+    if user_data_status != StatusCode::OK {
+        if cli_mode {
+            print_error("Error retrieving user data");
+            print_debug(&format!(
+                "status code {}, response body: {:?}",
+                user_data_status, user_data_body
+            ));
+        } else {
+            error!("Error retrieving user data");
+            debug!(
+                "status code {}, response body: {:?}",
+                user_data_status, user_data_body
+            );
+        }
+        return Err(anyhow!("Error retrieving user data"));
+    }
+    let user_data_body = user_data_body.unwrap();
+    let user_id = user_data_body.get("id");
+    if user_id.is_none() {
+        if cli_mode {
+            print_error("Error retrieving user data");
+            print_debug(&format!(
+                "status code {}, response body: {:?}, could not find id",
+                user_data_status, user_data_body
+            ));
+        } else {
+            error!("Error retrieving user data");
+            debug!(
+                "status code {}, response body: {:?}, could not find id",
+                user_data_status, user_data_body
+            );
+        }
+        return Err(anyhow!("Error retrieving user data"));
+    }
+    let user_id = user_id.unwrap().as_str();
+    if cli_mode {
+        print_debug(&format!("user_id: {:?}", user_id));
+    } else {
+        debug!("user_id: {:?}", user_id);
+    }
+    Ok(user_id.unwrap().to_string())
+}
+
+pub async fn login_for_user(
+    email_id: &str,
+    password: &str,
+    cli_mode: bool,
+) -> Result<(String, String)> {
+    let request_body = json!(
+        {
+            "email": email_id,
+            "password": password
+        }
+    );
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!(
+            "{}/auth/v1/token?grant_type=password",
+            SUPABASE_URL
+        ))
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Content-Type", "application/json")
+        .body(request_body.to_string())
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.json::<serde_json::Value>().await;
+    if status == StatusCode::OK {
+        match body {
+            Ok(body) => {
+                let access_token = body.get("access_token");
+                match access_token {
+                    Some(access_token) => {
+                        let access_token = access_token.as_str().unwrap();
+                        if cli_mode {
+                            print_info("🚀 Login successful");
+                            print_debug(&format!("Access token: {}", access_token));
+                        } else {
+                            info!("🚀 Login successful");
+                            debug!("Access token: {}", access_token);
+                        }
+                        let user_id = get_user_id_from_database(access_token, cli_mode).await?;
+                        return Ok((access_token.to_string(), user_id));
+                    }
+                    None => {
+                        if cli_mode {
+                            print_error("Error logging in");
+                            print_debug(&format!(
+                                "status code {}, response body: {:?}, could not find access token",
+                                status, body
+                            ));
+                        } else {
+                            error!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer");
+                            debug!(
+                                "status code {}, response body: {:?}, could not find access token",
+                                status, body
+                            );
+                        }
+                        return Err(anyhow!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer"));
+                    }
+                }
+            }
+            Err(e) => Err(anyhow!("Error logging in: {}", e)),
+        }
+    } else if status == StatusCode::TOO_MANY_REQUESTS {
+        if cli_mode {
+            print_error("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
+            print_debug(&format!(
+                "status code {}, response body: {:?}",
+                status, body
+            ));
+        } else {
+            error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
+            debug!("status code {}, response body: {:?}", status, body);
+        }
+        Err(anyhow!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢"))
+    } else {
+        match body {
+            Ok(body) => {
+                let error_description = body.get("error_description");
+                match error_description {
+                    Some(error_description) => {
+                        let error_description = error_description.to_string();
+                        if cli_mode {
+                            print_error(&error_description);
+                            print_debug(&format!(
+                                "status code {}, response body: {:?}",
+                                status, body
+                            ));
+                        } else {
+                            error!("{}", error_description);
+                            debug!("status code {}, response body: {:?}", status, body);
+                        }
+                        Err(anyhow!("Error logging in: {}", error_description))
+                    }
+                    None => {
+                        if cli_mode {
+                            print_error("Error logging in");
+                            print_debug(&format!(
+                                "status code {}, response body: {:?}",
+                                status, body
+                            ));
+                        } else {
+                            error!("Error logging in");
+                            debug!("status code {}, response body: {:?}", status, body);
+                        }
+                        Err(anyhow!("Error logging in"))
+                    }
+                }
+            }
+            Err(e) => {
+                if cli_mode {
+                    print_error(&format!("Error logging in: {}", e));
+                } else {
+                    error!("Error logging in: {}", e);
+                }
+                Err(anyhow!("Error logging in: {}", e))
+            }
+        }
+    }
+}
+
+async fn save_access_token_to_disk(
+    access_token: &str,
+    email_id: &str,
+    encryption_key_from_arguments: Option<String>,
+) -> Result<()> {
+    let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let access_token_path = get_config_dir();
+    if access_token_path.is_err() {
+        return Err(anyhow!("Error getting config directory"));
+    }
+    let mut access_token_path = access_token_path.unwrap();
+    access_token_path.push(ACCESS_TOKEN_FILE_NAME);
+    // if file exists delete it
+    if access_token_path.exists() {
+        let delete_file_status = std::fs::remove_file(&access_token_path);
+        if delete_file_status.is_err() {
+            return Err(anyhow!("Error deleting access token file"));
+        }
+    }
+    let encryption_key = get_user_encryption_key(encryption_key_from_arguments);
+    if encryption_key.is_err() {
+        return Err(anyhow!("Error getting encryption key"));
+    }
+    let encryption_key = encryption_key.unwrap();
+    let key = Key::<Aes256Gcm>::from_slice(&encryption_key);
+    let cipher = Aes256Gcm::new(key);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let encrypted_access_token = cipher.encrypt(&nonce, access_token.as_bytes());
+    if encrypted_access_token.is_err() {
+        return Err(anyhow!("Error encrypting access token"));
+    }
+    let encrypted_access_token = encrypted_access_token.unwrap();
+    let nonce = nonce.to_vec();
+    let nonce = base64_engine.encode(&nonce);
+    let encrypted_access_token = base64_engine.encode(&encrypted_access_token);
+    let encoded_email_id = base64_engine.encode(email_id.as_bytes());
+    let access_token_data = format!(
+        "{}{}{}{}{}",
+        nonce,
+        ACCESS_TOKEN_SEPARATOR,
+        encrypted_access_token,
+        ACCESS_TOKEN_SEPARATOR,
+        encoded_email_id
+    );
+    let file_creation_status = std::fs::write(&access_token_path, access_token_data);
+    if file_creation_status.is_err() {
+        return Err(anyhow!("Error creating access token file"));
+    }
+    Ok(())
+}
+
+fn get_access_token_from_disk(
+    encryption_key_from_arguments: Option<String>,
+) -> Result<(String, String)> {
+    let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let access_token_path = get_config_dir();
+    if access_token_path.is_err() {
+        return Err(anyhow!("Error getting config directory"));
+    }
+    let mut access_token_path = access_token_path.unwrap();
+    access_token_path.push(ACCESS_TOKEN_FILE_NAME);
+    let access_token_data = std::fs::read_to_string(&access_token_path);
+    if access_token_data.is_err() {
+        return Err(anyhow!("Error reading access token file"));
+    }
+    let access_token_data = access_token_data.unwrap();
+    let access_token_data = access_token_data
+        .split(ACCESS_TOKEN_SEPARATOR)
+        .collect::<Vec<&str>>();
+    if access_token_data.len() != 3 {
+        return Err(anyhow!("Error reading access token file"));
+    }
+    let nonce = access_token_data[0];
+    let nonce = base64_engine.decode(nonce);
+    if nonce.is_err() {
+        return Err(anyhow!("Error reading access token file"));
+    }
+    let nonce = nonce.unwrap();
+    let nonce = GenericArray::from_slice(&nonce);
+    let encrypted_access_token = access_token_data[1];
+    let encrypted_access_token = base64_engine.decode(encrypted_access_token);
+    if encrypted_access_token.is_err() {
+        return Err(anyhow!("Error reading access token file"));
+    }
+    let encrypted_access_token = encrypted_access_token.unwrap();
+    let email_id = access_token_data[2];
+    let email_id = base64_engine.decode(email_id);
+    if email_id.is_err() {
+        return Err(anyhow!("Error reading access token file"));
+    }
+    let email_id = email_id.unwrap();
+    let email_id = String::from_utf8(email_id);
+    if email_id.is_err() {
+        return Err(anyhow!("Error reading access token file"));
+    }
+    let email_id = email_id.unwrap();
+    let encryption_key = get_user_encryption_key(encryption_key_from_arguments);
+    if encryption_key.is_err() {
+        return Err(anyhow!("Error getting encryption key"));
+    }
+    let encryption_key = encryption_key.unwrap();
+    let key = Key::<Aes256Gcm>::from_slice(&encryption_key);
+    let cipher = Aes256Gcm::new(key);
+    let decrypted_access_token = cipher.decrypt(nonce, encrypted_access_token.as_slice());
+    if decrypted_access_token.is_err() {
+        return Err(anyhow!("Error decrypting access token"));
+    }
+    let decrypted_access_token = decrypted_access_token.unwrap();
+    let decrypted_access_token = String::from_utf8(decrypted_access_token);
+    if decrypted_access_token.is_err() {
+        return Err(anyhow!("Error converting decrypted access token to string"));
+    }
+    let decrypted_access_token = decrypted_access_token.unwrap();
+    Ok((decrypted_access_token, email_id))
+}
+
+async fn test_access_token_on_disk(
+    encryption_key_from_arguments: Option<String>,
+) -> Result<UserLoginData> {
+    let (access_token, email_id) = get_access_token_from_disk(encryption_key_from_arguments)?;
+    let user_id = get_user_id_from_database(&access_token, false).await?;
+    let user_data = UserLoginData {
+        auth_token: Some(access_token.clone()),
+        email_id: Some(email_id.clone()),
+        user_id: Some(user_id.clone()),
+    };
+    Ok(user_data)
 }

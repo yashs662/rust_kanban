@@ -2480,6 +2480,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             app.main_menu_prv();
                         } else if app.state.focus == Focus::MainMenuHelp {
                             app.help_prv();
+                        } else if app.state.focus == Focus::Log {
+                            app.log_prv();
                         } else {
                             let next_focus_key = app
                                 .config
@@ -2595,6 +2597,8 @@ pub async fn handle_general_actions(app: &mut App, key: Key) -> AppReturn {
                             app.main_menu_next();
                         } else if app.state.focus == Focus::MainMenuHelp {
                             app.help_next();
+                        } else if app.state.focus == Focus::Log {
+                            app.log_next();
                         } else {
                             let next_focus_key = app
                                 .config
@@ -4731,7 +4735,7 @@ pub async fn handle_mouse_action(app: &mut App, mouse_action: Mouse) -> AppRetur
                         handle_go_to_prv_ui_mode(app);
                     } else if app.state.mouse_focus == Some(Focus::LoadSave)
                         && app.state.load_save_state.selected().is_some()
-                        && app.state.cloud_data_preview.is_some()
+                        && app.state.cloud_data.is_some()
                     {
                         app.dispatch(IoEvent::LoadCloudPreview).await;
                     }
@@ -4907,6 +4911,28 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
             } else {
                 app.send_info_toast("Config updated Successfully", None);
                 app.send_warning_toast("Please restart the app to apply the changes", None);
+            }
+        } else if *config_item == "Auto Login" {
+            let auto_login = app.config.auto_login;
+            app.config.auto_login = !auto_login;
+            let config_string = format!("{}: {}", "Auto Login", app.config.auto_login);
+            let app_config = AppConfig::edit_with_string(&config_string, app);
+            app.config = app_config.clone();
+            let write_config_status = write_config(&app_config);
+            if write_config_status.is_err() {
+                error!(
+                    "Error writing config file: {}",
+                    write_config_status.clone().unwrap_err()
+                );
+                app.send_error_toast(
+                    &format!(
+                        "Error writing config file: {}",
+                        write_config_status.unwrap_err()
+                    ),
+                    None,
+                );
+            } else {
+                app.send_info_toast("Config updated Successfully", None);
             }
         } else if *config_item == "Default Theme" {
             app.state.default_theme_mode = true;
