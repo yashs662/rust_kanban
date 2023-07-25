@@ -402,37 +402,75 @@ impl Theme {
     fn dracula() -> Theme {
         Theme {
             name: "Dracula".to_string(),
-            general_style: Style::default().fg(Color::Rgb(248, 248, 242)).bg(Color::Rgb(40, 42, 54)),
-            list_select_style: Style::default().fg(Color::Rgb(248, 248, 242)).bg(Color::Rgb(68, 71, 90)),
-            card_due_default_style: Style::default().fg(Color::LightGreen).bg(Color::White),
+            general_style: Style::default()
+                .fg(Color::Rgb(248, 248, 242))
+                .bg(Color::Rgb(40, 42, 54)),
+            list_select_style: Style::default()
+                .fg(Color::Rgb(248, 248, 242))
+                .bg(Color::Rgb(68, 71, 90)),
+            card_due_default_style: Style::default()
+                .fg(Color::Rgb(80, 250, 123))
+                .bg(Color::Rgb(40, 42, 54)),
             card_due_warning_style: Style::default()
                 .fg(Color::Rgb(255, 184, 108))
                 .bg(Color::Rgb(40, 42, 54)),
-            card_due_overdue_style: Style::default().fg(Color::Rgb(255, 85, 85)).bg(Color::Rgb(40, 42, 54)),
-            card_status_active_style: Style::default().fg(Color::Rgb(80, 250, 123)).bg(Color::Rgb(248, 248, 242)),
-            card_status_completed_style: Style::default().fg(Color::LightGreen).bg(Color::White),
-            card_status_stale_style: Style::default().fg(Color::DarkGray).bg(Color::White),
-            keyboard_focus_style: Style::default().fg(Color::Rgb(80, 250, 123)).bg(Color::Rgb(40, 42, 54)),
+            card_due_overdue_style: Style::default()
+                .fg(Color::Rgb(255, 85, 85))
+                .bg(Color::Rgb(40, 42, 54)),
+            card_status_active_style: Style::default()
+                .fg(Color::Rgb(139, 233, 253))
+                .bg(Color::Rgb(40, 42, 54)),
+            card_status_completed_style: Style::default()
+                .fg(Color::Rgb(80, 250, 123))
+                .bg(Color::Rgb(40, 42, 54)),
+            card_status_stale_style: Style::default()
+                .fg(Color::Rgb(68, 71, 90))
+                .bg(Color::Rgb(40, 42, 54)),
+            keyboard_focus_style: Style::default()
+                .fg(Color::Rgb(80, 250, 123))
+                .bg(Color::Rgb(40, 42, 54)),
             mouse_focus_style: Style::default()
                 .fg(Color::Rgb(80, 250, 123))
                 .bg(Color::Rgb(40, 42, 54)),
-            help_key_style: Style::default().fg(Color::Rgb(255, 121, 198)).bg(Color::Rgb(40, 42, 54)),
-            help_text_style: Style::default().fg(Color::Rgb(248, 248, 242)).bg(Color::Rgb(40, 42, 54)),
-            log_error_style: Style::default().fg(Color::LightRed).bg(Color::White),
-            log_debug_style: Style::default().fg(Color::LightGreen).bg(Color::White),
+            help_key_style: Style::default()
+                .fg(Color::Rgb(255, 121, 198))
+                .bg(Color::Rgb(40, 42, 54)),
+            help_text_style: Style::default()
+                .fg(Color::Rgb(248, 248, 242))
+                .bg(Color::Rgb(40, 42, 54)),
+            log_error_style: Style::default()
+                .fg(Color::Rgb(248, 248, 242))
+                .bg(Color::Rgb(40, 42, 54)),
+            log_debug_style: Style::default()
+                .fg(Color::Rgb(80, 250, 123))
+                .bg(Color::Rgb(40, 42, 54)),
             log_warn_style: Style::default()
-                .fg(Color::Rgb(255, 165, 0))
-                .bg(Color::White),
-            log_trace_style: Style::default().fg(Color::DarkGray).bg(Color::White),
-            log_info_style: Style::default().fg(Color::Blue).bg(Color::White),
-            progress_bar_style: Style::default().fg(Color::Green).bg(Color::White),
-            error_text_style: Style::default().fg(Color::Black).bg(Color::LightRed),
-            inactive_text_style: Style::default().fg(Color::Gray).bg(Color::DarkGray),
-            card_priority_low_style: Style::default().fg(Color::LightGreen).bg(Color::White),
+                .fg(Color::Rgb(255, 184, 108))
+                .bg(Color::Rgb(40, 42, 54)),
+            log_trace_style: Style::default()
+                .fg(Color::Rgb(68, 71, 90))
+                .bg(Color::Rgb(40, 42, 54)),
+            log_info_style: Style::default()
+                .fg(Color::Rgb(139, 233, 253))
+                .bg(Color::Rgb(40, 42, 54)),
+            progress_bar_style: Style::default()
+                .fg(Color::Rgb(189, 147, 249))
+                .bg(Color::Rgb(68, 71, 90)),
+            error_text_style: Style::default()
+                .fg(Color::Rgb(40, 42, 54))
+                .bg(Color::Rgb(255, 85, 85)),
+            inactive_text_style: Style::default()
+                .fg(Color::Rgb(68, 71, 90))
+                .bg(Color::Rgb(40, 42, 54)),
+            card_priority_low_style: Style::default()
+                .fg(Color::Rgb(80, 250, 123))
+                .bg(Color::Rgb(40, 42, 54)),
             card_priority_medium_style: Style::default()
-                .fg(Color::Rgb(255, 165, 0))
-                .bg(Color::White),
-            card_priority_high_style: Style::default().fg(Color::LightRed).bg(Color::White),
+                .fg(Color::Rgb(255, 184, 108))
+                .bg(Color::Rgb(40, 42, 54)),
+            card_priority_high_style: Style::default()
+                .fg(Color::Rgb(255, 85, 85))
+                .bg(Color::Rgb(40, 42, 54)),
         }
     }
     pub fn all_default_themes() -> Vec<Theme> {
