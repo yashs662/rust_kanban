@@ -541,9 +541,9 @@ where
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Min(6),
-                    Constraint::Min(6),
-                    Constraint::Length(4),
+                    Constraint::Length(5),
+                    Constraint::Min(4),
+                    Constraint::Length(5),
                     Constraint::Length(3),
                 ]
                 .as_ref(),
@@ -729,7 +729,10 @@ where
         Span::styled(up_key, app.theme.help_key_style),
         Span::styled("or ", app.theme.help_text_style),
         Span::styled(down_key, app.theme.help_key_style),
-        Span::styled("to navigate. Press ", app.theme.help_text_style),
+        Span::styled(
+            "to navigate or use the mouse cursor. Press ",
+            app.theme.help_text_style,
+        ),
         Span::styled("<Enter>", app.theme.help_key_style),
         Span::styled(" or ", app.theme.help_text_style),
         Span::styled("<Mouse Left Click>", app.theme.help_key_style),
@@ -2159,7 +2162,7 @@ where
     ];
 
     let body = Paragraph::new(error_text_spans)
-        .block(Block::default().borders(Borders::ALL))
+        .block(Block::default().borders(Borders::ALL).borders(Borders::ALL))
         .alignment(Alignment::Center);
     rect.render_widget(body, chunks[1]);
 }
@@ -2176,11 +2179,18 @@ where
     let title = draw_title(app, *size);
     rect.render_widget(title, chunks[0]);
 
-    let text = Line::from(vec![
-        Span::styled("Loading......", app.theme.keyboard_focus_style),
-        Span::styled("`(*>﹏<*)′", app.theme.keyboard_focus_style),
+    let mut text = vec![Line::from(vec![
+        Span::styled("Loading", app.theme.keyboard_focus_style),
+        Span::styled("......`(*>﹏<*)′......", app.theme.keyboard_focus_style),
         Span::styled("Please wait", app.theme.keyboard_focus_style),
-    ]);
+    ])];
+    if app.config.auto_login {
+        text.push(Line::from(Span::styled("", app.theme.keyboard_focus_style)));
+        text.push(Line::from(Span::styled(
+            "Auto login enabled, please wait",
+            app.theme.keyboard_focus_style,
+        )));
+    }
     let body = Paragraph::new(text)
         .block(Block::default().borders(Borders::ALL))
         .alignment(Alignment::Center);
@@ -2602,7 +2612,7 @@ where
     rect.render_widget(card_description, chunks[2]);
 
     let parsed_due_date =
-        date_format_converter(&app.state.new_card_form[2], app.config.date_format);
+        date_format_converter(&app.state.new_card_form[2].trim(), app.config.date_format);
     let card_due_date = Paragraph::new(card_due_date_field)
         .alignment(Alignment::Left)
         .block(
@@ -4090,7 +4100,7 @@ where
             .constraints(
                 [
                     Constraint::Length(3),
-                    Constraint::Length(2),
+                    Constraint::Length(1),
                     Constraint::Length(3),
                     Constraint::Length(
                         ((command_search_results_length
@@ -4109,7 +4119,7 @@ where
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(3),
+                    Constraint::Length(2),
                     Constraint::Length(3),
                     Constraint::Length(
                         ((command_search_results_length
@@ -4354,10 +4364,7 @@ where
         .map(|s| ListItem::new(vec![Line::from(s.as_str().to_string())]))
         .collect::<Vec<ListItem>>();
 
-    let percent_height =
-        (((all_ui_modes.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
-
-    let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
+    let popup_area = centered_rect_with_length(40, 10, rect.size());
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeUiModePopup);
@@ -4403,10 +4410,7 @@ where
         .map(|s| ListItem::new(vec![Line::from(s.to_human_readable_string().to_string())]))
         .collect::<Vec<ListItem>>();
 
-    let percent_height =
-        (((all_date_formats.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
-
-    let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
+    let popup_area = centered_rect_with_length(30, 8, rect.size());
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeDateFormatPopup);
@@ -4895,6 +4899,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .style(close_btn_style),
         )
         .alignment(Alignment::Right);
@@ -4905,19 +4910,35 @@ pub fn render_change_theme_popup<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let popup_area = centered_rect_with_percentage(50, 50, rect.size());
+    let render_area = centered_rect_with_percentage(70, 70, rect.size());
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .title("Change Theme")
+        .style(app.theme.general_style)
+        .borders(Borders::ALL)
+        .border_style(app.theme.keyboard_focus_style)
+        .border_type(BorderType::Rounded);
+    render_blank_styled_canvas(rect, app, clear_area, false);
+    rect.render_widget(clear_area_border, clear_area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(8), Constraint::Length(5)].as_ref())
+        .split(render_area);
+
     let theme_list = app
         .all_themes
         .iter()
         .map(|t| ListItem::new(vec![Line::from(t.name.clone())]))
         .collect::<Vec<ListItem>>();
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+
+    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
         app.state.mouse_focus = Some(Focus::ThemeSelector);
         app.state.focus = Focus::ThemeSelector;
-        let top_of_list = popup_area.y + 1;
-        let mut bottom_of_list = popup_area.y + theme_list.len() as u16;
-        if bottom_of_list > popup_area.bottom() {
-            bottom_of_list = popup_area.bottom();
+        let top_of_list = chunks[0].y + 1;
+        let mut bottom_of_list = chunks[0].y + theme_list.len() as u16;
+        if bottom_of_list > chunks[0].bottom() {
+            bottom_of_list = chunks[0].bottom();
         }
         let mouse_y = app.state.current_mouse_coordinates.1;
         if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
@@ -4931,15 +4952,60 @@ where
     let themes = List::new(theme_list)
         .block(
             Block::default()
-                .title("Change Theme")
                 .style(app.theme.general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
         .highlight_style(app.theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
-    render_blank_styled_canvas(rect, app, popup_area, false);
-    rect.render_stateful_widget(themes, popup_area, &mut app.state.theme_selector_state);
+    render_blank_styled_canvas(rect, app, chunks[0], false);
+    rect.render_stateful_widget(themes, chunks[0], &mut app.state.theme_selector_state);
+
+    let up_key = app
+        .state
+        .keybinding_store
+        .iter()
+        .find(|x| x[1] == "Go up")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let down_key = app
+        .state
+        .keybinding_store
+        .iter()
+        .find(|x| x[1] == "Go down")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+
+    let help_spans = Line::from(vec![
+        Span::styled("Use ", app.theme.help_text_style),
+        Span::styled(up_key, app.theme.help_key_style),
+        Span::styled("or ", app.theme.help_text_style),
+        Span::styled(down_key, app.theme.help_key_style),
+        Span::styled(
+            "to navigate or use the mouse cursor. Press ",
+            app.theme.help_text_style,
+        ),
+        Span::styled("<Enter>", app.theme.help_key_style),
+        Span::styled(" or ", app.theme.help_text_style),
+        Span::styled("<Mouse Left Click>", app.theme.help_key_style),
+        Span::styled(" To select a Theme. Press ", app.theme.help_text_style),
+        Span::styled("<Esc>", app.theme.help_key_style),
+        Span::styled(" to cancel", app.theme.help_text_style),
+    ]);
+
+    let change_theme_help = Paragraph::new(help_spans)
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .style(app.theme.general_style)
+                .border_type(BorderType::Rounded),
+        )
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
+    rect.render_widget(change_theme_help, chunks[1]);
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -5041,6 +5107,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .style(submit_button_style),
         )
         .alignment(Alignment::Center);
@@ -5050,6 +5117,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .style(reset_button_style),
         )
         .alignment(Alignment::Center);
@@ -5197,6 +5265,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .title("Foreground")
                 .border_style(fg_list_border_style),
         )
@@ -5254,6 +5323,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .title("Background")
                 .border_style(bg_list_border_style),
         )
@@ -5275,6 +5345,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .title("Modifier")
                 .border_style(modifiers_list_border_style),
         )
@@ -5303,6 +5374,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(submit_button_style),
         )
         .alignment(Alignment::Center);
@@ -5363,6 +5435,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(app.theme.help_text_style),
         )
         .alignment(Alignment::Center)
@@ -5396,7 +5469,7 @@ pub fn render_save_theme_prompt<B>(rect: &mut Frame<B>, app: &mut App)
 where
     B: Backend,
 {
-    let popup_area = centered_rect_with_percentage(50, 50, rect.size());
+    let popup_area = centered_rect_with_length(40, 10, rect.size());
     // make two buttons save theme to file and only save for current session
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -5428,6 +5501,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(save_theme_button_style),
         )
         .alignment(Alignment::Center);
@@ -5436,6 +5510,7 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(dont_save_theme_button_style),
         )
         .alignment(Alignment::Center);
@@ -5458,7 +5533,7 @@ pub fn render_confirm_discard_card_changes<B>(rect: &mut Frame<B>, app: &mut App
 where
     B: Backend,
 {
-    let popup_area = centered_rect_with_percentage(30, 25, rect.size());
+    let popup_area = centered_rect_with_length(30, 7, rect.size());
     render_blank_styled_canvas(rect, app, popup_area, true);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -5490,7 +5565,8 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(save_card_button_style),
+                .border_style(save_card_button_style)
+                .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center);
     let dont_save_theme_button = Paragraph::new("No")
@@ -5498,7 +5574,8 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(dont_save_card_button_style),
+                .border_style(dont_save_card_button_style)
+                .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center);
     let border_block = Block::default()
@@ -5520,7 +5597,7 @@ where
     B: Backend,
 {
     // make a small popup with a text input field and a submit button
-    let popup_area = centered_rect_with_percentage(50, 60, rect.size());
+    let popup_area = centered_rect_with_length(60, 18, rect.size());
     let prompt_text = "Enter a custom RGB color in the format: r,g,b (0-254)";
 
     let chunks = Layout::default()
@@ -5573,7 +5650,8 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(text_input_style),
+                .border_style(text_input_style)
+                .border_type(BorderType::Rounded),
         );
 
     let enter_user_input_key = app
@@ -5612,7 +5690,12 @@ where
         Span::styled(" to submit.", app.theme.help_text_style),
     ];
     let help_text = Paragraph::new(Line::from(help_spans))
-        .block(Block::default().borders(Borders::ALL))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(app.theme.general_style)
+                .border_type(BorderType::Rounded),
+        )
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
 
@@ -5621,7 +5704,8 @@ where
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(submit_button_style),
+                .border_style(submit_button_style)
+                .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center);
 
@@ -7150,7 +7234,7 @@ where
                 .highlight_style(app.theme.list_select_style)
                 .highlight_symbol(LIST_SELECTED_SYMBOL)
                 .style(default_style);
-    
+
             if !(app.state.popup_mode.is_some()
                 && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
                 && check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
@@ -7173,16 +7257,15 @@ where
         }
     } else {
         let no_saves_paragraph = Paragraph::new("Waiting for data from the cloud...")
-                .alignment(Alignment::Center)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded),
-                )
-                .style(app.theme.error_text_style);
-            rect.render_widget(no_saves_paragraph, chunks[1]);
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(app.theme.error_text_style);
+        rect.render_widget(no_saves_paragraph, chunks[1]);
     }
-    
 
     let delete_key = app
         .state

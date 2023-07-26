@@ -5473,7 +5473,9 @@ fn handle_new_board_action(app: &mut App) {
     if app.state.focus == Focus::SubmitButton {
         // check if app.state.new_board_form[0] is not empty or is not the same as any of the existing boards
         let new_board_name = app.state.new_board_form[0].clone();
+        let new_board_name = new_board_name.trim();
         let new_board_description = app.state.new_board_form[1].clone();
+        let new_board_description = new_board_description.trim();
         let mut same_name_exists = false;
         for board in app.boards.iter() {
             if board.name == new_board_name {
@@ -5519,8 +5521,11 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
     if app.state.focus == Focus::SubmitButton {
         // check if app.state.new_card_form[0] is not empty or is not the same as any of the existing cards
         let new_card_name = app.state.new_card_form[0].clone();
+        let new_card_name = new_card_name.trim();
         let new_card_description = app.state.new_card_form[1].clone();
+        let new_card_description = new_card_description.trim();
         let new_card_due_date = app.state.new_card_form[2].clone();
+        let new_card_due_date = new_card_due_date.trim();
         let mut same_name_exists = false;
         let current_board_id = app.state.current_board_id.unwrap_or((0, 0));
         let current_board = app.boards.iter().find(|board| board.id == current_board_id);
@@ -5568,7 +5573,7 @@ fn handle_new_card_action(app: &mut App) -> AppReturn {
             let new_card = Card::new(
                 new_card_name,
                 new_card_description,
-                parsed_date,
+                &parsed_date,
                 CardPriority::Low,
                 vec![],
                 vec![],

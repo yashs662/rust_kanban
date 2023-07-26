@@ -16,11 +16,11 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new(name: String, description: String) -> Self {
+    pub fn new(name: &str, description: &str) -> Self {
         Self {
             id: get_id(),
-            name,
-            description,
+            name: name.to_owned(),
+            description: description.to_owned(),
             cards: Vec::new(),
         }
     }
@@ -155,9 +155,9 @@ pub struct Card {
 
 impl Card {
     pub fn new(
-        name: String,
-        description: String,
-        due_date: String,
+        name: &str,
+        description: &str,
+        due_date: &str,
         priority: CardPriority,
         tags: Vec<String>,
         comments: Vec<String>,
@@ -165,17 +165,17 @@ impl Card {
         let name = if name.is_empty() {
             FIELD_NOT_SET
         } else {
-            &name
+            name
         };
         let description = if description.is_empty() {
             FIELD_NOT_SET
         } else {
-            &description
+            description
         };
         let due_date = if due_date.is_empty() {
             FIELD_NOT_SET
         } else {
-            &due_date
+            due_date
         };
         let priority = if priority.to_string().is_empty() {
             CardPriority::Low
@@ -249,13 +249,7 @@ impl Card {
         };
         let due_date = match value["due_date"].as_str() {
             Some(due_date) => due_date,
-            None => {
-                // TODO : This is a fall back for old cards that had the field date_due instead of due_date. remove this in the future
-                match value["date_due"].as_str() {
-                    Some(date_due) => date_due,
-                    None => return Err("card due_date is invalid for card".to_string()),
-                }
-            }
+            None => return Err("card due_date is invalid for card".to_string()),
         };
         let date_completed = match value["date_completed"].as_str() {
             Some(date_completed) => date_completed,

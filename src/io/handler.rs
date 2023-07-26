@@ -8,7 +8,6 @@ use eyre::{anyhow, Result};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info, warn};
 use ratatui::widgets::ListState;
-use regex::Regex;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -29,8 +28,7 @@ use crate::{
     constants::{
         ACCESS_TOKEN_FILE_NAME, ACCESS_TOKEN_SEPARATOR, CONFIG_DIR_NAME, CONFIG_FILE_NAME,
         ENCRYPTION_KEY_FILE_NAME, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH,
-        MIN_TIME_BETWEEN_SENDING_RESET_LINK, SAVE_DIR_NAME, SAVE_FILE_REGEX, SUPABASE_ANON_KEY,
-        SUPABASE_URL,
+        MIN_TIME_BETWEEN_SENDING_RESET_LINK, SAVE_DIR_NAME, SUPABASE_ANON_KEY, SUPABASE_URL,
     },
     io::data_handler::{get_default_save_directory, get_saved_themes, save_kanban_state_locally},
     print_debug, print_error, print_info,
@@ -468,6 +466,7 @@ impl IoAsyncHandler {
             let mut app = self.app.lock().await;
             app.send_error_toast("Error logging out", None);
         }
+        delete_access_token_from_disk().await?;
         Ok(())
     }
 
@@ -999,10 +998,10 @@ impl IoAsyncHandler {
             error!("{}", error_string);
             let mut app = self.app.lock().await;
             app.send_error_toast(&error_string, None);
-            return Ok(vec![]);
+            Ok(vec![])
         } else {
             let save_ids = result.unwrap();
-            return Ok(save_ids);
+            Ok(save_ids)
         }
     }
 
@@ -1130,7 +1129,7 @@ impl IoAsyncHandler {
             visible_board.insert(board.id, visible_cards);
             visible_boards_and_cards.extend(visible_board);
         }
-        let save_timestamp = save.created_at.split(".").next();
+        let save_timestamp = save.created_at.split('.').next();
         if save_timestamp.is_none() {
             debug!("Error splitting {}", save.created_at);
             app.state.preview_visible_boards_and_cards = visible_boards_and_cards;
@@ -1138,7 +1137,7 @@ impl IoAsyncHandler {
             return Ok(());
         }
         let save_timestamp = save_timestamp.unwrap();
-        let save_date = NaiveDateTime::parse_from_str(&save_timestamp, "%Y-%m-%dT%H:%M:%S");
+        let save_date = NaiveDateTime::parse_from_str(save_timestamp, "%Y-%m-%dT%H:%M:%S");
         if save_date.is_ok() {
             let save_date = save_date.unwrap();
             let save_date = save_date.format(app.config.date_format.to_parser_string());
@@ -1376,13 +1375,8 @@ fn get_latest_save_file(config: &AppConfig) -> Result<String, String> {
     let latest_date = local_save_files
         .iter()
         .map(|file| {
-            let re = Regex::new(SAVE_FILE_REGEX).unwrap();
-            if re.is_match(file) {
-                let date = file.split('_').collect::<Vec<&str>>()[1];
-                NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap()
-            } else {
-                NaiveDate::parse_from_str("01-01-1970", "%d-%m-%Y").unwrap()
-            }
+            let date = file.split('_').collect::<Vec<&str>>()[1];
+            NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap()
         })
         .max()
         .unwrap();
@@ -1392,13 +1386,8 @@ fn get_latest_save_file(config: &AppConfig) -> Result<String, String> {
     let latest_version = local_save_files
         .iter()
         .filter(|file| {
-            let re = Regex::new(SAVE_FILE_REGEX).unwrap();
-            if re.is_match(file) {
-                let date = file.split('_').collect::<Vec<&str>>()[1];
-                NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap() == latest_date
-            } else {
-                false
-            }
+            let date = file.split('_').collect::<Vec<&str>>()[1];
+            NaiveDate::parse_from_str(date, "%d-%m-%Y").unwrap() == latest_date
         })
         .map(|file| {
             let version = file.split("_v").collect::<Vec<&str>>()[1];
@@ -1555,13 +1544,13 @@ fn encrypt_save(boards: Vec<Board>, key: &[u8]) -> Result<(String, String), Stri
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     // save the nonce as a string to be saved in the database
     let nonce_vec = nonce.to_vec();
-    let nonce_encoded = base64_engine.encode(&nonce_vec);
+    let nonce_encoded = base64_engine.encode(nonce_vec);
     let encrypted_boards = cipher.encrypt(&nonce, boards_json.as_bytes());
     if encrypted_boards.is_err() {
         return Err("Error encrypting boards".to_string());
     }
     let encrypted_boards = encrypted_boards.unwrap();
-    let encoded_boards = base64_engine.encode(&encrypted_boards);
+    let encoded_boards = base64_engine.encode(encrypted_boards);
     Ok((encoded_boards, nonce_encoded))
 }
 
@@ -1607,8 +1596,8 @@ pub fn save_user_encryption_key(key: &[u8]) -> Result<String> {
     let mut config_dir = get_config_dir().unwrap();
     config_dir.push(ENCRYPTION_KEY_FILE_NAME);
     let file_creation_status = std::fs::write(&config_dir, key);
-    if file_creation_status.is_err() {
-        return Err(file_creation_status.unwrap_err().into());
+    if let Err(e) = file_creation_status {
+        Err(anyhow!(e))
     } else {
         Ok(config_dir.to_str().unwrap().to_string())
     }
@@ -1616,27 +1605,28 @@ pub fn save_user_encryption_key(key: &[u8]) -> Result<String> {
 
 fn get_user_encryption_key(encryption_key_from_arguments: Option<String>) -> Result<Vec<u8>> {
     let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    if encryption_key_from_arguments.is_some() {
-        let decoded_key = base64_engine.decode(&encryption_key_from_arguments.unwrap());
-        if decoded_key.is_err() {
-            return Err(decoded_key.unwrap_err().into());
+    if let Some(encryption_key_from_arguments) = encryption_key_from_arguments {
+        let decoded_key = base64_engine.decode(encryption_key_from_arguments);
+        if let Err(e) = decoded_key {
+            Err(anyhow!(e))
+        } else {
+            Ok(decoded_key.unwrap())
         }
-        let decoded_key = decoded_key.unwrap();
-        return Ok(decoded_key);
     } else {
         let mut config_dir = get_config_dir().unwrap();
         config_dir.push(ENCRYPTION_KEY_FILE_NAME);
-        let key = std::fs::read_to_string(&config_dir);
-        if key.is_err() {
-            return Err(key.unwrap_err().into());
+        let encoded_key = std::fs::read_to_string(&config_dir);
+        if let Err(e) = encoded_key {
+            Err(anyhow!(e))
+        } else {
+            let key = encoded_key.unwrap();
+            let decoded_key = base64_engine.decode(key);
+            if let Err(e) = decoded_key {
+                Err(anyhow!(e))
+            } else {
+                Ok(decoded_key.unwrap())
+            }
         }
-        let key = key.unwrap();
-        let key = base64_engine.decode(&key);
-        if key.is_err() {
-            return Err(key.unwrap_err().into());
-        }
-        let key = key.unwrap();
-        Ok(key)
     }
 }
 
@@ -1707,10 +1697,7 @@ pub async fn get_user_id_from_database(access_token: &str, cli_mode: bool) -> Re
         .get(format!("{}/auth/v1/user", SUPABASE_URL))
         .header("apikey", SUPABASE_ANON_KEY)
         .header("Content-Type", "application/json")
-        .header(
-            "Authorization",
-            format!("Bearer {}", access_token.to_string()),
-        )
+        .header("Authorization", format!("Bearer {}", access_token))
         .send()
         .await?;
     let user_data_status = user_data_response.status();
@@ -1797,7 +1784,7 @@ pub async fn login_for_user(
                             debug!("Access token: {}", access_token);
                         }
                         let user_id = get_user_id_from_database(access_token, cli_mode).await?;
-                        return Ok((access_token.to_string(), user_id));
+                        Ok((access_token.to_string(), user_id))
                     }
                     None => {
                         if cli_mode {
@@ -1813,7 +1800,7 @@ pub async fn login_for_user(
                                 status, body
                             );
                         }
-                        return Err(anyhow!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer"));
+                        Err(anyhow!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer"))
                     }
                 }
             }
@@ -1910,8 +1897,8 @@ async fn save_access_token_to_disk(
     }
     let encrypted_access_token = encrypted_access_token.unwrap();
     let nonce = nonce.to_vec();
-    let nonce = base64_engine.encode(&nonce);
-    let encrypted_access_token = base64_engine.encode(&encrypted_access_token);
+    let nonce = base64_engine.encode(nonce);
+    let encrypted_access_token = base64_engine.encode(encrypted_access_token);
     let encoded_email_id = base64_engine.encode(email_id.as_bytes());
     let access_token_data = format!(
         "{}{}{}{}{}",
@@ -1991,6 +1978,23 @@ fn get_access_token_from_disk(
     }
     let decrypted_access_token = decrypted_access_token.unwrap();
     Ok((decrypted_access_token, email_id))
+}
+
+async fn delete_access_token_from_disk() -> Result<()> {
+    let access_token_path = get_config_dir();
+    if access_token_path.is_err() {
+        return Err(anyhow!("Error getting config directory"));
+    }
+    let mut access_token_path = access_token_path.unwrap();
+    access_token_path.push(ACCESS_TOKEN_FILE_NAME);
+    if !access_token_path.exists() {
+        return Ok(());
+    }
+    let delete_file_status = std::fs::remove_file(&access_token_path);
+    if delete_file_status.is_err() {
+        return Err(anyhow!("Error deleting access token file"));
+    }
+    Ok(())
 }
 
 async fn test_access_token_on_disk(
