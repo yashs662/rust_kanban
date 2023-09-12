@@ -1,11 +1,9 @@
-use std::{fmt, str::FromStr, vec};
-
+use super::{actions::Action, App};
+use crate::{inputs::key::Key, ui::ui_helper};
 use log::{debug, error};
 use ratatui::{backend::Backend, Frame};
 use serde::{Deserialize, Serialize};
-
-use super::{actions::Action, App};
-use crate::{inputs::key::Key, ui::ui_helper};
+use std::{fmt, str::FromStr, vec};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default)]
 pub enum UiMode {
@@ -409,7 +407,6 @@ impl Focus {
         }
     }
     pub fn next(&self, available_tabs: &Vec<Focus>) -> Self {
-        // check if current_focus is in available_tabs if not set to first available tab other wise find next tab
         if available_tabs.contains(self) {
             let index = available_tabs.iter().position(|x| x == self).unwrap();
             if index == available_tabs.len() - 1 {
@@ -422,7 +419,6 @@ impl Focus {
         }
     }
     pub fn prev(&self, available_tabs: &Vec<Focus>) -> Self {
-        // check if current_focus is in available_tabs if not set to first available tab other wise find next tab
         if available_tabs.contains(self) {
             let index = available_tabs.iter().position(|x| x == self).unwrap();
             if index == 0 {
@@ -543,7 +539,7 @@ impl KeyBindings {
                     "save_state" => return Some(&Action::SaveState),
                     "new_board" => return Some(&Action::NewBoard),
                     "new_card" => return Some(&Action::NewCard),
-                    "delete_card" => return Some(&Action::DeleteCard),
+                    "delete_card" => return Some(&Action::Delete),
                     "delete_board" => return Some(&Action::DeleteBoard),
                     "change_card_status_to_completed" => {
                         return Some(&Action::ChangeCardStatusToCompleted)
@@ -581,7 +577,7 @@ impl KeyBindings {
             "save_state" => Some(&Action::SaveState),
             "new_board" => Some(&Action::NewBoard),
             "new_card" => Some(&Action::NewCard),
-            "delete_card" => Some(&Action::DeleteCard),
+            "delete_card" => Some(&Action::Delete),
             "delete_board" => Some(&Action::DeleteBoard),
             "change_card_status_to_completed" => Some(&Action::ChangeCardStatusToCompleted),
             "change_card_status_to_active" => Some(&Action::ChangeCardStatusToActive),
@@ -597,7 +593,6 @@ impl KeyBindings {
     }
 
     pub fn edit_keybinding(&mut self, key: &str, keybinding: Vec<Key>) -> &mut Self {
-        // remove duplicate keys in keybinding without sorting
         let mut keybinding = keybinding;
         keybinding.dedup();
 

@@ -6,18 +6,14 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use rust_kanban::{
     app::App,
     constants::APP_TITLE,
-    gen_new_key_main,
-    io::{handler::IoAsyncHandler, logger, IoEvent},
-    reset_app_main, start_ui,
+    io::{io_handler::IoAsyncHandler, logger, IoEvent},
+    util::{gen_new_key_main, reset_app_main, start_ui},
 };
 use std::{io::stdout, sync::Arc};
-
-// generate_new_encryption_key should not take an value
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct CliArgs {
-    // optional argument to reset config
     #[arg(short, long, default_value = "false")]
     reset: bool,
     #[arg(short, long, default_value = "false")]
@@ -28,11 +24,13 @@ struct CliArgs {
     password: Option<String>,
     #[arg(long)]
     encryption_key: Option<String>,
+    #[arg(short, long, default_value = "false")]
+    debug_mode: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Handling Panic when terminal is in raw mode
+    let args = CliArgs::parse();
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         _ = terminal::disable_raw_mode();
@@ -47,34 +45,36 @@ async fn main() -> Result<()> {
         if let Ok(mut terminal) = terminal {
             terminal.clear().unwrap();
         }
-        if cfg!(debug_assertions) {
+        if cfg!(debug_assertions) || args.debug_mode {
             default_panic(info);
         } else {
             println!(
-                "An error occured 😢,\n{} has crashed please report this issue on github\n{}",
+                "An error occurred 😢,\n{} has crashed please report this issue on github\n{}",
                 APP_TITLE,
                 env!("CARGO_PKG_REPOSITORY")
             );
         }
     }));
 
-    // Configure log
     logger::init_logger(LevelFilter::Debug).unwrap();
-    logger::set_default_level(log::LevelFilter::Debug);
-    // parse cli args
-    let args = CliArgs::parse();
+    if args.debug_mode {
+        logger::set_default_level(LevelFilter::Debug);
+    } else {
+        logger::set_default_level(LevelFilter::Info);
+    }
 
     let (sync_io_tx, mut sync_io_rx) = tokio::sync::mpsc::channel::<IoEvent>(100);
 
-    // We need to share the App between thread
-    let main_app_instance = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
+    let main_app_instance = Arc::new(tokio::sync::Mutex::new(App::new(
+        sync_io_tx.clone(),
+        args.debug_mode,
+    )));
     let app_widget_manager_instance = Arc::clone(&main_app_instance);
     let app_ui_instance = Arc::clone(&main_app_instance);
 
     // TODO: get term bg color
     // let term_bg = get_term_bg_color();
 
-    // check if we need to reset config
     if args.reset {
         reset_app_main();
         return Ok(());
@@ -100,7 +100,6 @@ async fn main() -> Result<()> {
         app.state.encryption_key_from_arguments = Some(encryption_key);
     }
 
-    // Handle IO in a specifc thread
     tokio::spawn(async move {
         let mut handler = IoAsyncHandler::new(main_app_instance);
         while let Some(io_event) = sync_io_rx.recv().await {

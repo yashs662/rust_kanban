@@ -1,10 +1,10 @@
 pub mod data_handler;
-pub mod handler;
+pub mod io_handler;
 pub mod logger;
-// For this dummy application we only need two IO event
+
 #[derive(Debug, Clone)]
 pub enum IoEvent {
-    Initialize, // Launch to initialize the application
+    Initialize,
     SaveLocalData,
     LoadSaveLocal,
     LoadSaveCloud,

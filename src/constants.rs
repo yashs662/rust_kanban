@@ -1,8 +1,8 @@
+use crate::app::state::UiMode;
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::app::state::UiMode;
-
 pub const FIELD_NOT_SET: &str = "Not Set";
+pub const FIELD_NA: &str = "N/A";
 pub const CONFIG_FILE_NAME: &str = "config.json";
 pub const CONFIG_DIR_NAME: &str = "rust_kanban";
 pub const SAVE_DIR_NAME: &str = "kanban_saves";
@@ -44,6 +44,7 @@ pub const SAVE_FILE_REGEX: &str = r"^kanban_\d{2}-\d{2}-\d{4}_v\d+.json";
 pub const ENCRYPTION_KEY_FILE_NAME: &str = "kanban_encryption_key";
 pub const ACCESS_TOKEN_FILE_NAME: &str = "kanban_access_token";
 pub const ACCESS_TOKEN_SEPARATOR: &str = "<<>>";
+pub const PATTERN_CHANGE_INTERVAL: u64 = 1000; // ms
 
 // Cloud Stuff
 pub const MIN_TIME_BETWEEN_SENDING_RESET_LINK: u64 = 60; // seconds
@@ -52,7 +53,7 @@ pub const SUPABASE_ANON_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3
 pub const MIN_PASSWORD_LENGTH: usize = 8;
 pub const MAX_PASSWORD_LENGTH: usize = 32;
 
-// Style
+// Styles
 pub const GENERAL_STYLE: Style = Style {
     fg: Some(Color::White),
     bg: Some(Color::Reset),

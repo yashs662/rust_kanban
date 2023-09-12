@@ -1,3 +1,34 @@
+use self::{
+    actions::Actions,
+    app_helper::{
+        handle_general_actions, handle_keybinding_mode, handle_mouse_action,
+        handle_user_input_mode, prepare_config_for_new_app,
+    },
+    kanban::{Board, Card, CardPriority},
+    state::{AppStatus, Focus, KeyBindings, UiMode},
+};
+use crate::{
+    app::{actions::Action, kanban::CardStatus},
+    constants::{
+        DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
+        DEFAULT_UI_MODE, FIELD_NA, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE,
+        MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD,
+        MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
+    },
+    inputs::{key::Key, mouse::Mouse},
+    io::{
+        data_handler::{get_available_local_save_files, get_default_save_directory},
+        io_handler::{refresh_visible_boards_and_cards, CloudData},
+        logger::{get_logs, RUST_KANBAN_LOGGER},
+        IoEvent,
+    },
+    ui::{
+        text_box::TextBox,
+        ui_helper,
+        widgets::{CommandPaletteWidget, ToastType, ToastWidget},
+        TextColorOptions, TextModifierOptions, Theme,
+    },
+};
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info};
@@ -13,37 +44,6 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
     vec,
-};
-
-use self::{
-    actions::Actions,
-    app_helper::{
-        handle_general_actions, handle_keybinding_mode, handle_mouse_action,
-        handle_user_input_mode, prepare_config_for_new_app,
-    },
-    kanban::{Board, Card, CardPriority},
-    state::{AppStatus, Focus, KeyBindings, UiMode},
-};
-use crate::{
-    app::{actions::Action, kanban::CardStatus},
-    constants::{
-        DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
-        DEFAULT_UI_MODE, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE,
-        MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD,
-        MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
-    },
-    inputs::{key::Key, mouse::Mouse},
-    io::{
-        data_handler::{get_available_local_save_files, get_default_save_directory},
-        handler::{refresh_visible_boards_and_cards, CloudData},
-        logger::{get_logs, RUST_KANBAN_LOGGER},
-        IoEvent,
-    },
-    ui::{
-        ui_helper,
-        widgets::{CommandPaletteWidget, ToastType, ToastWidget},
-        TextColorOptions, TextModifierOptions, Theme,
-    },
 };
 
 pub mod actions;
@@ -84,59 +84,57 @@ impl ActionHistoryManager {
     }
 }
 
-/// The main application, containing the state
-pub struct App {
+pub struct App<'a> {
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
     actions: Actions,
     is_loading: bool,
-    pub state: AppState,
+    pub debug_mode: bool,
+    pub state: AppState<'a>,
     pub boards: Vec<Board>,
     pub filtered_boards: Vec<Board>,
     pub config: AppConfig,
-    pub config_item_being_edited: Option<usize>,
-    pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
     pub visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
     pub command_palette: CommandPaletteWidget,
     pub last_io_event_time: Option<Instant>,
     pub all_themes: Vec<Theme>,
-    pub theme: Theme,
+    pub current_theme: Theme,
     pub action_history_manager: ActionHistoryManager,
+    pub main_menu: MainMenu,
 }
 
-impl App {
-    pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>) -> Self {
+impl App<'_> {
+    pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>, debug_mode: bool) -> Self {
         let actions = vec![Action::Quit].into();
         let is_loading = false;
-        let mut state = AppState::default();
+        let state = AppState::default();
         let boards = vec![];
         let filtered_boards = vec![];
         let all_themes = Theme::all_default_themes();
         let mut theme = Theme::default();
-        let (config, config_errors, state) = prepare_config_for_new_app(&mut state, theme.clone());
+        let (config, config_errors, prepared_state) =
+            prepare_config_for_new_app(state, theme.clone());
         let default_theme = config.default_theme.clone();
-        for t in all_themes.iter() {
-            if t.name == default_theme {
-                theme = t.clone();
-                break;
-            }
+        let theme_in_all = all_themes.iter().find(|t| t.name == default_theme);
+        if theme_in_all.is_some() {
+            theme = theme_in_all.unwrap().clone();
         }
 
         let mut app = Self {
             io_tx,
             actions,
             is_loading,
-            state: state.to_owned(),
+            debug_mode,
+            state: prepared_state.to_owned(),
             boards,
             filtered_boards,
             config,
-            config_item_being_edited: None,
-            card_being_edited: None,
             visible_boards_and_cards: LinkedHashMap::new(),
-            command_palette: CommandPaletteWidget::new(),
+            command_palette: CommandPaletteWidget::new(debug_mode),
             last_io_event_time: None,
             all_themes,
-            theme,
+            current_theme: theme,
             action_history_manager: ActionHistoryManager::default(),
+            main_menu: MainMenu::default(),
         };
         if !config_errors.is_empty() {
             for error in config_errors {
@@ -146,9 +144,7 @@ impl App {
         app
     }
 
-    /// Handle a user action
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
-        // check if we are in a user input mode
         if self.state.app_status == AppStatus::UserInput {
             handle_user_input_mode(self, key).await
         } else if self.state.app_status == AppStatus::KeyBindMode {
@@ -157,11 +153,8 @@ impl App {
             handle_general_actions(self, key).await
         }
     }
-    /// Send a network event to the IO thread
     pub async fn dispatch(&mut self, action: IoEvent) {
-        // `is_loading` will be set to false again after the async action has finished in io/handler.rs
         self.is_loading = true;
-        // check if last_io_event_time is more thant current time + IO_EVENT_WAIT_TIME in ms
         if self
             .last_io_event_time
             .unwrap_or_else(|| Instant::now() - Duration::from_millis(IO_EVENT_WAIT_TIME + 10))
@@ -193,7 +186,6 @@ impl App {
         self.is_loading
     }
     pub fn initialized(&mut self) {
-        // Update contextual actions
         self.actions = Action::all().into();
         if self.state.ui_mode == UiMode::MainMenu {
             self.main_menu_next();
@@ -249,7 +241,7 @@ impl App {
     pub fn main_menu_next(&mut self) {
         let i = match self.state.main_menu_state.selected() {
             Some(i) => {
-                if i >= MainMenu::all().len() - 1 {
+                if i >= self.main_menu.all().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -263,7 +255,7 @@ impl App {
         let i = match self.state.main_menu_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    MainMenu::all().len() - 1
+                    self.main_menu.items.len() - 1
                 } else {
                     i - 1
                 }
@@ -354,7 +346,6 @@ impl App {
         self.state.ui_mode = ui_mode;
         let available_focus_targets = self.state.ui_mode.get_available_targets();
         if !available_focus_targets.contains(&self.state.focus) {
-            // check if available focus targets is empty
             if available_focus_targets.is_empty() {
                 self.state.focus = Focus::NoFocus;
             } else {
@@ -391,7 +382,6 @@ impl App {
         self.state.edit_keybindings_state.select(Some(i));
     }
     pub fn help_next(&mut self) {
-        // as the help menu is split into two use only half the length of the keybinding store
         let i = match self.state.help_state.selected() {
             Some(i) => {
                 if !self.state.keybinding_store.is_empty() {
@@ -639,7 +629,6 @@ impl App {
         }
 
         let default_action_iter = default_actions.actions().iter();
-        // append to keybinding_action_list if the keybinding is not already in the list
         for action in default_action_iter {
             let str_action = action.to_string();
             if !keybinding_action_list.iter().any(|x| x[1] == str_action) {
@@ -663,14 +652,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Info,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Info,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         }
     }
@@ -680,14 +669,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Error,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Error,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         }
     }
@@ -697,14 +686,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Warning,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Warning,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         }
     }
@@ -714,14 +703,14 @@ impl App {
                 message.to_string(),
                 duration,
                 ToastType::Loading,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         } else {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Loading,
-                self.theme.clone(),
+                self.current_theme.clone(),
             ));
         }
     }
@@ -772,6 +761,7 @@ impl App {
             None => 0,
         };
         self.state.theme_selector_state.select(Some(i));
+        self.current_theme = self.all_themes[i].clone();
     }
     pub fn select_change_theme_prv(&mut self) {
         let i = match self.state.theme_selector_state.selected() {
@@ -785,6 +775,7 @@ impl App {
             None => 0,
         };
         self.state.theme_selector_state.select(Some(i));
+        self.current_theme = self.all_themes[i].clone();
     }
     pub fn select_create_theme_next(&mut self) {
         let theme_rows_len = Theme::default().to_rows(self).1.len();
@@ -1016,7 +1007,6 @@ impl App {
                     moved_from_board_id,
                     moved_to_board_id,
                 ) => {
-                    // find the card in the moved_to_board_id and remove it
                     if let Some(moved_to_board) =
                         self.boards.iter_mut().find(|b| b.id == moved_to_board_id)
                     {
@@ -1025,7 +1015,6 @@ impl App {
                         self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{:?}' was not found", card.name, moved_to_board_id), None);
                         return;
                     }
-                    // find the card in the moved_from_board_id and add it
                     if let Some(moved_from_board) =
                         self.boards.iter_mut().find(|b| b.id == moved_from_board_id)
                     {
@@ -1039,12 +1028,14 @@ impl App {
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
                     if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        // check if both the index's are valid if so swap the card
                         if moved_from_index >= board.cards.len()
                             || moved_to_index >= board.cards.len()
                         {
                             self.send_error_toast(
-                                "Could not undo move card 'N/A' as the index's were invalid",
+                                &format!(
+                                    "Could not undo move card '{}' as the index's were invalid",
+                                    FIELD_NA
+                                ),
                                 None,
                             );
                             return;
@@ -1055,7 +1046,7 @@ impl App {
                         self.action_history_manager.history_index -= 1;
                         self.send_info_toast(&format!("Undo Move Card '{}'", card_name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not undo move card 'N/A' as the board with id '{:?}' was not found", board_id), None);
+                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{:?}' was not found",FIELD_NA, board_id), None);
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
@@ -1130,7 +1121,6 @@ impl App {
                     moved_from_board_id,
                     moved_to_board_id,
                 ) => {
-                    // find the card in the moved_to_board_id and remove it
                     if let Some(moved_to_board) =
                         self.boards.iter_mut().find(|b| b.id == moved_to_board_id)
                     {
@@ -1139,7 +1129,6 @@ impl App {
                         self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{:?}' was not found", card.name, moved_to_board_id), None);
                         return;
                     }
-                    // find the card in the moved_from_board_id and add it
                     if let Some(moved_from_board) =
                         self.boards.iter_mut().find(|b| b.id == moved_from_board_id)
                     {
@@ -1153,12 +1142,14 @@ impl App {
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
                     if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        // check if both the index's are valid if so swap the card
                         if moved_from_index >= board.cards.len()
                             || moved_to_index >= board.cards.len()
                         {
                             self.send_error_toast(
-                                "Could not redo move card 'N/A' as the index's were invalid",
+                                &format!(
+                                    "Could not redo move card '{}' as the index's were invalid",
+                                    FIELD_NA
+                                ),
                                 None,
                             );
                             return;
@@ -1169,7 +1160,7 @@ impl App {
                         self.action_history_manager.history_index += 1;
                         self.send_info_toast(&format!("Redo Move Card '{}'", card_name), None);
                     } else {
-                        self.send_error_toast(&format!("Could not redo move card 'N/A' as the board with id '{:?}' was not found", board_id), None);
+                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{:?}' was not found", FIELD_NA, board_id), None);
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
@@ -1248,7 +1239,8 @@ pub enum MainMenuItem {
     View,
     Config,
     Help,
-    LoadSave,
+    LoadSaveLocal,
+    LoadSaveCloud,
     Quit,
 }
 
@@ -1258,35 +1250,80 @@ impl Display for MainMenuItem {
             MainMenuItem::View => write!(f, "View your Boards"),
             MainMenuItem::Config => write!(f, "Configure"),
             MainMenuItem::Help => write!(f, "Help"),
-            MainMenuItem::LoadSave => write!(f, "Load a Save"),
+            MainMenuItem::LoadSaveLocal => write!(f, "Load a Save (local)"),
+            MainMenuItem::LoadSaveCloud => write!(f, "Load a Save (cloud)"),
             MainMenuItem::Quit => write!(f, "Quit"),
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct MainMenu {
     pub items: Vec<MainMenuItem>,
+    pub logged_in: bool,
+}
+
+impl Default for MainMenu {
+    fn default() -> Self {
+        MainMenu {
+            items: vec![
+                MainMenuItem::View,
+                MainMenuItem::Config,
+                MainMenuItem::Help,
+                MainMenuItem::LoadSaveLocal,
+                MainMenuItem::Quit,
+            ],
+            logged_in: false,
+        }
+    }
 }
 
 impl MainMenu {
-    pub fn all() -> Vec<MainMenuItem> {
-        vec![
-            MainMenuItem::View,
-            MainMenuItem::Config,
-            MainMenuItem::Help,
-            MainMenuItem::LoadSave,
-            MainMenuItem::Quit,
-        ]
+    pub fn all(&mut self) -> Vec<MainMenuItem> {
+        if self.logged_in {
+            let return_vec = vec![
+                MainMenuItem::View,
+                MainMenuItem::Config,
+                MainMenuItem::Help,
+                MainMenuItem::LoadSaveLocal,
+                MainMenuItem::LoadSaveCloud,
+                MainMenuItem::Quit,
+            ];
+            self.items = return_vec.clone();
+            return_vec
+        } else {
+            let return_vec = vec![
+                MainMenuItem::View,
+                MainMenuItem::Config,
+                MainMenuItem::Help,
+                MainMenuItem::LoadSaveLocal,
+                MainMenuItem::Quit,
+            ];
+            self.items = return_vec.clone();
+            return_vec
+        }
     }
 
-    pub fn from_index(index: usize) -> MainMenuItem {
-        match index {
-            0 => MainMenuItem::View,
-            1 => MainMenuItem::Config,
-            2 => MainMenuItem::Help,
-            3 => MainMenuItem::LoadSave,
-            4 => MainMenuItem::Quit,
-            _ => MainMenuItem::Quit,
+    pub fn from_index(&self, index: usize) -> MainMenuItem {
+        if self.logged_in {
+            match index {
+                0 => MainMenuItem::View,
+                1 => MainMenuItem::Config,
+                2 => MainMenuItem::Help,
+                3 => MainMenuItem::LoadSaveLocal,
+                4 => MainMenuItem::LoadSaveCloud,
+                5 => MainMenuItem::Quit,
+                _ => MainMenuItem::Quit,
+            }
+        } else {
+            match index {
+                0 => MainMenuItem::View,
+                1 => MainMenuItem::Config,
+                2 => MainMenuItem::Help,
+                3 => MainMenuItem::LoadSaveLocal,
+                4 => MainMenuItem::Quit,
+                _ => MainMenuItem::Quit,
+            }
         }
     }
 }
@@ -1429,7 +1466,7 @@ impl PopupMode {
 }
 
 #[derive(Debug, Clone)]
-pub struct AppState {
+pub struct AppState<'a> {
     pub app_status: AppStatus,
     pub current_board_id: Option<(u64, u64)>,
     pub current_card_id: Option<(u64, u64)>,
@@ -1488,10 +1525,13 @@ pub struct AppState {
     pub cloud_data: Option<Vec<CloudData>>,
     pub last_reset_password_link_sent_time: Option<Instant>,
     pub encryption_key_from_arguments: Option<String>,
+    pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
+    pub card_description_text_buffer: Option<TextBox<'a>>,
+    pub config_item_being_edited: Option<usize>,
 }
 
-impl Default for AppState {
-    fn default() -> AppState {
+impl Default for AppState<'_> {
+    fn default() -> AppState<'static> {
         AppState {
             app_status: AppStatus::default(),
             focus: Focus::NoFocus,
@@ -1562,6 +1602,9 @@ impl Default for AppState {
             cloud_data: None,
             last_reset_password_link_sent_time: None,
             encryption_key_from_arguments: None,
+            card_being_edited: None,
+            card_description_text_buffer: None,
+            config_item_being_edited: None,
         }
     }
 }
@@ -1647,6 +1690,7 @@ pub struct AppConfig {
     pub default_theme: String,
     pub date_format: DateFormat,
     pub auto_login: bool,
+    pub show_line_numbers: bool,
 }
 
 impl Default for AppConfig {
@@ -1668,6 +1712,7 @@ impl Default for AppConfig {
             default_theme: default_theme.name,
             date_format: DateFormat::default(),
             auto_login: true,
+            show_line_numbers: true,
         }
     }
 }
@@ -1696,6 +1741,10 @@ impl AppConfig {
                 self.disable_scroll_bar.to_string(),
             ],
             vec![String::from("Auto Login"), self.auto_login.to_string()],
+            vec![
+                String::from("Show Line Numbers"),
+                self.show_line_numbers.to_string(),
+            ],
             vec![
                 String::from("Number of Days to Warn Before Due Date"),
                 self.warning_delta.to_string(),
@@ -1735,7 +1784,6 @@ impl AppConfig {
             match key {
                 "Save Directory" => {
                     let new_path = PathBuf::from(value);
-                    // check if the new path is valid
                     if new_path.exists() {
                         config.save_directory = new_path;
                     } else {
@@ -1794,6 +1842,16 @@ impl AppConfig {
                         app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
                     }
                 }
+                "Show Line Numbers" => {
+                    if value.to_lowercase() == "true" {
+                        config.show_line_numbers = true;
+                    } else if value.to_lowercase() == "false" {
+                        config.show_line_numbers = false;
+                    } else {
+                        error!("Invalid boolean: {}", value);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
+                    }
+                }
                 "Enable Mouse Support" => {
                     if value.to_lowercase() == "true" {
                         config.enable_mouse_support = true;
@@ -1819,7 +1877,6 @@ impl AppConfig {
                 "Tickrate" => {
                     let new_tickrate = value.parse::<u64>();
                     if let Ok(new_tickrate) = new_tickrate {
-                        // make sure tickrate is not too low or too high
                         if new_tickrate < 10 {
                             error!(
                                 "Tickrate must be greater than 10ms, to avoid overloading the CPU"
@@ -1956,12 +2013,10 @@ impl AppConfig {
     pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) -> Result<(), String> {
         let current_bindings = &self.keybindings;
 
-        // make a list from the keybindings
         let mut key_list = vec![];
         for (k, v) in current_bindings.iter() {
             key_list.push((k, v));
         }
-        // check if index is valid
         if key_index >= key_list.len() {
             debug!("Invalid key index: {}", key_index);
             error!("Unable to edit keybinding");
@@ -1969,7 +2024,6 @@ impl AppConfig {
         }
         let (key, _) = key_list[key_index];
 
-        // check if key is present in current bindings if not, return error
         if !current_bindings.iter().any(|(k, _)| k == key) {
             debug!("Invalid key: {}", key);
             error!("Unable to edit keybinding");
@@ -2106,7 +2160,6 @@ impl AppConfig {
                 let mut keybindings_object = KeyBindings::default();
                 for (key, value) in keybindings.iter_mut() {
                     let mut keybinding = vec![];
-                    // the value can be either in the format [{"Char":"2"}] or ["Tab", "Shift"]
                     let value_array = value.as_array_mut();
                     if value_array.is_none() {
                         error!(
@@ -2166,7 +2219,6 @@ impl AppConfig {
         };
         let tickrate = match serde_json_object["tickrate"].as_u64() {
             Some(tickrate) => {
-                // make sure tickrate is not too low or too high
                 if !(10..=1000).contains(&tickrate) {
                     error!("Invalid tickrate: {}, It must be between 10 and 1000, Resetting to default tickrate", tickrate);
                     DEFAULT_TICKRATE
@@ -2246,6 +2298,13 @@ impl AppConfig {
                 DateFormat::default()
             }
         };
+        let show_line_numbers = match serde_json_object["show_line_numbers"].as_bool() {
+            Some(show_line_numbers) => show_line_numbers,
+            None => {
+                error!("Show Line Numbers is not a boolean, Resetting to default value");
+                true
+            }
+        };
         Ok(Self {
             save_directory,
             default_view,
@@ -2261,6 +2320,7 @@ impl AppConfig {
             enable_mouse_support,
             default_theme,
             date_format,
+            show_line_numbers,
         })
     }
 }
@@ -2299,7 +2359,6 @@ pub fn date_format_converter(date_string: &str, date_format: DateFormat) -> Resu
     let given_date_format = date_format_finder(date_string)?;
     let all_formats_with_time = DateFormat::all_formats_with_time();
     let all_formats_without_time = DateFormat::all_formats_without_time();
-    // check if the time needs to be added to the string or removed from it to parse and convert to the required format that is date_format
     if all_formats_with_time.contains(&given_date_format)
         && all_formats_without_time.contains(&date_format)
     {
@@ -2368,7 +2427,7 @@ pub fn date_format_converter(date_string: &str, date_format: DateFormat) -> Resu
     }
 }
 
-pub async fn handle_exit(app: &mut App) {
+pub async fn handle_exit(app: &mut App<'_>) {
     if app.config.save_on_exit {
         app.dispatch(IoEvent::AutoSave).await;
     }

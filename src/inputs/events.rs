@@ -1,3 +1,4 @@
+use super::{key::Key, mouse::Mouse, InputEvent};
 use log::error;
 use std::{
     sync::{
@@ -7,20 +8,13 @@ use std::{
     time::Duration,
 };
 
-use super::{key::Key, mouse::Mouse, InputEvent};
-
-/// A small event handler that wrap crossterm input and tick event. Each event
-/// type is handled in its own thread and returned to a common `Receiver`
 pub struct Events {
     rx: tokio::sync::mpsc::Receiver<InputEvent>,
-    // Need to be kept around to prevent disposing the sender side.
     _tx: tokio::sync::mpsc::Sender<InputEvent>,
-    // To stop the loop
     stop_capture: Arc<AtomicBool>,
 }
 
 impl Events {
-    /// Constructs an new instance of `Events` with the default config.
     pub fn new(tick_rate: Duration) -> Events {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let stop_capture = Arc::new(AtomicBool::new(false));
@@ -29,7 +23,6 @@ impl Events {
         let event_stop_capture = stop_capture.clone();
         tokio::spawn(async move {
             loop {
-                // poll for tick rate duration, if no event, sent tick event.
                 if crossterm::event::poll(tick_rate).unwrap() {
                     let event = crossterm::event::read().unwrap();
                     if let crossterm::event::Event::Mouse(mouse_action) = event {
@@ -61,7 +54,6 @@ impl Events {
         }
     }
 
-    /// Attempts to read an event.
     pub async fn next(&mut self) -> InputEvent {
         let new_event = self.rx.recv().await.unwrap_or(InputEvent::Tick);
         if new_event == InputEvent::KeyBoardInput(Key::Unknown) {
@@ -71,7 +63,6 @@ impl Events {
         }
     }
 
-    /// Close
     pub fn close(&mut self) {
         self.stop_capture.store(true, Ordering::Relaxed)
     }

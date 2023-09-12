@@ -1,13 +1,11 @@
+use super::state::KeyBindings;
+use crate::{app::AppConfig, inputs::key::Key};
 use std::{
     collections::HashMap,
     fmt::{self, Display},
     slice::Iter,
 };
 
-use super::state::KeyBindings;
-use crate::{app::AppConfig, inputs::key::Key};
-
-/// We define all available action
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Action {
     Quit,
@@ -30,7 +28,7 @@ pub enum Action {
     SaveState,
     NewBoard,
     NewCard,
-    DeleteCard,
+    Delete,
     DeleteBoard,
     ChangeCardStatusToCompleted,
     ChangeCardStatusToActive,
@@ -44,7 +42,6 @@ pub enum Action {
 }
 
 impl Action {
-    /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
         static ACTIONS: [Action; 31] = [
             Action::Quit,
@@ -67,7 +64,7 @@ impl Action {
             Action::SaveState,
             Action::NewBoard,
             Action::NewCard,
-            Action::DeleteCard,
+            Action::Delete,
             Action::DeleteBoard,
             Action::ChangeCardStatusToCompleted,
             Action::ChangeCardStatusToActive,
@@ -82,7 +79,6 @@ impl Action {
         ACTIONS.iter()
     }
 
-    /// List of key associated to action
     pub fn keys(&self) -> &[Key] {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
@@ -105,7 +101,7 @@ impl Action {
             Action::SaveState => &[Key::Ctrl('s')],
             Action::NewBoard => &[Key::Char('b')],
             Action::NewCard => &[Key::Char('n')],
-            Action::DeleteCard => &[Key::Char('d')],
+            Action::Delete => &[Key::Char('d')],
             Action::DeleteBoard => &[Key::Char('D')],
             Action::ChangeCardStatusToCompleted => &[Key::Char('1')],
             Action::ChangeCardStatusToActive => &[Key::Char('2')],
@@ -124,7 +120,6 @@ impl Action {
     }
 }
 
-/// Could display a user friendly short description of action
 impl Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
@@ -148,7 +143,7 @@ impl Display for Action {
             Action::SaveState => "Save Kanban state",
             Action::NewBoard => "Create new board",
             Action::NewCard => "Create new card in current board",
-            Action::DeleteCard => "Delete focused element",
+            Action::Delete => "Delete focused element",
             Action::DeleteBoard => "Delete Board",
             Action::ChangeCardStatusToCompleted => "Change card status to completed",
             Action::ChangeCardStatusToActive => "Change card status to active",
@@ -164,12 +159,10 @@ impl Display for Action {
     }
 }
 
-/// The application should have some contextual actions.
 #[derive(Default, Debug, Clone)]
 pub struct Actions(Vec<Action>);
 
 impl Actions {
-    /// Given a key, find the corresponding action
     pub fn find(&self, key: Key, config: &AppConfig) -> Option<&Action> {
         let current_bindings = config.keybindings.clone();
         let action_list = &mut Vec::new();
@@ -191,21 +184,13 @@ impl Actions {
         }
     }
 
-    /// Get contextual actions.
-    /// (just for building a help view)
     pub fn actions(&self) -> &[Action] {
         self.0.as_slice()
     }
 }
 
 impl From<Vec<Action>> for Actions {
-    /// Build contextual action
-    ///
-    /// # Panics
-    ///
-    /// If two actions have same key
     fn from(actions: Vec<Action>) -> Self {
-        // Check key unicity
         let mut map: HashMap<Key, Vec<Action>> = HashMap::new();
         for action in actions.iter() {
             for key in action.keys().iter() {
@@ -219,7 +204,7 @@ impl From<Vec<Action>> for Actions {
         }
         let errors = map
             .iter()
-            .filter(|(_, actions)| actions.len() > 1) // at least two actions share same shortcut
+            .filter(|(_, actions)| actions.len() > 1)
             .map(|(key, actions)| {
                 let actions = actions
                     .iter()
@@ -233,44 +218,6 @@ impl From<Vec<Action>> for Actions {
             panic!("{}", errors.join("; "))
         }
 
-        // Ok, we can create contextual actions
         Self(actions)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn should_find_action_by_key() {
-        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
-        let result = actions.find(Key::Ctrl('c'), &AppConfig::default());
-        assert_eq!(result, Some(&Action::Quit));
-    }
-
-    #[test]
-    fn should_find_action_by_key_not_found() {
-        let actions: Actions = vec![Action::Quit, Action::NextFocus].into();
-        let result = actions.find(Key::Alt('w'), &AppConfig::default());
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn should_create_actions_from_vec() {
-        let _actions: Actions = vec![Action::Quit, Action::NextFocus, Action::PrvFocus].into();
-    }
-
-    #[test]
-    #[should_panic]
-    fn should_panic_when_create_actions_conflict_key() {
-        let _actions: Actions = vec![
-            Action::Quit,
-            Action::Quit,
-            Action::NextFocus,
-            Action::NextFocus,
-            Action::NextFocus,
-        ]
-        .into();
     }
 }

@@ -6,9 +6,7 @@ pub mod mouse;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum InputEvent {
-    /// An input event occurred.
     KeyBoardInput(Key),
     MouseAction(Mouse),
-    /// An tick event occurred.
     Tick,
 }

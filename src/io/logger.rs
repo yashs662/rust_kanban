@@ -1,6 +1,4 @@
-// This is a stripped down version of the tui_logger crate to be used in rust-kanban,
-// i have not written this code myself. link to github: https://github.com/gin66/tui-logger
-// This is done to avoid future conflicts with the ratatui crate having different versions of the same crate.
+// This logger implementation is highly inspired by the logger implementation in https://github.com/gin66/tui-logger
 
 use chrono::{DateTime, Local};
 use log::{Level, LevelFilter, Log, Metadata, Record};
@@ -64,11 +62,10 @@ pub struct RustKanbanLogger {
 
 impl RustKanbanLogger {
     pub fn move_events(&self) {
-        // If there are no new events, then just return
         if self.hot_log.lock().events.total_elements() == 0 {
             return;
         }
-        // Exchange new event buffer with the hot buffer
+
         let mut received_events = {
             let new_circular = CircularBuffer::new(self.inner.lock().hot_depth);
             let mut hl = self.hot_log.lock();
@@ -84,7 +81,6 @@ impl RustKanbanLogger {
             reversed.push(log_entry);
         }
         if total > elements {
-            // Too many events received, so some have been lost
             let new_log_entry = ExtLogRecord {
                 timestamp: reversed[reversed.len() - 1].timestamp,
                 level: Level::Warn,
@@ -148,7 +144,6 @@ impl<T> CircularBuffer<T> {
     pub fn iter(&mut self) -> iter::Chain<std::slice::Iter<T>, std::slice::Iter<T>> {
         let max_depth = self.buffer.capacity();
         if self.next_write_pos <= max_depth {
-            // If buffer is not completely filled, then just iterate through it
             self.buffer.iter().chain(self.buffer[..0].iter())
         } else {
             let wrap = self.next_write_pos % max_depth;
@@ -162,7 +157,6 @@ impl<T> CircularBuffer<T> {
     ) -> iter::Chain<std::iter::Rev<std::slice::Iter<T>>, std::iter::Rev<std::slice::Iter<T>>> {
         let max_depth = self.buffer.capacity();
         if self.next_write_pos <= max_depth {
-            // If buffer is not completely filled, then just iterate through it
             self.buffer
                 .iter()
                 .rev()

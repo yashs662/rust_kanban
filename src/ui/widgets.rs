@@ -1,3 +1,15 @@
+use super::{TextColorOptions, Theme};
+use crate::{
+    app::{
+        app_helper::reset_preview_boards,
+        handle_exit,
+        state::{AppStatus, Focus, UiMode},
+        App, AppReturn, PopupMode,
+    },
+    constants::{RANDOM_SEARCH_TERM, TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
+    io::{io_handler::refresh_visible_boards_and_cards, IoEvent},
+    util::lerp_between,
+};
 use log::{debug, error, info};
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use std::{
@@ -7,19 +19,6 @@ use std::{
     time::Duration,
 };
 use tokio::{sync::MutexGuard, time::Instant};
-
-use crate::{
-    app::{
-        handle_exit,
-        state::{AppStatus, Focus, UiMode},
-        App, AppReturn, PopupMode,
-    },
-    constants::{RANDOM_SEARCH_TERM, TOAST_FADE_IN_TIME, TOAST_FADE_OUT_TIME},
-    io::{handler::refresh_visible_boards_and_cards, IoEvent},
-    lerp_between,
-};
-
-use super::{TextColorOptions, Theme};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToastWidget {
@@ -60,18 +59,15 @@ impl ToastWidget {
     }
 
     fn update(mut app: MutexGuard<App>) {
-        let theme = app.theme.clone();
-        let term_background_color = if app.theme.general_style.bg.is_some() {
-            TextColorOptions::from(app.theme.general_style.bg.unwrap()).to_rgb()
+        let theme = app.current_theme.clone();
+        let term_background_color = if app.current_theme.general_style.bg.is_some() {
+            TextColorOptions::from(app.current_theme.general_style.bg.unwrap()).to_rgb()
         } else {
             app.state.term_background_color
         };
         let toasts = &mut app.state.toasts;
-        // remove all inactive toasts
         for i in (0..toasts.len()).rev() {
-            // based on the toast_type lerp between the toast_type color and 0,0,0 within the TOAST_FADE_TIME which is in milliseconds
             if toasts[i].start_time.elapsed() < Duration::from_millis(TOAST_FADE_IN_TIME) {
-                // make the toast fade in use fade in time lerp from 0,0,0 to toast_type color
                 let t =
                     toasts[i].start_time.elapsed().as_millis() as f32 / TOAST_FADE_IN_TIME as f32;
                 toasts[i].toast_color = lerp_between(
@@ -82,10 +78,8 @@ impl ToastWidget {
             } else if toasts[i].start_time.elapsed()
                 < toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME)
             {
-                // make the toast stay at the toast_type color
                 toasts[i].toast_color = toasts[i].toast_type.as_color(theme.clone());
             } else {
-                // make the toast fade out use fade out time lerp from toast_type color to 0,0,0
                 let t = (toasts[i].start_time.elapsed()
                     - (toasts[i].duration - Duration::from_millis(TOAST_FADE_OUT_TIME)))
                 .as_millis() as f32
@@ -154,13 +148,13 @@ impl ToastType {
     }
 }
 
-pub struct WidgetManager {
-    pub app: Arc<tokio::sync::Mutex<App>>,
+pub struct WidgetManager<'a> {
+    pub app: Arc<tokio::sync::Mutex<App<'a>>>,
 }
 
-impl WidgetManager {
-    pub fn new(app: Arc<tokio::sync::Mutex<App>>) -> Self {
-        Self { app }
+impl WidgetManager<'_> {
+    pub fn new(app: Arc<tokio::sync::Mutex<App>>) -> WidgetManager {
+        WidgetManager { app }
     }
 
     pub async fn update(&mut self) {
@@ -181,15 +175,9 @@ pub struct CommandPaletteWidget {
     pub command_palette_actions_corpus: Corpus,
 }
 
-impl Default for CommandPaletteWidget {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl CommandPaletteWidget {
-    pub fn new() -> Self {
-        let available_commands = CommandPaletteActions::all();
+    pub fn new(debug_mode: bool) -> Self {
+        let available_commands = CommandPaletteActions::all(debug_mode);
         let mut corpus = CorpusBuilder::new().arity(2).pad_full(Pad::Auto).finish();
         for command in available_commands {
             corpus.add_text(command.to_string().to_lowercase().as_str());
@@ -198,15 +186,15 @@ impl CommandPaletteWidget {
             command_search_results: None,
             card_search_results: None,
             board_search_results: None,
-            last_search_string: RANDOM_SEARCH_TERM.to_string(), // random string that will never be typed as the selected index jumps around when a mouse is used with an empty search string
+            last_search_string: RANDOM_SEARCH_TERM.to_string(),
             already_in_user_input_mode: false,
             last_focus: None,
-            available_commands: CommandPaletteActions::all(),
+            available_commands: CommandPaletteActions::all(debug_mode),
             command_palette_actions_corpus: corpus,
         }
     }
 
-    pub async fn handle_command(app: &mut App) -> AppReturn {
+    pub async fn handle_command(app: &mut App<'_>) -> AppReturn {
         if app
             .state
             .command_palette_command_search_list_state
@@ -325,6 +313,7 @@ impl CommandPaletteWidget {
                     CommandPaletteActions::LoadASaveLocal => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        reset_preview_boards(app);
                         app.state.ui_mode = UiMode::LoadLocalSave;
                     }
                     CommandPaletteActions::DebugMenu => {
@@ -352,6 +341,9 @@ impl CommandPaletteWidget {
                     CommandPaletteActions::ClearFilter => {
                         if app.filtered_boards.is_empty() {
                             app.send_warning_toast("No filters to clear", None);
+                            app.state.popup_mode = None;
+                            app.state.app_status = AppStatus::Initialized;
+                            return AppReturn::Continue;
                         } else {
                             app.send_info_toast("All Filters Cleared", None);
                         }
@@ -366,9 +358,17 @@ impl CommandPaletteWidget {
                         app.state.popup_mode = Some(PopupMode::ChangeDateFormatPopup);
                     }
                     CommandPaletteActions::NoCommandsFound => {
+                        app.state.popup_mode = None;
+                        app.state.app_status = AppStatus::Initialized;
                         return AppReturn::Continue;
                     }
                     CommandPaletteActions::Login => {
+                        if app.state.user_login_data.auth_token.is_some() {
+                            app.send_error_toast("Already logged in", None);
+                            app.state.popup_mode = None;
+                            app.state.app_status = AppStatus::Initialized;
+                            return AppReturn::Continue;
+                        }
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::Login;
                         app.state.popup_mode = None;
@@ -398,11 +398,14 @@ impl CommandPaletteWidget {
                         if app.state.user_login_data.auth_token.is_some() {
                             app.state.prev_ui_mode = Some(app.state.ui_mode);
                             app.state.ui_mode = UiMode::LoadCloudSave;
+                            reset_preview_boards(app);
                             app.dispatch(IoEvent::GetCloudData).await;
                             app.state.popup_mode = None;
                         } else {
                             error!("Not logged in");
                             app.send_error_toast("Not logged in", None);
+                            app.state.popup_mode = None;
+                            app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
                         }
                     }
@@ -428,7 +431,6 @@ impl CommandPaletteWidget {
         if app.state.popup_mode.is_some()
             && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
         {
-            // check if last search string is different from app,.state.current_user_input
             if app.state.current_user_input.to_lowercase() == app.command_palette.last_search_string
             {
                 return;
@@ -442,14 +444,12 @@ impl CommandPaletteWidget {
             for item in result {
                 search_results.push(CommandPaletteActions::from_string(&item.text, true).unwrap());
             }
-            // if the search results are empty, then show all commands
             let mut command_search_results = if search_results.is_empty() {
                 if current_search_string.is_empty() {
-                    CommandPaletteActions::all()
+                    CommandPaletteActions::all(app.debug_mode)
                 } else {
-                    let all_actions = CommandPaletteActions::all();
+                    let all_actions = CommandPaletteActions::all(app.debug_mode);
                     let mut results = vec![];
-                    // append all that start with the current search string
                     for action in all_actions {
                         if action
                             .to_string()
@@ -462,7 +462,6 @@ impl CommandPaletteWidget {
                     results
                 }
             } else {
-                // sort to keep search results that start with the current search string at the top of the list
                 let mut ordered_command_search_results = vec![];
                 let mut extra_command_results = vec![];
                 for result in search_results {
@@ -483,7 +482,6 @@ impl CommandPaletteWidget {
                 command_search_results = vec![CommandPaletteActions::NoCommandsFound]
             }
 
-            // search for cards
             let mut card_search_results: Vec<(String, (u64, u64))> = vec![];
             if !current_search_string.is_empty() {
                 for board in &app.boards {
@@ -520,7 +518,6 @@ impl CommandPaletteWidget {
                 app.command_palette.card_search_results = Some(card_search_results.clone());
             }
 
-            // search for boards
             let mut board_search_results: Vec<(String, (u64, u64))> = vec![];
             if !current_search_string.is_empty() {
                 for board in &app.boards {
@@ -548,7 +545,6 @@ impl CommandPaletteWidget {
             app.command_palette.command_search_results = Some(command_search_results);
             app.command_palette.last_search_string = current_search_string;
             if app.command_palette.command_search_results.is_some() {
-                // if length is > 0 select first item
                 if !app
                     .command_palette
                     .command_search_results
@@ -656,7 +652,7 @@ impl Display for CommandPaletteActions {
 }
 
 impl CommandPaletteActions {
-    pub fn all() -> Vec<Self> {
+    pub fn all(debug_mode: bool) -> Vec<Self> {
         let all = vec![
             Self::OpenConfigMenu,
             Self::SaveKanbanState,
@@ -682,7 +678,7 @@ impl CommandPaletteActions {
             Self::Quit,
         ];
 
-        if cfg!(debug_assertions) {
+        if cfg!(debug_assertions) || debug_mode {
             let mut all = all;
             all.push(Self::DebugMenu);
             all

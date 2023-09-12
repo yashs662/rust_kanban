@@ -1,19 +1,18 @@
+use super::io_handler::{get_config_dir, make_file_system_safe_name};
+use crate::{
+    app::{kanban::Board, AppConfig},
+    constants::{
+        CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME, SAVE_FILE_REGEX,
+        THEME_DIR_NAME, THEME_FILE_NAME,
+    },
+    inputs::key::Key,
+    io::io_handler::prepare_config_dir,
+    ui::Theme,
+};
 use log::{debug, error, info};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap, env, fs, path::PathBuf};
-
-use super::handler::{get_config_dir, make_file_system_safe_name};
-use crate::{
-    app::{kanban::Board, AppConfig},
-    constants::{
-        CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME, THEME_DIR_NAME,
-        THEME_FILE_NAME,
-    },
-    inputs::key::Key,
-    io::handler::prepare_config_dir,
-    ui::Theme,
-};
 
 pub fn get_config(ignore_overlapped_keybindings: bool) -> Result<AppConfig, String> {
     let config_dir_status = get_config_dir();
@@ -54,7 +53,6 @@ pub fn get_config(ignore_overlapped_keybindings: bool) -> Result<AppConfig, Stri
         }
     };
     let config_keybindings = config.keybindings.clone();
-    // make sure there is no overlap between keybindings
     if ignore_overlapped_keybindings {
         return Ok(config);
     }
@@ -110,10 +108,6 @@ pub fn reset_config() {
 }
 
 pub fn save_kanban_state_locally(boards: Vec<Board>, config: &AppConfig) -> Result<(), String> {
-    // check config.save_directory for previous versions of the boards
-    // versioning style is: SAVE_FILE_NAME_27-12-2020_v1
-    // if the file exists, increment the version number
-    // if the file does not exist, version number is 1
     let files = fs::read_dir(&config.save_directory);
     if files.is_err() {
         return Err("Error reading save directory".to_string());
@@ -131,9 +125,7 @@ pub fn save_kanban_state_locally(boards: Vec<Board>, config: &AppConfig) -> Resu
         {
             let file_version = file_name.split('_').last();
             if let Some(file_version) = file_version {
-                // remove v from version number and find max of version numbers
                 let file_version = file_version.replace('v', "");
-                // remove .json from version number
                 let file_version = file_version.replace(".json", "");
                 let file_version = file_version.parse::<u32>();
                 if let Ok(file_version) = file_version {
@@ -192,7 +184,6 @@ pub fn get_local_kanban_state(
     if boards.is_none() {
         return Err("Error parsing save file".to_string());
     }
-    // collect vec<Board> from serde_json::Value
     let boards = boards.unwrap();
     let boards = boards.as_array();
     if boards.is_none() {
@@ -217,14 +208,9 @@ pub fn get_available_local_save_files(config: &AppConfig) -> Option<Vec<String>>
                 let file_name = file.file_name().into_string().unwrap();
                 savefiles.push(file_name);
             }
-            // keep only the files which have follow the pattern SAVEFILE_NAME_<NaiveDate in format DD-MM-YYYY>_v<version number>
-            // example kanban_02-12-2022_v7
-            // use regex to match the pattern
-
-            let re = Regex::new(r"^kanban_\d{2}-\d{2}-\d{4}_v\d+.json").unwrap();
+            let re = Regex::new(SAVE_FILE_REGEX).unwrap();
 
             savefiles.retain(|file| re.is_match(file));
-            // order the files by date and version
             savefiles.sort_by(|a, b| {
                 let a_date = a.split('_').nth(1).unwrap();
                 let b_date = b.split('_').nth(1).unwrap();
@@ -261,7 +247,6 @@ pub fn get_available_local_save_files(config: &AppConfig) -> Option<Vec<String>>
             Some(savefiles)
         }
         Err(_) => {
-            // try to create the save directory
             let default_save_path = env::temp_dir().join(SAVE_DIR_NAME);
             let dir_creation_status = fs::create_dir_all(&default_save_path);
             match dir_creation_status {
@@ -319,7 +304,6 @@ fn get_theme_dir() -> Result<PathBuf, String> {
         return Err(String::from("Error getting home directory"));
     }
     let mut theme_dir = home_dir.unwrap();
-    // check if windows or unix
     if cfg!(windows) {
         theme_dir.push("AppData");
         theme_dir.push("Roaming");
@@ -338,7 +322,6 @@ pub fn get_saved_themes() -> Option<Vec<Theme>> {
     }
     let theme_dir = theme_dir.unwrap();
     let read_dir_status = fs::read_dir(&theme_dir);
-    // we are looking for .json files with THEME_FILE_NAME as prefix
     let file_prefix = format!("{}_", THEME_FILE_NAME);
     let regex_str = format!("^{}.*\\.json$", file_prefix);
     let re = Regex::new(&regex_str).unwrap();
@@ -371,7 +354,6 @@ pub fn save_theme(theme: Theme) -> Result<String, String> {
     if let Err(e) = create_dir_status {
         return Err(e.to_string());
     }
-    // export the theme to json using serde prefix the file name with THEME_FILE_NAME and put the theme.name next then .json
     let theme_name = format!(
         "{}_{}.json",
         THEME_FILE_NAME,

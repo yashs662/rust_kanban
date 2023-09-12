@@ -1,26 +1,47 @@
-use crossterm::event;
+use crossterm::event::{self, KeyModifiers};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fmt::{self, Display, Formatter};
 
-/// Represents an key.
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum Key {
-    Enter,
-    Tab,
-    Backspace,
     Esc,
-    Space,
-    Left,
-    Right,
+
+    Backspace,
+    AltBackspace,
+
     Up,
+    ShiftUp,
+    CtrlUp,
+    CtrlAltUp,
+    PageUp,
+
     Down,
+    ShiftDown,
+    CtrlDown,
+    CtrlAltDown,
+    PageDown,
+
+    Left,
+    ShiftLeft,
+    CtrlLeft,
+    CtrlAltLeft,
+
+    Right,
+    ShiftRight,
+    CtrlRight,
+    CtrlAltRight,
+
+    Enter,
+
+    Tab,
+    BackTab,
+
+    Space,
     Ins,
     Delete,
     Home,
     End,
-    PageUp,
-    PageDown,
     F0,
     F1,
     F2,
@@ -37,11 +58,8 @@ pub enum Key {
     Char(char),
     Ctrl(char),
     Alt(char),
-    BackTab,
-    ShiftUp,
-    ShiftDown,
-    ShiftLeft,
-    ShiftRight,
+    AltDelete,
+    CtrlAlt(char),
     Unknown,
 }
 
@@ -65,7 +83,6 @@ impl Key {
         }
     }
     pub fn to_digit(&self) -> u8 {
-        // check if char is a digit if so return it
         match self {
             Key::Char(c) => c.to_digit(10).unwrap() as u8,
             _ => panic!("not a digit"),
@@ -95,61 +112,104 @@ impl Display for Key {
 
 impl From<event::KeyEvent> for Key {
     fn from(key_event: event::KeyEvent) -> Self {
+        let ctrl = key_event.modifiers.contains(KeyModifiers::CONTROL);
+        let alt = key_event.modifiers.contains(KeyModifiers::ALT);
+        let shift = key_event.modifiers.contains(KeyModifiers::SHIFT);
         match key_event {
             event::KeyEvent {
                 code: event::KeyCode::Esc,
                 kind: event::KeyEventKind::Press,
                 ..
             } => Key::Esc,
+
             event::KeyEvent {
                 code: event::KeyCode::Backspace,
                 kind: event::KeyEventKind::Press,
                 ..
-            } => Key::Backspace,
-            event::KeyEvent {
-                code: event::KeyCode::Left,
-                kind: event::KeyEventKind::Press,
-                modifiers: event::KeyModifiers::SHIFT,
-                ..
-            } => Key::ShiftLeft,
-            event::KeyEvent {
-                code: event::KeyCode::Left,
-                kind: event::KeyEventKind::Press,
-                ..
-            } => Key::Left,
-            event::KeyEvent {
-                code: event::KeyCode::Right,
-                kind: event::KeyEventKind::Press,
-                modifiers: event::KeyModifiers::SHIFT,
-                ..
-            } => Key::ShiftRight,
-            event::KeyEvent {
-                code: event::KeyCode::Right,
-                kind: event::KeyEventKind::Press,
-                ..
-            } => Key::Right,
-            event::KeyEvent {
-                code: event::KeyCode::Up,
-                kind: event::KeyEventKind::Press,
-                modifiers: event::KeyModifiers::SHIFT,
-                ..
-            } => Key::ShiftUp,
+            } => {
+                if alt {
+                    Key::AltBackspace
+                } else {
+                    Key::Backspace
+                }
+            }
+
             event::KeyEvent {
                 code: event::KeyCode::Up,
                 kind: event::KeyEventKind::Press,
                 ..
-            } => Key::Up,
+            } => {
+                if ctrl && alt {
+                    Key::CtrlAltUp
+                } else if ctrl {
+                    Key::CtrlUp
+                } else if shift {
+                    Key::ShiftUp
+                } else {
+                    Key::Up
+                }
+            }
+
             event::KeyEvent {
                 code: event::KeyCode::Down,
                 kind: event::KeyEventKind::Press,
-                modifiers: event::KeyModifiers::SHIFT,
                 ..
-            } => Key::ShiftDown,
+            } => {
+                if ctrl && alt {
+                    Key::CtrlAltDown
+                } else if ctrl {
+                    Key::CtrlDown
+                } else if shift {
+                    Key::ShiftDown
+                } else {
+                    Key::Down
+                }
+            }
+
             event::KeyEvent {
-                code: event::KeyCode::Down,
+                code: event::KeyCode::Left,
                 kind: event::KeyEventKind::Press,
                 ..
-            } => Key::Down,
+            } => {
+                if ctrl && alt {
+                    Key::CtrlAltLeft
+                } else if ctrl {
+                    Key::CtrlLeft
+                } else if shift {
+                    Key::ShiftLeft
+                } else {
+                    Key::Left
+                }
+            }
+
+            event::KeyEvent {
+                code: event::KeyCode::Right,
+                kind: event::KeyEventKind::Press,
+                ..
+            } => {
+                if ctrl && alt {
+                    Key::CtrlAltRight
+                } else if ctrl {
+                    Key::CtrlRight
+                } else if shift {
+                    Key::ShiftRight
+                } else {
+                    Key::Right
+                }
+            }
+
+            event::KeyEvent {
+                code: event::KeyCode::Delete,
+                kind: event::KeyEventKind::Press,
+                ..
+            } => {
+                if alt {
+                    Key::AltDelete
+                } else {
+                    Key::Delete
+                }
+            }
+
             event::KeyEvent {
                 code: event::KeyCode::Home,
                 kind: event::KeyEventKind::Press,
@@ -171,11 +231,6 @@ impl From<event::KeyEvent> for Key {
                 ..
             } => Key::PageDown,
             event::KeyEvent {
-                code: event::KeyCode::Delete,
-                kind: event::KeyEventKind::Press,
-                ..
-            } => Key::Delete,
-            event::KeyEvent {
                 code: event::KeyCode::Insert,
                 kind: event::KeyEventKind::Press,
                 ..
@@ -193,7 +248,6 @@ impl From<event::KeyEvent> for Key {
             event::KeyEvent {
                 code: event::KeyCode::BackTab,
                 kind: event::KeyEventKind::Press,
-                modifiers: event::KeyModifiers::SHIFT,
                 ..
             } => Key::BackTab,
             event::KeyEvent {
@@ -204,20 +258,20 @@ impl From<event::KeyEvent> for Key {
             event::KeyEvent {
                 code: event::KeyCode::Char(c),
                 kind: event::KeyEventKind::Press,
-                modifiers: event::KeyModifiers::ALT,
                 ..
-            } => Key::Alt(c),
-            event::KeyEvent {
-                code: event::KeyCode::Char(c),
-                kind: event::KeyEventKind::Press,
-                modifiers: event::KeyModifiers::CONTROL,
-                ..
-            } => Key::Ctrl(c),
-            event::KeyEvent {
-                code: event::KeyCode::Char(c),
-                kind: event::KeyEventKind::Press,
-                ..
-            } => Key::Char(c),
+            } => {
+                if ctrl && alt {
+                    Key::CtrlAlt(c)
+                } else if ctrl {
+                    Key::Ctrl(c)
+                } else if alt {
+                    Key::Alt(c)
+                } else if shift {
+                    Key::Char(c.to_ascii_uppercase())
+                } else {
+                    Key::Char(c)
+                }
+            }
             _ => Key::Unknown,
         }
     }

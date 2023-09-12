@@ -1,11 +1,9 @@
-use std::fmt;
-
+use crate::constants::{FIELD_NA, FIELD_NOT_SET};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt;
 use uuid::Uuid;
-
-use crate::constants::FIELD_NOT_SET;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Board {
@@ -162,11 +160,7 @@ impl Card {
         tags: Vec<String>,
         comments: Vec<String>,
     ) -> Self {
-        let name = if name.is_empty() {
-            FIELD_NOT_SET
-        } else {
-            name
-        };
+        let name = if name.is_empty() { FIELD_NOT_SET } else { name };
         let description = if description.is_empty() {
             FIELD_NOT_SET
         } else {
@@ -196,7 +190,7 @@ impl Card {
             date_created: Utc::now().to_string(),
             date_modified: Utc::now().to_string(),
             due_date: due_date.to_string(),
-            date_completed: "N/A".to_string(),
+            date_completed: FIELD_NA.to_string(),
             priority,
             card_status: CardStatus::Active,
             tags,
