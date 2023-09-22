@@ -254,16 +254,14 @@ impl IoAsyncHandler<'_> {
             error!("Cannot delete save file: file not found");
             app.send_error_toast("Cannot delete save file: file not found", None);
             return Ok(());
+        } else if let Err(err) = std::fs::remove_file(&path) {
+            debug!("Cannot delete save file: {:?}", err);
+            app.send_error_toast("Cannot delete save file: Something went wrong", None);
+            app.state.load_save_state = ListState::default();
+            return Ok(());
         } else {
-            if let Err(err) = std::fs::remove_file(&path) {
-                debug!("Cannot delete save file: {:?}", err);
-                app.send_error_toast("Cannot delete save file: Something went wrong", None);
-                app.state.load_save_state = ListState::default();
-                return Ok(());
-            } else {
-                info!("👍 Save file deleted");
-                app.send_info_toast("👍 Save file deleted", None);
-            }
+            info!("👍 Save file deleted");
+            app.send_info_toast("👍 Save file deleted", None);
         }
         let file_list = get_available_local_save_files(&app.config);
         let file_list = if file_list.is_none() {
@@ -1234,7 +1232,7 @@ impl IoAsyncHandler<'_> {
             delete_a_save_from_database(&user_access_token, false, save_file_id, Some(save_number))
                 .await;
         let mut app = self.app.lock().await;
-        if let Err(_) = delete_status {
+        if delete_status.is_err() {
             app.send_error_toast("Error deleting cloud save", None);
         } else {
             app.send_info_toast(
@@ -1791,15 +1789,13 @@ pub async fn delete_a_save_from_database(
             } else {
                 print_info("👍 Cloud save deleted");
             }
-            return Ok("👍 Cloud save deleted".to_string());
+            Ok("👍 Cloud save deleted".to_string())
+        } else if save_number.is_some() {
+            info!("👍 Cloud save {} deleted", save_number.unwrap());
+            Ok(format!("👍 Cloud save {} deleted", save_number.unwrap()).to_string())
         } else {
-            if save_number.is_some() {
-                info!("👍 Cloud save {} deleted", save_number.unwrap());
-                return Ok(format!("👍 Cloud save {} deleted", save_number.unwrap()).to_string());
-            } else {
-                info!("👍 Cloud save deleted");
-                return Ok("👍 Cloud save deleted".to_string());
-            }
+            info!("👍 Cloud save deleted");
+            Ok("👍 Cloud save deleted".to_string())
         }
     } else {
         let body = response.json::<serde_json::Value>().await;
@@ -1901,9 +1897,7 @@ pub async fn login_for_user(
             debug!("Error logging in: {}", e);
             error!("Error logging in, Something went wrong, please try again later");
         }
-        return Err(format!(
-            "Error logging in, Something went wrong, please try again later"
-        ));
+        return Err("Error logging in, Something went wrong, please try again later".to_string());
     }
     let response = response.unwrap();
     let status = response.status();
@@ -1958,7 +1952,7 @@ pub async fn login_for_user(
             error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
             debug!("status code {}, response body: {:?}", status, body);
         }
-        Err(format!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢"))
+        Err("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢".to_string())
     } else {
         match body {
             Ok(body) => {
@@ -1989,7 +1983,7 @@ pub async fn login_for_user(
                             error!("Error logging in");
                             debug!("status code {}, response body: {:?}", status, body);
                         }
-                        Err(format!("Error logging in"))
+                        Err("Error logging in".to_string())
                     }
                 }
             }

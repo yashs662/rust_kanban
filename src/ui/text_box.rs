@@ -86,7 +86,7 @@ impl<'a> TextBox<'a> {
     }
 
     pub fn input(&mut self, input: Key) -> bool {
-        let modified = match input {
+        match input {
             Key::Ctrl('m') | Key::Char('\n' | '\r') | Key::Enter => {
                 self.insert_newline();
                 true
@@ -161,12 +161,11 @@ impl<'a> TextBox<'a> {
                 false
             }
             _ => false,
-        };
-        modified
+        }
     }
 
     pub fn input_without_shortcuts(&mut self, input: Key) -> bool {
-        match input.into() {
+        match input {
             Key::Char(c) => {
                 self.insert_char(c);
                 true
@@ -413,7 +412,11 @@ impl<'a> TextBox<'a> {
             hl.line_number(row, lnum_len, style);
         }
 
-        hl.into_spans()
+        if row == self.cursor.0 {
+            hl.cursor_line(self.cursor.1, self.cursor_line_style);
+        }
+
+        hl.into_line()
     }
 
     pub fn widget(&'a self) -> impl Widget + 'a {
@@ -740,7 +743,7 @@ pub fn find_word_start_backward(line: &str, start_col: usize) -> Option<usize> {
         }
         cur = next;
     }
-    (cur != CharKind::Space).then(|| 0)
+    (cur != CharKind::Space).then_some(0)
 }
 
 pub enum TextBoxScroll {
@@ -889,6 +892,7 @@ impl<'a> Widget for TextBoxRenderer<'a> {
 pub struct TextLineFormatter<'a> {
     line: &'a str,
     spans: Vec<Span<'a>>,
+    boundaries: Vec<(Boundary, usize)>,
     style_begin: Style,
     cursor_at_end: bool,
     cursor_style: Style,
@@ -900,6 +904,7 @@ impl<'a> TextLineFormatter<'a> {
         Self {
             line,
             spans: vec![],
+            boundaries: vec![],
             style_begin: Style::default(),
             cursor_at_end: false,
             cursor_style,
@@ -913,21 +918,96 @@ impl<'a> TextLineFormatter<'a> {
             .push(Span::styled(format!("{}{}) ", pad, row + 1), style));
     }
 
-    pub fn into_spans(self) -> Line<'a> {
+    pub fn cursor_line(&mut self, cursor_col: usize, style: Style) {
+        if let Some((start, c)) = self.line.char_indices().nth(cursor_col) {
+            self.boundaries
+                .push((Boundary::Cursor(self.cursor_style), start));
+            self.boundaries.push((Boundary::End, start + c.len_utf8()));
+        } else {
+            self.cursor_at_end = true;
+        }
+        self.style_begin = style;
+    }
+
+    pub fn into_line(self) -> Line<'a> {
         let Self {
             line,
             mut spans,
+            mut boundaries,
             tab_len,
             style_begin,
             cursor_style,
             cursor_at_end,
         } = self;
 
-        spans.push(Span::styled(replace_tabs(line, tab_len), style_begin));
-        if cursor_at_end {
-            spans.push(Span::styled(" ", cursor_style));
+        if boundaries.is_empty() {
+            spans.push(Span::styled(replace_tabs(line, tab_len), style_begin));
+            if cursor_at_end {
+                spans.push(Span::styled(" ", cursor_style));
+            }
+            return Line::from(spans);
         }
-        return Line::from(spans);
+
+        boundaries.sort_unstable_by(|(l, i), (r, j)| match i.cmp(j) {
+            std::cmp::Ordering::Equal => l.cmp(r),
+            o => o,
+        });
+
+        let mut boundaries = boundaries.into_iter();
+        let mut style = style_begin;
+        let mut start = 0;
+        let mut stack = vec![];
+
+        loop {
+            if let Some((next_boundary, end)) = boundaries.next() {
+                if start < end {
+                    spans.push(Span::styled(
+                        replace_tabs(&line[start..end], tab_len),
+                        style,
+                    ));
+                }
+
+                style = if let Some(s) = next_boundary.style() {
+                    stack.push(style);
+                    s
+                } else {
+                    stack.pop().unwrap_or(style_begin)
+                };
+                start = end;
+            } else {
+                if start != line.len() {
+                    spans.push(Span::styled(replace_tabs(&line[start..], tab_len), style));
+                }
+                if cursor_at_end {
+                    spans.push(Span::styled(" ", cursor_style));
+                }
+                return Line::from(spans);
+            }
+        }
+    }
+}
+
+enum Boundary {
+    Cursor(Style),
+    End,
+}
+
+impl Boundary {
+    fn cmp(&self, other: &Boundary) -> std::cmp::Ordering {
+        fn rank(b: &Boundary) -> u8 {
+            match b {
+                Boundary::Cursor(_) => 2,
+                Boundary::End => 0,
+            }
+        }
+        rank(self).cmp(&rank(other))
+    }
+
+    fn style(&self) -> Option<Style> {
+        match self {
+            Boundary::Cursor(s) => Some(*s),
+            Boundary::End => None,
+        }
     }
 }
 
@@ -964,7 +1044,7 @@ impl CursorMove {
 
         match self {
             Forward if col >= lines[row].chars().count() => {
-                (row + 1 < lines.len()).then(|| (row + 1, 0))
+                (row + 1 < lines.len()).then_some((row + 1, 0))
             }
             Forward => Some((row, col + 1)),
             Back if col == 0 => {
@@ -1004,8 +1084,7 @@ impl CursorMove {
             }
             ParagraphForward => {
                 let mut prev_is_empty = lines[row].is_empty();
-                for row in row + 1..lines.len() {
-                    let line = &lines[row];
+                for (row, line) in lines.iter().enumerate().skip(row + 1) {
                     let is_empty = line.is_empty();
                     if !is_empty && prev_is_empty {
                         return Some((row, fit_col(col, line)));

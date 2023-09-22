@@ -3563,7 +3563,7 @@ where
             .min(remaining_height - card_tags_height - card_comments_height);
 
         let mut tag_and_comment_available_height = remaining_height - card_description_height;
-        if card_comment_lines.len() > 0 && card_tag_lines.len() > 0 {
+        if !card_comment_lines.is_empty() && !card_tag_lines.is_empty() {
             if app.state.focus == Focus::CardTags {
                 card_description_height = min_box_height;
                 tag_and_comment_available_height = remaining_height - card_description_height;
@@ -3576,17 +3576,18 @@ where
                 card_description_height =
                     remaining_height - card_tags_height - card_comments_height;
             }
-        } else if card_comment_lines.len() > 0 {
+        } else if !card_comment_lines.is_empty() {
             card_comments_height = tag_and_comment_available_height - card_tags_height;
             card_description_height = remaining_height - card_tags_height - card_comments_height;
-        } else if card_tag_lines.len() > 0 {
+        } else if !card_tag_lines.is_empty() {
             card_tags_height = tag_and_comment_available_height - card_comments_height;
             card_description_height = remaining_height - card_tags_height - card_comments_height;
         } else {
             card_description_height = remaining_height - card_tags_height - card_comments_height;
         }
 
-        let card_chunks = if app.state.card_being_edited.is_some() {
+        
+        if app.state.card_being_edited.is_some() {
             Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -3611,8 +3612,7 @@ where
                 ])
                 .margin(1)
                 .split(popup_area)
-        };
-        card_chunks
+        }
     };
 
     if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[2]) {

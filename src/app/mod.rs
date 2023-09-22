@@ -115,8 +115,8 @@ impl App<'_> {
             prepare_config_for_new_app(state, theme.clone());
         let default_theme = config.default_theme.clone();
         let theme_in_all = all_themes.iter().find(|t| t.name == default_theme);
-        if theme_in_all.is_some() {
-            theme = theme_in_all.unwrap().clone();
+        if let Some(theme_in_all) = theme_in_all {
+            theme = theme_in_all.clone();
         }
 
         let mut app = Self {

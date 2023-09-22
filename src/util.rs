@@ -189,7 +189,7 @@ pub async fn gen_new_key_main(email_id: String, password: String) -> Result<()> 
         println!("> ");
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
-        println!("");
+        println!();
         let input = input.trim().to_lowercase();
         if input == "y" || input == "yes" {
             for save_id in save_ids {

@@ -461,10 +461,10 @@ pub fn go_down(app: &mut App) {
     }
 }
 
-pub fn prepare_config_for_new_app<'a>(
-    state: AppState<'a>,
+pub fn prepare_config_for_new_app(
+    state: AppState<'_>,
     theme: Theme,
-) -> (AppConfig, Vec<&'a str>, AppState<'a>) {
+) -> (AppConfig, Vec<&str>, AppState<'_>) {
     let mut state = state;
     let mut errors = vec![];
     let get_config_status = get_config(false);
@@ -836,18 +836,17 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                                     if app.state.card_view_tag_list_state.selected().is_some() {
                                         let selected_tag_index =
                                             app.state.card_view_tag_list_state.selected();
-                                        if selected_tag_index.is_some() {
-                                            if card_being_edited
+                                        if selected_tag_index.is_some()
+                                            && card_being_edited
                                                 .1
                                                 .tags
                                                 .get(selected_tag_index.unwrap())
                                                 .is_none()
-                                            {
-                                                app.state.card_view_tag_list_state.select(Some(
-                                                    card_being_edited.1.tags.len() - 1,
-                                                ));
-                                                return AppReturn::Continue;
-                                            }
+                                        {
+                                            app.state
+                                                .card_view_tag_list_state
+                                                .select(Some(card_being_edited.1.tags.len() - 1));
+                                            return AppReturn::Continue;
                                         }
                                         let selected_tag_index = selected_tag_index.unwrap();
                                         let current_cursor_position =
@@ -891,27 +890,22 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                                     if app.state.card_view_comment_list_state.selected().is_some() {
                                         let selected_comment_index =
                                             app.state.card_view_comment_list_state.selected();
-                                        if selected_comment_index.is_some() {
-                                            if card_being_edited
+                                        if selected_comment_index.is_some()
+                                            && card_being_edited
                                                 .1
                                                 .comments
                                                 .get(selected_comment_index.unwrap())
                                                 .is_none()
-                                            {
-                                                if card_being_edited.1.comments.is_empty() {
-                                                    app.state
-                                                        .card_view_comment_list_state
-                                                        .select(None);
-                                                    app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
-                                                } else {
-                                                    app.state.card_view_comment_list_state.select(
-                                                        Some(
-                                                            card_being_edited.1.comments.len() - 1,
-                                                        ),
-                                                    );
-                                                }
-                                                return AppReturn::Continue;
+                                        {
+                                            if card_being_edited.1.comments.is_empty() {
+                                                app.state.card_view_comment_list_state.select(None);
+                                                app.send_warning_toast("No comment selected press <Shift+Right> or <Shift+Left> to select a comment", None);
+                                            } else {
+                                                app.state.card_view_comment_list_state.select(
+                                                    Some(card_being_edited.1.comments.len() - 1),
+                                                );
                                             }
+                                            return AppReturn::Continue;
                                         }
                                         let selected_comment_index =
                                             selected_comment_index.unwrap();
@@ -4234,15 +4228,14 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                 } else if mouse_scroll_up
                     && app.state.mouse_focus.is_some()
                     && app.state.popup_mode == Some(PopupMode::ViewCard)
+                    && app.state.mouse_focus.unwrap() == Focus::CardDescription
                 {
-                    if app.state.mouse_focus.unwrap() == Focus::CardDescription {
-                        if app.state.card_description_text_buffer.is_some() {
-                            let text_buffer =
-                                &mut app.state.card_description_text_buffer.as_mut().unwrap();
-                            text_buffer.scroll(TextBoxScroll::Delta { rows: -1, cols: 0 })
-                        } else {
-                            debug!("Text buffer not set for card description in view card mode for action handle_mouse_action scroll up");
-                        }
+                    if app.state.card_description_text_buffer.is_some() {
+                        let text_buffer =
+                            &mut app.state.card_description_text_buffer.as_mut().unwrap();
+                        text_buffer.scroll(TextBoxScroll::Delta { rows: -1, cols: 0 })
+                    } else {
+                        debug!("Text buffer not set for card description in view card mode for action handle_mouse_action scroll up");
                     }
                 }
             }
@@ -5325,7 +5318,9 @@ pub async fn handle_go_to_previous_ui_mode(app: &mut App<'_>) -> AppReturn {
 }
 
 fn handle_change_card_status(app: &mut App, status: Option<CardStatus>) -> AppReturn {
-    let selected_status = if status.is_none() {
+    let selected_status = if let Some(status) = status {
+        status
+    } else {
         let current_index = app.state.card_status_selector_state.selected().unwrap_or(0);
         let all_statuses = CardStatus::all();
 
@@ -5335,8 +5330,6 @@ fn handle_change_card_status(app: &mut App, status: Option<CardStatus>) -> AppRe
             current_index
         };
         all_statuses[current_index].clone()
-    } else {
-        status.unwrap()
     };
 
     if app.state.card_being_edited.is_some() {

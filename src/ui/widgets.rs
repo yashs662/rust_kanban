@@ -544,18 +544,15 @@ impl CommandPaletteWidget {
 
             app.command_palette.command_search_results = Some(command_search_results);
             app.command_palette.last_search_string = current_search_string;
-            if app.command_palette.command_search_results.is_some() {
-                if !app
+            if app.command_palette.command_search_results.is_some() && !app
                     .command_palette
                     .command_search_results
                     .as_ref()
                     .unwrap()
-                    .is_empty()
-                {
-                    app.state
-                        .command_palette_command_search_list_state
-                        .select(Some(0));
-                }
+                    .is_empty() {
+                app.state
+                    .command_palette_command_search_list_state
+                    .select(Some(0));
             }
         }
     }
