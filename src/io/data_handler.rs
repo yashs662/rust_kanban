@@ -277,9 +277,9 @@ pub fn export_kanban_to_json(
         config.date_format.to_human_readable_string()
     );
     let export_struct = ExportStruct {
-        kanban_version: version.to_string(),
-        export_date: date,
         boards: boards.to_vec(),
+        export_date: date,
+        kanban_version: version.to_string(),
     };
     let file_path = config.save_directory.join(file_name);
     let write_status = fs::write(
@@ -380,7 +380,7 @@ fn write_default_config() {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ExportStruct {
-    pub kanban_version: String,
-    pub export_date: String,
     pub boards: Vec<Board>,
+    pub export_date: String,
+    pub kanban_version: String,
 }

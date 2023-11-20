@@ -1,12 +1,9 @@
 use super::{super::app::state::AppStatus, ui_helper};
 use crate::app::App;
-use ratatui::{backend::Backend, Frame};
+use ratatui::Frame;
 
 /// Main UI Drawing handler
-pub fn draw<B>(rect: &mut Frame<B>, app: &mut App)
-where
-    B: Backend,
-{
+pub fn draw(rect: &mut Frame, app: &mut App) {
     ui_helper::render_blank_styled_canvas(rect, app, rect.size(), app.state.popup_mode.is_some());
     let msg = ui_helper::check_size(&rect.size());
     if &msg != "Size OK" {

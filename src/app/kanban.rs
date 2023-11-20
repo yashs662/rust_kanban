@@ -7,10 +7,10 @@ use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Board {
+    pub cards: Vec<Card>,
+    pub description: String,
     pub id: (u64, u64),
     pub name: String,
-    pub description: String,
-    pub cards: Vec<Card>,
 }
 
 impl Board {
@@ -82,10 +82,10 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self {
+            cards: vec![Card::default()],
+            description: String::from("Default Board Description"),
             id: get_id(),
             name: String::from("Default Board"),
-            description: String::from("Default Board Description"),
-            cards: vec![Card::default()],
         }
     }
 }
@@ -115,40 +115,40 @@ impl CardStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CardPriority {
+    High,
     Low,
     Medium,
-    High,
 }
 
 impl fmt::Display for CardPriority {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            CardPriority::High => write!(f, "High"),
             CardPriority::Low => write!(f, "Low"),
             CardPriority::Medium => write!(f, "Medium"),
-            CardPriority::High => write!(f, "High"),
         }
     }
 }
 
 impl CardPriority {
     pub fn all() -> Vec<CardPriority> {
-        vec![CardPriority::Low, CardPriority::Medium, CardPriority::High]
+        vec![CardPriority::High, CardPriority::Low, CardPriority::Medium]
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Card {
-    pub id: (u64, u64),
-    pub name: String,
-    pub description: String,
+    pub card_status: CardStatus,
+    pub comments: Vec<String>,
+    pub date_completed: String,
     pub date_created: String,
     pub date_modified: String,
+    pub description: String,
     pub due_date: String,
-    pub date_completed: String,
+    pub id: (u64, u64),
+    pub name: String,
     pub priority: CardPriority,
-    pub card_status: CardStatus,
     pub tags: Vec<String>,
-    pub comments: Vec<String>,
 }
 
 impl Card {
@@ -301,17 +301,17 @@ impl Card {
 impl Default for Card {
     fn default() -> Self {
         Self {
-            id: get_id(),
-            name: String::from("Default Card"),
-            description: String::from("Default Card Description"),
+            card_status: CardStatus::Active,
+            comments: Vec::new(),
+            date_completed: FIELD_NOT_SET.to_string(),
             date_created: Utc::now().to_string(),
             date_modified: Utc::now().to_string(),
+            description: String::from("Default Card Description"),
             due_date: FIELD_NOT_SET.to_string(),
-            date_completed: FIELD_NOT_SET.to_string(),
+            id: get_id(),
+            name: String::from("Default Card"),
             priority: CardPriority::Low,
-            card_status: CardStatus::Active,
             tags: Vec::new(),
-            comments: Vec::new(),
         }
     }
 }

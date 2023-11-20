@@ -8,9 +8,9 @@ use crate::{
         UserLoginData,
     },
     constants::{
-        ACCESS_TOKEN_FILE_NAME, ACCESS_TOKEN_SEPARATOR, CONFIG_DIR_NAME, CONFIG_FILE_NAME,
-        ENCRYPTION_KEY_FILE_NAME, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH,
-        MIN_TIME_BETWEEN_SENDING_RESET_LINK, SAVE_DIR_NAME, SUPABASE_ANON_KEY, SUPABASE_URL,
+        CONFIG_DIR_NAME, CONFIG_FILE_NAME, ENCRYPTION_KEY_FILE_NAME, MAX_PASSWORD_LENGTH,
+        MIN_PASSWORD_LENGTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK, REFRESH_TOKEN_FILE_NAME,
+        REFRESH_TOKEN_SEPARATOR, SAVE_DIR_NAME, SUPABASE_ANON_KEY, SUPABASE_URL,
     },
     io::data_handler::{get_default_save_directory, get_saved_themes, save_kanban_state_locally},
     ui::TextColorOptions,
@@ -99,8 +99,8 @@ impl IoAsyncHandler<'_> {
         app.keybinding_list_maker();
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         let saved_themes = get_saved_themes();
-        if saved_themes.is_some() {
-            app.all_themes.extend(saved_themes.unwrap());
+        if let Some(saved_themes) = saved_themes {
+            app.all_themes.extend(saved_themes);
         }
         let default_theme = app.config.default_theme.clone();
         for theme in &app.all_themes {
@@ -129,20 +129,20 @@ impl IoAsyncHandler<'_> {
         if app.config.auto_login {
             app.send_info_toast("Attempting to auto login", None);
             let user_login_data =
-                test_access_token_on_disk(app.state.encryption_key_from_arguments.clone()).await;
+                test_refresh_token_on_disk(app.state.encryption_key_from_arguments.clone()).await;
             if user_login_data.is_err() {
-                let access_token_file_path = get_config_dir();
-                if access_token_file_path.is_err() {
+                let refresh_token_file_path = get_config_dir();
+                if refresh_token_file_path.is_err() {
                     error!("Cannot get config directory");
                     app.send_error_toast("Cannot get config directory", None);
                     return Ok(());
                 }
-                let mut access_token_file_path = access_token_file_path.unwrap();
-                access_token_file_path.push(ACCESS_TOKEN_FILE_NAME);
-                if access_token_file_path.exists() {
-                    if let Err(err) = std::fs::remove_file(access_token_file_path) {
-                        error!("Cannot delete access token file: {:?}", err);
-                        app.send_error_toast("Cannot delete access token file", None);
+                let mut refresh_token_file_path = refresh_token_file_path.unwrap();
+                refresh_token_file_path.push(REFRESH_TOKEN_FILE_NAME);
+                if refresh_token_file_path.exists() {
+                    if let Err(err) = std::fs::remove_file(refresh_token_file_path) {
+                        error!("Cannot delete refresh token file: {:?}", err);
+                        app.send_error_toast("Cannot delete refresh token file", None);
                         return Ok(());
                     } else {
                         warn!("Previous access token has expired or does not exist. Please login again");
@@ -193,14 +193,14 @@ impl IoAsyncHandler<'_> {
 
     async fn load_save_file_local(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
-        let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
+        let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let local_files = get_available_local_save_files(&app.config);
-        let local_files = if local_files.is_none() {
+        let local_files = if let Some(local_files) = local_files {
+            local_files
+        } else {
             error!("Could not get local save files");
             app.send_error_toast("Could not get local save files", None);
             vec![]
-        } else {
-            local_files.unwrap()
         };
         if save_file_index >= local_files.len() {
             error!("Cannot load save file: No such file");
@@ -229,19 +229,19 @@ impl IoAsyncHandler<'_> {
     async fn delete_local_save_file(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
         let file_list = get_available_local_save_files(&app.config);
-        let file_list = if file_list.is_none() {
+        let file_list = if let Some(file_list) = file_list {
+            file_list
+        } else {
             error!("Cannot delete save file: no save files found");
             app.send_error_toast("Cannot delete save file: no save files found", None);
             return Ok(());
-        } else {
-            file_list.unwrap()
         };
-        if app.state.load_save_state.selected().is_none() {
+        if app.state.app_list_states.load_save.selected().is_none() {
             error!("Cannot delete save file: no save file selected");
             app.send_error_toast("Cannot delete save file: no save file selected", None);
             return Ok(());
         }
-        let selected = app.state.load_save_state.selected().unwrap_or(0);
+        let selected = app.state.app_list_states.load_save.selected().unwrap_or(0);
         if selected >= file_list.len() {
             debug!("Cannot delete save file: index out of range");
             app.send_error_toast("Cannot delete save file: Something went wrong", None);
@@ -257,24 +257,27 @@ impl IoAsyncHandler<'_> {
         } else if let Err(err) = std::fs::remove_file(&path) {
             debug!("Cannot delete save file: {:?}", err);
             app.send_error_toast("Cannot delete save file: Something went wrong", None);
-            app.state.load_save_state = ListState::default();
+            app.state.app_list_states.load_save = ListState::default();
             return Ok(());
         } else {
             info!("👍 Save file deleted");
             app.send_info_toast("👍 Save file deleted", None);
         }
         let file_list = get_available_local_save_files(&app.config);
-        let file_list = if file_list.is_none() {
-            app.state.load_save_state = ListState::default();
-            return Ok(());
+        let file_list = if let Some(file_list) = file_list {
+            file_list
         } else {
-            file_list.unwrap()
+            app.state.app_list_states.load_save = ListState::default();
+            return Ok(());
         };
         if selected >= file_list.len() {
             if file_list.is_empty() {
-                app.state.load_save_state = ListState::default();
+                app.state.app_list_states.load_save = ListState::default();
             } else {
-                app.state.load_save_state.select(Some(file_list.len() - 1));
+                app.state
+                    .app_list_states
+                    .load_save
+                    .select(Some(file_list.len() - 1));
             }
         }
         Ok(())
@@ -296,19 +299,19 @@ impl IoAsyncHandler<'_> {
 
     async fn load_local_preview(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
-        if app.state.load_save_state.selected().is_none() {
+        if app.state.app_list_states.load_save.selected().is_none() {
             return Ok(());
         }
         app.state.preview_boards_and_cards = None;
 
-        let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
+        let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let local_files = get_available_local_save_files(&app.config);
-        let local_files = if local_files.is_none() {
+        let local_files = if let Some(local_files) = local_files {
+            local_files
+        } else {
             error!("Could not get local save files");
             app.send_error_toast("Could not get local save files", None);
             vec![]
-        } else {
-            local_files.unwrap()
         };
         if save_file_index >= local_files.len() {
             error!("Cannot load preview: No such file");
@@ -394,16 +397,17 @@ impl IoAsyncHandler<'_> {
             app.send_error_toast("Error logging in", None);
             return Ok(());
         }
-        let (access_token, user_id) = login_for_user_status.unwrap();
+        let (access_token, user_id, refresh_token) = login_for_user_status.unwrap();
         let mut app = self.app.lock().await;
         app.state.user_login_data.auth_token = Some(access_token.to_string());
+        app.state.user_login_data.refresh_token = Some(refresh_token.to_string());
         app.state.user_login_data.email_id = Some(email_id.to_string());
         app.state.user_login_data.user_id = Some(user_id.to_string());
         app.main_menu.logged_in = true;
 
         if app.config.auto_login {
-            save_access_token_to_disk(
-                &access_token,
+            save_refresh_token_to_disk(
+                &refresh_token,
                 &email_id,
                 app.state.encryption_key_from_arguments.clone(),
             )
@@ -466,7 +470,7 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             app.send_error_toast("Error logging out", None);
         }
-        delete_access_token_from_disk().await?;
+        delete_refresh_token_from_disk().await?;
         Ok(())
     }
 
@@ -814,6 +818,7 @@ impl IoAsyncHandler<'_> {
                 }
                 let error_url = error_url.unwrap();
                 let error_url = error_url.to_string();
+                debug!("Error verifying reset password link: {}", error_url);
                 let access_token = error_url.split("access_token=");
                 let access_token = access_token.last();
                 if access_token.is_none() {
@@ -893,10 +898,10 @@ impl IoAsyncHandler<'_> {
 
         let save_ids = self.get_save_ids_for_user().await?;
         let max_save_id = save_ids.iter().max();
-        let max_save_id = if max_save_id.is_none() {
-            0
+        let max_save_id = if let Some(max_save_id) = max_save_id {
+            max_save_id + 1
         } else {
-            max_save_id.unwrap() + 1
+            0
         };
 
         let mut app = self.app.lock().await;
@@ -1050,7 +1055,7 @@ impl IoAsyncHandler<'_> {
     async fn preview_cloud_save(&mut self) -> Result<()> {
         {
             let mut app = self.app.lock().await;
-            if app.state.load_save_state.selected().is_none() {
+            if app.state.app_list_states.load_save.selected().is_none() {
                 error!("No save selected to preview");
                 app.send_error_toast("No save selected to preview", None);
                 return Ok(());
@@ -1058,7 +1063,7 @@ impl IoAsyncHandler<'_> {
         }
 
         let mut app = self.app.lock().await;
-        let selected_index = app.state.load_save_state.selected().unwrap();
+        let selected_index = app.state.app_list_states.load_save.selected().unwrap();
         let cloud_data = app.state.cloud_data.clone();
         if cloud_data.is_none() {
             debug!("No cloud data preview found to select");
@@ -1145,14 +1150,14 @@ impl IoAsyncHandler<'_> {
 
     async fn load_save_file_cloud(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
-        let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
+        let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let cloud_saves = app.state.cloud_data.clone();
-        let local_files = if cloud_saves.is_none() {
+        let local_files = if let Some(cloud_saves) = cloud_saves {
+            cloud_saves
+        } else {
             error!("Could not get local save files");
             app.send_error_toast("Could not get local save files", None);
             vec![]
-        } else {
-            cloud_saves.unwrap()
         };
         if save_file_index >= local_files.len() {
             error!("Cannot load save file: No such file");
@@ -1210,15 +1215,15 @@ impl IoAsyncHandler<'_> {
         }
 
         let mut app = self.app.lock().await;
-        let save_file_index = app.state.load_save_state.selected().unwrap_or(0);
+        let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let user_access_token = app.state.user_login_data.auth_token.clone().unwrap();
         let cloud_saves = app.state.cloud_data.clone();
-        let cloud_saves = if cloud_saves.is_none() {
+        let cloud_saves = if let Some(cloud_saves) = cloud_saves {
+            cloud_saves
+        } else {
             error!("Could not get local save files");
             app.send_error_toast("Could not get local save files", None);
             return Ok(());
-        } else {
-            cloud_saves.unwrap()
         };
         if save_file_index >= cloud_saves.len() {
             error!("Cannot delete save file: No such file");
@@ -1871,7 +1876,7 @@ pub async fn login_for_user(
     email_id: &str,
     password: &str,
     cli_mode: bool,
-) -> Result<(String, String), String> {
+) -> Result<(String, String, String), String> {
     let request_body = json!(
         {
             "email": email_id,
@@ -1906,7 +1911,8 @@ pub async fn login_for_user(
         match body {
             Ok(body) => {
                 let access_token = body.get("access_token");
-                match access_token {
+                let refresh_token = body.get("refresh_token");
+                let access_token_result = match access_token {
                     Some(access_token) => {
                         let access_token = access_token.as_str().unwrap();
                         if cli_mode {
@@ -1937,6 +1943,45 @@ pub async fn login_for_user(
                         }
                         Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string())
                     }
+                };
+                let refresh_token_result = match refresh_token {
+                    Some(refresh_token) => {
+                        let refresh_token = refresh_token.as_str().unwrap();
+                        if cli_mode {
+                            print_debug(&format!("Refresh token: {}", refresh_token));
+                        } else {
+                            debug!("Refresh token: {}", refresh_token);
+                        }
+                        Ok(refresh_token.to_string())
+                    }
+                    None => {
+                        if cli_mode {
+                            print_error("Error logging in");
+                            print_debug(&format!(
+                                "status code {}, response body: {:?}, could not find refresh token",
+                                status, body
+                            ));
+                        } else {
+                            error!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer");
+                            debug!(
+                                "status code {}, response body: {:?}, could not find refresh token",
+                                status, body
+                            );
+                        }
+                        Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string())
+                    }
+                };
+
+                if access_token_result.is_err() || refresh_token_result.is_err() {
+                    return Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string());
+                } else {
+                    let access_token_result = access_token_result.unwrap();
+                    let refresh_token_result = refresh_token_result.unwrap();
+                    Ok((
+                        access_token_result.0,
+                        access_token_result.1,
+                        refresh_token_result,
+                    ))
                 }
             }
             Err(e) => Err(format!("Error logging in: {}", e)),
@@ -1999,22 +2044,22 @@ pub async fn login_for_user(
     }
 }
 
-async fn save_access_token_to_disk(
-    access_token: &str,
+async fn save_refresh_token_to_disk(
+    refresh_token: &str,
     email_id: &str,
     encryption_key_from_arguments: Option<String>,
 ) -> Result<()> {
     let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    let access_token_path = get_config_dir();
-    if access_token_path.is_err() {
+    let refresh_token_path = get_config_dir();
+    if refresh_token_path.is_err() {
         return Err(anyhow!("Error getting config directory"));
     }
-    let mut access_token_path = access_token_path.unwrap();
-    access_token_path.push(ACCESS_TOKEN_FILE_NAME);
-    if access_token_path.exists() {
-        let delete_file_status = std::fs::remove_file(&access_token_path);
+    let mut refresh_token_path = refresh_token_path.unwrap();
+    refresh_token_path.push(REFRESH_TOKEN_FILE_NAME);
+    if refresh_token_path.exists() {
+        let delete_file_status = std::fs::remove_file(&refresh_token_path);
         if delete_file_status.is_err() {
-            return Err(anyhow!("Error deleting access token file"));
+            return Err(anyhow!("Error deleting refresh token file"));
         }
     }
     let encryption_key = get_user_encryption_key(encryption_key_from_arguments);
@@ -2025,73 +2070,73 @@ async fn save_access_token_to_disk(
     let key = Key::<Aes256Gcm>::from_slice(&encryption_key);
     let cipher = Aes256Gcm::new(key);
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    let encrypted_access_token = cipher.encrypt(&nonce, access_token.as_bytes());
-    if encrypted_access_token.is_err() {
-        return Err(anyhow!("Error encrypting access token"));
+    let encrypted_refresh_token = cipher.encrypt(&nonce, refresh_token.as_bytes());
+    if encrypted_refresh_token.is_err() {
+        return Err(anyhow!("Error encrypting refresh token"));
     }
-    let encrypted_access_token = encrypted_access_token.unwrap();
+    let encrypted_refresh_token = encrypted_refresh_token.unwrap();
     let nonce = nonce.to_vec();
     let nonce = base64_engine.encode(nonce);
-    let encrypted_access_token = base64_engine.encode(encrypted_access_token);
+    let encrypted_refresh_token = base64_engine.encode(encrypted_refresh_token);
     let encoded_email_id = base64_engine.encode(email_id.as_bytes());
-    let access_token_data = format!(
+    let refresh_token_data = format!(
         "{}{}{}{}{}",
         nonce,
-        ACCESS_TOKEN_SEPARATOR,
-        encrypted_access_token,
-        ACCESS_TOKEN_SEPARATOR,
+        REFRESH_TOKEN_SEPARATOR,
+        encrypted_refresh_token,
+        REFRESH_TOKEN_SEPARATOR,
         encoded_email_id
     );
-    let file_creation_status = std::fs::write(&access_token_path, access_token_data);
+    let file_creation_status = std::fs::write(&refresh_token_path, refresh_token_data);
     if file_creation_status.is_err() {
-        return Err(anyhow!("Error creating access token file"));
+        return Err(anyhow!("Error creating refresh token file"));
     }
     Ok(())
 }
 
-fn get_access_token_from_disk(
+fn get_refresh_token_from_disk(
     encryption_key_from_arguments: Option<String>,
 ) -> Result<(String, String)> {
     let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    let access_token_path = get_config_dir();
-    if access_token_path.is_err() {
+    let refresh_token_path = get_config_dir();
+    if refresh_token_path.is_err() {
         return Err(anyhow!("Error getting config directory"));
     }
-    let mut access_token_path = access_token_path.unwrap();
-    access_token_path.push(ACCESS_TOKEN_FILE_NAME);
-    let access_token_data = std::fs::read_to_string(&access_token_path);
-    if access_token_data.is_err() {
-        return Err(anyhow!("Error reading access token file"));
+    let mut refresh_token_path = refresh_token_path.unwrap();
+    refresh_token_path.push(REFRESH_TOKEN_FILE_NAME);
+    let refresh_token_data = std::fs::read_to_string(&refresh_token_path);
+    if refresh_token_data.is_err() {
+        return Err(anyhow!("Error reading refresh token file"));
     }
-    let access_token_data = access_token_data.unwrap();
-    let access_token_data = access_token_data
-        .split(ACCESS_TOKEN_SEPARATOR)
+    let refresh_token_data = refresh_token_data.unwrap();
+    let refresh_token_data = refresh_token_data
+        .split(REFRESH_TOKEN_SEPARATOR)
         .collect::<Vec<&str>>();
-    if access_token_data.len() != 3 {
-        return Err(anyhow!("Error reading access token file"));
+    if refresh_token_data.len() != 3 {
+        return Err(anyhow!("Error reading refresh token file"));
     }
-    let nonce = access_token_data[0];
+    let nonce = refresh_token_data[0];
     let nonce = base64_engine.decode(nonce);
     if nonce.is_err() {
-        return Err(anyhow!("Error reading access token file"));
+        return Err(anyhow!("Error reading refresh token file"));
     }
     let nonce = nonce.unwrap();
     let nonce = GenericArray::from_slice(&nonce);
-    let encrypted_access_token = access_token_data[1];
-    let encrypted_access_token = base64_engine.decode(encrypted_access_token);
-    if encrypted_access_token.is_err() {
-        return Err(anyhow!("Error reading access token file"));
+    let encrypted_refresh_token = refresh_token_data[1];
+    let encrypted_refresh_token = base64_engine.decode(encrypted_refresh_token);
+    if encrypted_refresh_token.is_err() {
+        return Err(anyhow!("Error reading refresh token file"));
     }
-    let encrypted_access_token = encrypted_access_token.unwrap();
-    let email_id = access_token_data[2];
+    let encrypted_refresh_token = encrypted_refresh_token.unwrap();
+    let email_id = refresh_token_data[2];
     let email_id = base64_engine.decode(email_id);
     if email_id.is_err() {
-        return Err(anyhow!("Error reading access token file"));
+        return Err(anyhow!("Error reading refresh token file"));
     }
     let email_id = email_id.unwrap();
     let email_id = String::from_utf8(email_id);
     if email_id.is_err() {
-        return Err(anyhow!("Error reading access token file"));
+        return Err(anyhow!("Error reading refresh token file"));
     }
     let email_id = email_id.unwrap();
     let encryption_key = get_user_encryption_key(encryption_key_from_arguments);
@@ -2101,45 +2146,172 @@ fn get_access_token_from_disk(
     let encryption_key = encryption_key.unwrap();
     let key = Key::<Aes256Gcm>::from_slice(&encryption_key);
     let cipher = Aes256Gcm::new(key);
-    let decrypted_access_token = cipher.decrypt(nonce, encrypted_access_token.as_slice());
-    if decrypted_access_token.is_err() {
-        return Err(anyhow!("Error decrypting access token"));
+    let decrypted_refresh_token = cipher.decrypt(nonce, encrypted_refresh_token.as_slice());
+    if decrypted_refresh_token.is_err() {
+        return Err(anyhow!("Error decrypting refresh token"));
     }
-    let decrypted_access_token = decrypted_access_token.unwrap();
-    let decrypted_access_token = String::from_utf8(decrypted_access_token);
-    if decrypted_access_token.is_err() {
-        return Err(anyhow!("Error converting decrypted access token to string"));
+    let decrypted_refresh_token = decrypted_refresh_token.unwrap();
+    let decrypted_refresh_token = String::from_utf8(decrypted_refresh_token);
+    if decrypted_refresh_token.is_err() {
+        return Err(anyhow!(
+            "Error converting decrypted refresh token to string"
+        ));
     }
-    let decrypted_access_token = decrypted_access_token.unwrap();
-    Ok((decrypted_access_token, email_id))
+    let decrypted_refresh_token = decrypted_refresh_token.unwrap();
+    Ok((decrypted_refresh_token, email_id))
 }
 
-async fn delete_access_token_from_disk() -> Result<()> {
-    let access_token_path = get_config_dir();
-    if access_token_path.is_err() {
+async fn delete_refresh_token_from_disk() -> Result<()> {
+    let refresh_token_path = get_config_dir();
+    if refresh_token_path.is_err() {
         return Err(anyhow!("Error getting config directory"));
     }
-    let mut access_token_path = access_token_path.unwrap();
-    access_token_path.push(ACCESS_TOKEN_FILE_NAME);
-    if !access_token_path.exists() {
+    let mut refresh_token_path = refresh_token_path.unwrap();
+    refresh_token_path.push(REFRESH_TOKEN_FILE_NAME);
+    if !refresh_token_path.exists() {
         return Ok(());
     }
-    let delete_file_status = std::fs::remove_file(&access_token_path);
+    let delete_file_status = std::fs::remove_file(&refresh_token_path);
     if delete_file_status.is_err() {
-        return Err(anyhow!("Error deleting access token file"));
+        return Err(anyhow!("Error deleting refresh token file"));
     }
     Ok(())
 }
 
-async fn test_access_token_on_disk(
+async fn refresh_access_token(refresh_token: &str) -> Result<(String, String, String), String> {
+    let request_body = json!(
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+    );
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!(
+            "{}/auth/v1/token?grant_type=refresh_token",
+            SUPABASE_URL
+        ))
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Content-Type", "application/json")
+        .body(request_body.to_string())
+        .send()
+        .await;
+    if let Err(e) = response {
+        debug!("Error logging in: {}", e);
+        error!("Error logging in, Something went wrong, please try again later");
+        return Err("Error logging in, Something went wrong, please try again later".to_string());
+    }
+    let response = response.unwrap();
+    let status = response.status();
+    let body = response.json::<serde_json::Value>().await;
+    if status == StatusCode::OK {
+        match body {
+            Ok(body) => {
+                let access_token = body.get("access_token");
+                let refresh_token = body.get("refresh_token");
+                let access_token_result = match access_token {
+                    Some(access_token) => {
+                        let access_token = access_token.as_str().unwrap();
+                        info!("🚀 Login successful");
+                        debug!("Access token: {}", access_token);
+                        let user_id = get_user_id_from_database(access_token, false)
+                            .await
+                            .unwrap_or_else(|_| "Error getting user id".to_string());
+                        Ok((access_token.to_string(), user_id))
+                    }
+                    None => {
+                        error!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer");
+                        debug!(
+                            "status code {}, response body: {:?}, could not find access token",
+                            status, body
+                        );
+                        Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string())
+                    }
+                };
+                let refresh_token_result = match refresh_token {
+                    Some(refresh_token) => {
+                        let refresh_token = refresh_token.as_str().unwrap();
+                        debug!("Refresh token: {}", refresh_token);
+                        Ok(refresh_token.to_string())
+                    }
+                    None => {
+                        error!("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer");
+                        debug!(
+                            "status code {}, response body: {:?}, could not find refresh token",
+                            status, body
+                        );
+                        Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string())
+                    }
+                };
+
+                if access_token_result.is_err() || refresh_token_result.is_err() {
+                    return Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string());
+                } else {
+                    let access_token_result = access_token_result.unwrap();
+                    let refresh_token_result = refresh_token_result.unwrap();
+                    Ok((
+                        access_token_result.0,
+                        access_token_result.1,
+                        refresh_token_result,
+                    ))
+                }
+            }
+            Err(e) => Err(format!("Error logging in: {}", e)),
+        }
+    } else if status == StatusCode::TOO_MANY_REQUESTS {
+        error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
+        debug!("status code {}, response body: {:?}", status, body);
+        Err("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢".to_string())
+    } else {
+        match body {
+            Ok(body) => {
+                let error_description = body.get("error_description");
+                match error_description {
+                    Some(error_description) => {
+                        let error_description = error_description.to_string();
+                        error!("{}", error_description);
+                        debug!("status code {}, response body: {:?}", status, body);
+                        Err(format!("Error logging in: {}", error_description))
+                    }
+                    None => {
+                        error!("Error logging in");
+                        debug!("status code {}, response body: {:?}", status, body);
+                        Err("Error logging in".to_string())
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Error logging in: {}", e);
+                Err(format!("Error logging in: {}", e))
+            }
+        }
+    }
+}
+
+async fn test_refresh_token_on_disk(
     encryption_key_from_arguments: Option<String>,
 ) -> Result<UserLoginData> {
-    let (access_token, email_id) = get_access_token_from_disk(encryption_key_from_arguments)?;
-    let user_id = get_user_id_from_database(&access_token, false).await?;
+    let (refresh_token, email_id) =
+        get_refresh_token_from_disk(encryption_key_from_arguments.clone())?;
+    debug!("refresh_token: {:?}", refresh_token);
+    let status = refresh_access_token(&refresh_token).await;
+    if status.is_err() {
+        return Err(anyhow!(status.err().unwrap()));
+    }
+    let status = status.unwrap();
+    let access_token = status.0;
+    let user_id = status.1;
+    let refresh_token = status.2;
+    let save_status =
+        save_refresh_token_to_disk(&refresh_token, &email_id, encryption_key_from_arguments).await;
+    if save_status.is_err() {
+        error!("Error saving refresh token to disk");
+    }
     let user_data = UserLoginData {
-        auth_token: Some(access_token.clone()),
-        email_id: Some(email_id.clone()),
-        user_id: Some(user_id.clone()),
+        auth_token: Some(access_token),
+        email_id: Some(email_id),
+        refresh_token: Some(refresh_token),
+        user_id: Some(user_id),
     };
     Ok(user_data)
 }

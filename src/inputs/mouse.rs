@@ -4,30 +4,30 @@ use std::fmt::{self, Display, Formatter};
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum Mouse {
+    Drag(u16, u16),
     LeftPress,
-    RightPress,
     MiddlePress,
-    ScrollUp,
+    Move(u16, u16),
+    RightPress,
     ScrollDown,
     ScrollLeft,
     ScrollRight,
-    Move(u16, u16),
-    Drag(u16, u16),
+    ScrollUp,
     Unknown,
 }
 
 impl Display for Mouse {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
+            Mouse::Drag(x, y) => write!(f, "<Mouse::Drag({}, {})>", x, y),
             Mouse::LeftPress => write!(f, "<Mouse::Left>"),
-            Mouse::RightPress => write!(f, "<Mouse::Right>"),
             Mouse::MiddlePress => write!(f, "<Mouse::Middle>"),
-            Mouse::ScrollUp => write!(f, "<Mouse::ScrollUp>"),
+            Mouse::Move(x, y) => write!(f, "<Mouse::Move({}, {})>", x, y),
+            Mouse::RightPress => write!(f, "<Mouse::Right>"),
             Mouse::ScrollDown => write!(f, "<Mouse::ScrollDown>"),
             Mouse::ScrollLeft => write!(f, "<Mouse::Ctrl + ScrollUp>"),
             Mouse::ScrollRight => write!(f, "<Mouse::Ctrl + ScrollDown>"),
-            Mouse::Move(x, y) => write!(f, "<Mouse::Move({}, {})>", x, y),
-            Mouse::Drag(x, y) => write!(f, "<Mouse::Drag({}, {})>", x, y),
+            Mouse::ScrollUp => write!(f, "<Mouse::ScrollUp>"),
             Mouse::Unknown => write!(f, "<Mouse::Unknown>"),
         }
     }

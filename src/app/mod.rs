@@ -1,7 +1,7 @@
 use self::{
     actions::Actions,
     app_helper::{
-        handle_general_actions, handle_keybinding_mode, handle_mouse_action,
+        handle_edit_keybinding_mode, handle_general_actions, handle_mouse_action,
         handle_user_input_mode, prepare_config_for_new_app,
     },
     kanban::{Board, Card, CardPriority},
@@ -33,7 +33,6 @@ use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, info};
 use ratatui::{
-    backend::Backend,
     widgets::{ListState, TableState},
     Frame,
 };
@@ -148,7 +147,7 @@ impl App<'_> {
         if self.state.app_status == AppStatus::UserInput {
             handle_user_input_mode(self, key).await
         } else if self.state.app_status == AppStatus::KeyBindMode {
-            handle_keybinding_mode(self, key).await
+            handle_edit_keybinding_mode(self, key).await
         } else {
             handle_general_actions(self, key).await
         }
@@ -210,10 +209,10 @@ impl App<'_> {
         self.state.current_user_input = String::new();
     }
     pub fn set_config_state(&mut self, config_state: TableState) {
-        self.state.config_state = config_state;
+        self.state.app_table_states.config = config_state;
     }
     pub fn config_next(&mut self) {
-        let i = match self.state.config_state.selected() {
+        let i = match self.state.app_table_states.config.selected() {
             Some(i) => {
                 if i >= self.config.to_view_list().len() - 1 {
                     0
@@ -223,10 +222,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.config_state.select(Some(i));
+        self.state.app_table_states.config.select(Some(i));
     }
     pub fn config_prv(&mut self) {
-        let i = match self.state.config_state.selected() {
+        let i = match self.state.app_table_states.config.selected() {
             Some(i) => {
                 if i == 0 {
                     self.config.to_view_list().len() - 1
@@ -236,10 +235,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.config_state.select(Some(i));
+        self.state.app_table_states.config.select(Some(i));
     }
     pub fn main_menu_next(&mut self) {
-        let i = match self.state.main_menu_state.selected() {
+        let i = match self.state.app_list_states.main_menu.selected() {
             Some(i) => {
                 if i >= self.main_menu.all().len() - 1 {
                     0
@@ -249,10 +248,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.main_menu_state.select(Some(i));
+        self.state.app_list_states.main_menu.select(Some(i));
     }
     pub fn main_menu_prv(&mut self) {
-        let i = match self.state.main_menu_state.selected() {
+        let i = match self.state.app_list_states.main_menu.selected() {
             Some(i) => {
                 if i == 0 {
                     self.main_menu.items.len() - 1
@@ -262,10 +261,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.main_menu_state.select(Some(i));
+        self.state.app_list_states.main_menu.select(Some(i));
     }
     pub fn load_save_next(&mut self, cloud_mode: bool) {
-        let i = match self.state.load_save_state.selected() {
+        let i = match self.state.app_list_states.load_save.selected() {
             Some(i) => {
                 if cloud_mode {
                     let cloud_save_files = self.state.cloud_data.clone();
@@ -297,10 +296,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.load_save_state.select(Some(i));
+        self.state.app_list_states.load_save.select(Some(i));
     }
     pub fn load_save_prv(&mut self, cloud_mode: bool) {
-        let i = match self.state.load_save_state.selected() {
+        let i = match self.state.app_list_states.load_save.selected() {
             Some(i) => {
                 if cloud_mode {
                     let cloud_save_files = self.state.cloud_data.clone();
@@ -336,10 +335,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.load_save_state.select(Some(i));
+        self.state.app_list_states.load_save.select(Some(i));
     }
     pub fn config_state(&self) -> &TableState {
-        &self.state.config_state
+        &self.state.app_table_states.config
     }
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
         self.state.prev_ui_mode = Some(self.state.ui_mode);
@@ -355,7 +354,7 @@ impl App<'_> {
     }
     pub fn edit_keybindings_next(&mut self) {
         let keybinding_iterator = self.config.keybindings.iter();
-        let i = match self.state.edit_keybindings_state.selected() {
+        let i = match self.state.app_table_states.edit_keybindings.selected() {
             Some(i) => {
                 if i >= keybinding_iterator.count() - 1 {
                     0
@@ -365,11 +364,11 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_keybindings_state.select(Some(i));
+        self.state.app_table_states.edit_keybindings.select(Some(i));
     }
     pub fn edit_keybindings_prv(&mut self) {
         let keybinding_iterator = self.config.keybindings.iter();
-        let i = match self.state.edit_keybindings_state.selected() {
+        let i = match self.state.app_table_states.edit_keybindings.selected() {
             Some(i) => {
                 if i == 0 {
                     keybinding_iterator.count() - 1
@@ -379,10 +378,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_keybindings_state.select(Some(i));
+        self.state.app_table_states.edit_keybindings.select(Some(i));
     }
     pub fn help_next(&mut self) {
-        let i = match self.state.help_state.selected() {
+        let i = match self.state.app_table_states.help.selected() {
             Some(i) => {
                 if !self.state.keybinding_store.is_empty() {
                     if i >= (self.state.keybinding_store.len() / 2) - 1 {
@@ -396,10 +395,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.help_state.select(Some(i));
+        self.state.app_table_states.help.select(Some(i));
     }
     pub fn help_prv(&mut self) {
-        let i = match self.state.help_state.selected() {
+        let i = match self.state.app_table_states.help.selected() {
             Some(i) => {
                 if !self.state.keybinding_store.is_empty() {
                     if i == 0 {
@@ -413,10 +412,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.help_state.select(Some(i));
+        self.state.app_table_states.help.select(Some(i));
     }
     pub fn select_default_view_next(&mut self) {
-        let i = match self.state.default_view_state.selected() {
+        let i = match self.state.app_list_states.default_view.selected() {
             Some(i) => {
                 if i >= UiMode::view_modes_as_string().len() - 1 {
                     0
@@ -426,10 +425,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.default_view_state.select(Some(i));
+        self.state.app_list_states.default_view.select(Some(i));
     }
     pub fn select_default_view_prv(&mut self) {
-        let i = match self.state.default_view_state.selected() {
+        let i = match self.state.app_list_states.default_view.selected() {
             Some(i) => {
                 if i == 0 {
                     UiMode::view_modes_as_string().len() - 1
@@ -439,12 +438,13 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.default_view_state.select(Some(i));
+        self.state.app_list_states.default_view.select(Some(i));
     }
     pub fn command_palette_command_search_prv(&mut self) {
         let i = match self
             .state
-            .command_palette_command_search_list_state
+            .app_list_states
+            .command_palette_command_search
             .selected()
         {
             Some(i) => {
@@ -466,13 +466,15 @@ impl App<'_> {
             None => 0,
         };
         self.state
-            .command_palette_command_search_list_state
+            .app_list_states
+            .command_palette_command_search
             .select(Some(i));
     }
     pub fn command_palette_command_search_next(&mut self) {
         let i = match self
             .state
-            .command_palette_command_search_list_state
+            .app_list_states
+            .command_palette_command_search
             .selected()
         {
             Some(i) => {
@@ -496,11 +498,17 @@ impl App<'_> {
             None => 0,
         };
         self.state
-            .command_palette_command_search_list_state
+            .app_list_states
+            .command_palette_command_search
             .select(Some(i));
     }
     pub fn command_palette_card_search_next(&mut self) {
-        let i = match self.state.command_palette_card_search_list_state.selected() {
+        let i = match self
+            .state
+            .app_list_states
+            .command_palette_card_search
+            .selected()
+        {
             Some(i) => {
                 if self.command_palette.card_search_results.is_some() {
                     if i >= self
@@ -522,11 +530,17 @@ impl App<'_> {
             None => 0,
         };
         self.state
-            .command_palette_card_search_list_state
+            .app_list_states
+            .command_palette_card_search
             .select(Some(i));
     }
     pub fn command_palette_card_search_prv(&mut self) {
-        let i = match self.state.command_palette_card_search_list_state.selected() {
+        let i = match self
+            .state
+            .app_list_states
+            .command_palette_card_search
+            .selected()
+        {
             Some(i) => {
                 if self.command_palette.card_search_results.is_some() {
                     if i == 0 {
@@ -546,13 +560,15 @@ impl App<'_> {
             None => 0,
         };
         self.state
-            .command_palette_card_search_list_state
+            .app_list_states
+            .command_palette_card_search
             .select(Some(i));
     }
     pub fn command_palette_board_search_next(&mut self) {
         let i = match self
             .state
-            .command_palette_board_search_list_state
+            .app_list_states
+            .command_palette_board_search
             .selected()
         {
             Some(i) => {
@@ -576,13 +592,15 @@ impl App<'_> {
             None => 0,
         };
         self.state
-            .command_palette_board_search_list_state
+            .app_list_states
+            .command_palette_board_search
             .select(Some(i));
     }
     pub fn command_palette_board_search_prv(&mut self) {
         let i = match self
             .state
-            .command_palette_board_search_list_state
+            .app_list_states
+            .command_palette_board_search
             .selected()
         {
             Some(i) => {
@@ -604,7 +622,8 @@ impl App<'_> {
             None => 0,
         };
         self.state
-            .command_palette_board_search_list_state
+            .app_list_states
+            .command_palette_board_search
             .select(Some(i));
     }
     pub fn keybinding_list_maker(&mut self) {
@@ -715,7 +734,7 @@ impl App<'_> {
         }
     }
     pub fn select_card_status_prv(&mut self) {
-        let i = match self.state.card_status_selector_state.selected() {
+        let i = match self.state.app_list_states.card_status_selector.selected() {
             Some(i) => {
                 if i == 0 {
                     CardStatus::all().len() - 1
@@ -725,10 +744,13 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.card_status_selector_state.select(Some(i));
+        self.state
+            .app_list_states
+            .card_status_selector
+            .select(Some(i));
     }
     pub fn select_card_status_next(&mut self) {
-        let i = match self.state.card_status_selector_state.selected() {
+        let i = match self.state.app_list_states.card_status_selector.selected() {
             Some(i) => {
                 if i >= CardStatus::all().len() - 1 {
                     0
@@ -738,7 +760,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.card_status_selector_state.select(Some(i));
+        self.state
+            .app_list_states
+            .card_status_selector
+            .select(Some(i));
     }
     pub fn increase_loading_toast_time(&mut self, msg: &str, increase_by: Duration) {
         let toast = self.state.toasts.iter_mut().find(|x| x.message == msg);
@@ -750,7 +775,7 @@ impl App<'_> {
         toast.duration += increase_by;
     }
     pub fn select_change_theme_next(&mut self) {
-        let i = match self.state.theme_selector_state.selected() {
+        let i = match self.state.app_list_states.theme_selector.selected() {
             Some(i) => {
                 if i >= self.all_themes.len() - 1 {
                     0
@@ -760,11 +785,11 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.theme_selector_state.select(Some(i));
+        self.state.app_list_states.theme_selector.select(Some(i));
         self.current_theme = self.all_themes[i].clone();
     }
     pub fn select_change_theme_prv(&mut self) {
-        let i = match self.state.theme_selector_state.selected() {
+        let i = match self.state.app_list_states.theme_selector.selected() {
             Some(i) => {
                 if i == 0 {
                     self.all_themes.len() - 1
@@ -774,12 +799,12 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.theme_selector_state.select(Some(i));
+        self.state.app_list_states.theme_selector.select(Some(i));
         self.current_theme = self.all_themes[i].clone();
     }
     pub fn select_create_theme_next(&mut self) {
         let theme_rows_len = Theme::default().to_rows(self).1.len();
-        let i = match self.state.theme_editor_state.selected() {
+        let i = match self.state.app_table_states.theme_editor.selected() {
             Some(i) => {
                 if i >= theme_rows_len - 1 {
                     0
@@ -789,11 +814,11 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.theme_editor_state.select(Some(i));
+        self.state.app_table_states.theme_editor.select(Some(i));
     }
     pub fn select_create_theme_prv(&mut self) {
         let theme_rows_len = Theme::default().to_rows(self).1.len();
-        let i = match self.state.theme_editor_state.selected() {
+        let i = match self.state.app_table_states.theme_editor.selected() {
             Some(i) => {
                 if i == 0 {
                     theme_rows_len - 1
@@ -803,10 +828,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.theme_editor_state.select(Some(i));
+        self.state.app_table_states.theme_editor.select(Some(i));
     }
     pub fn select_edit_style_fg_next(&mut self) {
-        let i = match self.state.edit_specific_style_state.0.selected() {
+        let i = match self.state.app_list_states.edit_specific_style.0.selected() {
             Some(i) => {
                 if i >= TextColorOptions::to_iter().count() - 1 {
                     0
@@ -816,10 +841,14 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_specific_style_state.0.select(Some(i));
+        self.state
+            .app_list_states
+            .edit_specific_style
+            .0
+            .select(Some(i));
     }
     pub fn select_edit_style_fg_prv(&mut self) {
-        let i = match self.state.edit_specific_style_state.0.selected() {
+        let i = match self.state.app_list_states.edit_specific_style.0.selected() {
             Some(i) => {
                 if i == 0 {
                     TextColorOptions::to_iter().count() - 1
@@ -829,10 +858,14 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_specific_style_state.0.select(Some(i));
+        self.state
+            .app_list_states
+            .edit_specific_style
+            .0
+            .select(Some(i));
     }
     pub fn select_edit_style_bg_next(&mut self) {
-        let i = match self.state.edit_specific_style_state.1.selected() {
+        let i = match self.state.app_list_states.edit_specific_style.1.selected() {
             Some(i) => {
                 if i >= TextColorOptions::to_iter().count() - 1 {
                     0
@@ -842,10 +875,14 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_specific_style_state.1.select(Some(i));
+        self.state
+            .app_list_states
+            .edit_specific_style
+            .1
+            .select(Some(i));
     }
     pub fn select_edit_style_bg_prv(&mut self) {
-        let i = match self.state.edit_specific_style_state.1.selected() {
+        let i = match self.state.app_list_states.edit_specific_style.1.selected() {
             Some(i) => {
                 if i == 0 {
                     TextColorOptions::to_iter().count() - 1
@@ -855,10 +892,14 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_specific_style_state.1.select(Some(i));
+        self.state
+            .app_list_states
+            .edit_specific_style
+            .1
+            .select(Some(i));
     }
     pub fn select_edit_style_modifier_next(&mut self) {
-        let i = match self.state.edit_specific_style_state.2.selected() {
+        let i = match self.state.app_list_states.edit_specific_style.2.selected() {
             Some(i) => {
                 if i >= TextModifierOptions::to_iter().count() - 1 {
                     0
@@ -868,10 +909,14 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_specific_style_state.2.select(Some(i));
+        self.state
+            .app_list_states
+            .edit_specific_style
+            .2
+            .select(Some(i));
     }
     pub fn select_edit_style_modifier_prv(&mut self) {
-        let i = match self.state.edit_specific_style_state.2.selected() {
+        let i = match self.state.app_list_states.edit_specific_style.2.selected() {
             Some(i) => {
                 if i == 0 {
                     TextModifierOptions::to_iter().count() - 1
@@ -881,10 +926,14 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.edit_specific_style_state.2.select(Some(i));
+        self.state
+            .app_list_states
+            .edit_specific_style
+            .2
+            .select(Some(i));
     }
     pub fn select_card_priority_next(&mut self) {
-        let i = match self.state.card_priority_selector_state.selected() {
+        let i = match self.state.app_list_states.card_priority_selector.selected() {
             Some(i) => {
                 if i >= CardPriority::all().len() - 1 {
                     0
@@ -894,10 +943,13 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.card_priority_selector_state.select(Some(i));
+        self.state
+            .app_list_states
+            .card_priority_selector
+            .select(Some(i));
     }
     pub fn select_card_priority_prv(&mut self) {
-        let i = match self.state.card_priority_selector_state.selected() {
+        let i = match self.state.app_list_states.card_priority_selector.selected() {
             Some(i) => {
                 if i == 0 {
                     CardPriority::all().len() - 1
@@ -907,7 +959,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.card_priority_selector_state.select(Some(i));
+        self.state
+            .app_list_states
+            .card_priority_selector
+            .select(Some(i));
     }
     pub fn filter_by_tag_popup_next(&mut self) {
         let all_tags_len = if self.state.all_available_tags.is_some() {
@@ -916,7 +971,7 @@ impl App<'_> {
             0
         };
         if all_tags_len > 0 {
-            let i = match self.state.filter_by_tag_list_state.selected() {
+            let i = match self.state.app_list_states.filter_by_tag_list.selected() {
                 Some(i) => {
                     if i >= all_tags_len - 1 {
                         0
@@ -926,7 +981,10 @@ impl App<'_> {
                 }
                 None => 0,
             };
-            self.state.filter_by_tag_list_state.select(Some(i));
+            self.state
+                .app_list_states
+                .filter_by_tag_list
+                .select(Some(i));
         }
     }
     pub fn filter_by_tag_popup_prv(&mut self) {
@@ -936,7 +994,7 @@ impl App<'_> {
             0
         };
         if all_tags_len > 0 {
-            let i = match self.state.filter_by_tag_list_state.selected() {
+            let i = match self.state.app_list_states.filter_by_tag_list.selected() {
                 Some(i) => {
                     if i == 0 {
                         all_tags_len - 1
@@ -946,11 +1004,14 @@ impl App<'_> {
                 }
                 None => 0,
             };
-            self.state.filter_by_tag_list_state.select(Some(i));
+            self.state
+                .app_list_states
+                .filter_by_tag_list
+                .select(Some(i));
         }
     }
     pub fn change_date_format_popup_next(&mut self) {
-        let i = match self.state.date_format_selector_state.selected() {
+        let i = match self.state.app_list_states.date_format_selector.selected() {
             Some(i) => {
                 if i >= DateFormat::get_all_date_formats().len() - 1 {
                     0
@@ -960,10 +1021,13 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.date_format_selector_state.select(Some(i));
+        self.state
+            .app_list_states
+            .date_format_selector
+            .select(Some(i));
     }
     pub fn change_date_format_popup_prv(&mut self) {
-        let i = match self.state.date_format_selector_state.selected() {
+        let i = match self.state.app_list_states.date_format_selector.selected() {
             Some(i) => {
                 if i == 0 {
                     DateFormat::get_all_date_formats().len() - 1
@@ -973,7 +1037,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state.date_format_selector_state.select(Some(i));
+        self.state
+            .app_list_states
+            .date_format_selector
+            .select(Some(i));
     }
     pub fn undo(&mut self) {
         if self.action_history_manager.history_index == 0 {
@@ -1411,10 +1478,7 @@ impl PopupMode {
         }
     }
 
-    pub fn render<B>(self, rect: &mut Frame<B>, app: &mut App)
-    where
-        B: Backend,
-    {
+    pub fn render(self, rect: &mut Frame, app: &mut App) {
         match self {
             PopupMode::ViewCard => {
                 ui_helper::render_view_card(rect, app);
@@ -1466,153 +1530,194 @@ impl PopupMode {
 }
 
 #[derive(Debug, Clone)]
+pub struct AppListStates {
+    pub card_priority_selector: ListState,
+    pub card_status_selector: ListState,
+    pub card_view_comment_list: ListState,
+    pub card_view_list: ListState,
+    pub card_view_tag_list: ListState,
+    pub command_palette_board_search: ListState,
+    pub command_palette_card_search: ListState,
+    pub command_palette_command_search: ListState,
+    pub date_format_selector: ListState,
+    pub default_view: ListState,
+    pub edit_specific_style: (ListState, ListState, ListState),
+    pub filter_by_tag_list: ListState,
+    pub load_save: ListState,
+    pub logs: ListState,
+    pub main_menu: ListState,
+    pub theme_selector: ListState,
+}
+
+impl Default for AppListStates {
+    fn default() -> Self {
+        AppListStates {
+            card_priority_selector: ListState::default(),
+            card_status_selector: ListState::default(),
+            card_view_comment_list: ListState::default(),
+            card_view_list: ListState::default(),
+            card_view_tag_list: ListState::default(),
+            command_palette_board_search: ListState::default(),
+            command_palette_card_search: ListState::default(),
+            command_palette_command_search: ListState::default(),
+            date_format_selector: ListState::default(),
+            default_view: ListState::default(),
+            edit_specific_style: (
+                ListState::default(),
+                ListState::default(),
+                ListState::default(),
+            ),
+            filter_by_tag_list: ListState::default(),
+            load_save: ListState::default(),
+            logs: ListState::default(),
+            main_menu: ListState::default(),
+            theme_selector: ListState::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AppTableStates {
+    pub config: TableState,
+    pub edit_keybindings: TableState,
+    pub help: TableState,
+    pub theme_editor: TableState,
+}
+
+impl Default for AppTableStates {
+    fn default() -> Self {
+        AppTableStates {
+            config: TableState::default(),
+            edit_keybindings: TableState::default(),
+            help: TableState::default(),
+            theme_editor: TableState::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AppFormStates {
+    pub login: (Vec<String>, bool),
+    pub new_board: Vec<String>,
+    pub new_card: Vec<String>,
+    pub reset_password: (Vec<String>, bool),
+    pub signup: (Vec<String>, bool),
+}
+
+impl Default for AppFormStates {
+    fn default() -> Self {
+        AppFormStates {
+            login: (vec![String::new(), String::new()], false),
+            new_board: vec![String::new(), String::new()],
+            new_card: vec![String::new(), String::new(), String::new()],
+            reset_password: (
+                vec![String::new(), String::new(), String::new(), String::new()],
+                false,
+            ),
+            signup: (vec![String::new(), String::new(), String::new()], false),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct AppState<'a> {
-    pub app_status: AppStatus,
-    pub current_board_id: Option<(u64, u64)>,
-    pub current_card_id: Option<(u64, u64)>,
-    pub focus: Focus,
-    pub previous_focus: Option<Focus>,
-    pub current_user_input: String,
-    pub main_menu_state: ListState,
-    pub config_state: TableState,
-    pub new_board_form: Vec<String>,
-    pub new_card_form: Vec<String>,
-    pub login_form: (Vec<String>, bool),
-    pub signup_form: (Vec<String>, bool),
-    pub reset_password_form: (Vec<String>, bool),
-    pub load_save_state: ListState,
-    pub edit_keybindings_state: TableState,
-    pub edited_keybinding: Option<Vec<Key>>,
-    pub help_state: TableState,
-    pub keybinding_store: Vec<Vec<String>>,
-    pub default_view_state: ListState,
-    pub current_cursor_position: Option<usize>,
-    pub toasts: Vec<ToastWidget>,
-    pub term_background_color: (u8, u8, u8),
-    pub preview_boards_and_cards: Option<Vec<Board>>,
-    pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
-    pub preview_file_name: Option<String>,
-    pub popup_mode: Option<PopupMode>,
-    pub ui_mode: UiMode,
-    pub no_of_cards_to_show: u16,
-    pub command_palette_command_search_list_state: ListState,
-    pub command_palette_card_search_list_state: ListState,
-    pub command_palette_board_search_list_state: ListState,
-    pub card_status_selector_state: ListState,
-    pub prev_ui_mode: Option<UiMode>,
-    pub debug_menu_toggled: bool,
-    pub ui_render_time: Option<u128>,
-    pub current_mouse_coordinates: (u16, u16),
-    pub mouse_focus: Option<Focus>,
-    pub mouse_list_index: Option<u16>,
-    pub last_mouse_action: Option<Mouse>,
-    pub last_mouse_action_time: Option<Instant>,
-    pub theme_selector_state: ListState,
-    pub theme_being_edited: Theme,
-    pub theme_editor_state: TableState,
-    pub edit_specific_style_state: (ListState, ListState, ListState),
-    pub default_theme_mode: bool,
-    pub card_view_list_state: ListState,
-    pub card_view_tag_list_state: ListState,
-    pub card_view_comment_list_state: ListState,
-    pub card_priority_selector_state: ListState,
     pub all_available_tags: Option<Vec<(String, u32)>>,
-    pub filter_tags: Option<Vec<String>>,
-    pub filter_by_tag_list_state: ListState,
-    pub date_format_selector_state: ListState,
-    pub log_state: ListState,
-    pub user_login_data: UserLoginData,
-    pub cloud_data: Option<Vec<CloudData>>,
-    pub last_reset_password_link_sent_time: Option<Instant>,
-    pub encryption_key_from_arguments: Option<String>,
+    pub app_form_states: AppFormStates,
+    pub app_list_states: AppListStates,
+    pub app_status: AppStatus,
+    pub app_table_states: AppTableStates,
     pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
     pub card_description_text_buffer: Option<TextBox<'a>>,
+    pub cloud_data: Option<Vec<CloudData>>,
     pub config_item_being_edited: Option<usize>,
+    pub current_board_id: Option<(u64, u64)>,
+    pub current_card_id: Option<(u64, u64)>,
+    pub current_cursor_position: Option<usize>,
+    pub current_mouse_coordinates: (u16, u16),
+    pub current_user_input: String,
+    pub debug_menu_toggled: bool,
+    pub default_theme_mode: bool,
+    pub edited_keybinding: Option<Vec<Key>>,
+    pub encryption_key_from_arguments: Option<String>,
+    pub filter_tags: Option<Vec<String>>,
+    pub focus: Focus,
+    pub keybinding_store: Vec<Vec<String>>,
+    pub last_mouse_action: Option<Mouse>,
+    pub last_mouse_action_time: Option<Instant>,
+    pub last_reset_password_link_sent_time: Option<Instant>,
+    pub mouse_focus: Option<Focus>,
+    pub mouse_list_index: Option<u16>,
+    pub no_of_cards_to_show: u16,
+    pub popup_mode: Option<PopupMode>,
+    pub prev_focus: Option<Focus>,
+    pub prev_ui_mode: Option<UiMode>,
+    pub preview_boards_and_cards: Option<Vec<Board>>,
+    pub preview_file_name: Option<String>,
+    pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
+    pub term_background_color: (u8, u8, u8),
+    pub theme_being_edited: Theme,
+    pub toasts: Vec<ToastWidget>,
+    pub ui_mode: UiMode,
+    pub ui_render_time: Option<u128>,
+    pub user_login_data: UserLoginData,
 }
 
 impl Default for AppState<'_> {
     fn default() -> AppState<'static> {
         AppState {
+            all_available_tags: None,
+            app_form_states: AppFormStates::default(),
+            app_list_states: AppListStates::default(),
             app_status: AppStatus::default(),
-            focus: Focus::NoFocus,
+            app_table_states: AppTableStates::default(),
+            card_being_edited: None,
+            card_description_text_buffer: None,
+            cloud_data: None,
+            config_item_being_edited: None,
             current_board_id: None,
             current_card_id: None,
-            previous_focus: None,
-            current_user_input: String::new(),
-            main_menu_state: ListState::default(),
-            config_state: TableState::default(),
-            new_board_form: vec![String::new(), String::new()],
-            new_card_form: vec![String::new(), String::new(), String::new()],
-            login_form: (vec![String::new(), String::new()], false),
-            signup_form: (vec![String::new(), String::new(), String::new()], false),
-            reset_password_form: (
-                vec![String::new(), String::new(), String::new(), String::new()],
-                false,
-            ),
-            load_save_state: ListState::default(),
-            edit_keybindings_state: TableState::default(),
-            edited_keybinding: None,
-            help_state: TableState::default(),
-            keybinding_store: Vec::new(),
-            default_view_state: ListState::default(),
             current_cursor_position: None,
-            toasts: Vec::new(),
-            term_background_color: get_term_bg_color(),
-            preview_boards_and_cards: None,
-            preview_visible_boards_and_cards: LinkedHashMap::new(),
-            preview_file_name: None,
-            popup_mode: None,
-            ui_mode: DEFAULT_UI_MODE,
-            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
-            command_palette_command_search_list_state: ListState::default(),
-            command_palette_card_search_list_state: ListState::default(),
-            command_palette_board_search_list_state: ListState::default(),
-            card_status_selector_state: ListState::default(),
-            prev_ui_mode: None,
-            debug_menu_toggled: false,
-            ui_render_time: None,
             current_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES, // make sure it's out of bounds when mouse mode is disabled
-            mouse_focus: None,
-            mouse_list_index: None,
+            current_user_input: String::new(),
+            debug_menu_toggled: false,
+            default_theme_mode: false,
+            edited_keybinding: None,
+            encryption_key_from_arguments: None,
+            filter_tags: None,
+            focus: Focus::NoFocus,
+            keybinding_store: Vec::new(),
             last_mouse_action: None,
             last_mouse_action_time: None,
-            theme_selector_state: ListState::default(),
+            last_reset_password_link_sent_time: None,
+            mouse_focus: None,
+            mouse_list_index: None,
+            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
+            popup_mode: None,
+            prev_focus: None,
+            prev_ui_mode: None,
+            preview_boards_and_cards: None,
+            preview_file_name: None,
+            preview_visible_boards_and_cards: LinkedHashMap::new(),
+            term_background_color: get_term_bg_color(),
             theme_being_edited: Theme::default(),
-            theme_editor_state: TableState::default(),
-            edit_specific_style_state: (
-                ListState::default(),
-                ListState::default(),
-                ListState::default(),
-            ),
-            default_theme_mode: false,
-            card_view_list_state: ListState::default(),
-            card_view_tag_list_state: ListState::default(),
-            card_view_comment_list_state: ListState::default(),
-            card_priority_selector_state: ListState::default(),
-            all_available_tags: None,
-            filter_tags: None,
-            filter_by_tag_list_state: ListState::default(),
-            date_format_selector_state: ListState::default(),
-            log_state: ListState::default(),
+            toasts: Vec::new(),
+            ui_mode: DEFAULT_UI_MODE,
+            ui_render_time: None,
             user_login_data: UserLoginData {
                 email_id: None,
                 auth_token: None,
+                refresh_token: None,
                 user_id: None,
             },
-            cloud_data: None,
-            last_reset_password_link_sent_time: None,
-            encryption_key_from_arguments: None,
-            card_being_edited: None,
-            card_description_text_buffer: None,
-            config_item_being_edited: None,
         }
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UserLoginData {
-    pub email_id: Option<String>,
     pub auth_token: Option<String>,
+    pub email_id: Option<String>,
+    pub refresh_token: Option<String>,
     pub user_id: Option<String>,
 }
 
@@ -2427,8 +2532,9 @@ pub fn date_format_converter(date_string: &str, date_format: DateFormat) -> Resu
     }
 }
 
-pub async fn handle_exit(app: &mut App<'_>) {
+pub async fn handle_exit(app: &mut App<'_>) -> AppReturn {
     if app.config.save_on_exit {
         app.dispatch(IoEvent::AutoSave).await;
     }
+    AppReturn::Exit
 }

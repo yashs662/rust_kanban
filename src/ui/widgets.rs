@@ -22,23 +22,23 @@ use tokio::{sync::MutexGuard, time::Instant};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToastWidget {
-    pub title: String,
-    pub message: String,
     pub duration: Duration,
+    pub message: String,
     pub start_time: Instant,
-    pub toast_type: ToastType,
+    pub title: String,
     pub toast_color: (u8, u8, u8),
+    pub toast_type: ToastType,
 }
 
 impl ToastWidget {
     pub fn new(message: String, duration: Duration, toast_type: ToastType, theme: Theme) -> Self {
         Self {
-            title: toast_type.as_str().to_string(),
-            message,
             duration,
+            message,
             start_time: Instant::now(),
-            toast_type: toast_type.clone(),
+            title: toast_type.as_str().to_string(),
             toast_color: toast_type.as_color(theme),
+            toast_type: toast_type.clone(),
         }
     }
     pub fn new_with_title(
@@ -49,12 +49,12 @@ impl ToastWidget {
         theme: Theme,
     ) -> Self {
         Self {
-            title,
-            message,
             duration,
+            message,
             start_time: Instant::now(),
-            toast_type: toast_type.clone(),
+            title,
             toast_color: toast_type.as_color(theme),
+            toast_type: toast_type.clone(),
         }
     }
 
@@ -100,18 +100,18 @@ impl ToastWidget {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToastType {
     Error,
-    Warning,
     Info,
     Loading,
+    Warning,
 }
 
 impl ToastType {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Error => "Error",
-            Self::Warning => "Warning",
             Self::Info => "Info",
             Self::Loading => "Loading",
+            Self::Warning => "Warning",
         }
     }
     pub fn as_color(&self, theme: Theme) -> (u8, u8, u8) {
@@ -165,14 +165,14 @@ impl WidgetManager<'_> {
 
 #[derive(Debug)]
 pub struct CommandPaletteWidget {
-    pub command_search_results: Option<Vec<CommandPaletteActions>>,
-    pub card_search_results: Option<Vec<(String, (u64, u64))>>,
-    pub board_search_results: Option<Vec<(String, (u64, u64))>>,
-    pub last_search_string: String,
-    pub available_commands: Vec<CommandPaletteActions>,
     pub already_in_user_input_mode: bool,
-    pub last_focus: Option<Focus>,
+    pub available_commands: Vec<CommandPaletteActions>,
+    pub board_search_results: Option<Vec<(String, (u64, u64))>>,
+    pub card_search_results: Option<Vec<(String, (u64, u64))>>,
     pub command_palette_actions_corpus: Corpus,
+    pub command_search_results: Option<Vec<CommandPaletteActions>>,
+    pub last_focus: Option<Focus>,
+    pub last_search_string: String,
 }
 
 impl CommandPaletteWidget {
@@ -183,27 +183,29 @@ impl CommandPaletteWidget {
             corpus.add_text(command.to_string().to_lowercase().as_str());
         }
         Self {
-            command_search_results: None,
-            card_search_results: None,
-            board_search_results: None,
-            last_search_string: RANDOM_SEARCH_TERM.to_string(),
             already_in_user_input_mode: false,
-            last_focus: None,
             available_commands: CommandPaletteActions::all(debug_mode),
+            board_search_results: None,
+            card_search_results: None,
             command_palette_actions_corpus: corpus,
+            command_search_results: None,
+            last_focus: None,
+            last_search_string: RANDOM_SEARCH_TERM.to_string(),
         }
     }
 
     pub async fn handle_command(app: &mut App<'_>) -> AppReturn {
         if app
             .state
-            .command_palette_command_search_list_state
+            .app_list_states
+            .command_palette_command_search
             .selected()
             .is_some()
         {
             let command_index = app
                 .state
-                .command_palette_command_search_list_state
+                .app_list_states
+                .command_palette_command_search
                 .selected()
                 .unwrap();
             let command = if app.command_palette.command_search_results.is_some() {
@@ -218,29 +220,28 @@ impl CommandPaletteWidget {
             if command.is_some() {
                 match command.unwrap() {
                     CommandPaletteActions::Quit => {
-                        handle_exit(app).await;
                         info!("Quitting");
-                        return AppReturn::Exit;
+                        return handle_exit(app).await;
                     }
-                    CommandPaletteActions::OpenConfigMenu => {
+                    CommandPaletteActions::ConfigMenu => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::ConfigMenu;
-                        app.state.config_state.select(Some(0));
+                        app.state.app_table_states.config.select(Some(0));
                         app.state.focus = Focus::ConfigTable;
                     }
-                    CommandPaletteActions::OpenMainMenu => {
+                    CommandPaletteActions::MainMenu => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::MainMenu;
-                        app.state.main_menu_state.select(Some(0));
+                        app.state.app_list_states.main_menu.select(Some(0));
                         app.state.focus = Focus::MainMenu;
                     }
-                    CommandPaletteActions::OpenHelpMenu => {
+                    CommandPaletteActions::HelpMenu => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::HelpMenu;
-                        app.state.help_state.select(Some(0));
+                        app.state.app_table_states.help.select(Some(0));
                         app.state.focus = Focus::Body;
                     }
                     CommandPaletteActions::SaveKanbanState => {
@@ -298,7 +299,10 @@ impl CommandPaletteWidget {
                                             app.state.popup_mode =
                                                 Some(PopupMode::CardStatusSelector);
                                             app.state.app_status = AppStatus::Initialized;
-                                            app.state.card_status_selector_state.select(Some(0));
+                                            app.state
+                                                .app_list_states
+                                                .card_status_selector
+                                                .select(Some(0));
                                             return AppReturn::Continue;
                                         }
                                     }
@@ -349,7 +353,7 @@ impl CommandPaletteWidget {
                         }
                         app.state.filter_tags = None;
                         app.state.all_available_tags = None;
-                        app.state.filter_by_tag_list_state.select(None);
+                        app.state.app_list_states.filter_by_tag_list.select(None);
                         app.state.popup_mode = None;
                         app.filtered_boards = vec![];
                         refresh_visible_boards_and_cards(app);
@@ -544,14 +548,17 @@ impl CommandPaletteWidget {
 
             app.command_palette.command_search_results = Some(command_search_results);
             app.command_palette.last_search_string = current_search_string;
-            if app.command_palette.command_search_results.is_some() && !app
+            if app.command_palette.command_search_results.is_some()
+                && !app
                     .command_palette
                     .command_search_results
                     .as_ref()
                     .unwrap()
-                    .is_empty() {
+                    .is_empty()
+            {
                 app.state
-                    .command_palette_command_search_list_state
+                    .app_list_states
+                    .command_palette_command_search
                     .select(Some(0));
             }
         }
@@ -591,59 +598,59 @@ impl CommandPaletteWidget {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandPaletteActions {
-    OpenConfigMenu,
-    SaveKanbanState,
+    ChangeCurrentCardStatus,
+    ChangeDateFormat,
+    ChangeTheme,
+    ChangeUIMode,
+    ClearFilter,
+    ConfigMenu,
+    CreateATheme,
+    DebugMenu,
+    FilterByTag,
+    HelpMenu,
+    LoadASaveCloud,
     LoadASaveLocal,
+    Login,
+    Logout,
+    MainMenu,
     NewBoard,
     NewCard,
-    ResetUI,
-    OpenMainMenu,
-    OpenHelpMenu,
-    ChangeUIMode,
-    ChangeCurrentCardStatus,
-    DebugMenu,
-    ChangeTheme,
-    CreateATheme,
-    FilterByTag,
-    ClearFilter,
     NoCommandsFound,
-    ChangeDateFormat,
-    Login,
-    SyncLocalData,
-    LoadASaveCloud,
-    Logout,
-    SignUp,
-    ResetPassword,
     Quit,
+    ResetPassword,
+    ResetUI,
+    SaveKanbanState,
+    SignUp,
+    SyncLocalData,
 }
 
 impl Display for CommandPaletteActions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::OpenConfigMenu => write!(f, "Configure"),
-            Self::SaveKanbanState => write!(f, "Save Kanban State"),
+            Self::ChangeCurrentCardStatus => write!(f, "Change Current Card Status"),
+            Self::ChangeDateFormat => write!(f, "Change Date Format"),
+            Self::ChangeTheme => write!(f, "Change Theme"),
+            Self::ChangeUIMode => write!(f, "Change UI Mode"),
+            Self::ClearFilter => write!(f, "Clear Filter"),
+            Self::CreateATheme => write!(f, "Create a Theme"),
+            Self::DebugMenu => write!(f, "Toggle Debug Panel"),
+            Self::FilterByTag => write!(f, "Filter by Tag"),
+            Self::LoadASaveCloud => write!(f, "Load a Save (Cloud)"),
             Self::LoadASaveLocal => write!(f, "Load a Save (Local)"),
+            Self::Login => write!(f, "Login"),
+            Self::Logout => write!(f, "Logout"),
             Self::NewBoard => write!(f, "New Board"),
             Self::NewCard => write!(f, "New Card"),
-            Self::ResetUI => write!(f, "Reset UI"),
-            Self::OpenMainMenu => write!(f, "Open Main Menu"),
-            Self::OpenHelpMenu => write!(f, "Open Help Menu"),
-            Self::ChangeUIMode => write!(f, "Change UI Mode"),
-            Self::ChangeCurrentCardStatus => write!(f, "Change Current Card Status"),
-            Self::DebugMenu => write!(f, "Toggle Debug Panel"),
-            Self::ChangeTheme => write!(f, "Change Theme"),
-            Self::CreateATheme => write!(f, "Create a Theme"),
-            Self::FilterByTag => write!(f, "Filter by Tag"),
-            Self::ClearFilter => write!(f, "Clear Filter"),
             Self::NoCommandsFound => write!(f, "No Commands Found"),
-            Self::ChangeDateFormat => write!(f, "Change Date Format"),
-            Self::Login => write!(f, "Login"),
-            Self::SyncLocalData => write!(f, "Sync Local Data"),
-            Self::LoadASaveCloud => write!(f, "Load a Save (Cloud)"),
-            Self::Logout => write!(f, "Logout"),
-            Self::SignUp => write!(f, "Sign Up"),
-            Self::ResetPassword => write!(f, "Reset Password"),
+            Self::ConfigMenu => write!(f, "Configure"),
+            Self::HelpMenu => write!(f, "Open Help Menu"),
+            Self::MainMenu => write!(f, "Open Main Menu"),
             Self::Quit => write!(f, "Quit"),
+            Self::ResetPassword => write!(f, "Reset Password"),
+            Self::ResetUI => write!(f, "Reset UI"),
+            Self::SaveKanbanState => write!(f, "Save Kanban State"),
+            Self::SignUp => write!(f, "Sign Up"),
+            Self::SyncLocalData => write!(f, "Sync Local Data"),
         }
     }
 }
@@ -651,28 +658,28 @@ impl Display for CommandPaletteActions {
 impl CommandPaletteActions {
     pub fn all(debug_mode: bool) -> Vec<Self> {
         let all = vec![
-            Self::OpenConfigMenu,
-            Self::SaveKanbanState,
-            Self::SyncLocalData,
-            Self::LoadASaveLocal,
-            Self::LoadASaveCloud,
-            Self::NewBoard,
-            Self::NewCard,
-            Self::ResetUI,
-            Self::OpenMainMenu,
-            Self::OpenHelpMenu,
-            Self::ChangeUIMode,
             Self::ChangeCurrentCardStatus,
+            Self::ChangeDateFormat,
             Self::ChangeTheme,
+            Self::ChangeUIMode,
+            Self::ClearFilter,
+            Self::ConfigMenu,
             Self::CreateATheme,
             Self::FilterByTag,
-            Self::ClearFilter,
-            Self::ChangeDateFormat,
+            Self::HelpMenu,
+            Self::LoadASaveCloud,
+            Self::LoadASaveLocal,
             Self::Login,
             Self::Logout,
-            Self::SignUp,
-            Self::ResetPassword,
+            Self::MainMenu,
+            Self::NewBoard,
+            Self::NewCard,
             Self::Quit,
+            Self::ResetPassword,
+            Self::ResetUI,
+            Self::SaveKanbanState,
+            Self::SignUp,
+            Self::SyncLocalData,
         ];
 
         if cfg!(debug_assertions) || debug_mode {
@@ -687,14 +694,14 @@ impl CommandPaletteActions {
     pub fn from_string(s: &str, lowercase_match: bool) -> Option<Self> {
         if lowercase_match {
             match s.to_lowercase().as_str() {
-                "configure" => Some(Self::OpenConfigMenu),
+                "configure" => Some(Self::ConfigMenu),
                 "save kanban state" => Some(Self::SaveKanbanState),
                 "load a save (local)" => Some(Self::LoadASaveLocal),
                 "new board" => Some(Self::NewBoard),
                 "new card" => Some(Self::NewCard),
                 "reset ui" => Some(Self::ResetUI),
-                "open main menu" => Some(Self::OpenMainMenu),
-                "open help menu" => Some(Self::OpenHelpMenu),
+                "open main menu" => Some(Self::MainMenu),
+                "open help menu" => Some(Self::HelpMenu),
                 "change ui mode" => Some(Self::ChangeUIMode),
                 "change current card status" => Some(Self::ChangeCurrentCardStatus),
                 "toggle debug panel" => Some(Self::DebugMenu),
@@ -714,14 +721,14 @@ impl CommandPaletteActions {
             }
         } else {
             match s {
-                "Configure" => Some(Self::OpenConfigMenu),
+                "Configure" => Some(Self::ConfigMenu),
                 "Save Kanban State" => Some(Self::SaveKanbanState),
                 "Load a Save (Local)" => Some(Self::LoadASaveLocal),
                 "New Board" => Some(Self::NewBoard),
                 "New Card" => Some(Self::NewCard),
                 "Reset UI" => Some(Self::ResetUI),
-                "Open Main Menu" => Some(Self::OpenMainMenu),
-                "Open Help Menu" => Some(Self::OpenHelpMenu),
+                "Open Main Menu" => Some(Self::MainMenu),
+                "Open Help Menu" => Some(Self::HelpMenu),
                 "Change UI Mode" => Some(Self::ChangeUIMode),
                 "Change Current Card Status" => Some(Self::ChangeCurrentCardStatus),
                 "Toggle Debug Panel" => Some(Self::DebugMenu),

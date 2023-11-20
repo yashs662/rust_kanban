@@ -7,7 +7,7 @@ use rust_kanban::{
     app::App,
     constants::APP_TITLE,
     io::{io_handler::IoAsyncHandler, logger, IoEvent},
-    util::{gen_new_key_main, reset_app_main, start_ui},
+    util::{gen_new_key_main, print_error, reset_app_main, start_ui},
 };
 use std::{io::stdout, sync::Arc};
 
@@ -82,7 +82,9 @@ async fn main() -> Result<()> {
     if args.generate_new_encryption_key {
         if args.email_id.is_none() || args.password.is_none() {
             println!();
-            println!("[ERROR] - Please provide email id (-e) and password (-p) to reset you encryption key");
+            print_error(
+                "Please provide your email id (-e) and password (-p) to reset your encryption key",
+            );
             println!();
             return Ok(());
         }
@@ -90,7 +92,7 @@ async fn main() -> Result<()> {
         return Ok(());
     } else if args.email_id.is_some() || args.password.is_some() {
         println!();
-        println!("[ERROR] - Please provide the -g or --generate-new-encryption-key flag to generate a new encryption key");
+        print_error("Please provide the -g or --generate-new-encryption-key flag to generate a new encryption key");
         println!();
         return Ok(());
     }

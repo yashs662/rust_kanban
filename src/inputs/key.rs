@@ -5,45 +5,32 @@ use std::fmt::{self, Display, Formatter};
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum Key {
-    Esc,
-
-    Backspace,
+    Alt(char),
     AltBackspace,
-
-    Up,
-    ShiftUp,
-    CtrlUp,
-    CtrlAltUp,
-    PageUp,
-
-    Down,
-    ShiftDown,
-    CtrlDown,
-    CtrlAltDown,
-    PageDown,
-
-    Left,
-    ShiftLeft,
-    CtrlLeft,
-    CtrlAltLeft,
-
-    Right,
-    ShiftRight,
-    CtrlRight,
-    CtrlAltRight,
-
-    Enter,
-
-    Tab,
+    AltDelete,
     BackTab,
-
-    Space,
-    Ins,
+    Backspace,
+    Char(char),
+    Ctrl(char),
+    CtrlAlt(char),
+    CtrlAltDown,
+    CtrlAltLeft,
+    CtrlAltRight,
+    CtrlAltUp,
+    CtrlDown,
+    CtrlLeft,
+    CtrlRight,
+    CtrlUp,
     Delete,
-    Home,
+    Down,
     End,
+    Enter,
+    Esc,
     F0,
     F1,
+    F10,
+    F11,
+    F12,
     F2,
     F3,
     F4,
@@ -52,15 +39,20 @@ pub enum Key {
     F7,
     F8,
     F9,
-    F10,
-    F11,
-    F12,
-    Char(char),
-    Ctrl(char),
-    Alt(char),
-    AltDelete,
-    CtrlAlt(char),
+    Home,
+    Ins,
+    Left,
+    PageDown,
+    PageUp,
+    Right,
+    ShiftDown,
+    ShiftLeft,
+    ShiftRight,
+    ShiftUp,
+    Space,
+    Tab,
     Unknown,
+    Up,
 }
 
 impl Key {
@@ -82,29 +74,46 @@ impl Key {
             _ => panic!("unknown function key: F{}", n),
         }
     }
-    pub fn to_digit(&self) -> u8 {
-        match self {
-            Key::Char(c) => c.to_digit(10).unwrap() as u8,
-            _ => panic!("not a digit"),
-        }
-    }
 }
 
 impl Display for Key {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Key::Alt(' ') => write!(f, "<Alt+Space>"),
-            Key::Ctrl(' ') => write!(f, "<Ctrl+Space>"),
-            Key::Char(' ') => write!(f, "<Space>"),
             Key::Alt(c) => write!(f, "<Alt+{}>", c),
-            Key::Ctrl(c) => write!(f, "<Ctrl+{}>", c),
-            Key::Char(c) => write!(f, "<{}>", c),
-            Key::Tab => write!(f, "<Tab>"),
+            Key::AltBackspace => write!(f, "<Alt+Backspace>"),
+            Key::AltDelete => write!(f, "<Alt+Delete>"),
             Key::BackTab => write!(f, "<Shift+Tab>"),
-            Key::ShiftUp => write!(f, "<Shift+Up>"),
+            Key::Backspace => write!(f, "<Backspace>"),
+            Key::Char(c) => write!(f, "<{}>", c),
+            Key::Ctrl(c) => write!(f, "<Ctrl+{}>", c),
+            Key::CtrlAlt(c) => write!(f, "<Ctrl+Alt+{}>", c),
+            Key::CtrlAltDown => write!(f, "<Ctrl+Alt+Down>"),
+            Key::CtrlAltLeft => write!(f, "<Ctrl+Alt+Left>"),
+            Key::CtrlAltRight => write!(f, "<Ctrl+Alt+Right>"),
+            Key::CtrlAltUp => write!(f, "<Ctrl+Alt+Up>"),
+            Key::CtrlDown => write!(f, "<Ctrl+Down>"),
+            Key::CtrlLeft => write!(f, "<Ctrl+Left>"),
+            Key::CtrlRight => write!(f, "<Ctrl+Right>"),
+            Key::CtrlUp => write!(f, "<Ctrl+Up>"),
+            Key::Delete => write!(f, "<Delete>"),
+            Key::Down => write!(f, "<Down>"),
+            Key::End => write!(f, "<End>"),
+            Key::Enter => write!(f, "<Enter>"),
+            Key::Esc => write!(f, "<Esc>"),
+            Key::Home => write!(f, "<Home>"),
+            Key::Ins => write!(f, "<Ins>"),
+            Key::Left => write!(f, "<Left>"),
+            Key::PageDown => write!(f, "<PageDown>"),
+            Key::PageUp => write!(f, "<PageUp>"),
+            Key::Right => write!(f, "<Right>"),
             Key::ShiftDown => write!(f, "<Shift+Down>"),
             Key::ShiftLeft => write!(f, "<Shift+Left>"),
             Key::ShiftRight => write!(f, "<Shift+Right>"),
+            Key::ShiftUp => write!(f, "<Shift+Up>"),
+            Key::Space => write!(f, "<Space>"),
+            Key::Tab => write!(f, "<Tab>"),
+            Key::Unknown => write!(f, "<Unknown>"),
+            Key::Up => write!(f, "<Up>"),
             _ => write!(f, "<{:?}>", self),
         }
     }
@@ -279,40 +288,53 @@ impl From<event::KeyEvent> for Key {
 
 impl From<&str> for Key {
     fn from(s: &str) -> Self {
+        // handle char
+        if s.len() == 1 {
+            return Key::Char(s.chars().next().unwrap());
+        }
+        // handle alt+char
+        if s.len() == 6 && s.starts_with("<Alt+") && s.ends_with('>') {
+            return Key::Alt(s.chars().nth(5).unwrap());
+        }
+        // handle ctrl+char
+        if s.len() == 7 && s.starts_with("<Ctrl+") && s.ends_with('>') {
+            return Key::Ctrl(s.chars().nth(6).unwrap());
+        }
+        // handle ctrl+alt+char
+        if s.len() == 10 && s.starts_with("<Ctrl+Alt+") && s.ends_with('>') {
+            return Key::CtrlAlt(s.chars().nth(9).unwrap());
+        }
         match s {
-            "Enter" => Key::Enter,
-            "Tab" => Key::Tab,
-            "Backspace" => Key::Backspace,
-            "Esc" => Key::Esc,
-            "Space" => Key::Space,
-            "Left" => Key::Left,
-            "Right" => Key::Right,
-            "Up" => Key::Up,
-            "Down" => Key::Down,
-            "Ins" => Key::Ins,
-            "Delete" => Key::Delete,
-            "Home" => Key::Home,
-            "End" => Key::End,
-            "PageUp" => Key::PageUp,
-            "PageDown" => Key::PageDown,
-            "F0" => Key::F0,
-            "F1" => Key::F1,
-            "F2" => Key::F2,
-            "F3" => Key::F3,
-            "F4" => Key::F4,
-            "F5" => Key::F5,
-            "F6" => Key::F6,
-            "F7" => Key::F7,
-            "F8" => Key::F8,
-            "F9" => Key::F9,
-            "F10" => Key::F10,
-            "F11" => Key::F11,
-            "F12" => Key::F12,
-            "BackTab" => Key::BackTab,
-            "ShiftUp" => Key::ShiftUp,
-            "ShiftDown" => Key::ShiftDown,
-            "ShiftLeft" => Key::ShiftLeft,
-            "ShiftRight" => Key::ShiftRight,
+            "<Alt+Backspace>" => Key::AltBackspace,
+            "<Alt+Delete>" => Key::AltDelete,
+            "<Backspace>" => Key::Backspace,
+            "<Ctrl+Alt+Down>" => Key::CtrlAltDown,
+            "<Ctrl+Alt+Left>" => Key::CtrlAltLeft,
+            "<Ctrl+Alt+Right>" => Key::CtrlAltRight,
+            "<Ctrl+Alt+Up>" => Key::CtrlAltUp,
+            "<Ctrl+Down>" => Key::CtrlDown,
+            "<Ctrl+Left>" => Key::CtrlLeft,
+            "<Ctrl+Right>" => Key::CtrlRight,
+            "<Ctrl+Up>" => Key::CtrlUp,
+            "<Delete>" => Key::Delete,
+            "<Down>" => Key::Down,
+            "<End>" => Key::End,
+            "<Enter>" => Key::Enter,
+            "<Esc>" => Key::Esc,
+            "<Home>" => Key::Home,
+            "<Ins>" => Key::Ins,
+            "<Left>" => Key::Left,
+            "<PageDown>" => Key::PageDown,
+            "<PageUp>" => Key::PageUp,
+            "<Right>" => Key::Right,
+            "<Shift+Down>" => Key::ShiftDown,
+            "<Shift+Left>" => Key::ShiftLeft,
+            "<Shift+Right>" => Key::ShiftRight,
+            "<Shift+Up>" => Key::ShiftUp,
+            "<Space>" => Key::Space,
+            "<Tab>" => Key::Tab,
+            "<Unknown>" => Key::Unknown,
+            "<Up>" => Key::Up,
             _ => Key::Unknown,
         }
     }

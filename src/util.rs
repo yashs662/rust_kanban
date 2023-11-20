@@ -141,7 +141,7 @@ pub async fn gen_new_key_main(email_id: String, password: String) -> Result<()> 
         print_error("Aborting...");
         return Ok(());
     }
-    let (access_token, user_id) = login_for_user_status.unwrap();
+    let (access_token, user_id, _refresh_token) = login_for_user_status.unwrap();
     let save_ids =
         get_all_save_ids_and_creation_dates_for_user(user_id.to_owned(), &access_token, true)
             .await?;
