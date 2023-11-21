@@ -5728,7 +5728,7 @@ fn handle_edit_specific_keybinding(app: &mut App) {
                 for (k, v) in app.config.keybindings.iter() {
                     key_list.push((k, v));
                 }
-                let (key, _) = key_list[selected];
+                let (key, _) = &key_list[selected];
                 let key_string = key.to_string();
                 let value = app.state.edited_keybinding.clone().unwrap_or_default();
                 let value = value

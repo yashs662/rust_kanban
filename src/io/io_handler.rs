@@ -1973,7 +1973,7 @@ pub async fn login_for_user(
                 };
 
                 if access_token_result.is_err() || refresh_token_result.is_err() {
-                    return Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string());
+                    Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string())
                 } else {
                     let access_token_result = access_token_result.unwrap();
                     let refresh_token_result = refresh_token_result.unwrap();
@@ -2245,7 +2245,7 @@ async fn refresh_access_token(refresh_token: &str) -> Result<(String, String, St
                 };
 
                 if access_token_result.is_err() || refresh_token_result.is_err() {
-                    return Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string());
+                    Err("Error logging in, If this is your first login attempt after signup please login again, if it is not please contact the developer".to_string())
                 } else {
                     let access_token_result = access_token_result.unwrap();
                     let refresh_token_result = refresh_token_result.unwrap();

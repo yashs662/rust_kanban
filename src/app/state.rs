@@ -3,7 +3,11 @@ use crate::{inputs::key::Key, ui::ui_helper};
 use log::{debug, error};
 use ratatui::Frame;
 use serde::{Deserialize, Serialize};
-use std::{fmt, str::FromStr, vec};
+use std::{
+    fmt::{self, Display},
+    str::FromStr,
+    vec,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default)]
 pub enum UiMode {
@@ -148,9 +152,9 @@ pub enum KeyBindingEnum {
     Up,
 }
 
-impl KeyBindingEnum {
-    pub fn to_str(&self) -> &str {
-        match self {
+impl Display for KeyBindingEnum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let str = match self {
             Self::ChangeCardStatusToActive => "change_card_status_to_active",
             Self::ChangeCardStatusToCompleted => "change_card_status_to_completed",
             Self::ChangeCardStatusToStale => "change_card_status_to_stale",
@@ -176,36 +180,41 @@ impl KeyBindingEnum {
             Self::ToggleCommandPalette => "toggle_command_palette",
             Self::Undo => "undo",
             Self::Up => "up",
-        }
+        };
+        write!(f, "{}", str)
     }
-    pub fn from_str(s: &str) -> Option<KeyBindingEnum> {
+}
+
+impl FromStr for KeyBindingEnum {
+    type Err = KeyBindingEnum;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "change_card_status_to_active" => Some(Self::ChangeCardStatusToActive),
-            "change_card_status_to_completed" => Some(Self::ChangeCardStatusToCompleted),
-            "change_card_status_to_stale" => Some(Self::ChangeCardStatusToStale),
-            "clear_all_toasts" => Some(Self::ClearAllToasts),
-            "delete_board" => Some(Self::DeleteBoard),
-            "delete_card" => Some(Self::DeleteCard),
-            "down" => Some(Self::Down),
-            "go_to_main_menu" => Some(Self::GoToMainMenu),
-            "hide_ui_element" => Some(Self::HideUiElement),
-            "left" => Some(Self::Left),
-            "new_board" => Some(Self::NewBoard),
-            "new_card" => Some(Self::NewCard),
-            "next_focus" => Some(Self::NextFocus),
-            "open_config_menu" => Some(Self::OpenConfigMenu),
-            "prev_focus" => Some(Self::PrvFocus),
-            "quit" => Some(Self::Quit),
-            "redo" => Some(Self::Redo),
-            "reset_ui" => Some(Self::ResetUI),
-            "right" => Some(Self::Right),
-            "save_state" => Some(Self::SaveState),
-            "stop_user_input" => Some(Self::StopUserInput),
-            "take_user_input" => Some(Self::TakeUserInput),
-            "toggle_command_palette" => Some(Self::ToggleCommandPalette),
-            "undo" => Some(Self::Undo),
-            "up" => Some(Self::Up),
-            _ => None,
+            "change_card_status_to_active" => Ok(Self::ChangeCardStatusToActive),
+            "change_card_status_to_completed" => Ok(Self::ChangeCardStatusToCompleted),
+            "change_card_status_to_stale" => Ok(Self::ChangeCardStatusToStale),
+            "clear_all_toasts" => Ok(Self::ClearAllToasts),
+            "delete_board" => Ok(Self::DeleteBoard),
+            "delete_card" => Ok(Self::DeleteCard),
+            "down" => Ok(Self::Down),
+            "go_to_main_menu" => Ok(Self::GoToMainMenu),
+            "hide_ui_element" => Ok(Self::HideUiElement),
+            "left" => Ok(Self::Left),
+            "new_board" => Ok(Self::NewBoard),
+            "new_card" => Ok(Self::NewCard),
+            "next_focus" => Ok(Self::NextFocus),
+            "open_config_menu" => Ok(Self::OpenConfigMenu),
+            "prev_focus" => Ok(Self::PrvFocus),
+            "quit" => Ok(Self::Quit),
+            "redo" => Ok(Self::Redo),
+            "reset_ui" => Ok(Self::ResetUI),
+            "right" => Ok(Self::Right),
+            "save_state" => Ok(Self::SaveState),
+            "stop_user_input" => Ok(Self::StopUserInput),
+            "take_user_input" => Ok(Self::TakeUserInput),
+            "toggle_command_palette" => Ok(Self::ToggleCommandPalette),
+            "undo" => Ok(Self::Undo),
+            "up" => Ok(Self::Up),
+            _ => Err(Self::ChangeCardStatusToActive),
         }
     }
 }
@@ -583,45 +592,45 @@ impl FromStr for Focus {
 }
 
 impl KeyBindings {
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Vec<Key>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (String, &Vec<Key>)> {
         vec![
             (
-                KeyBindingEnum::ChangeCardStatusToActive.to_str(),
+                KeyBindingEnum::ChangeCardStatusToActive.to_string(),
                 &self.change_card_status_to_active,
             ),
             (
-                KeyBindingEnum::ChangeCardStatusToCompleted.to_str(),
+                KeyBindingEnum::ChangeCardStatusToCompleted.to_string(),
                 &self.change_card_status_to_completed,
             ),
             (
-                KeyBindingEnum::ChangeCardStatusToStale.to_str(),
+                KeyBindingEnum::ChangeCardStatusToStale.to_string(),
                 &self.change_card_status_to_stale,
             ),
             (
-                KeyBindingEnum::ClearAllToasts.to_str(),
+                KeyBindingEnum::ClearAllToasts.to_string(),
                 &self.clear_all_toasts,
             ),
-            (KeyBindingEnum::DeleteBoard.to_str(), &self.delete_board),
-            (KeyBindingEnum::DeleteCard.to_str(), &self.delete_card),
-            (KeyBindingEnum::Down.to_str(), &self.down),
-            (KeyBindingEnum::GoToMainMenu.to_str(), &self.go_to_main_menu),
+            (KeyBindingEnum::DeleteBoard.to_string(), &self.delete_board),
+            (KeyBindingEnum::DeleteCard.to_string(), &self.delete_card),
+            (KeyBindingEnum::Down.to_string(), &self.down),
+            (KeyBindingEnum::GoToMainMenu.to_string(), &self.go_to_main_menu),
             (
-                KeyBindingEnum::HideUiElement.to_str(),
+                KeyBindingEnum::HideUiElement.to_string(),
                 &self.hide_ui_element,
             ),
-            (KeyBindingEnum::Left.to_str(), &self.left),
-            (KeyBindingEnum::NewBoard.to_str(), &self.new_board),
-            (KeyBindingEnum::NewCard.to_str(), &self.new_card),
-            (KeyBindingEnum::NextFocus.to_str(), &self.next_focus),
+            (KeyBindingEnum::Left.to_string(), &self.left),
+            (KeyBindingEnum::NewBoard.to_string(), &self.new_board),
+            (KeyBindingEnum::NewCard.to_string(), &self.new_card),
+            (KeyBindingEnum::NextFocus.to_string(), &self.next_focus),
             (
-                KeyBindingEnum::OpenConfigMenu.to_str(),
+                KeyBindingEnum::OpenConfigMenu.to_string(),
                 &self.open_config_menu,
             ),
-            (KeyBindingEnum::PrvFocus.to_str(), &self.prev_focus),
-            (KeyBindingEnum::Quit.to_str(), &self.quit),
-            (KeyBindingEnum::Redo.to_str(), &self.redo),
-            (KeyBindingEnum::ResetUI.to_str(), &self.reset_ui),
-            (KeyBindingEnum::Right.to_str(), &self.right),
+            (KeyBindingEnum::PrvFocus.to_string(), &self.prev_focus),
+            (KeyBindingEnum::Quit.to_string(), &self.quit),
+            (KeyBindingEnum::Redo.to_string(), &self.redo),
+            (KeyBindingEnum::ResetUI.to_string(), &self.reset_ui),
+            (KeyBindingEnum::Right.to_string(), &self.right),
         ]
         .into_iter()
     }
@@ -629,7 +638,7 @@ impl KeyBindings {
     pub fn key_to_action(self, key: Key) -> Option<&'static Action> {
         for (action, keys) in self.iter() {
             if keys.contains(&key) {
-                return self.clone().str_to_action(action);
+                return self.clone().str_to_action(&action);
             }
         }
         None
@@ -637,8 +646,8 @@ impl KeyBindings {
 
     pub fn str_to_action(self, action: &str) -> Option<&'static Action> {
         let keybinding_enum = KeyBindingEnum::from_str(action);
-        if let Some(keybinding_enum) = keybinding_enum {
-            return match keybinding_enum {
+        if let Ok(keybinding_enum) = keybinding_enum {
+            match keybinding_enum {
                 KeyBindingEnum::ChangeCardStatusToActive => Some(&Action::ChangeCardStatusToActive),
                 KeyBindingEnum::ChangeCardStatusToCompleted => {
                     Some(&Action::ChangeCardStatusToCompleted)
@@ -666,7 +675,7 @@ impl KeyBindings {
                 KeyBindingEnum::ToggleCommandPalette => Some(&Action::ToggleCommandPalette),
                 KeyBindingEnum::Undo => Some(&Action::Undo),
                 KeyBindingEnum::Up => Some(&Action::Up),
-            };
+            }
         } else {
             None
         }
@@ -676,7 +685,7 @@ impl KeyBindings {
         let mut keybinding = keybinding;
         keybinding.dedup();
         let keybinding_enum = KeyBindingEnum::from_str(key);
-        if let Some(keybinding_enum) = keybinding_enum {
+        if let Ok(keybinding_enum) = keybinding_enum {
             match keybinding_enum {
                 KeyBindingEnum::ChangeCardStatusToActive => {
                     self.change_card_status_to_active = keybinding
@@ -718,8 +727,8 @@ impl KeyBindings {
 
     pub fn get_keybinding(&self, action: &str) -> Option<&Vec<Key>> {
         let keybinding_enum = KeyBindingEnum::from_str(action);
-        if let Some(keybinding_enum) = keybinding_enum {
-            return match keybinding_enum {
+        if let Ok(keybinding_enum) = keybinding_enum {
+            match keybinding_enum {
                 KeyBindingEnum::ChangeCardStatusToActive => {
                     Some(&self.change_card_status_to_active)
                 }
@@ -749,7 +758,7 @@ impl KeyBindings {
                 KeyBindingEnum::ToggleCommandPalette => Some(&self.toggle_command_palette),
                 KeyBindingEnum::Undo => Some(&self.undo),
                 KeyBindingEnum::Up => Some(&self.up),
-            };
+            }
         } else {
             debug!("Invalid keybinding: {}", action);
             None

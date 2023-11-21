@@ -167,7 +167,7 @@ impl Actions {
         let current_bindings = config.keybindings.clone();
         let action_list = &mut Vec::new();
         for (k, _v) in current_bindings.iter() {
-            action_list.push(KeyBindings::str_to_action(current_bindings.clone(), k));
+            action_list.push(KeyBindings::str_to_action(current_bindings.clone(), &k));
         }
         let binding_action = KeyBindings::key_to_action(current_bindings, key);
         if binding_action.is_some() {

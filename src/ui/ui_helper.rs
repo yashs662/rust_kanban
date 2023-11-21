@@ -1030,7 +1030,7 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
     if key_id > key_list.len() {
         return;
     } else {
-        let key = key_list[key_id].0;
+        let key = &key_list[key_id].0;
         let value = key_list[key_id].1;
         let mut key_value = String::new();
         for v in value.iter() {
@@ -1721,7 +1721,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             for _i in 0..app.config.no_of_cards_to_show {
                 card_constraints.push(Constraint::Percentage(90 / app.config.no_of_cards_to_show));
             }
-        } else if board_cards.len() == 0 {
+        } else if board_cards.is_empty() {
             card_constraints.push(Constraint::Percentage(100));
         } else {
             for _i in 0..board_cards.len() {

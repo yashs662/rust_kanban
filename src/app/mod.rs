@@ -640,7 +640,7 @@ impl App<'_> {
                 keybinding_string.push(' ');
             }
             keybinding_action.push(keybinding_string);
-            let action_translated_string = KeyBindings::str_to_action(keybindings.clone(), action)
+            let action_translated_string = KeyBindings::str_to_action(keybindings.clone(), &action)
                 .unwrap_or(&Action::Quit)
                 .to_string();
             keybinding_action.push(action_translated_string);
@@ -1530,6 +1530,7 @@ impl PopupMode {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct AppListStates {
     pub card_priority_selector: ListState,
     pub card_status_selector: ListState,
@@ -1549,34 +1550,10 @@ pub struct AppListStates {
     pub theme_selector: ListState,
 }
 
-impl Default for AppListStates {
-    fn default() -> Self {
-        AppListStates {
-            card_priority_selector: ListState::default(),
-            card_status_selector: ListState::default(),
-            card_view_comment_list: ListState::default(),
-            card_view_list: ListState::default(),
-            card_view_tag_list: ListState::default(),
-            command_palette_board_search: ListState::default(),
-            command_palette_card_search: ListState::default(),
-            command_palette_command_search: ListState::default(),
-            date_format_selector: ListState::default(),
-            default_view: ListState::default(),
-            edit_specific_style: (
-                ListState::default(),
-                ListState::default(),
-                ListState::default(),
-            ),
-            filter_by_tag_list: ListState::default(),
-            load_save: ListState::default(),
-            logs: ListState::default(),
-            main_menu: ListState::default(),
-            theme_selector: ListState::default(),
-        }
-    }
-}
+
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct AppTableStates {
     pub config: TableState,
     pub edit_keybindings: TableState,
@@ -1584,16 +1561,7 @@ pub struct AppTableStates {
     pub theme_editor: TableState,
 }
 
-impl Default for AppTableStates {
-    fn default() -> Self {
-        AppTableStates {
-            config: TableState::default(),
-            edit_keybindings: TableState::default(),
-            help: TableState::default(),
-            theme_editor: TableState::default(),
-        }
-    }
-}
+
 
 #[derive(Debug, Clone)]
 pub struct AppFormStates {
@@ -2127,9 +2095,9 @@ impl AppConfig {
             error!("Unable to edit keybinding");
             return Err("Unable to edit keybinding 😢 ".to_string());
         }
-        let (key, _) = key_list[key_index];
+        let (key, _) = &key_list[key_index];
 
-        if !current_bindings.iter().any(|(k, _)| k == key) {
+        if !current_bindings.iter().any(|(k, _)| &k == key) {
             debug!("Invalid key: {}", key);
             error!("Unable to edit keybinding");
             return Err("Unable to edit keybinding 😢 ".to_string());
@@ -2137,7 +2105,7 @@ impl AppConfig {
 
         for new_value in value.iter() {
             for (k, v) in current_bindings.iter() {
-                if v.contains(new_value) && k != key {
+                if v.contains(new_value) && &k != key {
                     error!("Value {} is already assigned to {}", new_value, k);
                     return Err(format!("Value {} is already assigned to {}", new_value, k));
                 }
@@ -2146,7 +2114,7 @@ impl AppConfig {
 
         debug!("Editing keybinding: {} to {:?}", key, value);
 
-        match key {
+        match key.as_str() {
             "quit" => self.keybindings.quit = value,
             "next_focus" => self.keybindings.next_focus = value,
             "prev_focus" => self.keybindings.prev_focus = value,
