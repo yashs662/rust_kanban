@@ -49,6 +49,7 @@ pub fn go_right(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
+        app.state.current_board_id = Some(boards[0].id);
         boards[0].id
     };
     let current_board_index = current_visible_boards
@@ -133,6 +134,7 @@ pub fn go_left(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
+        app.state.current_board_id = Some(boards[0].id);
         boards[0].id
     };
     let current_board_index = current_visible_boards
@@ -217,6 +219,7 @@ pub fn go_up(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
+        app.state.current_board_id = Some(boards[0].id);
         boards[0].id
     };
     let current_card_id = if let Some(current_card_id) = current_card_id {
@@ -324,6 +327,7 @@ pub fn go_down(app: &mut App) {
     let current_board_id = if let Some(current_board_id) = current_board_id {
         current_board_id
     } else {
+        app.state.current_board_id = Some(boards[0].id);
         boards[0].id
     };
     let current_card_id = if let Some(current_card_id) = current_card_id {
@@ -3842,6 +3846,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                             card.clone(),
                                             moved_from_board_id,
                                             moved_to_board_id,
+                                            card_index,
+                                            0,
                                         ),
                                     );
 
@@ -3975,6 +3981,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                             card.clone(),
                                             moved_from_board_id,
                                             moved_to_board_id,
+                                            card_index,
+                                            0,
                                         ),
                                     );
 
@@ -4102,8 +4110,17 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
             app.state.current_mouse_coordinates = (x, y);
         }
         Mouse::Drag(x, y) => {
-            // TODO: handle mouse drag features
-            debug!("Mouse drag at {}, {}", x, y);
+            app.state.current_mouse_coordinates = (x, y);
+            let current_ui_mode = app.state.ui_mode;
+            let is_invalid_state = !UiMode::view_modes().contains(&current_ui_mode)
+                || app.state.hovered_card.is_none()
+                || app.state.hovered_board.is_none();
+            if is_invalid_state {
+                return AppReturn::Continue;
+            }
+            if !app.state.card_drag_mode {
+                app.state.card_drag_mode = true;
+            }
         }
         Mouse::LeftPress => left_button_pressed = true,
         Mouse::RightPress => right_button_pressed = true,
@@ -4114,9 +4131,29 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
         Mouse::ScrollRight => mouse_scroll_right = true,
         Mouse::Unknown => {}
     }
-    if let Mouse::Move(x, y) = mouse_action {
-        app.state.current_mouse_coordinates = (x, y);
+
+    if let Some(mouse_action) = &app.state.last_mouse_action {
+        match mouse_action {
+            Mouse::Drag(_, _) => {
+                if left_button_pressed || right_button_pressed || middle_button_pressed {
+                    left_button_pressed = false;
+                    right_button_pressed = false;
+                    middle_button_pressed = false;
+                    if app.state.hovered_card.is_some() && app.state.hovered_board.is_some() {
+                        move_dragged_card(app);
+                        reset_card_drag_mode(app);
+                        refresh_visible_boards_and_cards(app);
+                    }
+                    reset_card_drag_mode(app);
+                }
+            }
+            Mouse::Unknown => {
+                reset_card_drag_mode(app);
+            }
+            _ => {}
+        }
     }
+
     if right_button_pressed {
         return handle_go_to_previous_ui_mode(app).await;
     }
@@ -4531,373 +4568,44 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
         }
     } else {
         match app.state.ui_mode {
-            UiMode::Zen => {
+            UiMode::Zen
+            | UiMode::TitleBody
+            | UiMode::BodyHelp
+            | UiMode::BodyLog
+            | UiMode::TitleBodyHelp
+            | UiMode::TitleBodyLog
+            | UiMode::TitleBodyHelpLog
+            | UiMode::BodyHelpLog
+            | UiMode::ConfigMenu
+            | UiMode::EditKeybindings
+            | UiMode::HelpMenu => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
+                    if let Some(value) = handle_left_click_for_ui_mode_mouse_action(app).await {
+                        return value;
                     }
-                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_up(app);
-                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_down(app);
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::TitleBody => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Title) {
-                        app.state.ui_mode = UiMode::MainMenu;
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next()
-                        }
-                        app.state.prev_ui_mode = Some(UiMode::TitleBody);
-                    } else if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_up(app);
-                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_down(app);
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::BodyHelp => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.state.ui_mode = UiMode::HelpMenu;
-                        app.state.prev_ui_mode = Some(UiMode::BodyHelp);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_prv();
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_next();
-                    }
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::BodyLog => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::Log) {
-                        app.state.ui_mode = UiMode::LogsOnly;
-                        app.state.prev_ui_mode = Some(UiMode::BodyLog);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_up(app);
-                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_down(app);
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::TitleBodyHelp => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Title) {
-                        app.state.ui_mode = UiMode::MainMenu;
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next()
-                        }
-                        app.state.prev_ui_mode = Some(UiMode::TitleBodyHelp);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.state.ui_mode = UiMode::HelpMenu;
-                        app.state.prev_ui_mode = Some(UiMode::TitleBodyHelp);
-                    } else if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_prv();
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_next();
-                    }
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::TitleBodyLog => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Title) {
-                        app.state.ui_mode = UiMode::MainMenu;
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next()
-                        }
-                        app.state.prev_ui_mode = Some(UiMode::TitleBodyLog);
-                    } else if app.state.mouse_focus == Some(Focus::Log) {
-                        app.state.ui_mode = UiMode::LogsOnly;
-                        app.state.prev_ui_mode = Some(UiMode::TitleBodyLog);
-                    } else if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                } else if mouse_scroll_up && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_up(app);
-                } else if mouse_scroll_down && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_down(app);
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::TitleBodyHelpLog => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Title) {
-                        app.state.ui_mode = UiMode::MainMenu;
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next()
-                        }
-                        app.state.prev_ui_mode = Some(UiMode::TitleBodyHelpLog);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.state.ui_mode = UiMode::HelpMenu;
-                        app.state.prev_ui_mode = Some(UiMode::TitleBodyHelpLog);
-                    } else if app.state.mouse_focus == Some(Focus::Log) {
-                        app.state.ui_mode = UiMode::LogsOnly;
-                        app.state.prev_ui_mode = Some(UiMode::TitleBodyHelpLog);
-                    } else if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_prv();
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_next();
-                    }
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::BodyHelpLog => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        app.state.popup_mode = Some(PopupMode::ViewCard);
-                        app.state.focus = Focus::CardName;
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.state.ui_mode = UiMode::HelpMenu;
-                        app.state.prev_ui_mode = Some(UiMode::BodyHelpLog);
-                    } else if app.state.mouse_focus == Some(Focus::Log) {
-                        app.state.ui_mode = UiMode::LogsOnly;
-                        app.state.prev_ui_mode = Some(UiMode::BodyHelpLog);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                } else if mouse_scroll_up {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_up(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_prv();
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.mouse_focus == Some(Focus::Body) {
-                        scroll_down(app);
-                    } else if app.state.mouse_focus == Some(Focus::Help) {
-                        app.help_next();
-                    }
-                } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_right(app);
-                } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
-                    scroll_left(app);
-                }
-            }
-            UiMode::ConfigMenu => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Title) {
-                        app.state.ui_mode = UiMode::MainMenu;
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next()
-                        }
-                        app.state.prev_ui_mode = Some(UiMode::ConfigMenu);
-                    } else if app.state.mouse_focus == Some(Focus::ConfigTable)
-                        || app.state.mouse_focus == Some(Focus::SubmitButton)
-                        || app.state.mouse_focus == Some(Focus::ExtraFocus)
-                    {
-                        return handle_config_menu_action(app);
-                    } else if app.state.mouse_focus == Some(Focus::Log) {
-                        app.state.ui_mode = UiMode::LogsOnly;
-                        app.state.prev_ui_mode = Some(UiMode::ConfigMenu);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        handle_go_to_prv_ui_mode(app);
-                    }
-                } else if mouse_scroll_down {
-                    if app.state.focus == Focus::ConfigTable {
-                        app.config_next();
-                    } else if app.state.focus == Focus::Log {
-                        app.log_next();
-                    }
-                } else if mouse_scroll_up {
-                    if app.state.focus == Focus::ConfigTable {
-                        app.config_prv();
-                    } else if app.state.focus == Focus::Log {
-                        app.log_prv();
-                    }
-                }
-            }
-            UiMode::EditKeybindings => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Title) {
-                        app.state.ui_mode = UiMode::MainMenu;
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next()
-                        }
-                        app.state.prev_ui_mode = Some(UiMode::EditKeybindings);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.state.ui_mode = UiMode::ConfigMenu;
-                    } else if app.state.mouse_focus == Some(Focus::EditKeybindingsTable) {
-                        handle_edit_keybindings_action(app);
-                    } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
-                        app.state.focus = Focus::SubmitButton;
-                        handle_edit_keybindings_action(app);
-                    }
-                } else if mouse_scroll_down
-                    && app.state.mouse_focus == Some(Focus::EditKeybindingsTable)
-                {
-                    app.edit_keybindings_next();
                 } else if mouse_scroll_up
-                    && app.state.mouse_focus == Some(Focus::EditKeybindingsTable)
+                    || mouse_scroll_down
+                    || mouse_scroll_right
+                    || mouse_scroll_left
                 {
-                    app.edit_keybindings_prv();
+                    handle_scroll_for_ui_mode_mouse_action(
+                        app,
+                        mouse_scroll_up,
+                        mouse_scroll_down,
+                        mouse_scroll_right,
+                        mouse_scroll_left,
+                    );
                 }
             }
-            UiMode::MainMenu => {
+            UiMode::MainMenu
+            | UiMode::LogsOnly
+            | UiMode::NewBoard
+            | UiMode::NewCard
+            | UiMode::LoadLocalSave
+            | UiMode::CreateTheme => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Help) {
-                        app.state.ui_mode = UiMode::HelpMenu;
-                        app.state.prev_ui_mode = Some(UiMode::MainMenu);
-                    } else if app.state.mouse_focus == Some(Focus::Log) {
-                        app.state.ui_mode = UiMode::LogsOnly;
-                        app.state.prev_ui_mode = Some(UiMode::MainMenu);
-                    } else if app.state.mouse_focus == Some(Focus::MainMenu) {
-                        return handle_main_menu_action(app).await;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        return handle_exit(app).await;
-                    }
-                }
-            }
-            UiMode::HelpMenu => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::Log) {
-                        app.state.ui_mode = UiMode::LogsOnly;
-                        app.state.prev_ui_mode = Some(UiMode::HelpMenu);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        handle_go_to_prv_ui_mode(app);
-                    }
-                }
-            }
-            UiMode::LogsOnly => {
-                if left_button_pressed && app.state.mouse_focus == Some(Focus::CloseButton) {
-                    handle_go_to_prv_ui_mode(app);
-                }
-            }
-            UiMode::NewBoard => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        handle_go_to_prv_ui_mode(app);
-                        reset_new_board_form(app);
-                    } else if app.state.mouse_focus == Some(Focus::NewBoardName)
-                        || app.state.mouse_focus == Some(Focus::NewBoardDescription)
-                    {
-                        app.state.app_status = AppStatus::UserInput
-                    } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
-                        handle_new_board_action(app);
-                        app.state.app_status = AppStatus::Initialized;
-                    }
-                }
-            }
-            UiMode::NewCard => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        handle_go_to_prv_ui_mode(app);
-                        reset_new_card_form(app);
-                    } else if app.state.mouse_focus == Some(Focus::CardName)
-                        || app.state.mouse_focus == Some(Focus::CardDescription)
-                        || app.state.mouse_focus == Some(Focus::CardDueDate)
-                    {
-                        app.state.app_status = AppStatus::UserInput
-                    } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
-                        handle_new_card_action(app);
-                        app.state.app_status = AppStatus::Initialized;
-                    }
-                }
-            }
-            UiMode::LoadLocalSave => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        handle_go_to_prv_ui_mode(app);
-                    } else if app.state.mouse_focus == Some(Focus::LoadSave)
-                        && app.state.app_list_states.load_save.selected().is_some()
-                    {
-                        app.dispatch(IoEvent::LoadLocalPreview).await;
-                    }
-                }
-            }
-            UiMode::CreateTheme => {
-                if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.state.theme_being_edited = Theme::default();
-                        handle_go_to_prv_ui_mode(app);
-                    } else if app.state.mouse_focus.is_some() {
-                        match app.state.mouse_focus.unwrap() {
-                            Focus::ThemeEditor | Focus::SubmitButton | Focus::ExtraFocus => {
-                                return handle_create_theme_action(app);
-                            }
-                            _ => {}
-                        }
+                    if let Some(value) = handle_left_click_for_ui_mode_mouse_action(app).await {
+                        return value;
                     }
                 }
             }
@@ -4930,7 +4638,429 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
             }
         }
     }
+    app.state.last_mouse_action = Some(mouse_action);
     AppReturn::Continue
+}
+
+async fn handle_left_click_for_ui_mode_mouse_action(app: &mut App<'_>) -> Option<AppReturn> {
+    let prv_ui_mode = app.state.ui_mode;
+    if app.state.mouse_focus.is_none() {
+        return None;
+    }
+    let mouse_focus = app.state.mouse_focus.unwrap();
+    match mouse_focus {
+        Focus::Title => {
+            app.state.ui_mode = UiMode::MainMenu;
+            if app.state.app_list_states.main_menu.selected().is_none() {
+                app.main_menu_next()
+            }
+            app.state.prev_ui_mode = Some(prv_ui_mode);
+        }
+        Focus::Body => {
+            app.state.popup_mode = Some(PopupMode::ViewCard);
+            app.state.focus = Focus::CardName;
+        }
+        Focus::Help => {
+            app.state.ui_mode = UiMode::HelpMenu;
+            app.state.prev_ui_mode = Some(prv_ui_mode);
+        }
+        Focus::Log => {
+            app.state.ui_mode = UiMode::LogsOnly;
+            app.state.prev_ui_mode = Some(prv_ui_mode);
+        }
+        Focus::ConfigTable => {
+            return Some(handle_config_menu_action(app));
+        }
+        Focus::EditKeybindingsTable => {
+            handle_edit_keybindings_action(app);
+        }
+        Focus::CloseButton => match prv_ui_mode {
+            UiMode::Zen
+            | UiMode::TitleBody
+            | UiMode::BodyHelp
+            | UiMode::BodyLog
+            | UiMode::TitleBodyHelp
+            | UiMode::TitleBodyLog
+            | UiMode::BodyHelpLog
+            | UiMode::TitleBodyHelpLog
+            | UiMode::MainMenu => {
+                return Some(handle_exit(app).await);
+            }
+            UiMode::NewBoard => {
+                reset_new_board_form(app);
+                handle_go_to_prv_ui_mode(app);
+            }
+            UiMode::NewCard => {
+                reset_new_card_form(app);
+                handle_go_to_prv_ui_mode(app);
+            }
+            UiMode::CreateTheme => {
+                app.state.theme_being_edited = Theme::default();
+            }
+            _ => {
+                handle_go_to_prv_ui_mode(app);
+            }
+        },
+        Focus::SubmitButton => {
+            app.state.focus = Focus::SubmitButton;
+            match prv_ui_mode {
+                UiMode::EditKeybindings => {
+                    handle_edit_keybindings_action(app);
+                }
+                UiMode::NewBoard => {
+                    handle_new_board_action(app);
+                    app.state.app_status = AppStatus::Initialized;
+                }
+                UiMode::NewCard => {
+                    handle_new_card_action(app);
+                    app.state.app_status = AppStatus::Initialized;
+                }
+                UiMode::ConfigMenu => {
+                    return Some(handle_config_menu_action(app));
+                }
+                UiMode::CreateTheme => {
+                    return Some(handle_create_theme_action(app));
+                }
+                _ => {}
+            }
+        }
+        Focus::ExtraFocus => {
+            if prv_ui_mode == UiMode::ConfigMenu {
+                return Some(handle_config_menu_action(app));
+            } else if prv_ui_mode == UiMode::CreateTheme {
+                return Some(handle_create_theme_action(app));
+            }
+        }
+        Focus::MainMenu => {
+            return Some(handle_main_menu_action(app).await);
+        }
+        Focus::NewBoardName
+        | Focus::NewBoardDescription
+        | Focus::CardName
+        | Focus::CardDescription
+        | Focus::CardDueDate => {
+            app.state.app_status = AppStatus::UserInput;
+        }
+        Focus::LoadSave => {
+            if app.state.app_list_states.load_save.selected().is_some() {
+                app.dispatch(IoEvent::LoadLocalPreview).await;
+            }
+        }
+        Focus::ThemeEditor => {
+            return Some(handle_create_theme_action(app));
+        }
+        _ => {}
+    }
+    None
+}
+
+fn handle_scroll_for_ui_mode_mouse_action(
+    app: &mut App<'_>,
+    mouse_scroll_up: bool,
+    mouse_scroll_down: bool,
+    mouse_scroll_right: bool,
+    mouse_scroll_left: bool,
+) {
+    if mouse_scroll_up {
+        if app.state.mouse_focus == Some(Focus::Body) {
+            scroll_up(app);
+        } else if app.state.mouse_focus == Some(Focus::Help) {
+            app.help_prv();
+        } else if app.state.mouse_focus == Some(Focus::ConfigTable) {
+            app.config_prv();
+        } else if app.state.mouse_focus == Some(Focus::EditKeybindingsTable) {
+            app.edit_keybindings_prv();
+        }
+    } else if mouse_scroll_down {
+        if app.state.mouse_focus == Some(Focus::Body) {
+            scroll_down(app);
+        } else if app.state.mouse_focus == Some(Focus::Help) {
+            app.help_next();
+        } else if app.state.mouse_focus == Some(Focus::ConfigTable) {
+            app.config_next();
+        } else if app.state.mouse_focus == Some(Focus::EditKeybindingsTable) {
+            app.edit_keybindings_next();
+        }
+    } else if mouse_scroll_right && app.state.mouse_focus == Some(Focus::Body) {
+        scroll_right(app);
+    } else if mouse_scroll_left && app.state.mouse_focus == Some(Focus::Body) {
+        scroll_left(app);
+    }
+}
+
+fn move_dragged_card(app: &mut App<'_>) {
+    let card_being_dragged = app.state.hovered_card.unwrap();
+    let hovered_board_id = app.state.hovered_board.unwrap();
+    let card_being_dragged_board = card_being_dragged.0;
+    let card_being_dragged_id = card_being_dragged.1;
+    if hovered_board_id == card_being_dragged_board {
+        if app.state.current_card_id.is_none() {
+            debug!("Could not find current card");
+            return;
+        }
+        let hovered_card_id = app.state.current_card_id.unwrap();
+        // same board so swap cards
+        let hovered_board = app.boards.iter().find(|board| board.id == hovered_board_id);
+        if hovered_board.is_none() {
+            debug!("Could not find hovered board");
+            return;
+        }
+        let hovered_board = hovered_board.unwrap();
+        let dragged_card_index = hovered_board
+            .cards
+            .iter()
+            .position(|card| card.id == card_being_dragged_id);
+        if dragged_card_index.is_none() {
+            debug!("Could not find dragged card");
+            return;
+        }
+        let hovered_card_index = hovered_board
+            .cards
+            .iter()
+            .position(|card| card.id == hovered_card_id);
+        if hovered_card_index.is_none() {
+            debug!("Could not find hovered card");
+            return;
+        }
+        let dragged_card_index = dragged_card_index.unwrap();
+        let hovered_card_index = hovered_card_index.unwrap();
+        let dragged_card_name = hovered_board.cards[dragged_card_index].name.clone();
+        // swap cards
+        app.boards.iter_mut().for_each(|board| {
+            if board.id == hovered_board_id {
+                board.cards.swap(dragged_card_index, hovered_card_index);
+            }
+        });
+        app.action_history_manager
+            .new_action(ActionHistory::MoveCardWithinBoard(
+                hovered_board_id,
+                dragged_card_index,
+                hovered_card_index,
+            ));
+        let info_msg = &format!(
+            "Moved card {} from index {} to index {}",
+            dragged_card_name, dragged_card_index, hovered_card_index
+        );
+        info!("{}", info_msg);
+        app.send_info_toast(info_msg, None);
+    } else {
+        let app_boards = app.boards.clone();
+        // different board so remove dragged card from current board and add it to the hovered board at the index of the hovered card and push everything else down
+        let dragged_card_board_id = card_being_dragged.0;
+        let hovered_board_id = app.state.hovered_board;
+        if hovered_board_id.is_none() {
+            debug!("Could not find hovered board");
+            return;
+        }
+        let hovered_board_id = hovered_board_id.unwrap();
+        let dragged_card_board = app_boards
+            .iter()
+            .find(|board| board.id == dragged_card_board_id);
+        if dragged_card_board.is_none() {
+            debug!("Could not find dragged card board");
+            return;
+        }
+        let dragged_card_board = dragged_card_board.unwrap();
+        let hovered_board = app_boards.iter().find(|board| board.id == hovered_board_id);
+        if hovered_board.is_none() {
+            debug!("Could not find hovered board");
+            return;
+        }
+        let hovered_board = hovered_board.unwrap();
+        let dragged_card_id = card_being_dragged.1;
+        let hovered_card_id = app.state.current_card_id;
+        let dragged_card_index = dragged_card_board
+            .cards
+            .iter()
+            .position(|card| card.id == dragged_card_id);
+        if dragged_card_index.is_none() {
+            debug!("Could not find dragged card");
+            return;
+        }
+        let dragged_card_index = dragged_card_index.unwrap();
+        let dragged_card = dragged_card_board.cards[dragged_card_index].clone();
+        let dragged_card_name = dragged_card.name.clone();
+        if hovered_card_id.is_none() {
+            // check if hovered board is empty
+            if hovered_board.cards.is_empty() {
+                debug!("hovered board is empty");
+                // add dragged card to hovered board
+                app.boards.iter_mut().for_each(|board| {
+                    if board.id == hovered_board_id {
+                        board
+                            .cards
+                            .insert(0, dragged_card_board.cards[dragged_card_index].clone());
+                    }
+                });
+                // remove dragged card from current board
+                app.boards.iter_mut().for_each(|board| {
+                    // check if index is valid
+                    if board.id == dragged_card_board_id {
+                        if board.cards.len() > dragged_card_index {
+                            board.cards.remove(dragged_card_index);
+                        } else {
+                            debug!("Invalid Index for dragged card, board_id: {:?}, dragged_card_index: {}", dragged_card_board_id, dragged_card_index);
+                        }
+                    }
+                });
+                app.action_history_manager
+                    .new_action(ActionHistory::MoveCardBetweenBoards(
+                        dragged_card,
+                        dragged_card_board_id,
+                        hovered_board_id,
+                        dragged_card_index,
+                        0,
+                    ));
+                let info_msg = &format!(
+                    "Moved card {} to board \"{}\"",
+                    dragged_card_name, hovered_board.name
+                );
+                info!("{}", info_msg);
+                app.send_info_toast(info_msg, None);
+                return;
+            } else {
+                debug!("Could not find hovered card");
+                let error_msg = "Moving card failed, could not find hovered card";
+                error!("{}", error_msg);
+                app.send_error_toast(error_msg, None);
+                return;
+            }
+        }
+        let hovered_card_id = hovered_card_id.unwrap();
+        if hovered_card_id == dragged_card_id {
+            // the hovered board is empty just move the dragged card to the hovered
+            // board (Special case) as it was the last card that was hovered
+            app.boards.iter_mut().for_each(|board| {
+                if board.id == hovered_board_id {
+                    board
+                        .cards
+                        .insert(0, dragged_card_board.cards[dragged_card_index].clone());
+                }
+            });
+            // remove dragged card from current board
+            app.boards.iter_mut().for_each(|board| {
+                if board.id == dragged_card_board_id {
+                    board.cards.remove(dragged_card_index);
+                }
+            });
+            app.action_history_manager
+                .new_action(ActionHistory::MoveCardBetweenBoards(
+                    dragged_card,
+                    dragged_card_board_id,
+                    hovered_board_id,
+                    dragged_card_index,
+                    0,
+                ));
+            let info_msg = &format!(
+                "Moved card {} to board \"{}\"",
+                dragged_card_name, hovered_board.name
+            );
+            info!("{}", info_msg);
+            app.send_info_toast(info_msg, None);
+            return;
+        }
+        let hovered_card_index = hovered_board
+            .cards
+            .iter()
+            .position(|card| card.id == hovered_card_id);
+        if hovered_card_index.is_none() {
+            // case when card was hovered over another board so a card from another board was the last hovered card
+            if hovered_board.cards.is_empty() {
+                debug!("hovered board is empty");
+                // add dragged card to hovered board
+                app.boards.iter_mut().for_each(|board| {
+                    if board.id == hovered_board_id {
+                        board
+                            .cards
+                            .insert(0, dragged_card_board.cards[dragged_card_index].clone());
+                    }
+                });
+                app.boards.iter_mut().for_each(|board| {
+                    if board.id == dragged_card_board_id {
+                        board.cards.remove(dragged_card_index);
+                    }
+                });
+                app.action_history_manager
+                    .new_action(ActionHistory::MoveCardBetweenBoards(
+                        dragged_card,
+                        dragged_card_board_id,
+                        hovered_board_id,
+                        dragged_card_index,
+                        0,
+                    ));
+                let info_msg = &format!(
+                    "Moved card {} to board \"{}\"",
+                    dragged_card_name, hovered_board.name
+                );
+                info!("{}", info_msg);
+                app.send_info_toast(info_msg, None);
+            } else {
+                // the hovered board is empty just move the dragged card to the hovered board
+                app.boards.iter_mut().for_each(|board| {
+                    if board.id == hovered_board_id {
+                        board
+                            .cards
+                            .insert(0, dragged_card_board.cards[dragged_card_index].clone());
+                    }
+                });
+                // remove dragged card from current board
+                app.boards.iter_mut().for_each(|board| {
+                    if board.id == dragged_card_board_id {
+                        board.cards.remove(dragged_card_index);
+                    }
+                });
+                app.action_history_manager
+                    .new_action(ActionHistory::MoveCardBetweenBoards(
+                        dragged_card,
+                        dragged_card_board_id,
+                        hovered_board_id,
+                        dragged_card_index,
+                        0,
+                    ));
+                let info_msg = &format!(
+                    "Moved card {} to board \"{}\"",
+                    dragged_card_name, hovered_board.name
+                );
+                info!("{}", info_msg);
+            }
+        } else {
+            let hovered_card_index = hovered_card_index.unwrap();
+            let dragged_card = dragged_card_board.cards[dragged_card_index].clone();
+            // remove dragged card from current board
+            app.boards.iter_mut().for_each(|board| {
+                if board.id == dragged_card_board_id {
+                    board.cards.remove(dragged_card_index);
+                }
+            });
+            // add dragged card to hovered board
+            app.boards.iter_mut().for_each(|board| {
+                if board.id == hovered_board_id {
+                    board.cards.insert(hovered_card_index, dragged_card.clone());
+                }
+            });
+            app.action_history_manager
+                .new_action(ActionHistory::MoveCardBetweenBoards(
+                    dragged_card,
+                    dragged_card_board_id,
+                    hovered_board_id,
+                    dragged_card_index,
+                    hovered_card_index,
+                ));
+            let info_msg = &format!(
+                "Moved card {} to board \"{}\"",
+                dragged_card_name, hovered_board.name
+            );
+            info!("{}", info_msg);
+            app.send_info_toast(info_msg, None);
+        }
+    }
+}
+
+pub fn reset_card_drag_mode(app: &mut App) {
+    app.state.card_drag_mode = false;
+    app.state.hovered_board = None;
+    app.state.hovered_card = None;
+    app.state.hovered_card_dimensions = None;
 }
 
 fn handle_config_menu_action(app: &mut App) -> AppReturn {

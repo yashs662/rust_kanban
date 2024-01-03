@@ -367,6 +367,14 @@ impl UiMode {
     }
 
     pub fn render(self, rect: &mut Frame, app: &mut App) {
+        if app.state.popup_mode.is_none() {
+            let current_focus = app.state.focus;
+            if !self.get_available_targets().contains(&current_focus)
+                && !self.get_available_targets().is_empty()
+            {
+                app.state.focus = self.get_available_targets()[0];
+            }
+        }
         match self {
             UiMode::Zen => {
                 ui_helper::render_zen_mode(rect, app);
@@ -613,7 +621,10 @@ impl KeyBindings {
             (KeyBindingEnum::DeleteBoard.to_string(), &self.delete_board),
             (KeyBindingEnum::DeleteCard.to_string(), &self.delete_card),
             (KeyBindingEnum::Down.to_string(), &self.down),
-            (KeyBindingEnum::GoToMainMenu.to_string(), &self.go_to_main_menu),
+            (
+                KeyBindingEnum::GoToMainMenu.to_string(),
+                &self.go_to_main_menu,
+            ),
             (
                 KeyBindingEnum::HideUiElement.to_string(),
                 &self.hide_ui_element,
@@ -774,7 +785,7 @@ impl Default for KeyBindings {
             change_card_status_to_stale: vec![Key::Char('3')],
             clear_all_toasts: vec![Key::Char('t')],
             delete_board: vec![Key::Char('D')],
-            delete_card: vec![Key::Char('d')],
+            delete_card: vec![Key::Char('d'), Key::Delete],
             down: vec![Key::Down],
             go_to_main_menu: vec![Key::Char('m')],
             hide_ui_element: vec![Key::Char('h')],

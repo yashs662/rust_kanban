@@ -213,6 +213,7 @@ impl IoAsyncHandler<'_> {
         match board_data {
             Ok(boards) => {
                 app.set_boards(boards);
+                app.action_history_manager.reset();
                 info!("👍 Save file {:?} loaded", save_file_name);
                 app.send_info_toast(&format!("👍 Save file {:?} loaded", save_file_name), None);
             }
@@ -1649,10 +1650,10 @@ pub async fn get_all_save_ids_for_user(user_id: String, access_token: &str) -> R
                     if save_id.is_none() {
                         return Err(anyhow!("Error getting save ids".to_string()));
                     }
-                    debug!("save_id: {:?}", save_id.unwrap() as usize);
+                    debug!("Found save_id: {:?}", save_id.unwrap() as usize);
                     save_ids.push(save_id.unwrap() as usize);
                 }
-                debug!("save_instances: {:?}", save_instances);
+                debug!("Save instances: {:?}", save_instances);
                 Ok(save_ids)
             }
             Err(e) => {

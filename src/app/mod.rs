@@ -58,12 +58,19 @@ pub enum AppReturn {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ActionHistory {
+    /// card, board_id
     DeleteCard(Card, (u64, u64)),
+    /// card, board_id
     CreateCard(Card, (u64, u64)),
+    /// board
     DeleteBoard(Board),
-    MoveCardBetweenBoards(Card, (u64, u64), (u64, u64)),
+    /// card, moved_from_board_id, moved_to_board_id, moved_from_index, moved_to_index
+    MoveCardBetweenBoards(Card, (u64, u64), (u64, u64), usize, usize),
+    /// board_id, moved_from_index, moved_to_index
     MoveCardWithinBoard((u64, u64), usize, usize),
+    /// board
     CreateBoard(Board),
+    /// old_card, new_card, board_id
     EditCard(Card, Card, (u64, u64)),
 }
 
@@ -80,6 +87,10 @@ impl ActionHistoryManager {
         }
         self.history.push(action);
         self.history_index += 1;
+    }
+    pub fn reset(&mut self) {
+        self.history.clear();
+        self.history_index = 0;
     }
 }
 
@@ -141,6 +152,14 @@ impl App<'_> {
             }
         }
         app
+    }
+
+    pub fn get_mut_board(&mut self, board_id: (u64, u64)) -> Option<&mut Board> {
+        self.boards.iter_mut().find(|b| b.id == board_id)
+    }
+
+    pub fn get_board(&self, board_id: (u64, u64)) -> Option<&Board> {
+        self.boards.iter().find(|b| b.id == board_id)
     }
 
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
@@ -665,8 +684,8 @@ impl App<'_> {
         }
         self.state.keybinding_store = keybinding_action_list;
     }
-    pub fn send_info_toast(&mut self, message: &str, duration: Option<Duration>) {
-        if let Some(duration) = duration {
+    pub fn send_info_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
+        if let Some(duration) = custom_duration {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
@@ -682,8 +701,8 @@ impl App<'_> {
             ));
         }
     }
-    pub fn send_error_toast(&mut self, message: &str, duration: Option<Duration>) {
-        if let Some(duration) = duration {
+    pub fn send_error_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
+        if let Some(duration) = custom_duration {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
@@ -699,8 +718,8 @@ impl App<'_> {
             ));
         }
     }
-    pub fn send_warning_toast(&mut self, message: &str, duration: Option<Duration>) {
-        if let Some(duration) = duration {
+    pub fn send_warning_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
+        if let Some(duration) = custom_duration {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
@@ -716,8 +735,8 @@ impl App<'_> {
             ));
         }
     }
-    pub fn send_loading_toast(&mut self, message: &str, duration: Option<Duration>) {
-        if let Some(duration) = duration {
+    pub fn send_loading_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
+        if let Some(duration) = custom_duration {
             self.state.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
@@ -1073,25 +1092,39 @@ impl App<'_> {
                     card,
                     moved_from_board_id,
                     moved_to_board_id,
+                    moved_from_index,
+                    moved_to_index,
                 ) => {
-                    if let Some(moved_to_board) =
-                        self.boards.iter_mut().find(|b| b.id == moved_to_board_id)
-                    {
-                        moved_to_board.cards.retain(|c| c.id != card.id);
-                    } else {
-                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{:?}' was not found", card.name, moved_to_board_id), None);
+                    let moved_to_board = self.get_board(moved_to_board_id);
+                    let moved_from_board = self.get_board(moved_from_board_id);
+                    if moved_to_board.is_none() || moved_from_board.is_none() {
+                        debug!("Could not undo move card '{}' as the move to board with id '{:?}' or the move from board with id '{:?}' was not found", card.name, moved_to_board_id, moved_from_board_id);
                         return;
                     }
-                    if let Some(moved_from_board) =
-                        self.boards.iter_mut().find(|b| b.id == moved_from_board_id)
-                    {
-                        moved_from_board.cards.push(card.clone());
-                        refresh_visible_boards_and_cards(self);
-                        self.action_history_manager.history_index -= 1;
-                        self.send_info_toast(&format!("Undo Move Card '{}'", card.name), None);
-                    } else {
-                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{:?}' was not found", card.name, moved_from_board_id), None);
+
+                    let moved_from_board = moved_from_board.unwrap();
+                    if moved_from_index > moved_from_board.cards.len() {
+                        debug!("bad index for undo move card, from board {:?}, to board {:?}, from index {}, to index {}", moved_from_board_id, moved_to_board_id, moved_from_index, moved_to_index);
+                        self.send_error_toast(
+                            &format!(
+                                "Could not undo move card '{}' as the index's were invalid",
+                                card.name
+                            ),
+                            None,
+                        );
                     }
+
+                    let moved_to_board = self.get_mut_board(moved_to_board_id).unwrap();
+                    moved_to_board.cards.retain(|c| c.id != card.id);
+
+                    let moved_from_board = self.get_mut_board(moved_from_board_id).unwrap();
+                    moved_from_board
+                        .cards
+                        .insert(moved_from_index, card.clone());
+
+                    refresh_visible_boards_and_cards(self);
+                    self.action_history_manager.history_index -= 1;
+                    self.send_info_toast(&format!("Undo Move Card '{}'", card.name), None);
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
                     if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
@@ -1187,25 +1220,38 @@ impl App<'_> {
                     card,
                     moved_from_board_id,
                     moved_to_board_id,
+                    moved_from_index,
+                    moved_to_index,
                 ) => {
-                    if let Some(moved_to_board) =
-                        self.boards.iter_mut().find(|b| b.id == moved_to_board_id)
-                    {
-                        moved_to_board.cards.push(card.clone());
-                    } else {
-                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{:?}' was not found", card.name, moved_to_board_id), None);
+                    let moved_to_board = self.get_board(moved_to_board_id);
+                    let moved_from_board = self.get_board(moved_from_board_id);
+                    if moved_to_board.is_none() || moved_from_board.is_none() {
+                        debug!("Could not undo move card '{}' as the move to board with id '{:?}' or the move from board with id '{:?}' was not found", card.name, moved_to_board_id, moved_from_board_id);
                         return;
                     }
-                    if let Some(moved_from_board) =
-                        self.boards.iter_mut().find(|b| b.id == moved_from_board_id)
-                    {
-                        moved_from_board.cards.retain(|c| c.id != card.id);
-                        refresh_visible_boards_and_cards(self);
-                        self.action_history_manager.history_index += 1;
-                        self.send_info_toast(&format!("Redo Move Card '{}'", card.name), None);
-                    } else {
-                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{:?}' was not found", card.name, moved_from_board_id), None);
+
+                    let moved_to_board = moved_to_board.unwrap();
+                    if moved_to_index > moved_to_board.cards.len() {
+                        debug!("bad index for redo move card, from board {:?}, to board {:?}, from index {}, to index {}", moved_from_board_id, moved_to_board_id, moved_from_index, moved_to_index);
+                        self.send_error_toast(
+                            &format!(
+                                "Could not redo move card '{}' as the index's were invalid",
+                                card.name
+                            ),
+                            None,
+                        );
+                        return;
                     }
+
+                    let moved_from_board = self.get_mut_board(moved_from_board_id).unwrap();
+                    moved_from_board.cards.retain(|c| c.id != card.id);
+
+                    let moved_to_board = self.get_mut_board(moved_to_board_id).unwrap();
+                    moved_to_board.cards.insert(moved_to_index, card.clone());
+
+                    refresh_visible_boards_and_cards(self);
+                    self.action_history_manager.history_index += 1;
+                    self.send_info_toast(&format!("Redo Move Card '{}'", card.name), None);
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
                     if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
@@ -1479,6 +1525,12 @@ impl PopupMode {
     }
 
     pub fn render(self, rect: &mut Frame, app: &mut App) {
+        let current_focus = app.state.focus;
+        if !self.get_available_targets().contains(&current_focus)
+            && !self.get_available_targets().is_empty()
+        {
+            app.state.focus = self.get_available_targets()[0];
+        }
         match self {
             PopupMode::ViewCard => {
                 ui_helper::render_view_card(rect, app);
@@ -1529,8 +1581,7 @@ impl PopupMode {
     }
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct AppListStates {
     pub card_priority_selector: ListState,
     pub card_status_selector: ListState,
@@ -1550,18 +1601,13 @@ pub struct AppListStates {
     pub theme_selector: ListState,
 }
 
-
-
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct AppTableStates {
     pub config: TableState,
     pub edit_keybindings: TableState,
     pub help: TableState,
     pub theme_editor: TableState,
 }
-
-
 
 #[derive(Debug, Clone)]
 pub struct AppFormStates {
@@ -1611,7 +1657,10 @@ pub struct AppState<'a> {
     pub focus: Focus,
     pub keybinding_store: Vec<Vec<String>>,
     pub last_mouse_action: Option<Mouse>,
-    pub last_mouse_action_time: Option<Instant>,
+    pub hovered_card: Option<((u64, u64), (u64, u64))>,
+    pub hovered_board: Option<(u64, u64)>,
+    pub card_drag_mode: bool,
+    pub hovered_card_dimensions: Option<(u16, u16)>,
     pub last_reset_password_link_sent_time: Option<Instant>,
     pub mouse_focus: Option<Focus>,
     pub mouse_list_index: Option<u16>,
@@ -1655,7 +1704,10 @@ impl Default for AppState<'_> {
             focus: Focus::NoFocus,
             keybinding_store: Vec::new(),
             last_mouse_action: None,
-            last_mouse_action_time: None,
+            hovered_card: None,
+            hovered_board: None,
+            card_drag_mode: false,
+            hovered_card_dimensions: None,
             last_reset_password_link_sent_time: None,
             mouse_focus: None,
             mouse_list_index: None,

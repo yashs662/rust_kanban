@@ -5,16 +5,18 @@ use super::{
 };
 use crate::{
     app::{
+        app_helper::reset_card_drag_mode,
         date_format_converter, date_format_finder,
-        kanban::{CardPriority, CardStatus},
+        kanban::{Card, CardPriority, CardStatus},
         state::{AppStatus, Focus, UiMode},
         App, DateFormat, PopupMode,
     },
     constants::{
         APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
         HIDDEN_PASSWORD_SYMBOL, LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT,
-        MIN_TERM_WIDTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK, PATTERN_CHANGE_INTERVAL,
-        SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES, VERTICAL_SCROLL_BAR_SYMBOL,
+        MIN_TERM_WIDTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK, MOUSE_OUT_OF_BOUNDS_COORDINATES,
+        PATTERN_CHANGE_INTERVAL, SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES,
+        VERTICAL_SCROLL_BAR_SYMBOL,
     },
     io::{
         data_handler::get_available_local_save_files,
@@ -49,6 +51,7 @@ pub fn render_zen_mode(rect: &mut Frame, app: &mut App) {
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
+    render_card_being_dragged(chunks[0], app, rect);
 }
 
 pub fn render_title_body(rect: &mut Frame, app: &mut App) {
@@ -72,6 +75,7 @@ pub fn render_title_body(rect: &mut Frame, app: &mut App) {
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
+    render_card_being_dragged(chunks[1], app, rect);
 }
 
 pub fn render_body_help(rect: &mut Frame, app: &mut App) {
@@ -112,6 +116,7 @@ pub fn render_body_help(rect: &mut Frame, app: &mut App) {
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
+    render_card_being_dragged(chunks[0], app, rect);
 }
 
 pub fn render_body_log(rect: &mut Frame, app: &mut App) {
@@ -126,6 +131,7 @@ pub fn render_body_log(rect: &mut Frame, app: &mut App) {
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
+    render_card_being_dragged(chunks[0], app, rect);
 }
 
 pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
@@ -183,6 +189,7 @@ pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
+    render_card_being_dragged(chunks[1], app, rect);
 }
 
 pub fn render_title_body_log(rect: &mut Frame, app: &mut App) {
@@ -213,6 +220,79 @@ pub fn render_title_body_log(rect: &mut Frame, app: &mut App) {
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
+    }
+    render_card_being_dragged(chunks[1], app, rect);
+}
+
+fn render_card_being_dragged(parent_body_area: Rect, app: &mut App<'_>, rect: &mut Frame<'_>) {
+    if app.state.card_drag_mode {
+        if app.state.hovered_card.is_none() {
+            debug!("Hovered card is none");
+            return;
+        }
+        if app.state.hovered_card_dimensions.is_none() {
+            debug!("Hovered card dimensions are none");
+            return;
+        }
+
+        let current_mouse_coordinates = app.state.current_mouse_coordinates;
+        if current_mouse_coordinates == MOUSE_OUT_OF_BOUNDS_COORDINATES
+            || current_mouse_coordinates.0 < parent_body_area.x
+            || current_mouse_coordinates.1 < parent_body_area.y
+            || current_mouse_coordinates.0 > parent_body_area.x + parent_body_area.width
+            || current_mouse_coordinates.1 > parent_body_area.y + parent_body_area.height
+        {
+            debug!("Mouse is out of bounds");
+            reset_card_drag_mode(app);
+            return;
+        }
+        let card_dimensions = app.state.hovered_card_dimensions.unwrap();
+        let card_width = card_dimensions.0;
+        let card_height = card_dimensions.1;
+        let mut card_x = current_mouse_coordinates.0.saturating_sub(card_width / 2);
+        let mut card_y = current_mouse_coordinates.1.saturating_sub(card_height / 2);
+
+        if card_x < parent_body_area.x {
+            card_x = parent_body_area.x;
+        }
+        if card_y < parent_body_area.y {
+            card_y = parent_body_area.y;
+        }
+        if card_x + card_width > parent_body_area.x + parent_body_area.width {
+            card_x = parent_body_area.x + parent_body_area.width - card_width;
+        }
+        if card_y + card_height > parent_body_area.y + parent_body_area.height {
+            card_y = parent_body_area.y + parent_body_area.height - card_height;
+        }
+
+        let render_area = Rect::new(card_x, card_y, card_width, card_height);
+
+        let board_id = app.state.hovered_card.unwrap().0;
+        let card_id = app.state.hovered_card.unwrap().1;
+
+        let app_boards = app.boards.clone();
+        let card = {
+            let board = app_boards.iter().find(|x| x.id == board_id);
+            if let Some(board) = board {
+                board.cards.iter().find(|x| x.id == card_id)
+            } else {
+                None
+            }
+        };
+
+        if card.is_none() {
+            debug!("Card is none");
+            return;
+        }
+        let card = card.unwrap();
+        render_blank_styled_canvas(rect, app, render_area, app.state.popup_mode.is_some());
+        draw_a_single_card(
+            app,
+            render_area,
+            app.current_theme.error_text_style,
+            card,
+            rect,
+        )
     }
 }
 
@@ -263,6 +343,7 @@ pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
+    render_card_being_dragged(chunks[0], app, rect);
 }
 
 pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
@@ -323,6 +404,7 @@ pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
+    render_card_being_dragged(chunks[1], app, rect);
 }
 
 pub fn render_config(rect: &mut Frame, app: &mut App) {
@@ -486,11 +568,13 @@ fn draw_config_table_selector(app: &mut App) -> Table<'static> {
         app.current_theme.list_select_style
     };
 
-    Table::new(rows)
-        .block(Block::default())
-        .highlight_style(highlight_style)
-        .highlight_symbol(">> ")
-        .widths(&[Constraint::Percentage(40), Constraint::Percentage(60)])
+    Table::new(
+        rows,
+        [Constraint::Percentage(40), Constraint::Percentage(60)],
+    )
+    .block(Block::default())
+    .highlight_style(highlight_style)
+    .highlight_symbol(">> ")
 }
 
 pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
@@ -861,22 +945,24 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         app.current_theme.help_text_style
     };
 
-    let t = Table::new(rows)
-        .block(
-            Block::default()
-                .title("Edit Keybindings")
-                .style(default_style)
-                .border_style(table_border_style)
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        )
-        .highlight_style(current_element_style)
-        .highlight_symbol(">> ")
-        .widths(&[
+    let t = Table::new(
+        rows,
+        [
             Constraint::Percentage(50),
             Constraint::Length(30),
             Constraint::Min(10),
-        ]);
+        ],
+    )
+    .block(
+        Block::default()
+            .title("Edit Keybindings")
+            .style(default_style)
+            .border_style(table_border_style)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded),
+    )
+    .highlight_style(current_element_style)
+    .highlight_symbol(">> ");
 
     let next_focus_key = app
         .state
@@ -1361,19 +1447,23 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
     let left_rows = rows.clone().take(rows.clone().count() / 2);
     let right_rows = rows.clone().skip(rows.clone().count() / 2);
 
-    let left_table = Table::new(left_rows)
-        .block(Block::default().style(default_style))
-        .highlight_style(current_element_style)
-        .highlight_symbol(">> ")
-        .widths(&[Constraint::Percentage(30), Constraint::Percentage(70)])
-        .style(border_style);
+    let left_table = Table::new(
+        left_rows,
+        [Constraint::Percentage(30), Constraint::Percentage(70)],
+    )
+    .block(Block::default().style(default_style))
+    .highlight_style(current_element_style)
+    .highlight_symbol(">> ")
+    .style(border_style);
 
-    let right_table = Table::new(right_rows)
-        .block(Block::default().style(default_style))
-        .highlight_style(current_element_style)
-        .highlight_symbol(">> ")
-        .widths(&[Constraint::Percentage(30), Constraint::Percentage(70)])
-        .style(border_style);
+    let right_table = Table::new(
+        right_rows,
+        [Constraint::Percentage(30), Constraint::Percentage(70)],
+    )
+    .block(Block::default().style(default_style))
+    .highlight_style(current_element_style)
+    .highlight_symbol(">> ")
+    .style(border_style);
 
     let border_block = Block::default()
         .title("Help")
@@ -1539,29 +1629,37 @@ fn draw_main_menu(app: &mut App, render_area: Rect, rect: &mut Frame) {
 
 pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bool) {
     let fallback_boards = vec![];
-    let focus = app.state.focus;
+    let mut current_board_set = false;
+    let mut current_card_set = false;
+    let app_preview_boards_and_cards = app
+        .state
+        .preview_boards_and_cards
+        .clone()
+        .unwrap_or([].to_vec());
+    let app_boards_and_cards = app.boards.clone();
+    let app_filtered_boards_and_cards = app.filtered_boards.clone();
     let boards = if preview_mode {
-        if app.state.preview_boards_and_cards.is_some() {
-            app.state.preview_boards_and_cards.as_ref().unwrap()
-        } else {
+        if app_preview_boards_and_cards.is_empty() {
             &fallback_boards
+        } else {
+            &app_preview_boards_and_cards
         }
     } else if !app.filtered_boards.is_empty() {
-        &app.filtered_boards
+        &app_filtered_boards_and_cards
     } else {
-        &app.boards
+        &app_boards_and_cards
     };
-    let progress_bar_style = if app.state.popup_mode.is_some() {
+    let progress_bar_style = if app.state.popup_mode.is_some() || app.state.card_drag_mode {
         app.current_theme.inactive_text_style
     } else {
         app.current_theme.progress_bar_style
     };
-    let error_text_style = if app.state.popup_mode.is_some() {
+    let error_text_style = if app.state.popup_mode.is_some() || app.state.card_drag_mode {
         app.current_theme.inactive_text_style
     } else {
         app.current_theme.error_text_style
     };
-    let current_board = &app.state.current_board_id.unwrap_or((0, 0));
+    let current_board_id = &app.state.current_board_id.unwrap_or((0, 0));
 
     let add_board_key = app
         .state
@@ -1681,20 +1779,8 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
         app.visible_boards_and_cards.clone()
     };
     for (board_index, board_and_card_tuple) in visible_boards_and_cards.iter().enumerate() {
-        if board_index >= app.config.no_of_boards_to_show.into() {
-            break;
-        }
         let board_id = board_and_card_tuple.0;
-        let board = if preview_mode {
-            app.state
-                .preview_boards_and_cards
-                .as_ref()
-                .unwrap()
-                .iter()
-                .find(|&b| b.id == *board_id)
-        } else {
-            boards.iter().find(|&b| b.id == *board_id)
-        };
+        let board = boards.iter().find(|&b| b.id == *board_id);
         if board.is_none() {
             continue;
         }
@@ -1710,7 +1796,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             board_title
         };
         let board_title = format!("{} ({})", board_title, board.cards.len());
-        let board_title = if board_id == current_board {
+        let board_title = if board_id == current_board_id {
             format!("{} {}", ">>", board_title)
         } else {
             board_title
@@ -1733,7 +1819,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             continue;
         }
 
-        let board_style = if app.state.popup_mode.is_some() {
+        let board_style = if app.state.popup_mode.is_some() || app.state.card_drag_mode {
             app.current_theme.inactive_text_style
         } else {
             app.current_theme.general_style
@@ -1746,15 +1832,23 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
         ) {
             app.state.mouse_focus = Some(Focus::Body);
             app.state.focus = Focus::Body;
-            app.state.current_board_id = Some(*board_id);
+            if !current_board_set {
+                app.state.current_board_id = Some(*board_id);
+                current_board_set = true;
+            }
+            app.state.hovered_board = Some(*board_id);
             app.current_theme.mouse_focus_style
-        } else if *board_id == *current_board
-            && matches!(focus, Focus::Body)
+        } else if (app.state.current_board_id.unwrap_or((0, 0)) == *board_id)
             && app.state.current_card_id.is_none()
+            && matches!(app.state.focus, Focus::Body)
         {
             app.current_theme.keyboard_focus_style
         } else {
-            app.current_theme.general_style
+            if app.state.card_drag_mode {
+                app.current_theme.inactive_text_style
+            } else {
+                app.current_theme.general_style
+            }
         };
 
         let board_block = Block::default()
@@ -1851,159 +1945,17 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             }
         };
         for (card_index, card_id) in board_cards.iter().enumerate() {
-            if card_index >= app.config.no_of_cards_to_show.into() {
-                break;
+            if app.state.hovered_card.is_some()
+                && app.state.card_drag_mode
+                && app.state.hovered_card.unwrap().1 == *card_id
+            {
+                continue;
             }
-            let inner_card_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
-                .margin(1)
-                .split(card_chunks[card_index]);
             let card = board.get_card(*card_id);
             if card.is_none() {
                 continue;
             }
             let card = card.unwrap();
-
-            let card_title = if card.name.len() > DEFAULT_CARD_TITLE_LENGTH.into() {
-                format!("{}...", &card.name[0..DEFAULT_CARD_TITLE_LENGTH as usize])
-            } else {
-                card.name.clone()
-            };
-            let card_title = if app.state.current_card_id.unwrap_or((0, 0)) == *card_id {
-                format!("{} {}", ">>", card_title)
-            } else {
-                card_title
-            };
-
-            let card_description = if card.description == FIELD_NOT_SET {
-                format!("Description: {}", FIELD_NOT_SET)
-            } else {
-                card.description.clone()
-            };
-
-            let mut card_extra_info = vec![Line::from("")];
-            if card.due_date == FIELD_NOT_SET {
-                if app.state.popup_mode.is_some() {
-                    card_extra_info.push(Line::from(Span::styled(
-                        format!("Due: {}", FIELD_NOT_SET),
-                        app.current_theme.inactive_text_style,
-                    )))
-                } else {
-                    card_extra_info.push(Line::from(Span::styled(
-                        format!("Due: {}", FIELD_NOT_SET),
-                        app.current_theme.card_due_default_style,
-                    )))
-                }
-            } else {
-                let card_due_date = card.due_date.clone();
-                let parsed_due_date =
-                    date_format_converter(card_due_date.trim(), app.config.date_format);
-                let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-                    if app.state.popup_mode.is_some() {
-                        Line::from(Span::styled(
-                            format!("Due: {}", parsed_due_date),
-                            app.current_theme.inactive_text_style,
-                        ))
-                    } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
-                        Line::from(Span::styled(
-                            format!("Due: {}", parsed_due_date),
-                            app.current_theme.card_due_default_style,
-                        ))
-                    } else {
-                        let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
-                        let (days_left, parsed_due_date) = match formatted_date_format {
-                            DateFormat::DayMonthYear
-                            | DateFormat::MonthDayYear
-                            | DateFormat::YearMonthDay => {
-                                let today = Local::now().date_naive();
-                                let string_to_naive_date_format = NaiveDate::parse_from_str(
-                                    &parsed_due_date,
-                                    app.config.date_format.to_parser_string(),
-                                )
-                                .unwrap();
-                                let days_left = string_to_naive_date_format
-                                    .signed_duration_since(today)
-                                    .num_days();
-                                let parsed_due_date = string_to_naive_date_format
-                                    .format(app.config.date_format.to_parser_string())
-                                    .to_string();
-                                (days_left, parsed_due_date)
-                            }
-                            DateFormat::DayMonthYearTime
-                            | DateFormat::MonthDayYearTime
-                            | DateFormat::YearMonthDayTime {} => {
-                                let today = Local::now().naive_local();
-                                let string_to_naive_date_format = NaiveDateTime::parse_from_str(
-                                    &parsed_due_date,
-                                    app.config.date_format.to_parser_string(),
-                                )
-                                .unwrap();
-                                let days_left = string_to_naive_date_format
-                                    .signed_duration_since(today)
-                                    .num_days();
-                                let parsed_due_date = string_to_naive_date_format
-                                    .format(app.config.date_format.to_parser_string())
-                                    .to_string();
-                                (days_left, parsed_due_date)
-                            }
-                        };
-                        if days_left >= 0 {
-                            match days_left.cmp(&(app.config.warning_delta as i64)) {
-                                Ordering::Less | Ordering::Equal => Line::from(Span::styled(
-                                    format!("Due: {}", parsed_due_date),
-                                    app.current_theme.card_due_warning_style,
-                                )),
-                                Ordering::Greater => Line::from(Span::styled(
-                                    format!("Due: {}", parsed_due_date),
-                                    app.current_theme.card_due_default_style,
-                                )),
-                            }
-                        } else {
-                            Line::from(Span::styled(
-                                format!("Due: {}", parsed_due_date),
-                                app.current_theme.card_due_overdue_style,
-                            ))
-                        }
-                    }
-                } else if app.state.popup_mode.is_some() {
-                    Line::from(Span::styled(
-                        format!("Due: {}", card_due_date),
-                        app.current_theme.inactive_text_style,
-                    ))
-                } else {
-                    Line::from(Span::styled(
-                        format!("Due: {}", card_due_date),
-                        app.current_theme.card_due_default_style,
-                    ))
-                };
-                card_extra_info.extend(vec![card_due_date_styled]);
-            }
-
-            let card_status = format!("Status: {}", card.card_status.clone());
-            let card_status = if app.state.popup_mode.is_some() {
-                Line::from(Span::styled(
-                    card_status,
-                    app.current_theme.inactive_text_style,
-                ))
-            } else {
-                match card.card_status {
-                    CardStatus::Active => Line::from(Span::styled(
-                        card_status,
-                        app.current_theme.card_status_active_style,
-                    )),
-                    CardStatus::Complete => Line::from(Span::styled(
-                        card_status,
-                        app.current_theme.card_status_completed_style,
-                    )),
-                    CardStatus::Stale => Line::from(Span::styled(
-                        card_status,
-                        app.current_theme.card_status_stale_style,
-                    )),
-                }
-            };
-            card_extra_info.extend(vec![card_status]);
-
             let card_style = if app.state.popup_mode.is_some() {
                 app.current_theme.inactive_text_style
             } else if check_if_mouse_is_in_area(
@@ -2012,40 +1964,37 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             ) {
                 app.state.mouse_focus = Some(Focus::Body);
                 app.state.focus = Focus::Body;
-                app.state.current_card_id = Some(*card_id);
+                if !current_card_set {
+                    app.state.current_card_id = Some(card.id);
+                    current_card_set = true;
+                }
+                if !app.state.card_drag_mode {
+                    app.state.hovered_card = Some((*board_id, card.id));
+                    app.state.hovered_card_dimensions = Some((
+                        card_chunks[card_index].width,
+                        card_chunks[card_index].height,
+                    ));
+                }
                 app.current_theme.mouse_focus_style
-            } else if app.state.current_card_id.unwrap_or((0, 0)) == *card_id
-                && matches!(focus, Focus::Body)
-                && *board_id == *current_board
+            } else if app.state.current_card_id.unwrap_or((0, 0)) == card.id
+                && matches!(app.state.focus, Focus::Body)
+                && *board_id == *current_board_id
             {
                 app.current_theme.keyboard_focus_style
+            } else if app.state.card_drag_mode {
+                app.current_theme.inactive_text_style
             } else {
                 app.current_theme.general_style
             };
-            let card_block = Block::default()
-                .title(&*card_title)
-                .borders(Borders::ALL)
-                .border_style(card_style)
-                .border_type(BorderType::Rounded);
-            rect.render_widget(card_block, card_chunks[card_index]);
-            let card_paragraph = Paragraph::new(card_description)
-                .alignment(Alignment::Left)
-                .block(Block::default())
-                .wrap(ratatui::widgets::Wrap { trim: false });
-            rect.render_widget(card_paragraph, inner_card_chunks[0]);
-            let card_extra_info = Paragraph::new(card_extra_info)
-                .alignment(Alignment::Left)
-                .block(Block::default())
-                .wrap(ratatui::widgets::Wrap { trim: false });
-            rect.render_widget(card_extra_info, inner_card_chunks[1]);
+            draw_a_single_card(app, card_chunks[card_index], card_style, card, rect);
         }
+        if app.state.card_drag_mode {}
     }
 
     if !app.config.disable_scroll_bar {
-        let current_board_id = app.state.current_board_id.unwrap_or((0, 0));
         let current_board_index = boards
             .iter()
-            .position(|board| board.id == current_board_id)
+            .position(|board| board.id == *current_board_id)
             .unwrap_or(0)
             + 1;
         let percentage = {
@@ -2064,6 +2013,175 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             .percent(percentage);
         rect.render_widget(line_gauge, chunks[1]);
     }
+}
+
+fn draw_a_single_card(
+    app: &mut App,
+    render_area: Rect,
+    card_style: Style,
+    card: &Card,
+    frame_to_render_on: &mut Frame,
+) {
+    let inner_card_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
+        .margin(1)
+        .split(render_area);
+
+    let card_title = if card.name.len() > DEFAULT_CARD_TITLE_LENGTH.into() {
+        format!("{}...", &card.name[0..DEFAULT_CARD_TITLE_LENGTH as usize])
+    } else {
+        card.name.clone()
+    };
+    let card_title = if app.state.current_card_id.unwrap_or((0, 0)) == card.id {
+        format!("{} {}", ">>", card_title)
+    } else {
+        card_title
+    };
+
+    let card_description = if card.description == FIELD_NOT_SET {
+        format!("Description: {}", FIELD_NOT_SET)
+    } else {
+        card.description.clone()
+    };
+
+    let mut card_extra_info = vec![Line::from("")];
+    if card.due_date == FIELD_NOT_SET {
+        if app.state.popup_mode.is_some() {
+            card_extra_info.push(Line::from(Span::styled(
+                format!("Due: {}", FIELD_NOT_SET),
+                app.current_theme.inactive_text_style,
+            )))
+        } else {
+            card_extra_info.push(Line::from(Span::styled(
+                format!("Due: {}", FIELD_NOT_SET),
+                app.current_theme.card_due_default_style,
+            )))
+        }
+    } else {
+        let card_due_date = card.due_date.clone();
+        let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
+        let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
+            if app.state.popup_mode.is_some() {
+                Line::from(Span::styled(
+                    format!("Due: {}", parsed_due_date),
+                    app.current_theme.inactive_text_style,
+                ))
+            } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+                Line::from(Span::styled(
+                    format!("Due: {}", parsed_due_date),
+                    app.current_theme.card_due_default_style,
+                ))
+            } else {
+                let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
+                let (days_left, parsed_due_date) = match formatted_date_format {
+                    DateFormat::DayMonthYear
+                    | DateFormat::MonthDayYear
+                    | DateFormat::YearMonthDay => {
+                        let today = Local::now().date_naive();
+                        let string_to_naive_date_format = NaiveDate::parse_from_str(
+                            &parsed_due_date,
+                            app.config.date_format.to_parser_string(),
+                        )
+                        .unwrap();
+                        let days_left = string_to_naive_date_format
+                            .signed_duration_since(today)
+                            .num_days();
+                        let parsed_due_date = string_to_naive_date_format
+                            .format(app.config.date_format.to_parser_string())
+                            .to_string();
+                        (days_left, parsed_due_date)
+                    }
+                    DateFormat::DayMonthYearTime
+                    | DateFormat::MonthDayYearTime
+                    | DateFormat::YearMonthDayTime {} => {
+                        let today = Local::now().naive_local();
+                        let string_to_naive_date_format = NaiveDateTime::parse_from_str(
+                            &parsed_due_date,
+                            app.config.date_format.to_parser_string(),
+                        )
+                        .unwrap();
+                        let days_left = string_to_naive_date_format
+                            .signed_duration_since(today)
+                            .num_days();
+                        let parsed_due_date = string_to_naive_date_format
+                            .format(app.config.date_format.to_parser_string())
+                            .to_string();
+                        (days_left, parsed_due_date)
+                    }
+                };
+                if days_left >= 0 {
+                    match days_left.cmp(&(app.config.warning_delta as i64)) {
+                        Ordering::Less | Ordering::Equal => Line::from(Span::styled(
+                            format!("Due: {}", parsed_due_date),
+                            app.current_theme.card_due_warning_style,
+                        )),
+                        Ordering::Greater => Line::from(Span::styled(
+                            format!("Due: {}", parsed_due_date),
+                            app.current_theme.card_due_default_style,
+                        )),
+                    }
+                } else {
+                    Line::from(Span::styled(
+                        format!("Due: {}", parsed_due_date),
+                        app.current_theme.card_due_overdue_style,
+                    ))
+                }
+            }
+        } else if app.state.popup_mode.is_some() {
+            Line::from(Span::styled(
+                format!("Due: {}", card_due_date),
+                app.current_theme.inactive_text_style,
+            ))
+        } else {
+            Line::from(Span::styled(
+                format!("Due: {}", card_due_date),
+                app.current_theme.card_due_default_style,
+            ))
+        };
+        card_extra_info.extend(vec![card_due_date_styled]);
+    }
+
+    let card_status = format!("Status: {}", card.card_status.clone());
+    let card_status = if app.state.popup_mode.is_some() {
+        Line::from(Span::styled(
+            card_status,
+            app.current_theme.inactive_text_style,
+        ))
+    } else {
+        match card.card_status {
+            CardStatus::Active => Line::from(Span::styled(
+                card_status,
+                app.current_theme.card_status_active_style,
+            )),
+            CardStatus::Complete => Line::from(Span::styled(
+                card_status,
+                app.current_theme.card_status_completed_style,
+            )),
+            CardStatus::Stale => Line::from(Span::styled(
+                card_status,
+                app.current_theme.card_status_stale_style,
+            )),
+        }
+    };
+    card_extra_info.extend(vec![card_status]);
+
+    let card_block = Block::default()
+        .title(&*card_title)
+        .borders(Borders::ALL)
+        .border_style(card_style)
+        .border_type(BorderType::Rounded);
+    frame_to_render_on.render_widget(card_block, render_area);
+    let card_paragraph = Paragraph::new(card_description)
+        .alignment(Alignment::Left)
+        .block(Block::default())
+        .wrap(ratatui::widgets::Wrap { trim: false });
+    frame_to_render_on.render_widget(card_paragraph, inner_card_chunks[0]);
+    let card_extra_info = Paragraph::new(card_extra_info)
+        .alignment(Alignment::Left)
+        .block(Block::default())
+        .wrap(ratatui::widgets::Wrap { trim: false });
+    frame_to_render_on.render_widget(card_extra_info, inner_card_chunks[1]);
 }
 
 fn centered_rect_with_percentage(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -5224,9 +5342,8 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
     } else {
         app.current_theme.general_style
     };
-    let theme_title_list = Table::new(theme_table_rows.0)
+    let theme_title_list = Table::new(theme_table_rows.0, [Constraint::Percentage(100)])
         .block(Block::default().style(app.current_theme.general_style))
-        .widths(&[Constraint::Percentage(100)])
         .highlight_style(list_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
     rect.render_stateful_widget(
@@ -5234,9 +5351,8 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
         chunks[0],
         &mut app.state.app_table_states.theme_editor,
     );
-    let theme_element_list = Table::new(theme_table_rows.1)
-        .block(Block::default())
-        .widths(&[Constraint::Percentage(100)]);
+    let theme_element_list =
+        Table::new(theme_table_rows.1, [Constraint::Percentage(100)]).block(Block::default());
     rect.render_stateful_widget(
         theme_element_list,
         chunks[1],
@@ -6032,22 +6148,23 @@ pub fn render_logs(
         app.current_theme.general_style
     };
 
-    let table_constraints = [
-        Constraint::Length(date_length as u16),
-        Constraint::Length(wrap_length as u16),
-    ];
-    let log_list = Table::new(rows)
-        .block(
-            Block::default()
-                .title("Logs")
-                .style(log_box_style)
-                .border_style(log_box_border_style)
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        )
-        .highlight_style(highlight_style)
-        .highlight_symbol(LIST_SELECTED_SYMBOL)
-        .widths(&table_constraints);
+    let log_list = Table::new(
+        rows,
+        [
+            Constraint::Length(date_length as u16),
+            Constraint::Length(wrap_length as u16),
+        ],
+    )
+    .block(
+        Block::default()
+            .title("Logs")
+            .style(log_box_style)
+            .border_style(log_box_border_style)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded),
+    )
+    .highlight_style(highlight_style)
+    .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     rect.render_stateful_widget(
         log_list,

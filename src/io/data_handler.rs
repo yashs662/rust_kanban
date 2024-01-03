@@ -172,21 +172,25 @@ pub fn get_local_kanban_state(
     }
     let file = fs::File::open(file_path);
     if file.is_err() {
+        debug!("Error opening save file: {}", file.err().unwrap());
         return Err("Error opening save file".to_string());
     }
     let file = file.unwrap();
     let serde_object = serde_json::from_reader(file);
     if serde_object.is_err() {
+        debug!("Error parsing save file: {}", serde_object.err().unwrap());
         return Err("Error parsing save file".to_string());
     }
     let serde_object: serde_json::Value = serde_object.unwrap();
     let boards = serde_object.get("boards");
     if boards.is_none() {
+        debug!("Error parsing save file, no boards found");
         return Err("Error parsing save file".to_string());
     }
     let boards = boards.unwrap();
     let boards = boards.as_array();
     if boards.is_none() {
+        debug!("Error parsing save file, boards is not an array");
         return Err("Error parsing save file".to_string());
     }
     let boards = boards.unwrap();

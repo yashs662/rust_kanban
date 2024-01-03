@@ -196,7 +196,7 @@ impl Theme {
         }
 
         if let Some(modifier) = modifier {
-            style.add_modifier(modifier);
+            let _ = style.add_modifier(modifier);
         } else {
             style.sub_modifier = Modifier::empty();
             style.add_modifier = Modifier::empty();

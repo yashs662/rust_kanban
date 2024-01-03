@@ -19,7 +19,6 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 - [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
 - [ ] Improve error handling by implementing best practices
-- [ ] Allow for more mouse Interactions (Dragging cards maybe?)
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
@@ -29,6 +28,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## Completed Features
 
+- [x] Drag and Drop cards with the mouse
 - [X] Allow for vertical movement in text fields (e.g. card description)
 - [X] Encryption for Cloud Saves
 - [X] Implement Cloud saves
