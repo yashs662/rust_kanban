@@ -28,10 +28,11 @@ use chrono::{Local, NaiveDate, NaiveDateTime};
 use log::{debug, Level};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, Paragraph, Row, Table,
+        Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, ListState, Paragraph, Row,
+        Table,
     },
     Frame,
 };
@@ -47,7 +48,6 @@ pub fn render_zen_mode(rect: &mut Frame, app: &mut App) {
         .split(rect.size());
 
     render_body(rect, chunks[0], app, false);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -60,18 +60,8 @@ pub fn render_title_body(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Length(3), Constraint::Percentage(80)].as_ref())
         .split(rect.size());
 
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
-    };
-
+    render_title(app, &chunks[0], rect);
     render_body(rect, chunks[1], app, false);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -79,11 +69,6 @@ pub fn render_title_body(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_body_help(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(85), Constraint::Length(5)].as_ref())
@@ -102,17 +87,20 @@ pub fn render_body_help(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[1]);
 
-    render_body(rect, chunks[0], app, false);
-
     let help = draw_help(app, chunks[1]);
-    let help_separator = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(default_style);
+    let help_separator =
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(check_for_popup_and_get_style(
+                app,
+                app.current_theme.general_style,
+            ));
+
+    render_body(rect, chunks[0], app, false);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -127,7 +115,6 @@ pub fn render_body_log(rect: &mut Frame, app: &mut App) {
 
     render_body(rect, chunks[0], app, false);
     render_logs(app, true, chunks[1], rect, app.state.popup_mode.is_some());
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -135,11 +122,6 @@ pub fn render_body_log(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -165,27 +147,21 @@ pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[2]);
 
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
-    };
-
-    render_body(rect, chunks[1], app, false);
-
     let help = draw_help(app, chunks[2]);
-    let help_separator = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(default_style);
+    let help_separator =
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(check_for_popup_and_get_style(
+                app,
+                app.current_theme.general_style,
+            ));
+
+    render_title(app, &chunks[0], rect);
+    render_body(rect, chunks[1], app, false);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -205,19 +181,9 @@ pub fn render_title_body_log(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
-    };
-
+    render_title(app, &chunks[0], rect);
     render_body(rect, chunks[1], app, false);
     render_logs(app, true, chunks[2], rect, app.state.popup_mode.is_some());
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -285,8 +251,9 @@ fn render_card_being_dragged(parent_body_area: Rect, app: &mut App<'_>, rect: &m
             return;
         }
         let card = card.unwrap();
+
         render_blank_styled_canvas(rect, app, render_area, app.state.popup_mode.is_some());
-        draw_a_single_card(
+        render_a_single_card(
             app,
             render_area,
             app.current_theme.error_text_style,
@@ -297,11 +264,6 @@ fn render_card_being_dragged(parent_body_area: Rect, app: &mut App<'_>, rect: &m
 }
 
 pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -327,19 +289,21 @@ pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[1]);
 
-    render_body(rect, chunks[0], app, false);
-
     let help = draw_help(app, chunks[1]);
-    let help_separator = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(default_style);
+    let help_separator =
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(check_for_popup_and_get_style(
+                app,
+                app.current_theme.general_style,
+            ));
+
+    render_body(rect, chunks[0], app, false);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
-
     render_logs(app, true, chunks[2], rect, app.state.popup_mode.is_some());
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -347,11 +311,6 @@ pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -378,29 +337,22 @@ pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[2]);
 
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
-    };
-
-    render_body(rect, chunks[1], app, false);
-
     let help = draw_help(app, chunks[2]);
-    let help_separator = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(default_style);
+    let help_separator =
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(check_for_popup_and_get_style(
+                app,
+                app.current_theme.general_style,
+            ));
+
+    render_title(app, &chunks[0], rect);
+    render_body(rect, chunks[1], app, false);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
-
     render_logs(app, true, chunks[3], rect, app.state.popup_mode.is_some());
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -434,73 +386,36 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(chunks[2]);
 
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
-    };
+    let reset_both_style = get_button_style_with_default_error_style(
+        app,
+        Focus::SubmitButton,
+        &reset_btn_chunks[0],
+        popup_mode,
+    );
+    let reset_config_style = get_button_style_with_default_error_style(
+        app,
+        Focus::ExtraFocus,
+        &reset_btn_chunks[1],
+        popup_mode,
+    );
+    let progress_bar_style =
+        check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
+    let config_text_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let default_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ConfigTable,
+        &table_chunks[0],
+        popup_mode,
+        false,
+    );
 
     let config_table = draw_config_table_selector(app);
-    let reset_both_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, reset_btn_chunks[0]) {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::SubmitButton) {
-        app.current_theme.error_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let reset_config_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, reset_btn_chunks[1]) {
-        app.state.mouse_focus = Some(Focus::ExtraFocus);
-        app.state.focus = Focus::ExtraFocus;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::ExtraFocus) {
-        app.current_theme.error_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let progress_bar_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.progress_bar_style
-    };
-    let config_text_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let default_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, table_chunks[0]) {
-        app.state.mouse_focus = Some(Focus::ConfigTable);
-        app.state.focus = Focus::ConfigTable;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::ConfigTable {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-
     let config_border = Block::default()
         .title("Config Editor")
         .borders(Borders::ALL)
         .style(config_text_style)
         .border_style(default_style)
         .border_type(BorderType::Rounded);
-    rect.render_widget(config_border, chunks[1]);
-    rect.render_stateful_widget(
-        config_table,
-        table_chunks[0],
-        &mut app.state.app_table_states.config,
-    );
 
     let current_index = app.state.app_table_states.config.selected().unwrap_or(0);
     let total_rows = app.config.to_view_list().len();
@@ -526,7 +441,6 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         )
         .style(reset_both_style)
         .alignment(Alignment::Center);
-    rect.render_widget(reset_both_button, reset_btn_chunks[0]);
 
     let reset_config_button = Paragraph::new("Reset Only Config to Default")
         .block(
@@ -537,13 +451,20 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         )
         .style(reset_config_style)
         .alignment(Alignment::Center);
+
+    let config_help = draw_config_help(app, popup_mode);
+
+    render_title(app, &chunks[0], rect);
+    rect.render_widget(config_border, chunks[1]);
+    rect.render_stateful_widget(
+        config_table,
+        table_chunks[0],
+        &mut app.state.app_table_states.config,
+    );
+    rect.render_widget(reset_both_button, reset_btn_chunks[0]);
     rect.render_widget(reset_config_button, reset_btn_chunks[1]);
-
-    let config_help = draw_config_help(&app.state.focus, popup_mode, app);
     rect.render_widget(config_help, chunks[3]);
-
     render_logs(app, true, chunks[4], rect, app.state.popup_mode.is_some());
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -562,11 +483,7 @@ fn draw_config_table_selector(app: &mut App) -> Table<'static> {
         Row::new(cells).height(height as u16)
     });
 
-    let highlight_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.list_select_style
-    };
+    let highlight_style = check_for_popup_and_get_style(app, app.current_theme.list_select_style);
 
     Table::new(
         rows,
@@ -579,15 +496,6 @@ fn draw_config_table_selector(app: &mut App) -> Table<'static> {
 
 pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
     let area = centered_rect_with_percentage(70, 70, rect.size());
-    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
-    let clear_area_border = Block::default()
-        .title("Config Editor")
-        .style(app.current_theme.general_style)
-        .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
-        .border_type(BorderType::Rounded);
-    render_blank_styled_canvas(rect, app, clear_area, false);
-    rect.render_widget(clear_area_border, clear_area);
 
     let chunks = if app.config.enable_mouse_support {
         Layout::default()
@@ -616,16 +524,13 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             .split(area)
     };
 
-    let edit_box_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
-            app.state.mouse_focus = Some(Focus::EditGeneralConfigPopup);
-            app.state.focus = Focus::EditGeneralConfigPopup;
-            app.current_theme.mouse_focus_style
-        } else if app.state.app_status == AppStatus::UserInput {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+    let edit_box_style = get_mouse_focusable_field_style(
+        app,
+        Focus::EditGeneralConfigPopup,
+        &chunks[1],
+        false,
+        true,
+    );
 
     let config_item_index = &app.state.config_item_being_edited;
     let list_items = app.config.to_view_list();
@@ -668,8 +573,6 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
 
-    render_logs(app, false, chunks[2], rect, false);
-
     if app.state.app_status == AppStatus::UserInput {
         let current_cursor_position = if app.state.current_cursor_position.is_some() {
             app.state.current_cursor_position.unwrap() as u16
@@ -682,12 +585,23 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         let y_cursor_position = chunks[1].y + y_offset + 1;
         rect.set_cursor(x_cursor_position, y_cursor_position);
     }
+
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .title("Config Editor")
+        .style(app.current_theme.general_style)
+        .borders(Borders::ALL)
+        .border_style(app.current_theme.keyboard_focus_style)
+        .border_type(BorderType::Rounded);
+
+    render_blank_styled_canvas(rect, app, clear_area, false);
+    rect.render_widget(clear_area_border, clear_area);
     rect.render_widget(config_item, chunks[0]);
     rect.render_widget(edit_item, chunks[1]);
-
+    render_logs(app, false, chunks[2], rect, false);
     if app.config.enable_mouse_support {
         let submit_button_style =
-            if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
+            if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[3]) {
                 app.state.mouse_focus = Some(Focus::SubmitButton);
                 app.state.focus = Focus::SubmitButton;
                 app.current_theme.mouse_focus_style
@@ -712,16 +626,7 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
 
 pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
     let render_area = centered_rect_with_percentage(70, 70, rect.size());
-    let mouse_coordinates = app.state.current_mouse_coordinates;
-    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
-    let clear_area_border = Block::default()
-        .title("Default HomeScreen Editor")
-        .style(app.current_theme.general_style)
-        .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
-        .border_type(BorderType::Rounded);
-    render_blank_styled_canvas(rect, app, clear_area, false);
-    rect.render_widget(clear_area_border, clear_area);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(8), Constraint::Length(5)].as_ref())
@@ -733,21 +638,15 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
         .map(|s| ListItem::new(s.to_string()))
         .collect();
 
-    if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &render_area) {
         app.state.mouse_focus = Some(Focus::SelectDefaultView);
         app.state.focus = Focus::SelectDefaultView;
-        let top_of_list = render_area.top() + 1;
-        let mut bottom_of_list = top_of_list + list_items.len() as u16;
-        if bottom_of_list > render_area.bottom() {
-            bottom_of_list = render_area.bottom();
-        }
-        let mouse_y = mouse_coordinates.1;
-        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-            app.state
-                .app_list_states
-                .default_view
-                .select(Some((mouse_y - top_of_list) as usize));
-        }
+        calculate_mouse_list_select_index(
+            app.state.current_mouse_coordinates.1,
+            &list_items,
+            render_area,
+            &mut app.state.app_list_states.default_view,
+        );
     }
 
     let default_view_list = List::new(list_items)
@@ -807,13 +706,21 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
 
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .title("Default HomeScreen Editor")
+        .style(app.current_theme.general_style)
+        .borders(Borders::ALL)
+        .border_style(app.current_theme.keyboard_focus_style)
+        .border_type(BorderType::Rounded);
+    render_blank_styled_canvas(rect, app, clear_area, false);
+    rect.render_widget(clear_area_border, clear_area);
     rect.render_stateful_widget(
         default_view_list,
         chunks[0],
         &mut app.state.app_list_states.default_view,
     );
     rect.render_widget(config_help, chunks[1]);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -836,133 +743,23 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(95), Constraint::Length(1)].as_ref())
         .split(chunks[1]);
-    let default_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let progress_bar_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.progress_bar_style
-    };
-    let reset_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3])
-        && app.state.popup_mode.is_none()
-    {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::SubmitButton) {
-        app.current_theme.error_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let current_element_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.list_select_style
-    };
 
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
-    };
-
-    let mut table_items: Vec<Vec<String>> = Vec::new();
-    let keybindings = app.config.keybindings.clone();
-    for (key, value) in keybindings.iter() {
-        let mut row: Vec<String> = Vec::new();
-        row.push(key.to_string());
-        let mut row_value = String::new();
-        for v in value.iter() {
-            row_value.push_str(&v.to_string());
-            row_value.push(' ');
-        }
-        row.push(row_value);
-        table_items.push(row);
-    }
-
-    let rows = table_items.iter().map(|item| {
-        let height = item
-            .iter()
-            .map(|content| content.chars().filter(|c| *c == '\n').count())
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let cells = item.iter().map(|c| Cell::from(c.to_string()));
-        Row::new(cells).height(height as u16)
-    });
-
-    // TODO use ratatui's new scroll bar feature
-    let current_index = app
-        .state
-        .app_table_states
-        .edit_keybindings
-        .selected()
-        .unwrap_or(0);
-    let total_rows = table_items.len();
-    let visible_rows = (table_chunks[1].height - 1) as usize;
-    let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
-    let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
-
-    for i in 0..blocks_to_render {
-        let block_x = table_chunks[1].right() - 2;
-        let block_y = table_chunks[1].top() + i as u16;
-        let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
-            .style(progress_bar_style)
-            .block(Block::default().borders(Borders::NONE));
-        rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
-    }
-
-    let table_border_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
-        && app.state.popup_mode.is_none()
-    {
-        app.state.mouse_focus = Some(Focus::EditKeybindingsTable);
-        app.state.focus = Focus::EditKeybindingsTable;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::EditKeybindingsTable) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let help_key_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_key_style
-    };
-    let help_text_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
-
-    let t = Table::new(
-        rows,
-        [
-            Constraint::Percentage(50),
-            Constraint::Length(30),
-            Constraint::Min(10),
-        ],
-    )
-    .block(
-        Block::default()
-            .title("Edit Keybindings")
-            .style(default_style)
-            .border_style(table_border_style)
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded),
-    )
-    .highlight_style(current_element_style)
-    .highlight_symbol(">> ");
+    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let progress_bar_style =
+        check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
+    let reset_style =
+        get_button_style_with_default_error_style(app, Focus::SubmitButton, &chunks[3], popup_mode);
+    let current_element_style =
+        check_for_popup_and_get_style(app, app.current_theme.list_select_style);
+    let table_border_style = get_mouse_focusable_field_style(
+        app,
+        Focus::EditKeybindingsTable,
+        &chunks[1],
+        popup_mode,
+        false,
+    );
+    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
+    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
 
     let next_focus_key = app
         .state
@@ -1017,6 +814,71 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         Span::styled(" on the Reset Keybindings Button", help_text_style),
     ]);
 
+    let mut table_items: Vec<Vec<String>> = Vec::new();
+    let keybindings = app.config.keybindings.clone();
+    for (key, value) in keybindings.iter() {
+        let mut row: Vec<String> = Vec::new();
+        row.push(key.to_string());
+        let mut row_value = String::new();
+        for v in value.iter() {
+            row_value.push_str(&v.to_string());
+            row_value.push(' ');
+        }
+        row.push(row_value);
+        table_items.push(row);
+    }
+
+    let rows = table_items.iter().map(|item| {
+        let height = item
+            .iter()
+            .map(|content| content.chars().filter(|c| *c == '\n').count())
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let cells = item.iter().map(|c| Cell::from(c.to_string()));
+        Row::new(cells).height(height as u16)
+    });
+
+    // TODO use ratatui's new scroll bar feature
+    let current_index = app
+        .state
+        .app_table_states
+        .edit_keybindings
+        .selected()
+        .unwrap_or(0);
+    let total_rows = table_items.len();
+    let visible_rows = (table_chunks[1].height - 1) as usize;
+    let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
+    let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
+
+    for i in 0..blocks_to_render {
+        let block_x = table_chunks[1].right() - 2;
+        let block_y = table_chunks[1].top() + i as u16;
+        let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
+            .style(progress_bar_style)
+            .block(Block::default().borders(Borders::NONE));
+        rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
+    }
+
+    let t = Table::new(
+        rows,
+        [
+            Constraint::Percentage(50),
+            Constraint::Length(30),
+            Constraint::Min(10),
+        ],
+    )
+    .block(
+        Block::default()
+            .title("Edit Keybindings")
+            .style(default_style)
+            .border_style(table_border_style)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded),
+    )
+    .highlight_style(current_element_style)
+    .highlight_symbol(">> ");
+
     let edit_keybinding_help = Paragraph::new(edit_keybinding_help_spans)
         .block(
             Block::default()
@@ -1038,6 +900,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         .style(reset_style)
         .alignment(Alignment::Center);
 
+    render_title(app, &chunks[0], rect);
     rect.render_stateful_widget(
         t,
         chunks[1],
@@ -1045,7 +908,6 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
     );
     rect.render_widget(edit_keybinding_help, chunks[2]);
     rect.render_widget(reset_button, chunks[3]);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -1053,15 +915,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
 
 pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
     let area = centered_rect_with_percentage(70, 70, rect.size());
-    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
-    let clear_area_border = Block::default()
-        .title("Edit Keybindings")
-        .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
-        .border_type(BorderType::Rounded);
 
-    render_blank_styled_canvas(rect, app, clear_area, false);
-    rect.render_widget(clear_area_border, clear_area);
     let chunks = if app.config.enable_mouse_support {
         Layout::default()
             .direction(Direction::Vertical)
@@ -1090,7 +944,7 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
     };
 
     let edit_box_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1]) {
             app.state.mouse_focus = Some(Focus::EditSpecificKeyBindingPopup);
             app.state.focus = Focus::EditSpecificKeyBindingPopup;
             app.current_theme.mouse_focus_style
@@ -1115,70 +969,77 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
 
     if key_id > key_list.len() {
         return;
-    } else {
-        let key = &key_list[key_id].0;
-        let value = key_list[key_id].1;
-        let mut key_value = String::new();
-        for v in value.iter() {
-            key_value.push_str(&v.to_string());
-            key_value.push(' ');
+    }
+    let key = &key_list[key_id].0;
+    let value = key_list[key_id].1;
+    let mut key_value = String::new();
+    for v in value.iter() {
+        key_value.push_str(&v.to_string());
+        key_value.push(' ');
+    }
+    let user_input_key = app
+        .state
+        .keybinding_store
+        .iter()
+        .find(|x| x[1] == "Enter input mode")
+        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
+        .clone();
+    let paragraph_text = format!("Current Value is {}\n\nPress <{}> to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",key_value,user_input_key);
+    let paragraph_title = key.to_uppercase();
+    let config_item = Paragraph::new(paragraph_text)
+        .block(
+            Block::default()
+                .title(paragraph_title)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: true });
+    let current_edited_keybinding = app.state.edited_keybinding.clone();
+    let mut current_edited_keybinding_string = String::new();
+    if let Some(current_edited_keybinding) = current_edited_keybinding {
+        for key in current_edited_keybinding {
+            current_edited_keybinding_string.push_str(&key.to_string());
+            current_edited_keybinding_string.push(' ');
         }
-        let user_input_key = app
-            .state
-            .keybinding_store
-            .iter()
-            .find(|x| x[1] == "Enter input mode")
-            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-            .clone();
-        let paragraph_text = format!("Current Value is {}\n\nPress <{}> to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",key_value,user_input_key);
-        let paragraph_title = key.to_uppercase();
-        let config_item = Paragraph::new(paragraph_text)
-            .block(
-                Block::default()
-                    .title(paragraph_title)
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            )
-            .wrap(ratatui::widgets::Wrap { trim: true });
-        let current_edited_keybinding = app.state.edited_keybinding.clone();
-        let mut current_edited_keybinding_string = String::new();
-        if let Some(current_edited_keybinding) = current_edited_keybinding {
-            for key in current_edited_keybinding {
-                current_edited_keybinding_string.push_str(&key.to_string());
-                current_edited_keybinding_string.push(' ');
-            }
-        }
-        let edit_item = Paragraph::new(current_edited_keybinding_string.clone())
-            .block(
-                Block::default()
-                    .title("Edit")
-                    .borders(Borders::ALL)
-                    .border_style(edit_box_style)
-                    .border_type(BorderType::Rounded),
-            )
-            .wrap(ratatui::widgets::Wrap { trim: true });
+    }
+    let edit_item = Paragraph::new(current_edited_keybinding_string.clone())
+        .block(
+            Block::default()
+                .title("Edit")
+                .borders(Borders::ALL)
+                .border_style(edit_box_style)
+                .border_type(BorderType::Rounded),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: true });
 
-        render_logs(app, false, chunks[2], rect, false);
-
-        if app.state.app_status == AppStatus::KeyBindMode {
-            let current_cursor_position = if app.state.current_cursor_position.is_some() {
-                app.state.current_cursor_position.unwrap() as u16
-            } else {
-                current_edited_keybinding_string.len() as u16
-            };
-            let x_offset = current_cursor_position % (chunks[1].width - 2);
-            let y_offset = current_cursor_position / (chunks[1].width - 2);
-            let x_cursor_position = chunks[1].x + x_offset + 1;
-            let y_cursor_position = chunks[1].y + y_offset + 1;
-            rect.set_cursor(x_cursor_position, y_cursor_position);
-        }
-        rect.render_widget(config_item, chunks[0]);
-        rect.render_widget(edit_item, chunks[1]);
+    if app.state.app_status == AppStatus::KeyBindMode {
+        let current_cursor_position = if app.state.current_cursor_position.is_some() {
+            app.state.current_cursor_position.unwrap() as u16
+        } else {
+            current_edited_keybinding_string.len() as u16
+        };
+        let x_offset = current_cursor_position % (chunks[1].width - 2);
+        let y_offset = current_cursor_position / (chunks[1].width - 2);
+        let x_cursor_position = chunks[1].x + x_offset + 1;
+        let y_cursor_position = chunks[1].y + y_offset + 1;
+        rect.set_cursor(x_cursor_position, y_cursor_position);
     }
 
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .title("Edit Keybindings")
+        .borders(Borders::ALL)
+        .border_style(app.current_theme.keyboard_focus_style)
+        .border_type(BorderType::Rounded);
+
+    render_blank_styled_canvas(rect, app, clear_area, false);
+    rect.render_widget(clear_area_border, clear_area);
+    rect.render_widget(config_item, chunks[0]);
+    rect.render_widget(edit_item, chunks[1]);
+    render_logs(app, false, chunks[2], rect, false);
     if app.config.enable_mouse_support {
         let submit_button_style =
-            if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
+            if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[3]) {
                 app.state.mouse_focus = Some(Focus::SubmitButton);
                 app.state.focus = Focus::SubmitButton;
                 app.current_theme.mouse_focus_style
@@ -1201,11 +1062,6 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -1232,15 +1088,16 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[2]);
 
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, chunks[0]), chunks[0]);
-    };
+    let main_menu_help = draw_help(app, chunks[2]);
+    let help_separator =
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(check_for_popup_and_get_style(
+                app,
+                app.current_theme.general_style,
+            ));
+
+    render_title(app, &chunks[0], rect);
 
     if app.state.user_login_data.email_id.is_some() {
         let email_id = app.state.user_login_data.email_id.clone().unwrap();
@@ -1309,10 +1166,6 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
         draw_main_menu(app, chunks[1], rect);
     }
 
-    let main_menu_help = draw_help(app, chunks[2]);
-    let help_separator = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(default_style);
     rect.render_widget(main_menu_help.0, chunks[2]);
     rect.render_stateful_widget(
         main_menu_help.1,
@@ -1325,20 +1178,13 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
         help_chunks[2],
         &mut app.state.app_table_states.help,
     );
-
     render_logs(app, true, chunks[3], rect, app.state.popup_mode.is_some());
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
 }
 
 pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(70), Constraint::Length(4)].as_ref())
@@ -1358,9 +1204,14 @@ pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
         .split(chunks[0]);
 
     let help_menu = draw_help(app, chunks[0]);
-    let help_separator = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(default_style);
+    let help_separator =
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(check_for_popup_and_get_style(
+                app,
+                app.current_theme.general_style,
+            ));
+
     rect.render_widget(help_menu.0, chunks[0]);
     rect.render_stateful_widget(
         help_menu.1,
@@ -1373,7 +1224,6 @@ pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
         help_chunks[2],
         &mut app.state.app_table_states.help,
     );
-
     render_logs(app, true, chunks[1], rect, app.state.popup_mode.is_some());
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
@@ -1393,42 +1243,19 @@ pub fn render_logs_only(rect: &mut Frame, app: &mut App) {
 }
 
 fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Table<'a>) {
+    let border_style = get_mouse_focusable_field_style(
+        app,
+        Focus::Help,
+        &render_area,
+        app.state.popup_mode.is_some(),
+        false,
+    );
     let keybinding_store = &app.state.keybinding_store;
-    let popup_mode = app.state.popup_mode.is_some();
-    let mouse_coordinates = app.state.current_mouse_coordinates;
-    let focus = &mut app.state.focus;
-    let default_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
-    let border_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
-        app.state.mouse_focus = Some(Focus::Help);
-        app.state.focus = Focus::Help;
-        app.current_theme.mouse_focus_style
-    } else if *focus == Focus::Help || *focus == Focus::MainMenuHelp {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
 
-    let current_element_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.list_select_style
-    };
-    let help_key_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_key_style
-    };
-    let help_text_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
+    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
+    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+    let current_element_style =
+        check_for_popup_and_get_style(app, app.current_theme.list_select_style);
 
     let rows = keybinding_store.iter().map(|item| {
         let height = item
@@ -1451,7 +1278,7 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
         left_rows,
         [Constraint::Percentage(30), Constraint::Percentage(70)],
     )
-    .block(Block::default().style(default_style))
+    .block(Block::default().style(help_text_style))
     .highlight_style(current_element_style)
     .highlight_symbol(">> ")
     .style(border_style);
@@ -1460,7 +1287,7 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
         right_rows,
         [Constraint::Percentage(30), Constraint::Percentage(70)],
     )
-    .block(Block::default().style(default_style))
+    .block(Block::default().style(help_text_style))
     .highlight_style(current_element_style)
     .highlight_symbol(">> ")
     .style(border_style);
@@ -1468,14 +1295,15 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
     let border_block = Block::default()
         .title("Help")
         .borders(Borders::ALL)
-        .style(default_style)
+        .style(help_text_style)
         .border_style(border_style)
         .border_type(BorderType::Rounded);
 
     (border_block, left_table, right_table)
 }
 
-fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Paragraph<'a> {
+fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
+    let focus = app.state.focus;
     let help_box_style = if popup_mode {
         app.current_theme.inactive_text_style
     } else if matches!(focus, Focus::ConfigHelp) {
@@ -1483,16 +1311,8 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
     } else {
         app.current_theme.general_style
     };
-    let help_text_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
-    let help_key_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_key_style
-    };
+    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
+    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
 
     let up_key = app
         .state
@@ -1565,46 +1385,14 @@ fn draw_config_help<'a>(focus: &'a Focus, popup_mode: bool, app: &'a App) -> Par
 
 fn draw_main_menu(app: &mut App, render_area: Rect, rect: &mut Frame) {
     let main_menu_items = app.main_menu.all();
-    let popup_mode = app.state.popup_mode.is_some();
-    let focus = app.state.focus;
-    let mouse_coordinates = app.state.current_mouse_coordinates;
-    let menu_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
-        if !(app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
-        {
-            app.state.mouse_focus = Some(Focus::MainMenu);
-            app.state.focus = Focus::MainMenu;
-            let top_of_list = render_area.top() + 1;
-            let mut bottom_of_list = top_of_list + main_menu_items.len() as u16;
-            if bottom_of_list > render_area.bottom() {
-                bottom_of_list = render_area.bottom();
-            }
-            let mouse_y = mouse_coordinates.1;
-            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-                app.state
-                    .app_list_states
-                    .main_menu
-                    .select(Some((mouse_y - top_of_list) as usize));
-            }
-        }
-        app.current_theme.mouse_focus_style
-    } else if matches!(focus, Focus::MainMenu) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let default_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let highlight_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.list_select_style
-    };
+    let menu_style = get_mouse_focusable_field_style_with_vertical_list_selection(
+        app,
+        &main_menu_items,
+        render_area,
+        app.state.popup_mode.is_some(),
+    );
+    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let highlight_style = check_for_popup_and_get_style(app, app.current_theme.list_select_style);
     let list_items = main_menu_items
         .iter()
         .map(|i| ListItem::new(i.to_string()))
@@ -1620,6 +1408,7 @@ fn draw_main_menu(app: &mut App, render_area: Rect, rect: &mut Frame) {
         )
         .highlight_style(highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
+
     rect.render_stateful_widget(
         main_menu,
         render_area,
@@ -1649,15 +1438,15 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
     } else {
         &app_boards_and_cards
     };
-    let progress_bar_style = if app.state.popup_mode.is_some() || app.state.card_drag_mode {
+    let progress_bar_style = if app.state.card_drag_mode {
         app.current_theme.inactive_text_style
     } else {
-        app.current_theme.progress_bar_style
+        check_for_popup_and_get_style(app, app.current_theme.progress_bar_style)
     };
-    let error_text_style = if app.state.popup_mode.is_some() || app.state.card_drag_mode {
+    let error_text_style = if app.state.card_drag_mode {
         app.current_theme.inactive_text_style
     } else {
-        app.current_theme.error_text_style
+        check_for_popup_and_get_style(app, app.current_theme.error_text_style)
     };
     let current_board_id = &app.state.current_board_id.unwrap_or((0, 0));
 
@@ -1827,8 +1616,8 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
         let board_border_style = if app.state.popup_mode.is_some() {
             app.current_theme.inactive_text_style
         } else if check_if_mouse_is_in_area(
-            app.state.current_mouse_coordinates,
-            board_chunks[board_index],
+            &app.state.current_mouse_coordinates,
+            &board_chunks[board_index],
         ) {
             app.state.mouse_focus = Some(Focus::Body);
             app.state.focus = Focus::Body;
@@ -1843,12 +1632,10 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             && matches!(app.state.focus, Focus::Body)
         {
             app.current_theme.keyboard_focus_style
+        } else if app.state.card_drag_mode {
+            app.current_theme.inactive_text_style
         } else {
-            if app.state.card_drag_mode {
-                app.current_theme.inactive_text_style
-            } else {
-                app.current_theme.general_style
-            }
+            app.current_theme.general_style
         };
 
         let board_block = Block::default()
@@ -1891,15 +1678,15 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             } else {
                 "No cards found, press ".to_string() + &new_card_key + "to add a new card"
             };
-            let mut usuable_length = empty_card_text.len() as u16;
+            let mut usable_length = empty_card_text.len() as u16;
             let mut usable_height = 1.0;
             if empty_card_text.len() > available_width.into() {
-                usuable_length = available_width;
+                usable_length = available_width;
                 usable_height = empty_card_text.len() as f32 / available_width as f32;
                 usable_height = usable_height.ceil();
             }
             let message_centered_rect =
-                centered_rect_with_length(usuable_length, usable_height as u16, card_chunks[0]);
+                centered_rect_with_length(usable_length, usable_height as u16, card_chunks[0]);
             let empty_card_paragraph = Paragraph::new(empty_card_text)
                 .alignment(Alignment::Center)
                 .block(Block::default())
@@ -1959,8 +1746,8 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             let card_style = if app.state.popup_mode.is_some() {
                 app.current_theme.inactive_text_style
             } else if check_if_mouse_is_in_area(
-                app.state.current_mouse_coordinates,
-                card_chunks[card_index],
+                &app.state.current_mouse_coordinates,
+                &card_chunks[card_index],
             ) {
                 app.state.mouse_focus = Some(Focus::Body);
                 app.state.focus = Focus::Body;
@@ -1986,7 +1773,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             } else {
                 app.current_theme.general_style
             };
-            draw_a_single_card(app, card_chunks[card_index], card_style, card, rect);
+            render_a_single_card(app, card_chunks[card_index], card_style, card, rect);
         }
         if app.state.card_drag_mode {}
     }
@@ -2015,7 +1802,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
     }
 }
 
-fn draw_a_single_card(
+fn render_a_single_card(
     app: &mut App,
     render_area: Rect,
     card_style: Style,
@@ -2171,16 +1958,17 @@ fn draw_a_single_card(
         .borders(Borders::ALL)
         .border_style(card_style)
         .border_type(BorderType::Rounded);
-    frame_to_render_on.render_widget(card_block, render_area);
     let card_paragraph = Paragraph::new(card_description)
         .alignment(Alignment::Left)
         .block(Block::default())
         .wrap(ratatui::widgets::Wrap { trim: false });
-    frame_to_render_on.render_widget(card_paragraph, inner_card_chunks[0]);
     let card_extra_info = Paragraph::new(card_extra_info)
         .alignment(Alignment::Left)
         .block(Block::default())
         .wrap(ratatui::widgets::Wrap { trim: false });
+
+    frame_to_render_on.render_widget(card_block, render_area);
+    frame_to_render_on.render_widget(card_paragraph, inner_card_chunks[0]);
     frame_to_render_on.render_widget(card_extra_info, inner_card_chunks[1]);
 }
 
@@ -2268,9 +2056,6 @@ pub fn draw_size_error(rect: &mut Frame, size: &Rect, msg: String, app: &mut App
         .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
         .split(*size);
 
-    let title = draw_title(app, *size);
-    rect.render_widget(title, chunks[0]);
-
     let error_text_spans = vec![
         Line::from(Span::styled(msg, app.current_theme.error_text_style)),
         Line::from(Span::styled(
@@ -2282,6 +2067,8 @@ pub fn draw_size_error(rect: &mut Frame, size: &Rect, msg: String, app: &mut App
     let body = Paragraph::new(error_text_spans)
         .block(Block::default().borders(Borders::ALL).borders(Borders::ALL))
         .alignment(Alignment::Center);
+
+    rect.render_widget(draw_title(app, *size), chunks[0]);
     rect.render_widget(body, chunks[1]);
 }
 
@@ -2290,9 +2077,6 @@ pub fn draw_loading_screen(rect: &mut Frame, size: &Rect, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
         .split(*size);
-
-    let title = draw_title(app, *size);
-    rect.render_widget(title, chunks[0]);
 
     let mut text = vec![Line::from(vec![
         Span::styled("Loading", app.current_theme.keyboard_focus_style),
@@ -2315,29 +2099,20 @@ pub fn draw_loading_screen(rect: &mut Frame, size: &Rect, app: &mut App) {
     let body = Paragraph::new(text)
         .block(Block::default().borders(Borders::ALL))
         .alignment(Alignment::Center);
+
+    rect.render_widget(draw_title(app, *size), chunks[0]);
     rect.render_widget(body, chunks[1]);
 }
 
 pub fn draw_title<'a>(app: &mut App, render_area: Rect) -> Paragraph<'a> {
-    let popup_mode = app.state.popup_mode.is_some();
-    let mouse_coordinates = app.state.current_mouse_coordinates;
-    let focus = app.state.focus;
-    let title_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let border_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
-        app.state.mouse_focus = Some(Focus::Title);
-        app.state.focus = Focus::Title;
-        app.current_theme.mouse_focus_style
-    } else if matches!(focus, Focus::Title) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let title_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let border_style = get_mouse_focusable_field_style(
+        app,
+        Focus::Title,
+        &render_area,
+        app.state.popup_mode.is_some(),
+        false,
+    );
     Paragraph::new(APP_TITLE)
         .alignment(Alignment::Center)
         .block(
@@ -2368,6 +2143,7 @@ pub fn check_size(rect: &Rect) -> String {
 }
 
 pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
+    let popup_mode = app.state.popup_mode.is_some();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -2382,64 +2158,20 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let help_text_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
-    let name_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
-        if app.state.mouse_focus != Some(Focus::NewBoardName) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        }
-        app.state.mouse_focus = Some(Focus::NewBoardName);
-        app.state.focus = Focus::NewBoardName;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::NewBoardName) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let description_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
-        if app.state.mouse_focus != Some(Focus::NewBoardDescription) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        }
-        app.state.mouse_focus = Some(Focus::NewBoardDescription);
-        app.state.focus = Focus::NewBoardDescription;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::NewBoardDescription) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let help_key_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_key_style
-    };
-    let submit_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[4]) {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.state.current_cursor_position = None;
-        app.state.app_status = AppStatus::Initialized;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::SubmitButton) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
+    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+    let name_style =
+        get_mouse_focusable_field_style(app, Focus::NewBoardName, &chunks[1], popup_mode, false);
+    let description_style = get_mouse_focusable_field_style(
+        app,
+        Focus::NewBoardDescription,
+        &chunks[2],
+        popup_mode,
+        false,
+    );
+    let submit_style =
+        get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[4], popup_mode, false);
 
     let title_paragraph = Paragraph::new("Create a new Board")
         .alignment(Alignment::Center)
@@ -2584,6 +2316,7 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
+    let popup_mode = app.state.popup_mode.is_some();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -2599,79 +2332,17 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let name_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
-        if app.state.mouse_focus != Some(Focus::CardName) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        }
-        app.state.mouse_focus = Some(Focus::CardName);
-        app.state.focus = Focus::CardName;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::CardName) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let description_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
-        if app.state.mouse_focus != Some(Focus::CardDescription) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        }
-        app.state.mouse_focus = Some(Focus::CardDescription);
-        app.state.focus = Focus::CardDescription;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::CardDescription) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let due_date_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[3]) {
-        if app.state.mouse_focus != Some(Focus::CardDueDate) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        }
-        app.state.mouse_focus = Some(Focus::CardDueDate);
-        app.state.focus = Focus::CardDueDate;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::CardDueDate) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let help_key_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_key_style
-    };
-    let help_text_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
-    let submit_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[5]) {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.state.current_cursor_position = None;
-        app.state.app_status = AppStatus::Initialized;
-        app.current_theme.mouse_focus_style
-    } else if matches!(app.state.focus, Focus::SubmitButton) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let name_style =
+        get_mouse_focusable_field_style(app, Focus::CardName, &chunks[1], popup_mode, false);
+    let description_style =
+        get_mouse_focusable_field_style(app, Focus::CardDescription, &chunks[2], popup_mode, false);
+    let due_date_style =
+        get_mouse_focusable_field_style(app, Focus::CardDueDate, &chunks[3], popup_mode, false);
+    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
+    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+    let submit_style =
+        get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[5], popup_mode, false);
 
     let title_paragraph = Paragraph::new("Create a new Card")
         .alignment(Alignment::Center)
@@ -2879,21 +2550,9 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let help_key_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_key_style
-    };
-    let help_text_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
+    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
+    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
     let main_chunks = {
         Layout::default()
             .direction(Direction::Horizontal)
@@ -2966,22 +2625,16 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
 
         if !(app.state.popup_mode.is_some()
             && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
-            && check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
+            && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1])
         {
             app.state.mouse_focus = Some(Focus::LoadSave);
             app.state.focus = Focus::LoadSave;
-            let top_of_list = chunks[1].y + 1;
-            let mut bottom_of_list = chunks[1].y + item_list.len() as u16;
-            if bottom_of_list > chunks[1].bottom() {
-                bottom_of_list = chunks[1].bottom();
-            }
-            let mouse_y = app.state.current_mouse_coordinates.1;
-            if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-                app.state
-                    .app_list_states
-                    .load_save
-                    .select(Some((mouse_y - top_of_list) as usize));
-            }
+            calculate_mouse_list_select_index(
+                app.state.current_mouse_coordinates.1,
+                &item_list,
+                chunks[1],
+                &mut app.state.app_list_states.load_save,
+            );
         }
         rect.render_stateful_widget(
             choice_list,
@@ -3221,17 +2874,6 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
                 toast_height,
             ),
         );
-        render_blank_styled_canvas(
-            rect,
-            app,
-            Rect::new(
-                x_offset,
-                total_height_rendered,
-                rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO,
-                toast_height,
-            ),
-            false,
-        );
         rect.render_widget(
             toast_paragraph,
             Rect::new(
@@ -3260,13 +2902,13 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
         )
         .style(app.current_theme.general_style);
     let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
+
     render_blank_styled_canvas(rect, app, message_area, false);
     rect.render_widget(toast_count_paragraph, message_area);
 }
 
 pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     let popup_area = centered_rect_with_percentage(90, 90, rect.size());
-    render_blank_styled_canvas(rect, app, popup_area, false);
 
     if app.state.current_board_id.is_none() || app.state.current_card_id.is_none() {
         let no_board_or_card_selected = Paragraph::new("No board or card selected.")
@@ -3771,7 +3413,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         }
     };
 
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[2]) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[2]) {
         let top_of_list = card_chunks[2].y + 1;
         let mut bottom_of_list = card_chunks[2].y + card_extra_info_items_len as u16;
         if bottom_of_list > card_chunks[2].bottom() {
@@ -3823,7 +3465,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             app.state.app_list_states.card_view_list.select(None);
         }
     };
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[0]) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[0]) {
         app.state.focus = Focus::CardName;
         app.state.mouse_focus = Some(Focus::CardName);
         app.state
@@ -3833,7 +3475,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         app.state.app_list_states.card_view_tag_list.select(None);
         app.state.current_cursor_position = None;
     }
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[1]) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[1]) {
         app.state.focus = Focus::CardDescription;
         app.state.mouse_focus = Some(Focus::CardDescription);
         app.state
@@ -3874,7 +3516,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Left);
 
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[3]) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[3]) {
         app.state.focus = Focus::CardTags;
         app.state.mouse_focus = Some(Focus::CardTags);
         app.state
@@ -3883,7 +3525,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             .select(None);
     }
 
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[4]) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[4]) {
         app.state.focus = Focus::CardComments;
         app.state.mouse_focus = Some(Focus::CardComments);
         app.state.app_list_states.card_view_tag_list.select(None);
@@ -4008,6 +3650,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     }
 
     // Render everything
+    render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_widget(main_block_widget, popup_area);
     rect.render_widget(name_paragraph_widget, card_chunks[0]);
     rect.render_widget(card_description_widget, card_chunks[1]);
@@ -4017,7 +3660,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
 
     // Render Submit button if card is being edited
     if app.state.card_being_edited.is_some() {
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, card_chunks[5]) {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[5]) {
             app.state.focus = Focus::SubmitButton;
             app.state.mouse_focus = Some(Focus::SubmitButton);
             app.state
@@ -4141,94 +3784,35 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    let command_search_border_style = if app.state.focus == Focus::CommandPaletteCommand {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let card_search_border_style = if app.state.focus == Focus::CommandPaletteCard {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let board_search_border_style = if app.state.focus == Focus::CommandPaletteBoard {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let command_search_text_style = if app.state.focus == Focus::CommandPaletteCommand {
-        app.current_theme.general_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let card_search_text_style = if app.state.focus == Focus::CommandPaletteCard {
-        app.current_theme.general_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let board_search_text_style = if app.state.focus == Focus::CommandPaletteBoard {
-        app.current_theme.general_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let command_search_highlight_style = if app.state.focus == Focus::CommandPaletteCommand {
-        app.current_theme.list_select_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let card_search_highlight_style = if app.state.focus == Focus::CommandPaletteCard {
-        app.current_theme.list_select_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
-    let board_search_highlight_style = if app.state.focus == Focus::CommandPaletteBoard {
-        app.current_theme.list_select_style
-    } else {
-        app.current_theme.inactive_text_style.bg(app
-            .current_theme
-            .general_style
-            .bg
-            .unwrap_or(Color::Reset))
-    };
+    fn get_command_palette_style(app: &App, focus: Focus) -> (Style, Style, Style) {
+        if app.state.focus == focus {
+            (
+                app.current_theme.keyboard_focus_style,
+                app.current_theme.general_style,
+                app.current_theme.list_select_style,
+            )
+        } else {
+            (
+                app.current_theme.inactive_text_style,
+                app.current_theme.inactive_text_style,
+                app.current_theme.inactive_text_style,
+            )
+        }
+    }
+
+    let (command_search_border_style, command_search_text_style, command_search_highlight_style) =
+        get_command_palette_style(&app, Focus::CommandPaletteCommand);
+    let (card_search_border_style, card_search_text_style, card_search_highlight_style) =
+        get_command_palette_style(&app, Focus::CommandPaletteCard);
+    let (board_search_border_style, board_search_text_style, board_search_highlight_style) =
+        get_command_palette_style(&app, Focus::CommandPaletteBoard);
 
     let command_search_results = if app.command_palette.command_search_results.is_some() {
         let raw_search_results = app.command_palette.command_search_results.as_ref().unwrap();
         let mut list_items = vec![];
         for item in raw_search_results {
             let mut spans = vec![];
-            for (_, c) in item.to_string().chars().enumerate() {
+            for c in item.to_string().chars() {
                 if current_search_text_input
                     .to_lowercase()
                     .contains(c.to_string().to_lowercase().as_str())
@@ -4512,24 +4096,6 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         .highlight_style(board_search_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    render_blank_styled_canvas(rect, app, search_results_chunk, false);
-    rect.render_widget(results_border, search_results_chunk);
-    rect.render_stateful_widget(
-        command_search_results,
-        search_results_chunks[0],
-        &mut app.state.app_list_states.command_palette_command_search,
-    );
-    rect.render_stateful_widget(
-        card_search_results,
-        search_results_chunks[1],
-        &mut app.state.app_list_states.command_palette_card_search,
-    );
-    rect.render_stateful_widget(
-        board_search_results,
-        search_results_chunks[2],
-        &mut app.state.app_list_states.command_palette_board_search,
-    );
-
     let up_key = app
         .state
         .keybinding_store
@@ -4587,31 +4153,47 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: false });
 
-    render_blank_styled_canvas(rect, app, help_chunk, false);
-    rect.render_widget(help_paragraph, help_chunk);
-
     if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        search_results_chunks[0],
+        &app.state.current_mouse_coordinates,
+        &search_results_chunks[0],
     ) {
         app.state.mouse_focus = Some(Focus::CommandPaletteCommand);
         app.state.focus = Focus::CommandPaletteCommand;
     }
     if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        search_results_chunks[1],
+        &app.state.current_mouse_coordinates,
+        &search_results_chunks[1],
     ) {
         app.state.mouse_focus = Some(Focus::CommandPaletteCard);
         app.state.focus = Focus::CommandPaletteCard;
     }
     if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        search_results_chunks[2],
+        &app.state.current_mouse_coordinates,
+        &search_results_chunks[2],
     ) {
         app.state.mouse_focus = Some(Focus::CommandPaletteBoard);
         app.state.focus = Focus::CommandPaletteBoard;
     }
 
+    render_blank_styled_canvas(rect, app, search_results_chunk, false);
+    rect.render_widget(results_border, search_results_chunk);
+    rect.render_stateful_widget(
+        command_search_results,
+        search_results_chunks[0],
+        &mut app.state.app_list_states.command_palette_command_search,
+    );
+    rect.render_stateful_widget(
+        card_search_results,
+        search_results_chunks[1],
+        &mut app.state.app_list_states.command_palette_card_search,
+    );
+    rect.render_stateful_widget(
+        board_search_results,
+        search_results_chunks[2],
+        &mut app.state.app_list_states.command_palette_board_search,
+    );
+    render_blank_styled_canvas(rect, app, help_chunk, false);
+    rect.render_widget(help_paragraph, help_chunk);
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -4625,21 +4207,15 @@ pub fn render_change_ui_mode_popup(rect: &mut Frame, app: &mut App) {
 
     let popup_area = centered_rect_with_length(40, 10, rect.size());
 
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeUiModePopup);
         app.state.focus = Focus::ChangeUiModePopup;
-        let top_of_list = popup_area.y + 1;
-        let mut bottom_of_list = popup_area.y + all_ui_modes.len() as u16;
-        if bottom_of_list > popup_area.bottom() {
-            bottom_of_list = popup_area.bottom();
-        }
-        let mouse_y = app.state.current_mouse_coordinates.1;
-        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-            app.state
-                .app_list_states
-                .default_view
-                .select(Some((mouse_y - top_of_list) as usize));
-        }
+        calculate_mouse_list_select_index(
+            app.state.current_mouse_coordinates.1,
+            &all_ui_modes,
+            popup_area,
+            &mut app.state.app_list_states.default_view,
+        );
     }
     let ui_modes = List::new(all_ui_modes)
         .block(
@@ -4658,7 +4234,6 @@ pub fn render_change_ui_mode_popup(rect: &mut Frame, app: &mut App) {
         popup_area,
         &mut app.state.app_list_states.default_view,
     );
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -4673,21 +4248,15 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
 
     let popup_area = centered_rect_with_length(30, 8, rect.size());
 
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeDateFormatPopup);
         app.state.focus = Focus::ChangeDateFormatPopup;
-        let top_of_list = popup_area.y + 1;
-        let mut bottom_of_list = popup_area.y + all_date_formats.len() as u16;
-        if bottom_of_list > popup_area.bottom() {
-            bottom_of_list = popup_area.bottom();
-        }
-        let mouse_y = app.state.current_mouse_coordinates.1;
-        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-            app.state
-                .app_list_states
-                .date_format_selector
-                .select(Some((mouse_y - top_of_list) as usize));
-        }
+        calculate_mouse_list_select_index(
+            app.state.current_mouse_coordinates.1,
+            &all_date_formats,
+            popup_area,
+            &mut app.state.app_list_states.date_format_selector,
+        );
     }
     let date_formats = List::new(all_date_formats)
         .block(
@@ -4706,7 +4275,6 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
         popup_area,
         &mut app.state.app_list_states.date_format_selector,
     );
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -4739,21 +4307,15 @@ pub fn render_change_card_status_popup(rect: &mut Frame, app: &mut App) {
     let percent_height =
         (((all_statuses.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
     let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeCardStatusPopup);
         app.state.focus = Focus::ChangeCardStatusPopup;
-        let top_of_list = popup_area.y + 1;
-        let mut bottom_of_list = popup_area.y + all_statuses.len() as u16;
-        if bottom_of_list > popup_area.bottom() {
-            bottom_of_list = popup_area.bottom();
-        }
-        let mouse_y = app.state.current_mouse_coordinates.1;
-        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-            app.state
-                .app_list_states
-                .card_status_selector
-                .select(Some((mouse_y - top_of_list) as usize));
-        }
+        calculate_mouse_list_select_index(
+            app.state.current_mouse_coordinates.1,
+            &all_statuses,
+            popup_area,
+            &mut app.state.app_list_states.card_status_selector,
+        );
     }
     let statuses = List::new(all_statuses)
         .block(
@@ -4775,7 +4337,6 @@ pub fn render_change_card_status_popup(rect: &mut Frame, app: &mut App) {
         popup_area,
         &mut app.state.app_list_states.card_status_selector,
     );
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -4808,21 +4369,15 @@ pub fn render_card_priority_selector(rect: &mut Frame, app: &mut App) {
     let percent_height =
         (((all_priorities.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
     let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, popup_area) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeCardPriorityPopup);
         app.state.focus = Focus::ChangeCardPriorityPopup;
-        let top_of_list = popup_area.y + 1;
-        let mut bottom_of_list = popup_area.y + all_priorities.len() as u16;
-        if bottom_of_list > popup_area.bottom() {
-            bottom_of_list = popup_area.bottom();
-        }
-        let mouse_y = app.state.current_mouse_coordinates.1;
-        if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-            app.state
-                .app_list_states
-                .card_priority_selector
-                .select(Some((mouse_y - top_of_list) as usize));
-        }
+        calculate_mouse_list_select_index(
+            app.state.current_mouse_coordinates.1,
+            &all_priorities,
+            popup_area,
+            &mut app.state.app_list_states.card_priority_selector,
+        );
     }
     let priorities = List::new(all_priorities)
         .block(
@@ -4844,7 +4399,48 @@ pub fn render_card_priority_selector(rect: &mut Frame, app: &mut App) {
         popup_area,
         &mut app.state.app_list_states.card_priority_selector,
     );
+    if app.config.enable_mouse_support {
+        render_close_button(rect, app);
+    }
+}
 
+pub fn render_popup<T: ToString>(
+    rect: &mut Frame,
+    app: &mut App,
+    focus: Focus,
+    list_items: &[T],
+    list_state: &mut ListState,
+    title: &str,
+    popup_area: Rect,
+) {
+    let items = list_items
+        .iter()
+        .map(|s| ListItem::new(vec![Line::from(s.to_string())]))
+        .collect::<Vec<ListItem>>();
+
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
+        app.state.mouse_focus = Some(focus);
+        app.state.focus = focus;
+        calculate_mouse_list_select_index(
+            app.state.current_mouse_coordinates.1,
+            &items,
+            popup_area,
+            list_state,
+        );
+    }
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(title)
+                .style(app.current_theme.general_style)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(app.current_theme.list_select_style)
+        .highlight_symbol(LIST_SELECTED_SYMBOL);
+
+    render_blank_styled_canvas(rect, app, popup_area, false);
+    rect.render_stateful_widget(list, popup_area, list_state);
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -4865,7 +4461,7 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
         };
 
         let popup_area = centered_rect_with_percentage(80, 80, rect.size());
-        render_blank_styled_canvas(rect, app, popup_area, false);
+
         let all_available_tags = app.state.all_available_tags.as_ref().unwrap();
         let empty_vec = vec![];
         let selected_tags = if app.state.filter_tags.is_some() {
@@ -4928,15 +4524,6 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .border_type(BorderType::Rounded)
             .style(app.current_theme.general_style)
             .border_style(tag_box_style);
-
-        rect.render_widget(tag_box_border, chunks[0]);
-
-        render_blank_styled_canvas(rect, app, filter_list_chunks[0], false);
-        rect.render_stateful_widget(
-            tags,
-            filter_list_chunks[0],
-            &mut app.state.app_list_states.filter_by_tag_list,
-        );
 
         let up_key = app
             .state
@@ -5006,8 +4593,6 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        rect.render_widget(help, chunks[1]);
-
         let submit_btn_text = if app.state.filter_tags.is_some() {
             if app.state.filter_tags.as_ref().unwrap().len() > 1 {
                 "Confirm filters"
@@ -5028,8 +4613,6 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
                     .border_style(submit_style),
             )
             .alignment(Alignment::Center);
-
-        rect.render_widget(submit_button, chunks[2]);
 
         if filter_list_chunks.len() > 1 {
             render_blank_styled_canvas(rect, app, filter_list_chunks[1], false);
@@ -5054,14 +4637,25 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             }
         }
 
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[0]) {
             app.state.mouse_focus = Some(Focus::FilterByTagPopup);
             app.state.focus = Focus::FilterByTagPopup;
         }
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[2]) {
             app.state.mouse_focus = Some(Focus::SubmitButton);
             app.state.focus = Focus::SubmitButton;
         }
+
+        render_blank_styled_canvas(rect, app, popup_area, false);
+        rect.render_widget(tag_box_border, chunks[0]);
+        render_blank_styled_canvas(rect, app, filter_list_chunks[0], false);
+        rect.render_stateful_widget(
+            tags,
+            filter_list_chunks[0],
+            &mut app.state.app_list_states.filter_by_tag_list,
+        );
+        rect.render_widget(help, chunks[1]);
+        rect.render_widget(submit_button, chunks[2]);
     }
 
     if app.config.enable_mouse_support {
@@ -5079,7 +4673,7 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let ui_render_time = if app.state.ui_render_time.is_some() {
         let render_time = app.state.ui_render_time.unwrap();
         if render_time > 1000 {
-            format!("{}ms", render_time / 1000)
+            format!("{}ms", render_time as f64 / 1000_f64)
         } else {
             format!("{}μs", render_time)
         }
@@ -5117,11 +4711,12 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
             .style(app.current_theme.general_style)
             .border_style(app.current_theme.log_debug_style),
     );
+
     render_blank_styled_canvas(rect, app, menu_area, false);
     rect.render_widget(debug_panel, menu_area);
 }
 
-pub fn check_if_mouse_is_in_area(mouse_coordinates: (u16, u16), rect_to_check: Rect) -> bool {
+pub fn check_if_mouse_is_in_area(mouse_coordinates: &(u16, u16), rect_to_check: &Rect) -> bool {
     let (x, y) = mouse_coordinates;
     let (x1, y1, x2, y2) = (
         rect_to_check.x,
@@ -5129,7 +4724,7 @@ pub fn check_if_mouse_is_in_area(mouse_coordinates: (u16, u16), rect_to_check: R
         rect_to_check.x + rect_to_check.width,
         rect_to_check.y + rect_to_check.height,
     );
-    if x >= x1 && x <= x2 && y >= y1 && y <= y2 {
+    if x >= &x1 && x <= &x2 && y >= &y1 && y <= &y2 {
         return true;
     }
     false
@@ -5138,13 +4733,7 @@ pub fn check_if_mouse_is_in_area(mouse_coordinates: (u16, u16), rect_to_check: R
 fn render_close_button(rect: &mut Frame, app: &mut App) {
     let close_btn_area = Rect::new(rect.size().width - 3, 0, 3, 3);
     let close_btn_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, close_btn_area) {
-            app.state.mouse_focus = Some(Focus::CloseButton);
-            app.state.focus = Focus::CloseButton;
-            app.current_theme.mouse_focus_style
-        } else {
-            app.current_theme.error_text_style
-        };
+        get_button_style_with_default_error_style(app, Focus::CloseButton, &close_btn_area, false);
     let close_btn = Paragraph::new(vec![Line::from("X")])
         .block(
             Block::default()
@@ -5153,6 +4742,7 @@ fn render_close_button(rect: &mut Frame, app: &mut App) {
                 .style(close_btn_style),
         )
         .alignment(Alignment::Right);
+
     rect.render_widget(close_btn, close_btn_area);
 }
 
@@ -5165,8 +4755,6 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
         .borders(Borders::ALL)
         .border_style(app.current_theme.keyboard_focus_style)
         .border_type(BorderType::Rounded);
-    render_blank_styled_canvas(rect, app, clear_area, false);
-    rect.render_widget(clear_area_border, clear_area);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -5179,7 +4767,7 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
         .map(|t| ListItem::new(vec![Line::from(t.name.clone())]))
         .collect::<Vec<ListItem>>();
 
-    if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[0]) {
         app.state.mouse_focus = Some(Focus::ThemeSelector);
         app.state.focus = Focus::ThemeSelector;
         let top_of_list = chunks[0].y + 1;
@@ -5211,12 +4799,6 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
         )
         .highlight_style(app.current_theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
-    render_blank_styled_canvas(rect, app, chunks[0], false);
-    rect.render_stateful_widget(
-        themes,
-        chunks[0],
-        &mut app.state.app_list_states.theme_selector,
-    );
 
     let up_key = app
         .state
@@ -5265,14 +4847,21 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
 
+    render_blank_styled_canvas(rect, app, clear_area, false);
+    rect.render_widget(clear_area_border, clear_area);
+    rect.render_stateful_widget(
+        themes,
+        chunks[0],
+        &mut app.state.app_list_states.theme_selector,
+    );
     rect.render_widget(change_theme_help, chunks[1]);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
 }
 
 pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
+    let popup_mode = app.state.popup_mode.is_some();
     let render_area = rect.size();
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -5287,10 +4876,26 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(main_chunks[1]);
+
+    let submit_button_style = get_mouse_focusable_field_style(
+        app,
+        Focus::SubmitButton,
+        &button_chunks[0],
+        popup_mode,
+        false,
+    );
+    let reset_button_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ExtraFocus,
+        &button_chunks[1],
+        popup_mode,
+        false,
+    );
+
     let theme_table_rows = app.state.theme_being_edited.to_rows(app);
     let list_highlight_style = if app.state.popup_mode.is_some() {
         app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, main_chunks[0]) {
+    } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &main_chunks[0]) {
         app.state.mouse_focus = Some(Focus::ThemeEditor);
         app.state.focus = Focus::ThemeEditor;
         let top_of_list = main_chunks[0].y + 1;
@@ -5320,44 +4925,12 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
     } else {
         app.current_theme.general_style
     };
-    let submit_button_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, button_chunks[0]) {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::SubmitButton {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let reset_button_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, button_chunks[1]) {
-        app.state.mouse_focus = Some(Focus::ExtraFocus);
-        app.state.focus = Focus::ExtraFocus;
-        app.current_theme.error_text_style
-    } else if app.state.focus == Focus::ExtraFocus {
-        app.current_theme.error_text_style
-    } else {
-        app.current_theme.general_style
-    };
     let theme_title_list = Table::new(theme_table_rows.0, [Constraint::Percentage(100)])
         .block(Block::default().style(app.current_theme.general_style))
         .highlight_style(list_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
-    rect.render_stateful_widget(
-        theme_title_list,
-        chunks[0],
-        &mut app.state.app_table_states.theme_editor,
-    );
     let theme_element_list =
         Table::new(theme_table_rows.1, [Constraint::Percentage(100)]).block(Block::default());
-    rect.render_stateful_widget(
-        theme_element_list,
-        chunks[1],
-        &mut app.state.app_table_states.theme_editor,
-    );
     let submit_button = Paragraph::new(vec![Line::from("Create Theme")])
         .block(
             Block::default()
@@ -5366,7 +4939,6 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
                 .style(submit_button_style),
         )
         .alignment(Alignment::Center);
-    rect.render_widget(submit_button, button_chunks[0]);
 
     let reset_button = Paragraph::new(vec![Line::from("Reset")])
         .block(
@@ -5376,15 +4948,26 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
                 .style(reset_button_style),
         )
         .alignment(Alignment::Center);
-    rect.render_widget(reset_button, button_chunks[1]);
 
     let border_block = Block::default()
         .title("Create a new Theme")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(theme_block_style);
-    rect.render_widget(border_block, main_chunks[0]);
 
+    rect.render_stateful_widget(
+        theme_title_list,
+        chunks[0],
+        &mut app.state.app_table_states.theme_editor,
+    );
+    rect.render_stateful_widget(
+        theme_element_list,
+        chunks[1],
+        &mut app.state.app_table_states.theme_editor,
+    );
+    rect.render_widget(submit_button, button_chunks[0]);
+    rect.render_widget(reset_button, button_chunks[1]);
+    rect.render_widget(border_block, main_chunks[0]);
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -5416,7 +4999,7 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         )
         .split(main_chunks[0]);
     let fg_list_border_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[0]) {
             if app
                 .state
                 .app_list_states
@@ -5440,7 +5023,7 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
             app.current_theme.general_style
         };
     let bg_list_border_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1]) {
             if app
                 .state
                 .app_list_states
@@ -5464,7 +5047,7 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
             app.current_theme.general_style
         };
     let modifiers_list_border_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[2]) {
             if app
                 .state
                 .app_list_states
@@ -5488,15 +5071,7 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
             app.current_theme.general_style
         };
     let submit_button_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, main_chunks[1]) {
-            app.state.mouse_focus = Some(Focus::SubmitButton);
-            app.state.focus = Focus::SubmitButton;
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::SubmitButton {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+        get_mouse_focusable_field_style(app, Focus::SubmitButton, &main_chunks[1], false, false);
     let fg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
         .map(|color| {
             let mut fg_style = Style::default();
@@ -5759,26 +5334,11 @@ pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .margin(2)
         .split(popup_area);
+
     let save_theme_button_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
-            app.state.mouse_focus = Some(Focus::SubmitButton);
-            app.state.focus = Focus::SubmitButton;
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::SubmitButton {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+        get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], false, false);
     let dont_save_theme_button_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
-            app.state.mouse_focus = Some(Focus::ExtraFocus);
-            app.state.focus = Focus::ExtraFocus;
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::ExtraFocus {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+        get_mouse_focusable_field_style(app, Focus::ExtraFocus, &chunks[1], false, false);
     let save_theme_button = Paragraph::new("Save Theme to File")
         .style(save_theme_button_style)
         .block(
@@ -5802,11 +5362,11 @@ pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(app.current_theme.general_style);
+
     render_blank_styled_canvas(rect, app, popup_area, true);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
     rect.render_widget(border_block, popup_area);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -5814,32 +5374,17 @@ pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
 
 pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App) {
     let popup_area = centered_rect_with_length(30, 7, rect.size());
-    render_blank_styled_canvas(rect, app, popup_area, true);
+
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .margin(2)
         .split(popup_area);
+
     let save_card_button_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[0]) {
-            app.state.mouse_focus = Some(Focus::SubmitButton);
-            app.state.focus = Focus::SubmitButton;
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::SubmitButton {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+        get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], false, false);
     let dont_save_card_button_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
-            app.state.mouse_focus = Some(Focus::ExtraFocus);
-            app.state.focus = Focus::ExtraFocus;
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::ExtraFocus {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+        get_mouse_focusable_field_style(app, Focus::ExtraFocus, &chunks[1], false, false);
     let save_theme_button = Paragraph::new("Yes")
         .style(save_card_button_style)
         .block(
@@ -5863,10 +5408,11 @@ pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(app.current_theme.general_style);
+
+    render_blank_styled_canvas(rect, app, popup_area, true);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
     rect.render_widget(border_block, popup_area);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -5896,26 +5442,9 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
         .border_style(app.current_theme.general_style);
 
     let text_input_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1]) {
-            app.state.mouse_focus = Some(Focus::TextInput);
-            app.state.focus = Focus::TextInput;
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::TextInput {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+        get_mouse_focusable_field_style(app, Focus::TextInput, &chunks[1], false, true);
     let submit_button_style =
-        if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[2]) {
-            app.state.mouse_focus = Some(Focus::SubmitButton);
-            app.state.focus = Focus::SubmitButton;
-            app.state.app_status = AppStatus::Initialized;
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::SubmitButton {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+        get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[2], false, false);
     let prompt_text = Paragraph::new(prompt_text)
         .style(app.current_theme.general_style)
         .block(Block::default())
@@ -6073,6 +5602,18 @@ pub fn render_blank_styled_canvas_with_margin(
     rect.render_widget(styled_text, new_render_area);
 }
 
+fn render_title(app: &mut App<'_>, render_area: &Rect, rect: &mut Frame<'_>) {
+    if app.config.enable_mouse_support {
+        let new_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
+            .split(*render_area);
+        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
+    } else {
+        rect.render_widget(draw_title(app, *render_area), *render_area);
+    };
+}
+
 pub fn render_logs(
     app: &mut App,
     enable_focus_highlight: bool,
@@ -6080,14 +5621,16 @@ pub fn render_logs(
     rect: &mut Frame,
     popup_mode: bool,
 ) {
+    let log_box_border_style = if enable_focus_highlight {
+        get_mouse_focusable_field_style(app, Focus::Log, &render_area, popup_mode, false)
+    } else {
+        app.current_theme.general_style
+    };
     let date_format = app.config.date_format.to_parser_string();
     let theme = &app.current_theme;
     let all_logs = get_logs();
-    let mut highlight_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.list_select_style
-    };
+    let mut highlight_style =
+        check_for_popup_and_get_style(app, app.current_theme.list_select_style);
     let mut items = vec![];
     let date_length = date_format.len() + 5;
     let wrap_length = render_area.width as usize - date_length - 6; // Border + arrow + padding
@@ -6129,24 +5672,7 @@ pub fn render_logs(
         Row::new(cells).height(height as u16)
     });
 
-    let focus = app.state.focus;
-    let mouse_coordinates = app.state.current_mouse_coordinates;
-    let log_box_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let log_box_border_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(mouse_coordinates, render_area) {
-        app.state.mouse_focus = Some(Focus::Log);
-        app.state.focus = Focus::Log;
-        app.current_theme.mouse_focus_style
-    } else if matches!(focus, Focus::Log) && enable_focus_highlight {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let log_box_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
 
     let log_list = Table::new(
         rows,
@@ -6242,29 +5768,23 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
             .split(chunks[2])
     };
 
-    let email_id_field_chunk = if app.state.user_login_data.auth_token.is_some() {
-        form_chunks[2]
-    } else {
-        form_chunks[1]
-    };
+    fn get_form_chunk(
+        app: &App,
+        form_chunks: &[Rect],
+        index_if_auth: usize,
+        index_if_not_auth: usize,
+    ) -> Rect {
+        if app.state.user_login_data.auth_token.is_some() {
+            form_chunks[index_if_auth]
+        } else {
+            form_chunks[index_if_not_auth]
+        }
+    }
 
-    let password_field_chunk = if app.state.user_login_data.auth_token.is_some() {
-        form_chunks[3]
-    } else {
-        form_chunks[2]
-    };
-
-    let show_password_main_chunk = if app.state.user_login_data.auth_token.is_some() {
-        form_chunks[4]
-    } else {
-        form_chunks[3]
-    };
-
-    let submit_button_chunk = if app.state.user_login_data.auth_token.is_some() {
-        form_chunks[5]
-    } else {
-        form_chunks[4]
-    };
+    let email_id_field_chunk = get_form_chunk(&app, &form_chunks, 2, 1);
+    let password_field_chunk = get_form_chunk(&app, &form_chunks, 3, 2);
+    let show_password_main_chunk = get_form_chunk(&app, &form_chunks, 4, 3);
+    let submit_button_chunk = get_form_chunk(&app, &form_chunks, 5, 4);
 
     let show_password_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -6284,87 +5804,36 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         ])
         .split(submit_button_chunk);
 
-    let email_id_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, email_id_field_chunk) {
-        if app.state.mouse_focus != Some(Focus::EmailIDField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::EmailIDField);
-        app.state.focus = Focus::EmailIDField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::EmailIDField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let email_id_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::EmailIDField,
+        &email_id_field_chunk,
+        app.state.popup_mode.is_some(),
+        true,
+    );
+    let password_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::PasswordField,
+        &password_field_chunk,
+        app.state.popup_mode.is_some(),
+        true,
+    );
+    let show_password_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ExtraFocus,
+        &show_password_main_chunk,
+        app.state.popup_mode.is_some(),
+        true,
+    );
+    let submit_button_style = get_mouse_focusable_field_style(
+        app,
+        Focus::SubmitButton,
+        &submit_button_chunks[1],
+        app.state.popup_mode.is_some(),
+        true,
+    );
 
-    let password_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, password_field_chunk) {
-        if app.state.mouse_focus != Some(Focus::PasswordField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::PasswordField);
-        app.state.focus = Focus::PasswordField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::PasswordField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-
-    let show_password_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        show_password_main_chunk,
-    ) {
-        app.state.mouse_focus = Some(Focus::ExtraFocus);
-        app.state.focus = Focus::ExtraFocus;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::ExtraFocus {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-
-    let submit_button_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        submit_button_chunks[1],
-    ) {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::SubmitButton {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-
-    let separator_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(main_chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, main_chunks[0]), main_chunks[0]);
-    };
+    let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
 
     let crab_paragraph = if app.state.popup_mode.is_some() {
         draw_crab_pattern(chunks[0], app.current_theme.inactive_text_style, true)
@@ -6465,6 +5934,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
+    render_title(app, &main_chunks[0], rect);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
     render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
@@ -6537,6 +6007,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_signup(rect: &mut Frame, app: &mut App) {
+    let popup_mode = app.state.popup_mode.is_some();
     if app.state.popup_mode.is_none() {
         if app.state.focus == Focus::EmailIDField
             || app.state.focus == Focus::PasswordField
@@ -6611,105 +6082,47 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         ])
         .split(form_chunks[5]);
 
-    let email_id_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, form_chunks[1]) {
-        if app.state.mouse_focus != Some(Focus::EmailIDField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::EmailIDField);
-        app.state.focus = Focus::EmailIDField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::EmailIDField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let email_id_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::EmailIDField,
+        &form_chunks[1],
+        popup_mode,
+        true,
+    );
 
-    let password_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, form_chunks[2]) {
-        if app.state.mouse_focus != Some(Focus::PasswordField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::PasswordField);
-        app.state.focus = Focus::PasswordField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::PasswordField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let password_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::PasswordField,
+        &form_chunks[2],
+        popup_mode,
+        true,
+    );
 
-    let confirm_password_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, form_chunks[3]) {
-        if app.state.mouse_focus != Some(Focus::ConfirmPasswordField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::ConfirmPasswordField);
-        app.state.focus = Focus::ConfirmPasswordField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::ConfirmPasswordField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let confirm_password_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ConfirmPasswordField,
+        &form_chunks[3],
+        popup_mode,
+        true,
+    );
 
-    let show_password_checkbox_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        show_password_chunks[1],
-    ) {
-        app.state.mouse_focus = Some(Focus::ExtraFocus);
-        app.state.focus = Focus::ExtraFocus;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::ExtraFocus {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let show_password_checkbox_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ExtraFocus,
+        &show_password_chunks[1],
+        popup_mode,
+        false,
+    );
 
-    let submit_button_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        submit_button_chunks[1],
-    ) {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::SubmitButton {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let submit_button_style = get_mouse_focusable_field_style(
+        app,
+        Focus::SubmitButton,
+        &submit_button_chunks[1],
+        popup_mode,
+        false,
+    );
 
-    let separator_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(main_chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, main_chunks[0]), main_chunks[0]);
-    };
+    let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
 
     let crab_paragraph = if app.state.popup_mode.is_some() {
         draw_crab_pattern(chunks[0], app.current_theme.inactive_text_style, true)
@@ -6831,6 +6244,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
+    render_title(app, &main_chunks[0], rect);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
     render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
@@ -6844,7 +6258,6 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     rect.render_widget(show_password_paragraph, show_password_chunks[0]);
     rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
     rect.render_widget(submit_button, submit_button_chunks[1]);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -6906,6 +6319,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
+    let popup_mode = app.state.popup_mode.is_some();
     if app.state.popup_mode.is_none() {
         if app.state.focus == Focus::EmailIDField
             || app.state.focus == Focus::ResetPasswordLinkField
@@ -6992,25 +6406,15 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         ])
         .split(submit_button_chunk);
 
-    let email_id_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, email_id_chunk) {
-        if app.state.mouse_focus != Some(Focus::EmailIDField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::EmailIDField);
-        app.state.focus = Focus::EmailIDField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::EmailIDField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let email_id_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::EmailIDField,
+        &email_id_chunk,
+        popup_mode,
+        true,
+    );
 
-    let send_reset_link_button_style = if app.state.popup_mode.is_some() {
+    let send_reset_link_button_style = if popup_mode {
         app.current_theme.inactive_text_style
     } else if app.state.last_reset_password_link_sent_time.is_some() {
         let last_reset_password_link_sent_time =
@@ -7020,8 +6424,8 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         {
             app.current_theme.inactive_text_style
         } else if check_if_mouse_is_in_area(
-            app.state.current_mouse_coordinates,
-            send_reset_link_button_chunk,
+            &app.state.current_mouse_coordinates,
+            &send_reset_link_button_chunk,
         ) {
             if app.state.mouse_focus != Some(Focus::SendResetPasswordLinkButton) {
                 app.state.current_cursor_position = None;
@@ -7038,8 +6442,8 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
             app.current_theme.general_style
         }
     } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        send_reset_link_button_chunk,
+        &app.state.current_mouse_coordinates,
+        &send_reset_link_button_chunk,
     ) {
         if app.state.mouse_focus != Some(Focus::SendResetPasswordLinkButton) {
             app.state.current_cursor_position = None;
@@ -7056,108 +6460,47 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         app.current_theme.general_style
     };
 
-    let separator_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
+    let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
 
-    let reset_link_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, reset_link_chunk) {
-        if app.state.mouse_focus != Some(Focus::ResetPasswordLinkField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::ResetPasswordLinkField);
-        app.state.focus = Focus::ResetPasswordLinkField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::ResetPasswordLinkField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let reset_link_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ResetPasswordLinkField,
+        &reset_link_chunk,
+        popup_mode,
+        true,
+    );
 
-    let new_password_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(app.state.current_mouse_coordinates, new_password_chunk) {
-        if app.state.mouse_focus != Some(Focus::PasswordField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::PasswordField);
-        app.state.focus = Focus::PasswordField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::PasswordField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let new_password_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::PasswordField,
+        &new_password_chunk,
+        popup_mode,
+        true,
+    );
 
-    let confirm_new_password_field_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        confirm_new_password_chunk,
-    ) {
-        if app.state.mouse_focus != Some(Focus::ConfirmPasswordField) {
-            app.state.current_cursor_position = None;
-            app.state.app_status = AppStatus::Initialized;
-        } else {
-            app.state.app_status = AppStatus::UserInput;
-        }
-        app.state.mouse_focus = Some(Focus::ConfirmPasswordField);
-        app.state.focus = Focus::ConfirmPasswordField;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::ConfirmPasswordField {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let confirm_new_password_field_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ConfirmPasswordField,
+        &confirm_new_password_chunk,
+        popup_mode,
+        true,
+    );
 
-    let show_password_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        show_password_main_chunk,
-    ) {
-        app.state.mouse_focus = Some(Focus::ExtraFocus);
-        app.state.focus = Focus::ExtraFocus;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::ExtraFocus {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let show_password_style = get_mouse_focusable_field_style(
+        app,
+        Focus::ExtraFocus,
+        &show_password_main_chunk,
+        popup_mode,
+        false,
+    );
 
-    let submit_button_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(
-        app.state.current_mouse_coordinates,
-        submit_button_chunks[1],
-    ) {
-        app.state.mouse_focus = Some(Focus::SubmitButton);
-        app.state.focus = Focus::SubmitButton;
-        app.current_theme.mouse_focus_style
-    } else if app.state.focus == Focus::SubmitButton {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(main_chunks[0]);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, main_chunks[0]), main_chunks[0]);
-    };
+    let submit_button_style = get_mouse_focusable_field_style(
+        app,
+        Focus::SubmitButton,
+        &submit_button_chunks[1],
+        popup_mode,
+        false,
+    );
 
     let crab_paragraph = if app.state.popup_mode.is_some() {
         draw_crab_pattern(chunks[0], app.current_theme.inactive_text_style, true)
@@ -7344,6 +6687,7 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
+    render_title(app, &main_chunks[0], rect);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
     render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
@@ -7359,7 +6703,6 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     rect.render_widget(show_password_paragraph, show_password_chunks[0]);
     rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
     rect.render_widget(submit_button, submit_button_chunks[1]);
-
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -7432,21 +6775,9 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
-    let default_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
-    let help_key_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_key_style
-    };
-    let help_text_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.help_text_style
-    };
+    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
+    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
     let main_chunks = {
         Layout::default()
             .direction(Direction::Horizontal)
@@ -7516,22 +6847,16 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
 
             if !(app.state.popup_mode.is_some()
                 && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
-                && check_if_mouse_is_in_area(app.state.current_mouse_coordinates, chunks[1])
+                && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1])
             {
                 app.state.mouse_focus = Some(Focus::LoadSave);
                 app.state.focus = Focus::LoadSave;
-                let top_of_list = chunks[1].y + 1;
-                let mut bottom_of_list = chunks[1].y + item_list.len() as u16;
-                if bottom_of_list > chunks[1].bottom() {
-                    bottom_of_list = chunks[1].bottom();
-                }
-                let mouse_y = app.state.current_mouse_coordinates.1;
-                if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
-                    app.state
-                        .app_list_states
-                        .load_save
-                        .select(Some((mouse_y - top_of_list) as usize));
-                }
+                calculate_mouse_list_select_index(
+                    app.state.current_mouse_coordinates.1,
+                    item_list,
+                    chunks[1],
+                    &mut app.state.app_list_states.load_save,
+                );
             }
             rect.render_stateful_widget(
                 choice_list,
@@ -7774,4 +7099,104 @@ fn get_sliding_window_over_text(
     }
     let text = &text[start_pos as usize..end_pos as usize];
     (text, cursor_pos as u16 - start_pos)
+}
+
+/// Returns the style for the field based on the current focus and mouse position and sets the focus if the mouse is in the field area
+fn get_mouse_focusable_field_style(
+    app: &mut App,
+    focus: Focus,
+    chunk: &Rect,
+    popup_mode: bool,
+    user_input_mode: bool,
+) -> Style {
+    if popup_mode {
+        app.current_theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, chunk) {
+        if app.state.mouse_focus != Some(focus) {
+            app.state.current_cursor_position = None;
+            app.state.app_status = AppStatus::Initialized;
+        } else if user_input_mode {
+            app.state.app_status = AppStatus::UserInput;
+        } else {
+            app.state.app_status = AppStatus::Initialized;
+        }
+        app.state.mouse_focus = Some(focus);
+        app.state.focus = focus;
+        app.current_theme.mouse_focus_style
+    } else if app.state.focus == focus {
+        app.current_theme.keyboard_focus_style
+    } else {
+        app.current_theme.general_style
+    }
+}
+
+/// Checks for popup mode to return inactive style if not returns the style passed
+fn check_for_popup_and_get_style(app: &App, style: Style) -> Style {
+    if app.state.popup_mode.is_some() {
+        app.current_theme.inactive_text_style
+    } else {
+        style
+    }
+}
+
+fn get_button_style_with_default_error_style(
+    app: &mut App,
+    focus: Focus,
+    chunk: &Rect,
+    popup_mode: bool,
+) -> Style {
+    if popup_mode {
+        app.current_theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, chunk) {
+        app.state.mouse_focus = Some(focus);
+        app.state.focus = focus;
+        app.current_theme.mouse_focus_style
+    } else if app.state.focus == focus {
+        app.current_theme.error_text_style
+    } else {
+        app.current_theme.general_style
+    }
+}
+
+fn get_mouse_focusable_field_style_with_vertical_list_selection<T>(
+    app: &mut App<'_>,
+    main_menu_items: &[T],
+    render_area: Rect,
+    popup_mode: bool,
+) -> Style {
+    let mouse_coordinates = app.state.current_mouse_coordinates;
+
+    if popup_mode {
+        app.current_theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(&mouse_coordinates, &render_area) {
+        app.state.mouse_focus = Some(Focus::MainMenu);
+        app.state.focus = Focus::MainMenu;
+        calculate_mouse_list_select_index(
+            mouse_coordinates.1,
+            main_menu_items,
+            render_area,
+            &mut app.state.app_list_states.main_menu,
+        );
+        app.current_theme.mouse_focus_style
+    } else if matches!(app.state.focus, Focus::MainMenu) {
+        app.current_theme.keyboard_focus_style
+    } else {
+        app.current_theme.general_style
+    }
+}
+
+fn calculate_mouse_list_select_index<T>(
+    mouse_y: u16,
+    list_to_check_against: &[T],
+    render_area: Rect,
+    list_state: &mut ListState,
+) {
+    let top_of_list = render_area.top() + 1;
+    let mut bottom_of_list = top_of_list + list_to_check_against.len() as u16;
+    if bottom_of_list > render_area.bottom() {
+        bottom_of_list = render_area.bottom();
+    }
+    if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
+        list_state.select(Some((mouse_y - top_of_list) as usize));
+    }
 }

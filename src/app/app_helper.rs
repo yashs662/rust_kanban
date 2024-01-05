@@ -2733,14 +2733,12 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus
-                                .get(0)
+                                .next_focus.first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
-                                .get(0)
+                                .prev_focus.first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
@@ -2750,7 +2748,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     UiMode::MainMenu => {
                         if app.state.focus == Focus::MainMenu {
                             app.main_menu_prv();
-                        } else if app.state.focus == Focus::MainMenuHelp {
+                        } else if app.state.focus == Focus::Help {
                             app.help_prv();
                         } else if app.state.focus == Focus::Log {
                             app.log_prv();
@@ -2758,14 +2756,12 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus
-                                .get(0)
+                                .next_focus.first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
-                                .get(0)
+                                .prev_focus.first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
@@ -2790,14 +2786,12 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus
-                                .get(0)
+                                .next_focus.first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
-                                .get(0)
+                                .prev_focus.first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the theme editor with {} or {}, to select a style to edit",
@@ -2890,14 +2884,12 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus
-                                .get(0)
+                                .next_focus.first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
-                                .get(0)
+                                .prev_focus.first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
@@ -2907,7 +2899,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     UiMode::MainMenu => {
                         if app.state.focus == Focus::MainMenu {
                             app.main_menu_next();
-                        } else if app.state.focus == Focus::MainMenuHelp {
+                        } else if app.state.focus == Focus::Help {
                             app.help_next();
                         } else if app.state.focus == Focus::Log {
                             app.log_next();
@@ -2915,14 +2907,12 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus
-                                .get(0)
+                                .next_focus.first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
-                                .get(0)
+                                .prev_focus.first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
@@ -2947,14 +2937,12 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus
-                                .get(0)
+                                .next_focus.first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
-                                .get(0)
+                                .prev_focus.first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the theme editor with {} or {}, to select a style to edit",
@@ -3145,7 +3133,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     UiMode::ConfigMenu => handle_config_menu_action(app),
                     UiMode::MainMenu => match app.state.focus {
                         Focus::MainMenu => handle_main_menu_action(app).await,
-                        Focus::MainMenuHelp => {
+                        Focus::Help => {
                             app.state.ui_mode = UiMode::HelpMenu;
                             AppReturn::Continue
                         }
@@ -4644,9 +4632,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
 
 async fn handle_left_click_for_ui_mode_mouse_action(app: &mut App<'_>) -> Option<AppReturn> {
     let prv_ui_mode = app.state.ui_mode;
-    if app.state.mouse_focus.is_none() {
-        return None;
-    }
+    app.state.mouse_focus?;
     let mouse_focus = app.state.mouse_focus.unwrap();
     match mouse_focus {
         Focus::Title => {
@@ -5802,7 +5788,7 @@ fn handle_edit_general_config(app: &mut App) {
     let config_item_list = AppConfig::to_view_list(&app.config);
     let config_item = config_item_list[config_item_index].clone();
     let default_key = String::from("");
-    let config_item_key = config_item.get(0).unwrap_or(&default_key);
+    let config_item_key = config_item.first().unwrap_or(&default_key);
     let new_value = app.state.current_user_input.clone();
     if !new_value.is_empty() {
         let config_string = format!("{}: {}", config_item_key, new_value);

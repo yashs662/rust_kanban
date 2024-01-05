@@ -17,6 +17,7 @@ use crossterm::{event::EnableMouseCapture, execute};
 use eyre::Result;
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::{borrow::Cow, io::stdout, sync::Arc, time::Duration};
+use tokio::time::Instant;
 
 pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App<'_>>>) -> Result<()> {
     crossterm::terminal::enable_raw_mode()?;
@@ -44,14 +45,9 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App<'_>>>) -> Result<()> {
 
     loop {
         let mut app = app.lock().await;
-        let render_start_time = std::time::Instant::now();
+        let render_start_time = Instant::now();
         terminal.draw(|rect| ui_main::draw(rect, &mut app))?;
-        let render_end_time = std::time::Instant::now();
-        app.state.ui_render_time = Some(
-            render_end_time
-                .duration_since(render_start_time)
-                .as_micros(),
-        );
+        app.state.ui_render_time = Some(render_start_time.elapsed().as_micros());
         let result = match events.next().await {
             InputEvent::KeyBoardInput(key) => app.do_action(key).await,
             InputEvent::MouseAction(mouse_action) => app.handle_mouse(mouse_action).await,

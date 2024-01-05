@@ -75,7 +75,6 @@ pub enum Focus {
     LoadSave,
     Log,
     MainMenu,
-    MainMenuHelp,
     NewBoardDescription,
     NewBoardName,
     #[default]
@@ -311,7 +310,7 @@ impl UiMode {
                 Focus::SubmitButton,
             ],
             UiMode::LogsOnly => vec![Focus::Log],
-            UiMode::MainMenu => vec![Focus::MainMenu, Focus::MainMenuHelp, Focus::Log],
+            UiMode::MainMenu => vec![Focus::MainMenu, Focus::Help, Focus::Log],
             UiMode::NewBoard => vec![
                 Focus::NewBoardName,
                 Focus::NewBoardDescription,
@@ -501,7 +500,6 @@ impl Focus {
             Self::LoadSave => "Load Save",
             Self::Log => "Log",
             Self::MainMenu => "Main Menu",
-            Self::MainMenuHelp => "Main Menu Help",
             Self::NewBoardDescription => "New Board Description",
             Self::NewBoardName => "New Board Name",
             Self::NoFocus => "No Focus",
@@ -576,7 +574,6 @@ impl FromStr for Focus {
             "Help" => Ok(Self::Help),
             "Load Save" => Ok(Self::LoadSave),
             "Log" => Ok(Self::Log),
-            "Main Menu Help" => Ok(Self::MainMenuHelp),
             "Main Menu" => Ok(Self::MainMenu),
             "New Board Description" => Ok(Self::NewBoardDescription),
             "New Board Name" => Ok(Self::NewBoardName),
