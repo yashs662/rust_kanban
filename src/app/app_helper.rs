@@ -3,7 +3,7 @@ use super::{
     date_format_converter, handle_exit,
     kanban::{Board, Card, CardPriority, CardStatus},
     state::{AppStatus, Focus, UiMode},
-    App, AppReturn, AppState, DateFormat, MainMenuItem, PopupMode,
+    App, AppReturn, DateFormat, MainMenuItem, PopupMode,
 };
 use crate::{
     app::{state::KeyBindings, ActionHistory, AppConfig},
@@ -466,63 +466,62 @@ pub fn go_down(app: &mut App) {
 }
 
 pub fn prepare_config_for_new_app(
-    state: AppState<'_>,
     theme: Theme,
-) -> (AppConfig, Vec<&str>, AppState<'_>) {
-    let mut state = state;
+) -> (AppConfig, Vec<&'static str>, Vec<ToastWidget>) {
+    let mut toasts = vec![];
     let mut errors = vec![];
     let get_config_status = get_config(false);
     if let Err(config_error_msg) = get_config_status {
         if config_error_msg.contains("Overlapped keybindings found") {
             error!("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
             errors.push("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
-            state.toasts.push(ToastWidget::new(
+            toasts.push(ToastWidget::new(
                 config_error_msg,
                 Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                 ToastType::Error,
                 theme.clone(),
             ));
-            state.toasts.push(ToastWidget::new("Please check your config file and fix the keybindings. Using default keybindings for now.".to_owned(),
+            toasts.push(ToastWidget::new("Please check your config file and fix the keybindings. Using default keybindings for now.".to_owned(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning, theme.clone()));
             let new_config = get_config(true);
             if let Err(new_config_error) = new_config {
                 error!("Unable to fix keybindings. Please check your config file. Using default config for now.");
                 errors.push("Unable to fix keybindings. Please check your config file. Using default config for now.");
-                state.toasts.push(ToastWidget::new(
+                toasts.push(ToastWidget::new(
                     new_config_error,
                     Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                     ToastType::Error,
                     theme.clone(),
                 ));
-                state.toasts.push(ToastWidget::new(
+                toasts.push(ToastWidget::new(
                     "Using default config for now.".to_owned(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION),
                     ToastType::Warning,
                     theme,
                 ));
-                (AppConfig::default(), errors, state)
+                (AppConfig::default(), errors, toasts)
             } else {
                 let mut unwrapped_new_config = new_config.unwrap();
                 unwrapped_new_config.keybindings = KeyBindings::default();
-                (unwrapped_new_config, errors, state)
+                (unwrapped_new_config, errors, toasts)
             }
         } else {
-            state.toasts.push(ToastWidget::new(
+            toasts.push(ToastWidget::new(
                 config_error_msg,
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Error,
                 theme.clone(),
             ));
-            state.toasts.push(ToastWidget::new(
+            toasts.push(ToastWidget::new(
                 "Using default config for now.".to_owned(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Info,
                 theme,
             ));
-            (AppConfig::default(), errors, state)
+            (AppConfig::default(), errors, toasts)
         }
     } else {
-        (get_config_status.unwrap(), errors, state)
+        (get_config_status.unwrap(), errors, toasts)
     }
 }
 
@@ -569,10 +568,10 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
             match app.state.popup_mode.unwrap() {
                 PopupMode::CommandPalette => {
                     app.state.popup_mode = None;
-                    if app.command_palette.already_in_user_input_mode {
-                        app.command_palette.already_in_user_input_mode = false;
-                        if app.command_palette.last_focus.is_some() {
-                            app.state.focus = app.command_palette.last_focus.unwrap();
+                    if app.widgets.command_palette.already_in_user_input_mode {
+                        app.widgets.command_palette.already_in_user_input_mode = false;
+                        if app.widgets.command_palette.last_focus.is_some() {
+                            app.state.focus = app.widgets.command_palette.last_focus.unwrap();
                         }
                         return AppReturn::Continue;
                     }
@@ -628,8 +627,8 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
         app.state.current_cursor_position = None;
         info!("Exiting user input mode");
     } else if app.config.keybindings.toggle_command_palette.contains(&key) {
-        app.command_palette.already_in_user_input_mode = true;
-        app.command_palette.last_focus = Some(app.state.focus);
+        app.widgets.command_palette.already_in_user_input_mode = true;
+        app.widgets.command_palette.last_focus = Some(app.state.focus);
         app.state.popup_mode = Some(PopupMode::CommandPalette);
     } else {
         if app.config.keybindings.toggle_command_palette.contains(&key) {
@@ -2618,7 +2617,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         app.current_theme = theme.clone();
                     }
                 }
-                app.state.toasts = vec![];
+                app.widgets.toasts = vec![];
                 app.send_info_toast("UI reset, all toasts cleared", None);
                 app.state.ui_mode = new_ui_mode;
                 app.state.popup_mode = None;
@@ -2733,12 +2732,14 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus.first()
+                                .next_focus
+                                .first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus.first()
+                                .prev_focus
+                                .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
@@ -2756,12 +2757,14 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus.first()
+                                .next_focus
+                                .first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus.first()
+                                .prev_focus
+                                .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
@@ -2786,12 +2789,14 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus.first()
+                                .next_focus
+                                .first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus.first()
+                                .prev_focus
+                                .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the theme editor with {} or {}, to select a style to edit",
@@ -2884,12 +2889,14 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus.first()
+                                .next_focus
+                                .first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus.first()
+                                .prev_focus
+                                .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
@@ -2907,12 +2914,14 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus.first()
+                                .next_focus
+                                .first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus.first()
+                                .prev_focus
+                                .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
@@ -2937,12 +2946,14 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let next_focus_key = app
                                 .config
                                 .keybindings
-                                .next_focus.first()
+                                .next_focus
+                                .first()
                                 .unwrap_or(&Key::Tab);
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus.first()
+                                .prev_focus
+                                .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
                                 "Move Focus to the theme editor with {} or {}, to select a style to edit",
@@ -2968,6 +2979,15 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     && app.state.popup_mode.is_none()
                 {
                     go_right(app);
+                } else if app.state.popup_mode.is_some()
+                    && (app.state.popup_mode.unwrap() == PopupMode::ConfirmDiscardCardChanges
+                        || app.state.popup_mode.unwrap() == PopupMode::SaveThemePrompt)
+                {
+                    if app.state.focus == Focus::SubmitButton {
+                        app.state.focus = Focus::ExtraFocus;
+                    } else {
+                        app.state.focus = Focus::SubmitButton;
+                    }
                 }
                 AppReturn::Continue
             }
@@ -2978,6 +2998,15 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     && app.state.popup_mode.is_none()
                 {
                     go_left(app);
+                } else if app.state.popup_mode.is_some()
+                    && (app.state.popup_mode.unwrap() == PopupMode::ConfirmDiscardCardChanges
+                        || app.state.popup_mode.unwrap() == PopupMode::SaveThemePrompt)
+                {
+                    if app.state.focus == Focus::SubmitButton {
+                        app.state.focus = Focus::ExtraFocus;
+                    } else {
+                        app.state.focus = Focus::SubmitButton;
+                    }
                 }
                 AppReturn::Continue
             }
@@ -4073,7 +4102,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::ClearAllToasts => {
-                app.state.toasts.clear();
+                app.widgets.toasts.clear();
                 info!("Cleared toast messages");
                 AppReturn::Continue
             }
@@ -4412,8 +4441,8 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                             if app.state.card_being_edited.is_some() {
                                 app.state.popup_mode = Some(PopupMode::ConfirmDiscardCardChanges);
                                 app.state.focus = Focus::SubmitButton;
-                                reset_text_buffer(app);
                             }
+                            reset_text_buffer(app);
                         }
                         Focus::CardName
                         | Focus::CardDescription
@@ -5247,6 +5276,31 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
             app.config.show_line_numbers = !show_line_numbers;
             let config_string =
                 format!("{}: {}", "Show Line Numbers", app.config.show_line_numbers);
+            let app_config = AppConfig::edit_with_string(&config_string, app);
+            app.config = app_config.clone();
+            let write_config_status = write_config(&app_config);
+            if write_config_status.is_err() {
+                error!(
+                    "Error writing config file: {}",
+                    write_config_status.clone().unwrap_err()
+                );
+                app.send_error_toast(
+                    &format!(
+                        "Error writing config file: {}",
+                        write_config_status.unwrap_err()
+                    ),
+                    None,
+                );
+            } else {
+                app.send_info_toast("Config updated Successfully", None);
+            }
+        } else if *config_item == "Disable Animations" {
+            let disable_animations = app.config.disable_animations;
+            app.config.disable_animations = !disable_animations;
+            let config_string = format!(
+                "{}: {}",
+                "Disable Animations", app.config.disable_animations
+            );
             let app_config = AppConfig::edit_with_string(&config_string, app);
             app.config = app_config.clone();
             let write_config_status = write_config(&app_config);
@@ -7321,7 +7375,7 @@ fn handle_command_palette_card_selection(app: &mut App) {
         return;
     }
     let card_details_index = card_details_index.unwrap();
-    let all_card_details = app.command_palette.card_search_results.clone();
+    let all_card_details = app.widgets.command_palette.card_search_results.clone();
     if all_card_details.is_none() {
         debug!("No card details found to select");
         return;
@@ -7364,7 +7418,7 @@ fn handle_command_palette_board_selection(app: &mut App) {
         return;
     }
     let board_details_index = board_details_index.unwrap();
-    let all_board_details = app.command_palette.board_search_results.clone();
+    let all_board_details = app.widgets.command_palette.board_search_results.clone();
     if all_board_details.is_none() {
         debug!("No board details found to select");
         return;

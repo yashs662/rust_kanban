@@ -25,7 +25,7 @@ use crate::{
     ui::{
         text_box::TextBox,
         ui_helper,
-        widgets::{CommandPaletteWidget, ToastType, ToastWidget},
+        widgets::{CloseButtonWidget, CommandPaletteWidget, ToastType, ToastWidget},
         TextColorOptions, TextModifierOptions, Theme,
     },
 };
@@ -94,6 +94,22 @@ impl ActionHistoryManager {
     }
 }
 
+pub struct Widgets {
+    pub command_palette: CommandPaletteWidget,
+    pub close_button_widget: CloseButtonWidget,
+    pub toasts: Vec<ToastWidget>,
+}
+
+impl Widgets {
+    pub fn new(theme: Theme, debug_mode: bool) -> Self {
+        Self {
+            command_palette: CommandPaletteWidget::new(debug_mode),
+            close_button_widget: CloseButtonWidget::new(theme.general_style),
+            toasts: vec![],
+        }
+    }
+}
+
 pub struct App<'a> {
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
     actions: Actions,
@@ -104,12 +120,12 @@ pub struct App<'a> {
     pub filtered_boards: Vec<Board>,
     pub config: AppConfig,
     pub visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
-    pub command_palette: CommandPaletteWidget,
     pub last_io_event_time: Option<Instant>,
     pub all_themes: Vec<Theme>,
     pub current_theme: Theme,
     pub action_history_manager: ActionHistoryManager,
     pub main_menu: MainMenu,
+    pub widgets: Widgets,
 }
 
 impl App<'_> {
@@ -121,30 +137,30 @@ impl App<'_> {
         let filtered_boards = vec![];
         let all_themes = Theme::all_default_themes();
         let mut theme = Theme::default();
-        let (config, config_errors, prepared_state) =
-            prepare_config_for_new_app(state, theme.clone());
+        let (config, config_errors, toasts) = prepare_config_for_new_app(theme.clone());
         let default_theme = config.default_theme.clone();
         let theme_in_all = all_themes.iter().find(|t| t.name == default_theme);
         if let Some(theme_in_all) = theme_in_all {
             theme = theme_in_all.clone();
         }
-
+        let mut widgets = Widgets::new(theme.clone(), debug_mode);
+        widgets.toasts = toasts;
         let mut app = Self {
             io_tx,
             actions,
             is_loading,
             debug_mode,
-            state: prepared_state.to_owned(),
+            state,
             boards,
             filtered_boards,
             config,
             visible_boards_and_cards: LinkedHashMap::new(),
-            command_palette: CommandPaletteWidget::new(debug_mode),
             last_io_event_time: None,
             all_themes,
             current_theme: theme,
             action_history_manager: ActionHistoryManager::default(),
             main_menu: MainMenu::default(),
+            widgets,
         };
         if !config_errors.is_empty() {
             for error in config_errors {
@@ -467,9 +483,15 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.command_palette.command_search_results.is_some() {
+                if self
+                    .widgets
+                    .command_palette
+                    .command_search_results
+                    .is_some()
+                {
                     if i == 0 {
-                        self.command_palette
+                        self.widgets
+                            .command_palette
                             .command_search_results
                             .clone()
                             .unwrap()
@@ -497,8 +519,14 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.command_palette.command_search_results.is_some() {
+                if self
+                    .widgets
+                    .command_palette
+                    .command_search_results
+                    .is_some()
+                {
                     if i >= self
+                        .widgets
                         .command_palette
                         .command_search_results
                         .clone()
@@ -529,8 +557,9 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.command_palette.card_search_results.is_some() {
+                if self.widgets.command_palette.card_search_results.is_some() {
                     if i >= self
+                        .widgets
                         .command_palette
                         .card_search_results
                         .clone()
@@ -561,9 +590,10 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.command_palette.card_search_results.is_some() {
+                if self.widgets.command_palette.card_search_results.is_some() {
                     if i == 0 {
-                        self.command_palette
+                        self.widgets
+                            .command_palette
                             .card_search_results
                             .clone()
                             .unwrap()
@@ -591,8 +621,9 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.command_palette.board_search_results.is_some() {
+                if self.widgets.command_palette.board_search_results.is_some() {
                     if i >= self
+                        .widgets
                         .command_palette
                         .board_search_results
                         .clone()
@@ -623,9 +654,10 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.command_palette.board_search_results.is_some() {
+                if self.widgets.command_palette.board_search_results.is_some() {
                     if i == 0 {
-                        self.command_palette
+                        self.widgets
+                            .command_palette
                             .board_search_results
                             .clone()
                             .unwrap()
@@ -686,14 +718,14 @@ impl App<'_> {
     }
     pub fn send_info_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
                 ToastType::Info,
                 self.current_theme.clone(),
             ));
         } else {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Info,
@@ -703,14 +735,14 @@ impl App<'_> {
     }
     pub fn send_error_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
                 ToastType::Error,
                 self.current_theme.clone(),
             ));
         } else {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Error,
@@ -720,14 +752,14 @@ impl App<'_> {
     }
     pub fn send_warning_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
                 ToastType::Warning,
                 self.current_theme.clone(),
             ));
         } else {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Warning,
@@ -737,14 +769,14 @@ impl App<'_> {
     }
     pub fn send_loading_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 duration,
                 ToastType::Loading,
                 self.current_theme.clone(),
             ));
         } else {
-            self.state.toasts.push(ToastWidget::new(
+            self.widgets.toasts.push(ToastWidget::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Loading,
@@ -785,7 +817,7 @@ impl App<'_> {
             .select(Some(i));
     }
     pub fn increase_loading_toast_time(&mut self, msg: &str, increase_by: Duration) {
-        let toast = self.state.toasts.iter_mut().find(|x| x.message == msg);
+        let toast = self.widgets.toasts.iter_mut().find(|x| x.message == msg);
         if toast.is_none() {
             debug!("No toast found with message: {}", msg);
             return;
@@ -1673,9 +1705,8 @@ pub struct AppState<'a> {
     pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
     pub term_background_color: (u8, u8, u8),
     pub theme_being_edited: Theme,
-    pub toasts: Vec<ToastWidget>,
     pub ui_mode: UiMode,
-    pub ui_render_time: Option<u128>,
+    pub ui_render_time: Vec<u128>,
     pub user_login_data: UserLoginData,
 }
 
@@ -1720,9 +1751,8 @@ impl Default for AppState<'_> {
             preview_visible_boards_and_cards: LinkedHashMap::new(),
             term_background_color: get_term_bg_color(),
             theme_being_edited: Theme::default(),
-            toasts: Vec::new(),
             ui_mode: DEFAULT_UI_MODE,
-            ui_render_time: None,
+            ui_render_time: Vec::new(),
             user_login_data: UserLoginData {
                 email_id: None,
                 auth_token: None,
@@ -1816,6 +1846,7 @@ pub struct AppConfig {
     pub date_format: DateFormat,
     pub auto_login: bool,
     pub show_line_numbers: bool,
+    pub disable_animations: bool,
 }
 
 impl Default for AppConfig {
@@ -1838,6 +1869,7 @@ impl Default for AppConfig {
             date_format: DateFormat::default(),
             auto_login: true,
             show_line_numbers: true,
+            disable_animations: false,
         }
     }
 }
@@ -1864,6 +1896,10 @@ impl AppConfig {
             vec![
                 String::from("Disable Scroll Bar"),
                 self.disable_scroll_bar.to_string(),
+            ],
+            vec![
+                String::from("Disable Animations"),
+                self.disable_animations.to_string(),
             ],
             vec![String::from("Auto Login"), self.auto_login.to_string()],
             vec![
@@ -1952,6 +1988,16 @@ impl AppConfig {
                         config.disable_scroll_bar = true;
                     } else if value.to_lowercase() == "false" {
                         config.disable_scroll_bar = false;
+                    } else {
+                        error!("Invalid boolean: {}", value);
+                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
+                    }
+                }
+                "Disable Animations" => {
+                    if value.to_lowercase() == "true" {
+                        config.disable_animations = true;
+                    } else if value.to_lowercase() == "false" {
+                        config.disable_animations = false;
                     } else {
                         error!("Invalid boolean: {}", value);
                         app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
@@ -2430,6 +2476,13 @@ impl AppConfig {
                 true
             }
         };
+        let disable_animations = match serde_json_object["disable_animations"].as_bool() {
+            Some(disable_animations) => disable_animations,
+            None => {
+                error!("Disable Animations is not a boolean, Resetting to default value");
+                false
+            }
+        };
         Ok(Self {
             save_directory,
             default_view,
@@ -2446,6 +2499,7 @@ impl AppConfig {
             default_theme,
             date_format,
             show_line_numbers,
+            disable_animations,
         })
     }
 }

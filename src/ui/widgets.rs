@@ -12,13 +12,14 @@ use crate::{
 };
 use log::{debug, error, info};
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
+use ratatui::style::{Color, Style};
 use std::{
     collections::HashMap,
     fmt::{self, Display},
     sync::Arc,
     time::Duration,
 };
-use tokio::{sync::MutexGuard, time::Instant};
+use tokio::time::Instant;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToastWidget {
@@ -36,7 +37,7 @@ impl ToastWidget {
             duration,
             message,
             start_time: Instant::now(),
-            title: toast_type.as_str().to_string(),
+            title: toast_type.as_string(),
             toast_color: toast_type.as_color(theme),
             toast_type: toast_type.clone(),
         }
@@ -58,15 +59,24 @@ impl ToastWidget {
         }
     }
 
-    fn update(mut app: MutexGuard<App>) {
+    fn update(app: &mut App) {
         let theme = app.current_theme.clone();
         let term_background_color = if app.current_theme.general_style.bg.is_some() {
             TextColorOptions::from(app.current_theme.general_style.bg.unwrap()).to_rgb()
         } else {
             app.state.term_background_color
         };
-        let toasts = &mut app.state.toasts;
+        let disable_animations = app.config.disable_animations;
+        let toasts = &mut app.widgets.toasts;
         for i in (0..toasts.len()).rev() {
+            if toasts[i].start_time.elapsed() > toasts[i].duration {
+                toasts.remove(i);
+                continue;
+            }
+            if disable_animations {
+                toasts[i].toast_color = toasts[i].toast_type.as_color(theme.clone());
+                continue;
+            }
             if toasts[i].start_time.elapsed() < Duration::from_millis(TOAST_FADE_IN_TIME) {
                 let t =
                     toasts[i].start_time.elapsed().as_millis() as f32 / TOAST_FADE_IN_TIME as f32;
@@ -90,9 +100,6 @@ impl ToastWidget {
                     t,
                 );
             }
-            if toasts[i].start_time.elapsed() > toasts[i].duration {
-                toasts.remove(i);
-            }
         }
     }
 }
@@ -106,12 +113,12 @@ pub enum ToastType {
 }
 
 impl ToastType {
-    pub fn as_str(&self) -> &str {
+    pub fn as_string(&self) -> String {
         match self {
-            Self::Error => "Error",
-            Self::Info => "Info",
-            Self::Loading => "Loading",
-            Self::Warning => "Warning",
+            Self::Error => "Error".to_string(),
+            Self::Info => "Info".to_string(),
+            Self::Loading => "Loading".to_string(),
+            Self::Warning => "Warning".to_string(),
         }
     }
     pub fn as_color(&self, theme: Theme) -> (u8, u8, u8) {
@@ -158,8 +165,63 @@ impl WidgetManager<'_> {
     }
 
     pub async fn update(&mut self) {
-        ToastWidget::update(self.app.lock().await);
-        CommandPaletteWidget::update(self.app.lock().await);
+        let mut app = self.app.lock().await;
+        ToastWidget::update(&mut app);
+        CommandPaletteWidget::update(&mut app);
+        CloseButtonWidget::update(&mut app);
+    }
+}
+
+#[derive(Debug)]
+pub struct CloseButtonWidget {
+    start_time: Instant,
+    fade_time: f32,
+    pub color: (u8, u8, u8),
+    offset: f32,
+}
+
+impl CloseButtonWidget {
+    pub fn new(style: Style) -> Self {
+        let color = style.fg.unwrap_or(Color::White);
+        let text_color = TextColorOptions::from(color).to_rgb();
+        Self {
+            start_time: Instant::now(),
+            fade_time: 1.0,
+            color: text_color,
+            offset: 0.8,
+        }
+    }
+
+    pub fn update(app: &mut App) {
+        if app.state.focus == Focus::CloseButton {
+            let theme = app.current_theme.clone();
+            let disable_animations = app.config.disable_animations;
+            let widget = &mut app.widgets.close_button_widget;
+            if disable_animations {
+                widget.color = TextColorOptions::from(theme.error_text_style.bg.unwrap()).to_rgb();
+                return;
+            }
+
+            let normal_color = TextColorOptions::from(theme.general_style.bg.unwrap()).to_rgb();
+            let hover_color = TextColorOptions::from(theme.error_text_style.bg.unwrap()).to_rgb();
+            let total_duration = Duration::from_millis((widget.fade_time * 1000.0) as u64);
+            let half_duration = Duration::from_millis((widget.fade_time * 500.0) as u64);
+
+            if widget.start_time.elapsed() > total_duration {
+                widget.start_time = Instant::now();
+            }
+
+            let mut t = (widget.start_time.elapsed().as_millis() as f32
+                / total_duration.as_millis() as f32)
+                + widget.offset; // offset to make it overall brighter
+
+            if widget.start_time.elapsed() < half_duration {
+                widget.color = lerp_between(normal_color, hover_color, t);
+            } else {
+                t = t - widget.fade_time - (widget.offset / 4.0); // offset to make it overall brighter
+                widget.color = lerp_between(hover_color, normal_color, t);
+            }
+        }
     }
 }
 
@@ -179,12 +241,12 @@ impl CommandPaletteWidget {
     pub fn new(debug_mode: bool) -> Self {
         let available_commands = CommandPaletteActions::all(debug_mode);
         let mut corpus = CorpusBuilder::new().arity(2).pad_full(Pad::Auto).finish();
-        for command in available_commands {
+        for command in &available_commands {
             corpus.add_text(command.to_string().to_lowercase().as_str());
         }
         Self {
             already_in_user_input_mode: false,
-            available_commands: CommandPaletteActions::all(debug_mode),
+            available_commands,
             board_search_results: None,
             card_search_results: None,
             command_palette_actions_corpus: corpus,
@@ -208,8 +270,9 @@ impl CommandPaletteWidget {
                 .command_palette_command_search
                 .selected()
                 .unwrap();
-            let command = if app.command_palette.command_search_results.is_some() {
-                app.command_palette
+            let command = if app.widgets.command_palette.command_search_results.is_some() {
+                app.widgets
+                    .command_palette
                     .command_search_results
                     .as_ref()
                     .unwrap()
@@ -421,9 +484,9 @@ impl CommandPaletteWidget {
         } else {
             return AppReturn::Continue;
         }
-        if app.command_palette.already_in_user_input_mode {
-            app.command_palette.already_in_user_input_mode = false;
-            app.command_palette.last_focus = None;
+        if app.widgets.command_palette.already_in_user_input_mode {
+            app.widgets.command_palette.already_in_user_input_mode = false;
+            app.widgets.command_palette.last_focus = None;
         }
         app.state.app_status = AppStatus::Initialized;
         app.state.current_user_input = String::new();
@@ -431,16 +494,18 @@ impl CommandPaletteWidget {
         AppReturn::Continue
     }
 
-    fn update(mut app: MutexGuard<App>) {
+    fn update(app: &mut App) {
         if app.state.popup_mode.is_some()
             && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
         {
-            if app.state.current_user_input.to_lowercase() == app.command_palette.last_search_string
+            if app.state.current_user_input.to_lowercase()
+                == app.widgets.command_palette.last_search_string
             {
                 return;
             }
             let current_search_string = app.state.current_user_input.clone().to_lowercase();
             let result = app
+                .widgets
                 .command_palette
                 .command_palette_actions_corpus
                 .search(&current_search_string, 0.2);
@@ -519,7 +584,7 @@ impl CommandPaletteWidget {
                 }
             }
             if !card_search_results.is_empty() {
-                app.command_palette.card_search_results = Some(card_search_results.clone());
+                app.widgets.command_palette.card_search_results = Some(card_search_results.clone());
             }
 
             let mut board_search_results: Vec<(String, (u64, u64))> = vec![];
@@ -543,13 +608,15 @@ impl CommandPaletteWidget {
                 }
             }
             if !board_search_results.is_empty() {
-                app.command_palette.board_search_results = Some(board_search_results.clone());
+                app.widgets.command_palette.board_search_results =
+                    Some(board_search_results.clone());
             }
 
-            app.command_palette.command_search_results = Some(command_search_results);
-            app.command_palette.last_search_string = current_search_string;
-            if app.command_palette.command_search_results.is_some()
+            app.widgets.command_palette.command_search_results = Some(command_search_results);
+            app.widgets.command_palette.last_search_string = current_search_string;
+            if app.widgets.command_palette.command_search_results.is_some()
                 && !app
+                    .widgets
                     .command_palette
                     .command_search_results
                     .as_ref()

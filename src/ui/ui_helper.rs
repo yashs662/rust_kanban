@@ -28,7 +28,7 @@ use chrono::{Local, NaiveDate, NaiveDateTime};
 use log::{debug, Level};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Modifier, Style, Color},
     text::{Line, Span},
     widgets::{
         Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, ListState, Paragraph, Row,
@@ -1775,8 +1775,11 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             };
             render_a_single_card(app, card_chunks[card_index], card_style, card, rect);
         }
-        if app.state.card_drag_mode {}
+
+    if app.state.card_drag_mode {
+        // TODO: add up and down hover zones to scroll while dragging a card
     }
+}
 
     if !app.config.disable_scroll_bar {
         let current_board_index = boards
@@ -2756,12 +2759,12 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_toast(rect: &mut Frame, app: &mut App) {
-    let all_toasts = app.state.toasts.clone();
+    let all_toasts = app.widgets.toasts.clone();
     let mut loading_toasts = all_toasts
         .iter()
         .filter(|x| x.toast_type == ToastType::Loading)
         .collect::<Vec<&ToastWidget>>();
-    let app_toasts = app.state.toasts.clone();
+    let app_toasts = app.widgets.toasts.clone();
     let toasts = if !loading_toasts.is_empty() {
         let sorted_loading_toasts = if loading_toasts.len() > MAX_TOASTS_TO_DISPLAY - 1 {
             loading_toasts.sort_by(|a, b| a.start_time.cmp(&b.start_time));
@@ -2826,13 +2829,8 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
                 toast.toast_color.1,
                 toast.toast_color.2,
             ));
-        let toast_title = match toast.toast_type {
-            ToastType::Error => "Error",
-            ToastType::Info => "Info",
-            ToastType::Warning => "Warning",
-            ToastType::Loading => "Loading",
-        };
-        let toast_title = match toast.toast_type {
+        let mut toast_title = toast.title.to_owned();
+        toast_title = match toast.toast_type {
             ToastType::Loading => {
                 let spinner_frames = &SPINNER_FRAMES;
                 let frame =
@@ -2840,7 +2838,7 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
                 let frame = frame as usize;
                 format!("{} {}", spinner_frames[frame], toast_title)
             }
-            _ => toast_title.to_string(),
+            _ => toast_title,
         };
         let x_offset = rect.size().width - (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO);
         let lines = textwrap::wrap(
@@ -2891,7 +2889,7 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
     }
 
     let text_offset = 15;
-    let toast_count = app.state.toasts.len();
+    let toast_count = app.widgets.toasts.len();
     let toast_count_text = format!(" {} Message(s)", toast_count);
     let toast_count_paragraph = Paragraph::new(toast_count_text)
         .alignment(Alignment::Right)
@@ -2909,7 +2907,7 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
 
 pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     let popup_area = centered_rect_with_percentage(90, 90, rect.size());
-
+    render_blank_styled_canvas(rect, app, popup_area, false);
     if app.state.current_board_id.is_none() || app.state.current_card_id.is_none() {
         let no_board_or_card_selected = Paragraph::new("No board or card selected.")
             .block(
@@ -3650,7 +3648,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     }
 
     // Render everything
-    render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_widget(main_block_widget, popup_area);
     rect.render_widget(name_paragraph_widget, card_chunks[0]);
     rect.render_widget(card_description_widget, card_chunks[1]);
@@ -3702,8 +3699,9 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .command_palette_command_search
                 .selected()
                 .is_none()
-                && app.command_palette.command_search_results.is_some()
+                && app.widgets.command_palette.command_search_results.is_some()
                 && !app
+                    .widgets
                     .command_palette
                     .command_search_results
                     .as_ref()
@@ -3723,8 +3721,9 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .command_palette_card_search
                 .selected()
                 .is_none()
-                && app.command_palette.card_search_results.is_some()
+                && app.widgets.command_palette.card_search_results.is_some()
                 && !app
+                    .widgets
                     .command_palette
                     .card_search_results
                     .as_ref()
@@ -3744,8 +3743,9 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .command_palette_board_search
                 .selected()
                 .is_none()
-                && app.command_palette.board_search_results.is_some()
+                && app.widgets.command_palette.board_search_results.is_some()
                 && !app
+                    .widgets
                     .command_palette
                     .board_search_results
                     .as_ref()
@@ -3801,14 +3801,19 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
     }
 
     let (command_search_border_style, command_search_text_style, command_search_highlight_style) =
-        get_command_palette_style(&app, Focus::CommandPaletteCommand);
+        get_command_palette_style(app, Focus::CommandPaletteCommand);
     let (card_search_border_style, card_search_text_style, card_search_highlight_style) =
-        get_command_palette_style(&app, Focus::CommandPaletteCard);
+        get_command_palette_style(app, Focus::CommandPaletteCard);
     let (board_search_border_style, board_search_text_style, board_search_highlight_style) =
-        get_command_palette_style(&app, Focus::CommandPaletteBoard);
+        get_command_palette_style(app, Focus::CommandPaletteBoard);
 
-    let command_search_results = if app.command_palette.command_search_results.is_some() {
-        let raw_search_results = app.command_palette.command_search_results.as_ref().unwrap();
+    let command_search_results = if app.widgets.command_palette.command_search_results.is_some() {
+        let raw_search_results = app
+            .widgets
+            .command_palette
+            .command_search_results
+            .as_ref()
+            .unwrap();
         let mut list_items = vec![];
         for item in raw_search_results {
             let mut spans = vec![];
@@ -3829,18 +3834,24 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         }
         list_items
     } else {
-        app.command_palette
+        app.widgets
+            .command_palette
             .available_commands
             .iter()
             .map(|c| ListItem::new(Line::from(format!("Command - {}", c))))
             .collect::<Vec<ListItem>>()
     };
 
-    let card_search_results = if app.command_palette.card_search_results.is_some()
+    let card_search_results = if app.widgets.command_palette.card_search_results.is_some()
         && !current_search_text_input.is_empty()
         && current_search_text_input.len() > 1
     {
-        let raw_search_results = app.command_palette.card_search_results.as_ref().unwrap();
+        let raw_search_results = app
+            .widgets
+            .command_palette
+            .card_search_results
+            .as_ref()
+            .unwrap();
         let mut list_items = vec![];
         for (item, _) in raw_search_results {
             let item = if item.len() > (horizontal_chunks[1].width - 2) as usize {
@@ -3858,11 +3869,16 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         vec![]
     };
 
-    let board_search_results = if app.command_palette.board_search_results.is_some()
+    let board_search_results = if app.widgets.command_palette.board_search_results.is_some()
         && !current_search_text_input.is_empty()
         && current_search_text_input.len() > 1
     {
-        let raw_search_results = app.command_palette.board_search_results.as_ref().unwrap();
+        let raw_search_results = app
+            .widgets
+            .command_palette
+            .board_search_results
+            .as_ref()
+            .unwrap();
         let mut list_items = vec![];
         for (item, _) in raw_search_results {
             let item = if item.len() > (horizontal_chunks[1].width - 2) as usize {
@@ -4670,8 +4686,11 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     } else {
         "None".to_string()
     };
-    let ui_render_time = if app.state.ui_render_time.is_some() {
-        let render_time = app.state.ui_render_time.unwrap();
+    let ui_render_time = if !app.state.ui_render_time.is_empty() {
+        // let render_time =
+        //     app.state.ui_render_time.iter().sum::<u128>() / app.state.ui_render_time.len() as u128;
+        // minimum value of the array
+        let render_time = *app.state.ui_render_time.iter().min().unwrap();
         if render_time > 1000 {
             format!("{}ms", render_time as f64 / 1000_f64)
         } else {
@@ -4683,7 +4702,7 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let current_board_id = app.state.current_board_id;
     let current_card_id = app.state.current_card_id;
 
-    let menu_area = top_left_rect(30, 30, rect.size());
+    let menu_area = top_left_rect(30, 40, rect.size());
     let strings = vec![
         format!("UI Mode: {}", current_ui_mode),
         format!("Focus: {:?}", app.state.focus),
@@ -4733,7 +4752,25 @@ pub fn check_if_mouse_is_in_area(mouse_coordinates: &(u16, u16), rect_to_check: 
 fn render_close_button(rect: &mut Frame, app: &mut App) {
     let close_btn_area = Rect::new(rect.size().width - 3, 0, 3, 3);
     let close_btn_style =
-        get_button_style_with_default_error_style(app, Focus::CloseButton, &close_btn_area, false);
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &close_btn_area)
+            || app.state.focus == Focus::CloseButton
+        {
+            app.state.mouse_focus = Some(Focus::CloseButton);
+            app.state.focus = Focus::CloseButton;
+            let close_button_color = app.widgets.close_button_widget.color;
+            let fg_color = app
+                .current_theme
+                .error_text_style
+                .fg
+                .unwrap_or(Color::White);
+            Style::default().fg(fg_color).bg(Color::Rgb(
+                close_button_color.0,
+                close_button_color.1,
+                close_button_color.2,
+            ))
+        } else {
+            app.current_theme.general_style
+        };
     let close_btn = Paragraph::new(vec![Line::from("X")])
         .block(
             Block::default()
@@ -5781,10 +5818,10 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         }
     }
 
-    let email_id_field_chunk = get_form_chunk(&app, &form_chunks, 2, 1);
-    let password_field_chunk = get_form_chunk(&app, &form_chunks, 3, 2);
-    let show_password_main_chunk = get_form_chunk(&app, &form_chunks, 4, 3);
-    let submit_button_chunk = get_form_chunk(&app, &form_chunks, 5, 4);
+    let email_id_field_chunk = get_form_chunk(app, &form_chunks, 2, 1);
+    let password_field_chunk = get_form_chunk(app, &form_chunks, 3, 2);
+    let show_password_main_chunk = get_form_chunk(app, &form_chunks, 4, 3);
+    let submit_button_chunk = get_form_chunk(app, &form_chunks, 5, 4);
 
     let show_password_chunks = Layout::default()
         .direction(Direction::Horizontal)

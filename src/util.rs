@@ -47,7 +47,17 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App<'_>>>) -> Result<()> {
         let mut app = app.lock().await;
         let render_start_time = Instant::now();
         terminal.draw(|rect| ui_main::draw(rect, &mut app))?;
-        app.state.ui_render_time = Some(render_start_time.elapsed().as_micros());
+        if app.state.ui_render_time.len() < 10 {
+            app.state
+                .ui_render_time
+                .push(render_start_time.elapsed().as_micros());
+        } else {
+            app.state.ui_render_time.remove(0);
+            app.state
+                .ui_render_time
+                .push(render_start_time.elapsed().as_micros());
+        }
+        // app.state.ui_render_time = Some(render_start_time.elapsed().as_micros());
         let result = match events.next().await {
             InputEvent::KeyBoardInput(key) => app.do_action(key).await,
             InputEvent::MouseAction(mouse_action) => app.handle_mouse(mouse_action).await,
@@ -97,10 +107,16 @@ pub fn calculate_cursor_position(
 }
 
 /// function to lerp between rgb values of two colors
-pub fn lerp_between(color_a: (u8, u8, u8), color_b: (u8, u8, u8), time_in_ms: f32) -> (u8, u8, u8) {
-    let r = (color_a.0 as f32 * (1.0 - time_in_ms) + color_b.0 as f32 * time_in_ms) as u8;
-    let g = (color_a.1 as f32 * (1.0 - time_in_ms) + color_b.1 as f32 * time_in_ms) as u8;
-    let b = (color_a.2 as f32 * (1.0 - time_in_ms) + color_b.2 as f32 * time_in_ms) as u8;
+pub fn lerp_between(
+    color_a: (u8, u8, u8),
+    color_b: (u8, u8, u8),
+    normalised_time: f32,
+) -> (u8, u8, u8) {
+    // clamp the normalised time between 0 and 1
+    let normalised_time = normalised_time.max(0.0).min(1.0);
+    let r = (color_a.0 as f32 * (1.0 - normalised_time) + color_b.0 as f32 * normalised_time) as u8;
+    let g = (color_a.1 as f32 * (1.0 - normalised_time) + color_b.1 as f32 * normalised_time) as u8;
+    let b = (color_a.2 as f32 * (1.0 - normalised_time) + color_b.2 as f32 * normalised_time) as u8;
     (r, g, b)
 }
 
