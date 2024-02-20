@@ -56,7 +56,9 @@ impl Events {
 
     pub async fn next(&mut self) -> InputEvent {
         let new_event = self.rx.recv().await.unwrap_or(InputEvent::Tick);
-        if new_event == InputEvent::KeyBoardInput(Key::Unknown) {
+        if (new_event == InputEvent::KeyBoardInput(Key::Unknown))
+            || (new_event == InputEvent::MouseAction(Mouse::Unknown))
+        {
             InputEvent::Tick
         } else {
             new_event

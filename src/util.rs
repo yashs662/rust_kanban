@@ -35,7 +35,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App<'_>>>) -> Result<()> {
 
     let mut events = {
         let tick_rate = app.lock().await.config.tickrate;
-        Events::new(Duration::from_millis(tick_rate))
+        Events::new(Duration::from_millis(tick_rate as u64))
     };
 
     {
@@ -61,7 +61,12 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App<'_>>>) -> Result<()> {
         let result = match events.next().await {
             InputEvent::KeyBoardInput(key) => app.do_action(key).await,
             InputEvent::MouseAction(mouse_action) => app.handle_mouse(mouse_action).await,
-            InputEvent::Tick => AppReturn::Continue,
+            InputEvent::Tick => {
+                if app.state.previous_mouse_coordinates != app.state.current_mouse_coordinates {
+                    app.state.previous_mouse_coordinates = app.state.current_mouse_coordinates;
+                }
+                AppReturn::Continue
+            }
         };
         if result == AppReturn::Exit {
             events.close();

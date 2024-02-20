@@ -8,7 +8,11 @@ pub const CONFIG_FILE_NAME: &str = "config.json";
 pub const DEFAULT_BOARD_TITLE_LENGTH: u16 = 20;
 pub const DEFAULT_CARD_TITLE_LENGTH: u16 = 20;
 pub const DEFAULT_CARD_WARNING_DUE_DATE_DAYS: u16 = 3;
-pub const DEFAULT_TICKRATE: u64 = 50;
+pub const MAX_WARNING_DUE_DATE_DAYS: u16 = 30;
+pub const MIN_WARNING_DUE_DATE_DAYS: u16 = 1;
+pub const DEFAULT_TICKRATE: u16 = 50;
+pub const MIN_TICKRATE: u16 = 10;
+pub const MAX_TICKRATE: u16 = 1000;
 pub const DEFAULT_TOAST_DURATION: u64 = 5;
 pub const DEFAULT_UI_MODE: UiMode = UiMode::TitleBodyHelpLog;
 pub const ENCRYPTION_KEY_FILE_NAME: &str = "kanban_encryption_key";
@@ -43,7 +47,6 @@ pub const THEME_DIR_NAME: &str = "themes";
 pub const THEME_FILE_NAME: &str = "kanban_theme";
 pub const TOAST_FADE_IN_TIME: u64 = 200;
 pub const TOAST_FADE_OUT_TIME: u64 = 400;
-pub const VERTICAL_SCROLL_BAR_SYMBOL: &str = "█";
 pub const SPINNER_FRAMES: [&str; 7] = [
     "[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]",
 ];

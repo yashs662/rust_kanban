@@ -341,6 +341,7 @@ impl From<&str> for Key {
 }
 
 impl From<&Map<String, Value>> for Key {
+    // TODO: handle more key types
     fn from(value: &Map<String, Value>) -> Self {
         if value.get("Char").is_some() {
             Key::Char(

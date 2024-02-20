@@ -8,7 +8,7 @@ use crate::{
         app_helper::reset_card_drag_mode,
         date_format_converter, date_format_finder,
         kanban::{Card, CardPriority, CardStatus},
-        state::{AppStatus, Focus, UiMode},
+        state::{AppStatus, Focus, KeyBindingEnum, UiMode},
         App, DateFormat, PopupMode,
     },
     constants::{
@@ -16,7 +16,6 @@ use crate::{
         HIDDEN_PASSWORD_SYMBOL, LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT,
         MIN_TERM_WIDTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK, MOUSE_OUT_OF_BOUNDS_COORDINATES,
         PATTERN_CHANGE_INTERVAL, SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES,
-        VERTICAL_SCROLL_BAR_SYMBOL,
     },
     io::{
         data_handler::get_available_local_save_files,
@@ -27,12 +26,12 @@ use crate::{
 use chrono::{Local, NaiveDate, NaiveDateTime};
 use log::{debug, Level};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style, Color},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
         Block, BorderType, Borders, Cell, Clear, Gauge, List, ListItem, ListState, Paragraph, Row,
-        Table,
+        Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
     },
     Frame,
 };
@@ -44,7 +43,7 @@ use std::{
 pub fn render_zen_mode(rect: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(100)].as_ref())
+        .constraints([Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
     render_body(rect, chunks[0], app, false);
@@ -57,7 +56,7 @@ pub fn render_zen_mode(rect: &mut Frame, app: &mut App) {
 pub fn render_title_body(rect: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Percentage(80)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
     render_title(app, &chunks[0], rect);
@@ -71,16 +70,16 @@ pub fn render_title_body(rect: &mut Frame, app: &mut App) {
 pub fn render_body_help(rect: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(85), Constraint::Length(5)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
         .split(rect.size());
 
     let help_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
                 Constraint::Length(1),
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -110,7 +109,7 @@ pub fn render_body_help(rect: &mut Frame, app: &mut App) {
 pub fn render_body_log(rect: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(80), Constraint::Length(8)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
         .split(rect.size());
 
     render_body(rect, chunks[0], app, false);
@@ -127,7 +126,7 @@ pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(75),
+                Constraint::Fill(1),
                 Constraint::Length(5),
             ]
             .as_ref(),
@@ -138,9 +137,9 @@ pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
                 Constraint::Length(1),
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -174,8 +173,8 @@ pub fn render_title_body_log(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(75),
-                Constraint::Length(8),
+                Constraint::Fill(1),
+                Constraint::Length(5),
             ]
             .as_ref(),
         )
@@ -268,9 +267,9 @@ pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Percentage(70),
+                Constraint::Fill(1),
                 Constraint::Length(5),
-                Constraint::Length(8),
+                Constraint::Length(5),
             ]
             .as_ref(),
         )
@@ -280,9 +279,9 @@ pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
                 Constraint::Length(1),
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -316,9 +315,9 @@ pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Percentage(60),
+                Constraint::Fill(1),
                 Constraint::Length(5),
-                Constraint::Length(8),
+                Constraint::Length(5),
             ]
             .as_ref(),
         )
@@ -328,9 +327,9 @@ pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
                 Constraint::Length(1),
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -366,7 +365,7 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Min(8),
+                Constraint::Fill(1),
                 Constraint::Length(3),
                 Constraint::Length(5),
                 Constraint::Length(5),
@@ -375,15 +374,9 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    let table_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(5), Constraint::Length(1)].as_ref())
-        .margin(1)
-        .split(chunks[1]);
-
     let reset_btn_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())
         .split(chunks[2]);
 
     let reset_both_style = get_button_style_with_default_error_style(
@@ -398,39 +391,54 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         &reset_btn_chunks[1],
         popup_mode,
     );
-    let progress_bar_style =
-        check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
+    let scrollbar_style = check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
     let config_text_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let default_style = get_mouse_focusable_field_style(
-        app,
-        Focus::ConfigTable,
-        &table_chunks[0],
-        popup_mode,
-        false,
+    let default_style =
+        get_mouse_focusable_field_style(app, Focus::ConfigTable, &chunks[1], popup_mode, false);
+
+    let config_table = draw_config_table_selector(app, config_text_style, default_style);
+    let all_rows = app.config.to_view_list();
+    let total_rows = all_rows.len();
+    let current_index = app
+        .state
+        .app_table_states
+        .config
+        .selected()
+        .unwrap_or(0)
+        .min(total_rows - 1);
+    let available_height = (chunks[1].height - 2) as usize;
+    let (row_start_index, _) = get_scrollable_widget_row_bounds(
+        all_rows.len(),
+        current_index,
+        app.state.app_table_states.config.offset(),
+        available_height,
     );
-
-    let config_table = draw_config_table_selector(app);
-    let config_border = Block::default()
-        .title("Config Editor")
-        .borders(Borders::ALL)
-        .style(config_text_style)
-        .border_style(default_style)
-        .border_type(BorderType::Rounded);
-
-    let current_index = app.state.app_table_states.config.selected().unwrap_or(0);
-    let total_rows = app.config.to_view_list().len();
-    let visible_rows = (table_chunks[1].height - 1) as usize;
-    let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
-    let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
-
-    for i in 0..blocks_to_render {
-        let block_x = table_chunks[1].right() - 2;
-        let block_y = table_chunks[1].top() + i as u16;
-        let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
-            .style(progress_bar_style)
-            .block(Block::default().borders(Borders::NONE));
-        rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
+    let current_mouse_y_position = app.state.current_mouse_coordinates.1;
+    let hovered_index = if current_mouse_y_position > chunks[1].y
+        && current_mouse_y_position < (chunks[1].y + chunks[1].height - 1)
+    {
+        Some(((current_mouse_y_position - chunks[1].y - 1) + row_start_index as u16) as usize)
+    } else {
+        None
+    };
+    if hovered_index.is_some()
+        && (app.state.previous_mouse_coordinates != app.state.current_mouse_coordinates)
+    {
+        app.state.app_table_states.config.select(hovered_index);
     }
+
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .style(scrollbar_style)
+        .end_symbol(Some("↓"))
+        .track_symbol(Some("|"))
+        .track_style(app.current_theme.inactive_text_style);
+
+    let mut scrollbar_state = ScrollbarState::new(total_rows).position(current_index);
+    let scrollbar_area = chunks[1].inner(&Margin {
+        horizontal: 0,
+        vertical: 1,
+    });
 
     let reset_both_button = Paragraph::new("Reset Config and KeyBindings to Default")
         .block(
@@ -455,12 +463,12 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
     let config_help = draw_config_help(app, popup_mode);
 
     render_title(app, &chunks[0], rect);
-    rect.render_widget(config_border, chunks[1]);
     rect.render_stateful_widget(
         config_table,
-        table_chunks[0],
+        chunks[1],
         &mut app.state.app_table_states.config,
     );
+    rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
     rect.render_widget(reset_both_button, reset_btn_chunks[0]);
     rect.render_widget(reset_config_button, reset_btn_chunks[1]);
     rect.render_widget(config_help, chunks[3]);
@@ -470,7 +478,11 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
     }
 }
 
-fn draw_config_table_selector(app: &mut App) -> Table<'static> {
+fn draw_config_table_selector(
+    app: &mut App,
+    config_text_style: Style,
+    default_style: Style,
+) -> Table<'static> {
     let config_list = app.config.to_view_list();
     let rows = config_list.iter().map(|item| {
         let height = item
@@ -489,7 +501,14 @@ fn draw_config_table_selector(app: &mut App) -> Table<'static> {
         rows,
         [Constraint::Percentage(40), Constraint::Percentage(60)],
     )
-    .block(Block::default())
+    .block(
+        Block::default()
+            .title("Config Editor")
+            .borders(Borders::ALL)
+            .style(config_text_style)
+            .border_style(default_style)
+            .border_type(BorderType::Rounded),
+    )
     .highlight_style(highlight_style)
     .highlight_symbol(">> ")
 }
@@ -503,7 +522,7 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             .constraints(
                 [
                     Constraint::Length(5),
-                    Constraint::Min(4),
+                    Constraint::Fill(1),
                     Constraint::Length(5),
                     Constraint::Length(3),
                 ]
@@ -515,8 +534,8 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(40),
+                    Constraint::Length(5),
+                    Constraint::Fill(1),
                     Constraint::Length(4),
                 ]
                 .as_ref(),
@@ -629,7 +648,7 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(8), Constraint::Length(5)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
         .split(render_area);
 
     let list_items = UiMode::view_modes_as_string();
@@ -660,27 +679,19 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", app.current_theme.help_text_style),
         Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled("or ", app.current_theme.help_text_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
         Span::styled(down_key, app.current_theme.help_key_style),
         Span::styled(
-            "to navigate or use the mouse cursor. Press ",
+            " to navigate or use the mouse cursor. Press ",
             app.current_theme.help_text_style,
         ),
         Span::styled("<Enter>", app.current_theme.help_key_style),
@@ -732,21 +743,16 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Min(8),
+                Constraint::Fill(1),
                 Constraint::Length(5),
                 Constraint::Length(3),
             ]
             .as_ref(),
         )
         .split(rect.size());
-    let table_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(95), Constraint::Length(1)].as_ref())
-        .split(chunks[1]);
 
     let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let progress_bar_style =
-        check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
+    let scrollbar_style = check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
     let reset_style =
         get_button_style_with_default_error_style(app, Focus::SubmitButton, &chunks[3], popup_mode);
     let current_element_style =
@@ -761,41 +767,25 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
     let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
     let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
 
-    let next_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus next")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let prev_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus previous")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
+    let next_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let edit_keybinding_help_spans = Line::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(up_key, help_key_style),
-        Span::styled("and ", help_text_style),
+        Span::styled(" and ", help_text_style),
         Span::styled(down_key, help_key_style),
-        Span::styled("or scroll with the mouse", help_text_style),
+        Span::styled(" or scroll with the mouse", help_text_style),
         Span::styled(" to select a keybinding, Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" or ", help_text_style),
@@ -807,9 +797,9 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
             help_text_style,
         ),
         Span::styled(next_focus_key, help_key_style),
-        Span::styled("or ", help_text_style),
-        Span::styled(prev_focus_key, help_key_style),
-        Span::styled("to highlight Reset Button and Press ", help_text_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
+        Span::styled(" to highlight Reset Button and Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" on the Reset Keybindings Button", help_text_style),
     ]);
@@ -822,7 +812,10 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         let mut row_value = String::new();
         for v in value.iter() {
             row_value.push_str(&v.to_string());
-            row_value.push(' ');
+            // check if it's the last element
+            if value.iter().last().unwrap() != v {
+                row_value.push_str(", ");
+            }
         }
         row.push(row_value);
         table_items.push(row);
@@ -839,45 +832,35 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         Row::new(cells).height(height as u16)
     });
 
-    // TODO use ratatui's new scroll bar feature
     let current_index = app
         .state
         .app_table_states
         .edit_keybindings
         .selected()
         .unwrap_or(0);
-    let total_rows = table_items.len();
-    let visible_rows = (table_chunks[1].height - 1) as usize;
-    let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
-    let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .style(scrollbar_style)
+        .end_symbol(Some("↓"))
+        .track_symbol(Some("|"))
+        .track_style(app.current_theme.inactive_text_style);
+    let mut scrollbar_state = ScrollbarState::new(table_items.len()).position(current_index);
+    let scrollbar_area = chunks[1].inner(&Margin {
+        vertical: 1,
+        horizontal: 0,
+    });
 
-    for i in 0..blocks_to_render {
-        let block_x = table_chunks[1].right() - 2;
-        let block_y = table_chunks[1].top() + i as u16;
-        let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
-            .style(progress_bar_style)
-            .block(Block::default().borders(Borders::NONE));
-        rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
-    }
-
-    let t = Table::new(
-        rows,
-        [
-            Constraint::Percentage(50),
-            Constraint::Length(30),
-            Constraint::Min(10),
-        ],
-    )
-    .block(
-        Block::default()
-            .title("Edit Keybindings")
-            .style(default_style)
-            .border_style(table_border_style)
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded),
-    )
-    .highlight_style(current_element_style)
-    .highlight_symbol(">> ");
+    let t = Table::new(rows, [Constraint::Fill(1), Constraint::Fill(1)])
+        .block(
+            Block::default()
+                .title("Edit Keybindings")
+                .style(default_style)
+                .border_style(table_border_style)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        )
+        .highlight_style(current_element_style)
+        .highlight_symbol(">> ");
 
     let edit_keybinding_help = Paragraph::new(edit_keybinding_help_spans)
         .block(
@@ -906,6 +889,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         chunks[1],
         &mut app.state.app_table_states.edit_keybindings,
     );
+    rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
     rect.render_widget(edit_keybinding_help, chunks[2]);
     rect.render_widget(reset_button, chunks[3]);
     if app.config.enable_mouse_support {
@@ -921,8 +905,8 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(7),
-                    Constraint::Min(6),
+                    Constraint::Length(6),
+                    Constraint::Fill(1),
                     Constraint::Length(4),
                     Constraint::Length(3),
                 ]
@@ -934,8 +918,8 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(40),
+                    Constraint::Length(6),
+                    Constraint::Fill(1),
                     Constraint::Length(4),
                 ]
                 .as_ref(),
@@ -970,22 +954,17 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
     if key_id > key_list.len() {
         return;
     }
-    let key = &key_list[key_id].0;
+    let paragraph_title = key_list[key_id].0.to_string().to_uppercase();
     let value = key_list[key_id].1;
     let mut key_value = String::new();
     for v in value.iter() {
-        key_value.push_str(&v.to_string());
+        key_value.push_str(&v.to_string().replace(['<', '>'], ""));
         key_value.push(' ');
     }
     let user_input_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Enter input mode")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let paragraph_text = format!("Current Value is {}\n\nPress <{}> to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",key_value,user_input_key);
-    let paragraph_title = key.to_uppercase();
+        .get_first_keybinding(KeyBindingEnum::TakeUserInput)
+        .unwrap_or("".to_string());
+    let paragraph_text = format!("Current Value is '{}'\n\nPress {} to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",key_value,user_input_key);
     let config_item = Paragraph::new(paragraph_text)
         .block(
             Block::default()
@@ -1067,9 +1046,9 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Length(16),
-                Constraint::Min(8),
-                Constraint::Length(8),
+                Constraint::Length(10),
+                Constraint::Fill(1),
+                Constraint::Fill(2),
             ]
             .as_ref(),
         )
@@ -1079,9 +1058,9 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
                 Constraint::Length(1),
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -1187,16 +1166,16 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
 pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(70), Constraint::Length(4)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(4)].as_ref())
         .split(rect.size());
 
     let help_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
                 Constraint::Length(1),
-                Constraint::Percentage(50),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -1233,7 +1212,7 @@ pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
 pub fn render_logs_only(rect: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(100)].as_ref())
+        .constraints([Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
     render_logs(app, true, chunks[0], rect, app.state.popup_mode.is_some());
@@ -1250,33 +1229,37 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
         app.state.popup_mode.is_some(),
         false,
     );
-    let keybinding_store = &app.state.keybinding_store;
-
     let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
     let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
     let current_element_style =
         check_for_popup_and_get_style(app, app.current_theme.list_select_style);
 
-    let rows = keybinding_store.iter().map(|item| {
-        let height = item
-            .iter()
-            .map(|content| content.chars().filter(|c| *c == '\n').count())
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let cells = vec![
-            Cell::from(item[0].to_string()).style(help_key_style),
-            Cell::from(item[1].to_string()).style(help_text_style),
-        ];
-        Row::new(cells).height(height as u16)
-    });
+    let rows: Vec<Row> = app
+        .config
+        .keybindings
+        .iter()
+        .map(|item| {
+            let keys = item
+                .1
+                .iter()
+                .map(|key| key.to_string())
+                .collect::<Vec<String>>()
+                .join(", ");
+            let cells = vec![
+                Cell::from(item.0.to_string()).style(help_text_style),
+                Cell::from(keys).style(help_key_style),
+            ];
+            Row::new(cells)
+        })
+        .collect();
 
-    let left_rows = rows.clone().take(rows.clone().count() / 2);
-    let right_rows = rows.clone().skip(rows.clone().count() / 2);
+    let mid_point = rows.len() / 2;
+    let left_rows = rows[..mid_point].to_vec();
+    let right_rows = rows[mid_point..].to_vec();
 
     let left_table = Table::new(
         left_rows,
-        [Constraint::Percentage(30), Constraint::Percentage(70)],
+        [Constraint::Percentage(70), Constraint::Percentage(30)],
     )
     .block(Block::default().style(help_text_style))
     .highlight_style(current_element_style)
@@ -1285,7 +1268,7 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
 
     let right_table = Table::new(
         right_rows,
-        [Constraint::Percentage(30), Constraint::Percentage(70)],
+        [Constraint::Percentage(70), Constraint::Percentage(30)],
     )
     .block(Block::default().style(help_text_style))
     .highlight_style(current_element_style)
@@ -1315,40 +1298,24 @@ fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
     let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
 
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
     let next_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus next")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let prev_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus previous")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(up_key, help_key_style),
-        Span::styled("and ", help_text_style),
+        Span::styled(" and ", help_text_style),
         Span::styled(down_key, help_key_style),
-        Span::styled("or scroll with the mouse", help_text_style),
+        Span::styled(" or scroll with the mouse", help_text_style),
         Span::styled(" to navigate. To edit a value press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" or ", help_text_style),
@@ -1360,10 +1327,10 @@ fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
             help_text_style,
         ),
         Span::styled(next_focus_key, help_key_style),
-        Span::styled("or ", help_text_style),
-        Span::styled(prev_focus_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
         Span::styled(
-            "to highlight respective Reset Button then press ",
+            " to highlight respective Reset Button then press ",
             help_text_style,
         ),
         Span::styled("<Enter>", help_key_style),
@@ -1438,7 +1405,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
     } else {
         &app_boards_and_cards
     };
-    let progress_bar_style = if app.state.card_drag_mode {
+    let scrollbar_style = if app.state.card_drag_mode {
         app.current_theme.inactive_text_style
     } else {
         check_for_popup_and_get_style(app, app.current_theme.progress_bar_style)
@@ -1450,20 +1417,12 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
     };
     let current_board_id = &app.state.current_board_id.unwrap_or((0, 0));
 
-    let add_board_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Create new board")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+    let new_board_key = app
+        .get_first_keybinding(KeyBindingEnum::NewBoard)
+        .unwrap_or("".to_string());
     let new_card_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Create new card in current board")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::NewCard)
+        .unwrap_or("".to_string());
 
     if preview_mode {
         if app.state.preview_boards_and_cards.is_none()
@@ -1490,7 +1449,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
         let empty_paragraph = Paragraph::new(
             [
                 "No boards found, press ".to_string(),
-                add_board_key,
+                new_board_key,
                 " to add a new board".to_string(),
             ]
             .concat(),
@@ -1510,30 +1469,24 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
     let filter_chunks = if app.filtered_boards.is_empty() {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(0), Constraint::Percentage(100)].as_ref())
+            .constraints([Constraint::Percentage(0), Constraint::Fill(1)].as_ref())
             .split(area)
     } else {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Length(area.height - 1)].as_ref())
+            .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
             .split(area)
     };
 
     let chunks = if app.config.disable_scroll_bar {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(100)].as_ref())
+            .constraints([Constraint::Fill(1)].as_ref())
             .split(filter_chunks[1])
     } else {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Length(filter_chunks[1].height - 1),
-                    Constraint::Length(1),
-                ]
-                .as_ref(),
-            )
+            .constraints([Constraint::Fill(1), Constraint::Length(1)].as_ref())
             .split(filter_chunks[1])
     };
 
@@ -1549,13 +1502,11 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
     let mut constraints = vec![];
     if boards.len() > app.config.no_of_boards_to_show.into() {
         for _i in 0..app.config.no_of_boards_to_show {
-            constraints.push(Constraint::Percentage(
-                100 / app.config.no_of_boards_to_show,
-            ));
+            constraints.push(Constraint::Fill(1));
         }
     } else {
         for _i in 0..boards.len() {
-            constraints.push(Constraint::Percentage(100 / boards.len() as u16));
+            constraints.push(Constraint::Fill(1));
         }
     }
     let board_chunks = Layout::default()
@@ -1594,13 +1545,13 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
         let mut card_constraints = vec![];
         if board_cards.len() > app.config.no_of_cards_to_show.into() {
             for _i in 0..app.config.no_of_cards_to_show {
-                card_constraints.push(Constraint::Percentage(90 / app.config.no_of_cards_to_show));
+                card_constraints.push(Constraint::Fill(1));
             }
         } else if board_cards.is_empty() {
-            card_constraints.push(Constraint::Percentage(100));
+            card_constraints.push(Constraint::Fill(1));
         } else {
             for _i in 0..board_cards.len() {
-                card_constraints.push(Constraint::Percentage(100 / board_cards.len() as u16));
+                card_constraints.push(Constraint::Fill(1));
             }
         }
 
@@ -1646,37 +1597,22 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             .border_type(BorderType::Rounded);
         rect.render_widget(board_block, board_chunks[board_index]);
 
-        let card_area_chunks = if app.config.disable_scroll_bar {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(100)].as_ref())
-                .split(board_chunks[board_index])
-        } else {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Length(1), Constraint::Percentage(99)].as_ref())
-                .split(board_chunks[board_index])
-        };
+        let card_area_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Fill(1)].as_ref())
+            .split(board_chunks[board_index]);
 
-        let card_chunks = if app.config.disable_scroll_bar {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints(AsRef::<[Constraint]>::as_ref(&card_constraints))
-                .split(card_area_chunks[0])
-        } else {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints(AsRef::<[Constraint]>::as_ref(&card_constraints))
-                .split(card_area_chunks[1])
-        };
+        let card_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(1)
+            .constraints(AsRef::<[Constraint]>::as_ref(&card_constraints))
+            .split(card_area_chunks[0]);
         if board_cards.is_empty() {
             let available_width = card_chunks[0].width - 2;
             let empty_card_text = if preview_mode {
                 "No cards found".to_string()
             } else {
-                "No cards found, press ".to_string() + &new_card_key + "to add a new card"
+                "No cards found, press ".to_string() + &new_card_key + " to add a new card"
             };
             let mut usable_length = empty_card_text.len() as u16;
             let mut usable_height = 1.0;
@@ -1695,41 +1631,26 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             rect.render_widget(empty_card_paragraph, message_centered_rect);
             continue;
         }
-        if !app.config.disable_scroll_bar {
-            let all_board_cards = boards
-                .iter()
-                .find(|&b| b.id == *board_id)
-                .unwrap()
+        if !app.config.disable_scroll_bar && !board_cards.is_empty() && board_cards.len() > 1 {
+            let current_card_index = board
                 .cards
-                .clone();
-            let current_card_index = all_board_cards
                 .iter()
-                .position(|c| c.id == app.state.current_card_id.unwrap_or((0, 0)));
-            let cards_scroll_percentage =
-                (current_card_index.unwrap_or(0) + 1) as f64 / all_board_cards.len() as f64;
-            let cards_scroll_percentage = cards_scroll_percentage.clamp(0.0, 1.0);
-            let available_height = if card_area_chunks[0].height >= 2 {
-                (card_area_chunks[0].height - 2) as f64
-            } else {
-                0.0
-            };
-            let blocks_to_render = (available_height * cards_scroll_percentage) as u16;
-            if !all_board_cards.is_empty() {
-                for i in 0..blocks_to_render {
-                    let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
-                        .style(progress_bar_style)
-                        .block(Block::default().borders(Borders::NONE));
-                    rect.render_widget(
-                        block,
-                        Rect::new(
-                            card_area_chunks[0].x,
-                            card_area_chunks[0].y + i + 1,
-                            card_area_chunks[0].width,
-                            1,
-                        ),
-                    );
-                }
-            }
+                .position(|c| c.id == app.state.current_card_id.unwrap_or((0, 0)))
+                .unwrap_or(0);
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalLeft)
+                .begin_symbol(Some("↑"))
+                .style(scrollbar_style)
+                .end_symbol(Some("↓"))
+                .track_symbol(Some("|"))
+                .track_style(app.current_theme.inactive_text_style);
+            let mut scrollbar_state = ScrollbarState::new(board.cards.len())
+                .position(current_card_index)
+                .viewport_content_length((card_chunks[0].height) as usize);
+            let scrollbar_area = card_area_chunks[0].inner(&Margin {
+                vertical: 1,
+                horizontal: 0,
+            });
+            rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
         };
         for (card_index, card_id) in board_cards.iter().enumerate() {
             if app.state.hovered_card.is_some()
@@ -1776,10 +1697,10 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             render_a_single_card(app, card_chunks[card_index], card_style, card, rect);
         }
 
-    if app.state.card_drag_mode {
-        // TODO: add up and down hover zones to scroll while dragging a card
+        if app.state.card_drag_mode {
+            // TODO: add up and down hover zones to scroll while dragging a card
+        }
     }
-}
 
     if !app.config.disable_scroll_bar {
         let current_board_index = boards
@@ -1799,7 +1720,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
         };
         let line_gauge = Gauge::default()
             .block(Block::default())
-            .gauge_style(progress_bar_style)
+            .gauge_style(scrollbar_style)
             .percent(percentage);
         rect.render_widget(line_gauge, chunks[1]);
     }
@@ -1814,7 +1735,7 @@ fn render_a_single_card(
 ) {
     let inner_card_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(3)].as_ref())
         .margin(1)
         .split(render_area);
 
@@ -2027,14 +1948,14 @@ fn centered_rect_with_length(length_x: u16, length_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn top_left_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+fn top_left_rect(length_x: u16, length_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Length(length_y),
+                Constraint::Length((r.width - length_y) / 2),
+                Constraint::Length((r.width - length_y) / 2),
             ]
             .as_ref(),
         )
@@ -2044,9 +1965,9 @@ fn top_left_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Length(length_x),
+                Constraint::Length((r.width - length_x) / 2),
+                Constraint::Length((r.width - length_x) / 2),
             ]
             .as_ref(),
         )
@@ -2056,7 +1977,7 @@ fn top_left_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 pub fn draw_size_error(rect: &mut Frame, size: &Rect, msg: String, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(*size);
 
     let error_text_spans = vec![
@@ -2078,7 +1999,7 @@ pub fn draw_size_error(rect: &mut Frame, size: &Rect, msg: String, app: &mut App
 pub fn draw_loading_screen(rect: &mut Frame, size: &Rect, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(*size);
 
     let mut text = vec![Line::from(vec![
@@ -2153,7 +2074,7 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
             [
                 Constraint::Length(3),
                 Constraint::Length(5),
-                Constraint::Min(8),
+                Constraint::Fill(1),
                 Constraint::Length(4),
                 Constraint::Length(3),
             ]
@@ -2226,39 +2147,27 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
     rect.render_widget(board_description, chunks[2]);
 
     let input_mode_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Enter input mode")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::TakeUserInput)
+        .unwrap_or("".to_string());
     let next_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus next")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let prev_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus previous")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
         Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
-        Span::styled("or ", help_text_style),
+        Span::styled(" or ", help_text_style),
         Span::styled("<Enter> ", help_key_style),
         Span::styled("to start typing. Press ", help_text_style),
         Span::styled("<Ins>", help_key_style),
         Span::styled(" to stop typing. Press ", help_text_style),
         Span::styled(next_focus_key, help_key_style),
-        Span::styled("or ", help_text_style),
-        Span::styled(prev_focus_key, help_key_style),
-        Span::styled("to switch focus. Press ", help_text_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
+        Span::styled(" to switch focus. Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" to submit. Press ", help_text_style),
         Span::styled("<Esc>", help_key_style),
@@ -2326,7 +2235,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
             [
                 Constraint::Length(3),
                 Constraint::Length(5),
-                Constraint::Min(8),
+                Constraint::Fill(1),
                 Constraint::Length(3),
                 Constraint::Length(4),
                 Constraint::Length(3),
@@ -2442,7 +2351,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
     if parsed_due_date.is_err() && !app.state.app_form_states.new_card[2].is_empty() {
         let new_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(70), Constraint::Length(20)].as_ref())
+            .constraints([Constraint::Fill(1), Constraint::Length(21)].as_ref())
             .split(chunks[3]);
         rect.render_widget(card_due_date, new_chunks[0]);
         let error_text = Line::from(vec![Span::raw("Invalid date format")]);
@@ -2460,39 +2369,27 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
     }
 
     let input_mode_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Enter input mode")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::TakeUserInput)
+        .unwrap_or("".to_string());
     let next_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus next")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let prev_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus previous")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
-        Span::styled("or ", help_text_style),
+        Span::styled(" or ", help_text_style),
         Span::styled("<Enter> ", help_key_style),
         Span::styled("to start typing. Press ", help_text_style),
         Span::styled("<Ins>", help_key_style),
         Span::styled(" to stop typing. Press ", help_text_style),
         Span::styled(next_focus_key, help_key_style),
-        Span::styled("or ", help_text_style),
-        Span::styled(prev_focus_key, help_key_style),
-        Span::styled("to switch focus. Press ", help_text_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
+        Span::styled(" to switch focus. Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" to submit. Press ", help_text_style),
         Span::styled("<Esc>", help_key_style),
@@ -2559,7 +2456,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
     let main_chunks = {
         Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+            .constraints([Constraint::Length(35), Constraint::Fill(1)].as_ref())
             .split(rect.size())
     };
     let chunks = Layout::default()
@@ -2567,7 +2464,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Min(10),
+                Constraint::Fill(1),
                 Constraint::Length(9),
             ]
             .as_ref(),
@@ -2576,12 +2473,12 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
 
     let preview_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(main_chunks[1]);
 
     let title_bar_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(3)].as_ref())
         .split(preview_chunks[0]);
 
     let title_paragraph = Paragraph::new("Load a Save (Local)")
@@ -2646,42 +2543,29 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
         );
     }
 
-    let delete_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Delete focused element")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
+    let delete_key = app
+        .get_first_keybinding(KeyBindingEnum::DeleteCard)
+        .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(&up_key, help_key_style),
-        Span::styled("or ", help_text_style),
+        Span::styled(" or ", help_text_style),
         Span::styled(&down_key, help_key_style),
-        Span::styled("to navigate. Press ", help_text_style),
+        Span::styled(" to navigate. Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" to Load the selected save file. Press ", help_text_style),
         Span::styled("<Esc>", help_key_style),
         Span::styled(" to cancel. Press ", help_text_style),
         Span::styled(delete_key, help_key_style),
         Span::styled(
-            "to delete a save file. If using a mouse click on a save file to preview",
+            " to delete a save file. If using a mouse click on a save file to preview",
             help_text_style,
         ),
     ]);
@@ -3330,13 +3214,17 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     // Determine chunk sizes
     let card_chunks = {
         let min_box_height: u16 = 2;
+        let max_box_width: u16 = popup_area.width - 2;
         let border_height: u16 = 2;
         let max_height: u16 = popup_area.height - border_height;
         let submit_button_height: u16 = 3;
         let card_name_box_height: u16 = 3;
         let card_extra_info_height: u16 = 8;
-        let mut card_tags_height: u16 = min_box_height;
-        let mut card_comments_height: u16 = min_box_height;
+        let mut available_height: u16 = if app.state.card_being_edited.is_some() {
+            max_height - card_name_box_height - card_extra_info_height - submit_button_height
+        } else {
+            max_height - card_name_box_height - card_extra_info_height
+        };
 
         let raw_card_description_height = if app.state.card_description_text_buffer.is_some() {
             app.state
@@ -3347,40 +3235,72 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                 .len()
         } else {
             debug!("Text buffer not set for card description in render view card");
-            card.description.len()
+            card.description.len() / max_box_width as usize
         } as u16;
 
-        let remaining_height = if app.state.card_being_edited.is_some() {
-            max_height - card_name_box_height - card_extra_info_height - submit_button_height
+        let raw_tags_height = card_tag_lines.len() as u16;
+        let raw_comments_height = card_comment_lines.len() as u16;
+
+        let mut card_description_height = if app.state.focus == Focus::CardDescription {
+            if available_height
+                .saturating_sub(raw_tags_height + border_height)
+                .saturating_sub(raw_comments_height + border_height)
+                > 0
+            {
+                let calc =
+                    available_height - raw_tags_height - raw_comments_height - (border_height * 2);
+                if calc < (raw_card_description_height + border_height) {
+                    let diff = (raw_card_description_height + border_height) - calc;
+                    if diff < min_box_height {
+                        raw_card_description_height + border_height
+                    } else {
+                        calc
+                    }
+                } else {
+                    calc
+                }
+            } else if (raw_card_description_height + border_height) <= available_height {
+                raw_card_description_height + border_height
+            } else {
+                available_height
+            }
+        } else if ((raw_card_description_height + border_height) <= available_height)
+            && app.state.focus != Focus::CardTags
+            && app.state.focus != Focus::CardComments
+        {
+            raw_card_description_height.saturating_sub(border_height)
         } else {
-            max_height - card_name_box_height - card_extra_info_height
+            min_box_height
         };
 
-        let mut card_description_height = (raw_card_description_height)
-            .min(remaining_height - card_tags_height - card_comments_height);
+        available_height = available_height.saturating_sub(card_description_height);
 
-        let mut tag_and_comment_available_height = remaining_height - card_description_height;
-        if !card_comment_lines.is_empty() && !card_tag_lines.is_empty() {
+        let card_tags_height = if available_height > 0 {
             if app.state.focus == Focus::CardTags {
-                card_description_height = min_box_height;
-                tag_and_comment_available_height = remaining_height - card_description_height;
-                card_tags_height = tag_and_comment_available_height - card_comments_height;
-            } else if app.state.focus == Focus::CardComments {
-                card_description_height = min_box_height;
-                tag_and_comment_available_height = remaining_height - card_description_height;
-                card_comments_height = tag_and_comment_available_height - card_tags_height;
+                raw_tags_height + border_height
             } else {
-                card_description_height =
-                    remaining_height - card_tags_height - card_comments_height;
+                min_box_height
             }
-        } else if !card_comment_lines.is_empty() {
-            card_comments_height = tag_and_comment_available_height - card_tags_height;
-            card_description_height = remaining_height - card_tags_height - card_comments_height;
-        } else if !card_tag_lines.is_empty() {
-            card_tags_height = tag_and_comment_available_height - card_comments_height;
-            card_description_height = remaining_height - card_tags_height - card_comments_height;
         } else {
-            card_description_height = remaining_height - card_tags_height - card_comments_height;
+            min_box_height
+        };
+
+        available_height = available_height.saturating_sub(card_tags_height);
+
+        let card_comments_height = if available_height > 0 {
+            if app.state.focus == Focus::CardComments {
+                raw_comments_height + border_height
+            } else {
+                min_box_height
+            }
+        } else {
+            min_box_height
+        };
+
+        available_height = available_height.saturating_sub(card_comments_height);
+
+        if available_height > 0 {
+            card_description_height += available_height;
         }
 
         if app.state.card_being_edited.is_some() {
@@ -3967,7 +3887,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                             + board_search_results_length)
                             + 2) as u16,
                     ),
-                    Constraint::Min(1),
+                    Constraint::Fill(1),
                     Constraint::Length(4),
                 ]
                 .as_ref(),
@@ -3986,7 +3906,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                             + board_search_results_length)
                             + 2) as u16,
                     ),
-                    Constraint::Min(1),
+                    Constraint::Fill(1),
                     Constraint::Length(4),
                 ]
                 .as_ref(),
@@ -4079,7 +3999,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(search_results_chunk);
 
-    let command_search_results = List::new(command_search_results)
+    let command_search_results_list = List::new(command_search_results.clone())
         .block(
             Block::default()
                 .title("Commands")
@@ -4090,7 +4010,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         .highlight_style(command_search_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    let card_search_results = List::new(card_search_results)
+    let card_search_results_list = List::new(card_search_results.clone())
         .block(
             Block::default()
                 .title("Cards")
@@ -4101,7 +4021,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         .highlight_style(card_search_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    let board_search_results = List::new(board_search_results)
+    let board_search_results_list = List::new(board_search_results.clone())
         .block(
             Block::default()
                 .title("Boards")
@@ -4113,49 +4033,33 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
     let next_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus next")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let prev_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus previous")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", app.current_theme.help_text_style),
         Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled("and ", app.current_theme.help_text_style),
+        Span::styled(" and ", app.current_theme.help_text_style),
         Span::styled(down_key, app.current_theme.help_key_style),
         Span::styled(
-            "or scroll with the mouse to highlight a Command/Card/Board. Press ",
+            " or scroll with the mouse to highlight a Command/Card/Board. Press ",
             app.current_theme.help_text_style,
         ),
         Span::styled("<Enter> ", app.current_theme.help_key_style),
         Span::styled("to select. Press ", app.current_theme.help_text_style),
         Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled("or ", app.current_theme.help_text_style),
-        Span::styled(prev_focus_key, app.current_theme.help_key_style),
-        Span::styled("to change focus", app.current_theme.help_text_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
+        Span::styled(prv_focus_key, app.current_theme.help_key_style),
+        Span::styled(" to change focus", app.current_theme.help_text_style),
     ]);
 
     let help_paragraph = Paragraph::new(help_spans)
@@ -4194,20 +4098,164 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
     render_blank_styled_canvas(rect, app, search_results_chunk, false);
     rect.render_widget(results_border, search_results_chunk);
     rect.render_stateful_widget(
-        command_search_results,
+        command_search_results_list,
         search_results_chunks[0],
         &mut app.state.app_list_states.command_palette_command_search,
     );
     rect.render_stateful_widget(
-        card_search_results,
+        card_search_results_list,
         search_results_chunks[1],
         &mut app.state.app_list_states.command_palette_card_search,
     );
     rect.render_stateful_widget(
-        board_search_results,
+        board_search_results_list,
         search_results_chunks[2],
         &mut app.state.app_list_states.command_palette_board_search,
     );
+
+    if app.state.focus == Focus::CommandPaletteCommand {
+        let current_index = app
+            .state
+            .app_list_states
+            .command_palette_command_search
+            .selected()
+            .unwrap_or(0);
+        let (row_start_index, _) = get_scrollable_widget_row_bounds(
+            command_search_results_length.saturating_sub(2),
+            current_index,
+            app.state.app_list_states.command_palette_command_search.offset(),
+            (search_results_chunks[0].height - 2) as usize,
+        );
+        let current_mouse_y_position = app.state.current_mouse_coordinates.1;
+        let hovered_index = if current_mouse_y_position > search_results_chunks[0].y
+            && current_mouse_y_position
+                < (search_results_chunks[0].y + search_results_chunks[0].height - 1)
+        {
+            Some(
+                ((current_mouse_y_position - search_results_chunks[0].y - 1)
+                    + row_start_index as u16) as usize,
+            )
+        } else {
+            None
+        };
+        if hovered_index.is_some()
+            && (app.state.previous_mouse_coordinates != app.state.current_mouse_coordinates)
+        {
+            app.state
+                .app_list_states
+                .command_palette_command_search
+                .select(hovered_index);
+        }
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .style(app.current_theme.progress_bar_style)
+            .end_symbol(Some("↓"))
+            .track_symbol(Some("|"))
+            .track_style(app.current_theme.inactive_text_style);
+
+        let mut scrollbar_state =
+            ScrollbarState::new(command_search_results.len()).position(current_index);
+        let scrollbar_area = search_results_chunks[0].inner(&Margin {
+            horizontal: 0,
+            vertical: 1,
+        });
+        rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+    } else if app.state.focus == Focus::CommandPaletteCard {
+        let current_index = app
+            .state
+            .app_list_states
+            .command_palette_card_search
+            .selected()
+            .unwrap_or(0);
+        let (row_start_index, _) = get_scrollable_widget_row_bounds(
+            card_search_results_length.saturating_sub(2),
+            current_index,
+            app.state.app_list_states.command_palette_card_search.offset(),
+            (search_results_chunks[1].height - 2) as usize,
+        );
+        let current_mouse_y_position = app.state.current_mouse_coordinates.1;
+        let hovered_index = if current_mouse_y_position > search_results_chunks[1].y
+            && current_mouse_y_position
+                < (search_results_chunks[1].y + search_results_chunks[1].height - 1)
+        {
+            Some(
+                ((current_mouse_y_position - search_results_chunks[1].y - 1)
+                    + row_start_index as u16) as usize,
+            )
+        } else {
+            None
+        };
+        if hovered_index.is_some()
+            && (app.state.previous_mouse_coordinates != app.state.current_mouse_coordinates)
+        {
+            app.state
+                .app_list_states
+                .command_palette_card_search
+                .select(hovered_index);
+        }
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .style(app.current_theme.progress_bar_style)
+            .end_symbol(Some("↓"))
+            .track_symbol(Some("|"))
+            .track_style(app.current_theme.inactive_text_style);
+
+        let mut scrollbar_state =
+            ScrollbarState::new(card_search_results.len()).position(current_index);
+        let scrollbar_area = search_results_chunks[1].inner(&Margin {
+            horizontal: 0,
+            vertical: 1,
+        });
+        rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+    } else if app.state.focus == Focus::CommandPaletteBoard {
+        let current_index = app
+            .state
+            .app_list_states
+            .command_palette_board_search
+            .selected()
+            .unwrap_or(0);
+        let (row_start_index, _) = get_scrollable_widget_row_bounds(
+            board_search_results_length.saturating_sub(2),
+            current_index,
+            app.state.app_list_states.command_palette_board_search.offset(),
+            (search_results_chunks[2].height - 2) as usize,
+        );
+        let current_mouse_y_position = app.state.current_mouse_coordinates.1;
+        let hovered_index = if current_mouse_y_position > search_results_chunks[2].y
+            && current_mouse_y_position
+                < (search_results_chunks[2].y + search_results_chunks[2].height - 1)
+        {
+            Some(
+                ((current_mouse_y_position - search_results_chunks[2].y - 1)
+                    + row_start_index as u16) as usize,
+            )
+        } else {
+            None
+        };
+        if hovered_index.is_some()
+            && (app.state.previous_mouse_coordinates != app.state.current_mouse_coordinates)
+        {
+            app.state
+                .app_list_states
+                .command_palette_board_search
+                .select(hovered_index);
+        }
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .style(app.current_theme.progress_bar_style)
+            .end_symbol(Some("↓"))
+            .track_symbol(Some("|"))
+            .track_style(app.current_theme.inactive_text_style);
+
+        let mut scrollbar_state =
+            ScrollbarState::new(board_search_results.len()).position(current_index);
+        let scrollbar_area = search_results_chunks[2].inner(&Margin {
+            horizontal: 0,
+            vertical: 1,
+        });
+        rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+    }
+
     render_blank_styled_canvas(rect, app, help_chunk, false);
     rect.render_widget(help_paragraph, help_chunk);
     if app.config.enable_mouse_support {
@@ -4475,6 +4523,7 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
         } else {
             app.current_theme.general_style
         };
+        let scrollbar_style = app.current_theme.progress_bar_style;
 
         let popup_area = centered_rect_with_percentage(80, 80, rect.size());
 
@@ -4490,27 +4539,13 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Min(5),
+                    Constraint::Fill(1),
                     Constraint::Length(5),
                     Constraint::Length(3),
                 ]
                 .as_ref(),
             )
             .split(popup_area);
-
-        let filter_list_chunks = if all_available_tags.len() > (popup_area.height as usize - 10) {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Min(10), Constraint::Length(1)])
-                .margin(1)
-                .split(chunks[0])
-        } else {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(100)])
-                .margin(1)
-                .split(chunks[0])
-        };
 
         let all_tags = all_available_tags
             .iter()
@@ -4530,53 +4565,37 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .collect::<Vec<ListItem>>();
 
         let tags = List::new(all_tags.clone())
-            .block(Block::default())
+            .block(
+                Block::default()
+                    .title("Filter by Tag")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .style(app.current_theme.general_style)
+                    .border_style(tag_box_style),
+            )
             .highlight_style(app.current_theme.list_select_style)
             .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-        let tag_box_border = Block::default()
-            .title("Filter by Tag")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .style(app.current_theme.general_style)
-            .border_style(tag_box_style);
-
         let up_key = app
-            .state
-            .keybinding_store
-            .iter()
-            .find(|x| x[1] == "Go up")
-            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-            .clone();
+            .get_first_keybinding(KeyBindingEnum::Up)
+            .unwrap_or("".to_string());
         let down_key = app
-            .state
-            .keybinding_store
-            .iter()
-            .find(|x| x[1] == "Go down")
-            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-            .clone();
+            .get_first_keybinding(KeyBindingEnum::Down)
+            .unwrap_or("".to_string());
         let next_focus_key = app
-            .state
-            .keybinding_store
-            .iter()
-            .find(|x| x[1] == "Focus next")
-            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-            .clone();
-        let prev_focus_key = app
-            .state
-            .keybinding_store
-            .iter()
-            .find(|x| x[1] == "Focus previous")
-            .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-            .clone();
+            .get_first_keybinding(KeyBindingEnum::NextFocus)
+            .unwrap_or("".to_string());
+        let prv_focus_key = app
+            .get_first_keybinding(KeyBindingEnum::PrvFocus)
+            .unwrap_or("".to_string());
 
         let help_spans = Line::from(vec![
             Span::styled("Use ", app.current_theme.help_text_style),
             Span::styled(up_key, app.current_theme.help_key_style),
-            Span::styled("and ", app.current_theme.help_text_style),
+            Span::styled(" and ", app.current_theme.help_text_style),
             Span::styled(down_key, app.current_theme.help_key_style),
             Span::styled(
-                "or scroll with the mouse to navigate. Press ",
+                " or scroll with the mouse to navigate. Press ",
                 app.current_theme.help_text_style,
             ),
             Span::styled("<Enter>", app.current_theme.help_key_style),
@@ -4592,9 +4611,9 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             Span::styled("<Esc>", app.current_theme.help_key_style),
             Span::styled(" to cancel, Press ", app.current_theme.help_text_style),
             Span::styled(next_focus_key, app.current_theme.help_key_style),
-            Span::styled("or ", app.current_theme.help_text_style),
-            Span::styled(prev_focus_key, app.current_theme.help_key_style),
-            Span::styled("to change focus", app.current_theme.help_text_style),
+            Span::styled(" or ", app.current_theme.help_text_style),
+            Span::styled(prv_focus_key, app.current_theme.help_key_style),
+            Span::styled(" to change focus", app.current_theme.help_text_style),
         ]);
 
         let help = Paragraph::new(help_spans)
@@ -4630,28 +4649,23 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             )
             .alignment(Alignment::Center);
 
-        if filter_list_chunks.len() > 1 {
-            render_blank_styled_canvas(rect, app, filter_list_chunks[1], false);
-            let current_index = app
-                .state
-                .app_list_states
-                .filter_by_tag_list
-                .selected()
-                .unwrap_or(0);
-            let total_rows = all_tags.len();
-            let visible_rows = (filter_list_chunks[1].height - 1) as usize;
-            let percentage = ((current_index + 1) as f32 / total_rows as f32) * 100.0;
-            let blocks_to_render = (percentage / 100.0 * visible_rows as f32) as usize;
-
-            for i in 0..blocks_to_render {
-                let block_x = filter_list_chunks[1].right() - 1;
-                let block_y = filter_list_chunks[1].top() + i as u16;
-                let block = Paragraph::new(VERTICAL_SCROLL_BAR_SYMBOL)
-                    .style(app.current_theme.progress_bar_style)
-                    .block(Block::default().borders(Borders::NONE));
-                rect.render_widget(block, Rect::new(block_x, block_y, 1, 1));
-            }
-        }
+        let current_index = app
+            .state
+            .app_list_states
+            .filter_by_tag_list
+            .selected()
+            .unwrap_or(0);
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .style(scrollbar_style)
+            .end_symbol(Some("↓"))
+            .track_symbol(Some("|"))
+            .track_style(app.current_theme.inactive_text_style);
+        let mut scrollbar_state = ScrollbarState::new(all_tags.len()).position(current_index);
+        let scrollbar_area = chunks[0].inner(&Margin {
+            vertical: 1,
+            horizontal: 0,
+        });
 
         if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[0]) {
             app.state.mouse_focus = Some(Focus::FilterByTagPopup);
@@ -4663,13 +4677,12 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
         }
 
         render_blank_styled_canvas(rect, app, popup_area, false);
-        rect.render_widget(tag_box_border, chunks[0]);
-        render_blank_styled_canvas(rect, app, filter_list_chunks[0], false);
         rect.render_stateful_widget(
             tags,
-            filter_list_chunks[0],
+            chunks[0],
             &mut app.state.app_list_states.filter_by_tag_list,
         );
+        rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
         rect.render_widget(help, chunks[1]);
         rect.render_widget(submit_button, chunks[2]);
     }
@@ -4702,7 +4715,7 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let current_board_id = app.state.current_board_id;
     let current_card_id = app.state.current_card_id;
 
-    let menu_area = top_left_rect(30, 40, rect.size());
+    let menu_area = top_left_rect(38, 10, rect.size());
     let strings = vec![
         format!("UI Mode: {}", current_ui_mode),
         format!("Focus: {:?}", app.state.focus),
@@ -4795,7 +4808,7 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(8), Constraint::Length(5)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
         .split(render_area);
 
     let theme_list = app
@@ -4838,27 +4851,19 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", app.current_theme.help_text_style),
         Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled("or ", app.current_theme.help_text_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
         Span::styled(down_key, app.current_theme.help_key_style),
         Span::styled(
-            "to navigate or use the mouse cursor. Press ",
+            " to navigate or use the mouse cursor. Press ",
             app.current_theme.help_text_style,
         ),
         Span::styled("<Enter>", app.current_theme.help_key_style),
@@ -4902,16 +4907,16 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
     let render_area = rect.size();
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(3)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(3)].as_ref())
         .split(render_area);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())
         .margin(1)
         .split(main_chunks[0]);
     let button_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())
         .split(main_chunks[1]);
 
     let submit_button_style = get_mouse_focusable_field_style(
@@ -4962,12 +4967,12 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
     } else {
         app.current_theme.general_style
     };
-    let theme_title_list = Table::new(theme_table_rows.0, [Constraint::Percentage(100)])
+    let theme_title_list = Table::new(theme_table_rows.0, [Constraint::Fill(1)])
         .block(Block::default().style(app.current_theme.general_style))
         .highlight_style(list_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
     let theme_element_list =
-        Table::new(theme_table_rows.1, [Constraint::Percentage(100)]).block(Block::default());
+        Table::new(theme_table_rows.1, [Constraint::Fill(1)]).block(Block::default());
     let submit_button = Paragraph::new(vec![Line::from("Create Theme")])
         .block(
             Block::default()
@@ -5016,7 +5021,7 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Min(10),
+                Constraint::Fill(1),
                 Constraint::Length(4),
                 Constraint::Length(3),
             ]
@@ -5028,9 +5033,9 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage(33),
-                Constraint::Percentage(33),
-                Constraint::Percentage(33),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -5275,42 +5280,26 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
-    let next_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus next")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let previous_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus previous")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
+    let next_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let help_spans = vec![
         Span::styled("Use ", app.current_theme.help_text_style),
         Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled("and ", app.current_theme.help_text_style),
+        Span::styled(" and ", app.current_theme.help_text_style),
         Span::styled(down_key, app.current_theme.help_key_style),
         Span::styled(
-            "or scroll with the mouse",
+            " or scroll with the mouse",
             app.current_theme.help_text_style,
         ),
         Span::styled(
@@ -5325,9 +5314,9 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
             app.current_theme.help_text_style,
         ),
         Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled("or ", app.current_theme.help_text_style),
-        Span::styled(previous_focus_key, app.current_theme.help_key_style),
-        Span::styled("to change focus.", app.current_theme.help_text_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
+        Span::styled(prv_focus_key, app.current_theme.help_key_style),
+        Span::styled(" to change focus.", app.current_theme.help_text_style),
     ];
 
     let help_text = Paragraph::new(Line::from(help_spans))
@@ -5368,7 +5357,7 @@ pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
     let popup_area = centered_rect_with_length(40, 10, rect.size());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())
         .margin(2)
         .split(popup_area);
 
@@ -5414,7 +5403,7 @@ pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App) {
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())
         .margin(2)
         .split(popup_area);
 
@@ -5464,7 +5453,7 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(1),
-                Constraint::Min(5),
+                Constraint::Fill(1),
                 Constraint::Length(3),
                 Constraint::Length(5),
             ]
@@ -5496,41 +5485,32 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
                 .border_type(BorderType::Rounded),
         );
 
-    let enter_user_input_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Enter input mode")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+    let input_mode_key = app
+        .get_first_keybinding(KeyBindingEnum::TakeUserInput)
+        .unwrap_or("".to_string());
     let next_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus next")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-    let previous_focus_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Focus previous")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let help_spans = vec![
         Span::styled("Press ", app.current_theme.help_text_style),
-        Span::styled(enter_user_input_key, app.current_theme.help_key_style),
+        Span::styled(input_mode_key, app.current_theme.help_key_style),
         Span::styled(
-            "to enter input mode. Press ",
+            " to enter input mode. Press ",
             app.current_theme.help_text_style,
         ),
         Span::styled("<Ins>", app.current_theme.help_key_style),
         Span::styled(" to stop editing. Use ", app.current_theme.help_text_style),
         Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled("or ", app.current_theme.help_text_style),
-        Span::styled(previous_focus_key, app.current_theme.help_key_style),
-        Span::styled("to change focus. Press ", app.current_theme.help_text_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
+        Span::styled(prv_focus_key, app.current_theme.help_key_style),
+        Span::styled(
+            " to change focus. Press ",
+            app.current_theme.help_text_style,
+        ),
         Span::styled("<Enter>", app.current_theme.help_key_style),
         Span::styled(" to submit.", app.current_theme.help_text_style),
     ];
@@ -5640,15 +5620,7 @@ pub fn render_blank_styled_canvas_with_margin(
 }
 
 fn render_title(app: &mut App<'_>, render_area: &Rect, rect: &mut Frame<'_>) {
-    if app.config.enable_mouse_support {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Max(3)].as_ref())
-            .split(*render_area);
-        rect.render_widget(draw_title(app, new_chunks[0]), new_chunks[0]);
-    } else {
-        rect.render_widget(draw_title(app, *render_area), *render_area);
-    };
+    rect.render_widget(draw_title(app, *render_area), *render_area);
 }
 
 pub fn render_logs(
@@ -5678,6 +5650,7 @@ pub fn render_logs(
         push_vec.push(log_record.level.to_string());
         items.push(push_vec);
     }
+    // TODO: Optimise this by using the log state to avoid going through all the logs and only go throught the ones that can fit in the render area
     let rows = items.iter().enumerate().map(|(index, item_og)| {
         let mut item = item_og.clone();
         let mut height = item
@@ -5749,13 +5722,13 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Min(10),
+            Constraint::Fill(1),
             Constraint::Length(2),
             Constraint::Length(50),
         ])
@@ -6060,13 +6033,13 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Min(10),
+            Constraint::Fill(1),
             Constraint::Length(2),
             Constraint::Length(50),
         ])
@@ -6373,13 +6346,13 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(10)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Min(10),
+            Constraint::Fill(1),
             Constraint::Length(2),
             Constraint::Length(50),
         ])
@@ -6393,7 +6366,7 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
             [
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Min(3),
+                Constraint::Fill(1),
             ]
             .as_ref(),
         )
@@ -6826,7 +6799,7 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
         .constraints(
             [
                 Constraint::Length(3),
-                Constraint::Min(10),
+                Constraint::Fill(1),
                 Constraint::Length(9),
             ]
             .as_ref(),
@@ -6835,12 +6808,12 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
 
     let preview_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+        .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(main_chunks[1]);
 
     let title_bar_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
+        .constraints([Constraint::Fill(1), Constraint::Length(3)].as_ref())
         .split(preview_chunks[0]);
 
     let title_paragraph = Paragraph::new("Load a Save (Cloud)")
@@ -6913,42 +6886,29 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
         rect.render_widget(no_saves_paragraph, chunks[1]);
     }
 
-    let delete_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Delete focused element")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
-
     let up_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go up")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
     let down_key = app
-        .state
-        .keybinding_store
-        .iter()
-        .find(|x| x[1] == "Go down")
-        .unwrap_or(&vec!["".to_string(), "".to_string()])[0]
-        .clone();
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
+    let delete_key = app
+        .get_first_keybinding(KeyBindingEnum::DeleteCard)
+        .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
         Span::styled("Use ", help_text_style),
         Span::styled(&up_key, help_key_style),
-        Span::styled("or ", help_text_style),
+        Span::styled(" or ", help_text_style),
         Span::styled(&down_key, help_key_style),
-        Span::styled("to navigate. Press ", help_text_style),
+        Span::styled(" to navigate. Press ", help_text_style),
         Span::styled("<Enter>", help_key_style),
         Span::styled(" to Load the selected save file. Press ", help_text_style),
         Span::styled("<Esc>", help_key_style),
         Span::styled(" to cancel. Press ", help_text_style),
         Span::styled(delete_key, help_key_style),
         Span::styled(
-            "to delete a save file. If using a mouse click on a save file to preview",
+            " to delete a save file. If using a mouse click on a save file to preview",
             help_text_style,
         ),
     ]);
@@ -7236,4 +7196,46 @@ fn calculate_mouse_list_select_index<T>(
     if mouse_y >= top_of_list && mouse_y <= bottom_of_list {
         list_state.select(Some((mouse_y - top_of_list) as usize));
     }
+}
+
+fn get_scrollable_widget_row_bounds(
+    all_rows_len: usize,
+    selected_index: usize,
+    offset: usize,
+    max_height: usize,
+) -> (usize, usize) {
+    let offset = offset.min(all_rows_len.saturating_sub(1));
+    debug!("offset: {}, selected_index: {}, total length {}", offset, selected_index, all_rows_len);
+    let mut start = offset;
+    let mut end = offset;
+    let mut height = 0;
+    for _ in (0..all_rows_len)
+        .collect::<std::vec::Vec<usize>>()
+        .iter()
+        .skip(offset)
+    {
+        if height + 1 > max_height {
+            break;
+        }
+        height += 1;
+        end += 1;
+    }
+
+    while selected_index >= end {
+        height = height.saturating_add(1);
+        end += 1;
+        while height > max_height {
+            height = height.saturating_sub(1);
+            start += 1;
+        }
+    }
+    while selected_index < start {
+        start -= 1;
+        height = height.saturating_add(1);
+        while height > max_height {
+            end -= 1;
+            height = height.saturating_sub(1);
+        }
+    }
+    (start, end - 1)
 }

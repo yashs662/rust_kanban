@@ -1,12 +1,10 @@
 use super::state::KeyBindings;
-use crate::{app::AppConfig, inputs::key::Key};
-use std::{
-    collections::HashMap,
-    fmt::{self, Display},
-    slice::Iter,
-};
+use crate::inputs::key::Key;
+use std::fmt::{self, Display};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, EnumIter)]
 pub enum Action {
     ChangeCardStatusToActive,
     ChangeCardStatusToCompleted,
@@ -42,81 +40,46 @@ pub enum Action {
 }
 
 impl Action {
-    pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 31] = [
-            Action::ChangeCardStatusToActive,
-            Action::ChangeCardStatusToCompleted,
-            Action::ChangeCardStatusToStale,
-            Action::ClearAllToasts,
-            Action::Delete,
-            Action::DeleteBoard,
-            Action::Down,
-            Action::Enter,
-            Action::GoToMainMenu,
-            Action::GoToPreviousUIMode,
-            Action::HideUiElement,
-            Action::Left,
-            Action::MoveCardDown,
-            Action::MoveCardLeft,
-            Action::MoveCardRight,
-            Action::MoveCardUp,
-            Action::NewBoard,
-            Action::NewCard,
-            Action::NextFocus,
-            Action::OpenConfigMenu,
-            Action::PrvFocus,
-            Action::Quit,
-            Action::Redo,
-            Action::ResetUI,
-            Action::Right,
-            Action::SaveState,
-            Action::StopUserInput,
-            Action::TakeUserInput,
-            Action::ToggleCommandPalette,
-            Action::Undo,
-            Action::Up,
-        ];
-        ACTIONS.iter()
-    }
-
-    pub fn keys(&self) -> &[Key] {
+    pub fn keys(&self) -> Vec<Key> {
+        let default_keybinds = KeyBindings::default();
+        // TODO: make the remaining keybinds also customizable
         match self {
-            Action::ChangeCardStatusToActive => &[Key::Char('2')],
-            Action::ChangeCardStatusToCompleted => &[Key::Char('1')],
-            Action::ChangeCardStatusToStale => &[Key::Char('3')],
-            Action::ClearAllToasts => &[Key::Char('t')],
-            Action::Delete => &[Key::Char('d')],
-            Action::DeleteBoard => &[Key::Char('D')],
-            Action::Down => &[Key::Down],
-            Action::Enter => &[Key::Enter],
-            Action::GoToMainMenu => &[Key::Char('m')],
-            Action::GoToPreviousUIMode => &[Key::Esc],
-            Action::HideUiElement => &[Key::Char('h')],
-            Action::Left => &[Key::Left],
-            Action::MoveCardDown => &[Key::ShiftDown],
-            Action::MoveCardLeft => &[Key::ShiftLeft],
-            Action::MoveCardRight => &[Key::ShiftRight],
-            Action::MoveCardUp => &[Key::ShiftUp],
-            Action::NewBoard => &[Key::Char('b')],
-            Action::NewCard => &[Key::Char('n')],
-            Action::NextFocus => &[Key::Tab],
-            Action::OpenConfigMenu => &[Key::Char('c')],
-            Action::PrvFocus => &[Key::BackTab],
-            Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
-            Action::Redo => &[Key::Ctrl('y')],
-            Action::ResetUI => &[Key::Char('r')],
-            Action::Right => &[Key::Right],
-            Action::SaveState => &[Key::Ctrl('s')],
-            Action::StopUserInput => &[Key::Ins],
-            Action::TakeUserInput => &[Key::Char('i')],
-            Action::ToggleCommandPalette => &[Key::Ctrl('p')],
-            Action::Undo => &[Key::Ctrl('z')],
-            Action::Up => &[Key::Up],
+            Action::ChangeCardStatusToActive => default_keybinds.change_card_status_to_active,
+            Action::ChangeCardStatusToCompleted => default_keybinds.change_card_status_to_completed,
+            Action::ChangeCardStatusToStale => default_keybinds.change_card_status_to_stale,
+            Action::ClearAllToasts => default_keybinds.clear_all_toasts,
+            Action::Delete => default_keybinds.delete_card,
+            Action::DeleteBoard => default_keybinds.delete_board,
+            Action::Down => default_keybinds.down,
+            Action::Enter => vec![Key::Enter],
+            Action::GoToMainMenu => default_keybinds.go_to_main_menu,
+            Action::GoToPreviousUIMode => vec![Key::Esc],
+            Action::HideUiElement => default_keybinds.hide_ui_element,
+            Action::Left => default_keybinds.left,
+            Action::MoveCardDown => vec![Key::ShiftDown],
+            Action::MoveCardLeft => vec![Key::ShiftLeft],
+            Action::MoveCardRight => vec![Key::ShiftRight],
+            Action::MoveCardUp => vec![Key::ShiftUp],
+            Action::NewBoard => default_keybinds.new_board,
+            Action::NewCard => default_keybinds.new_card,
+            Action::NextFocus => default_keybinds.next_focus,
+            Action::OpenConfigMenu => default_keybinds.open_config_menu,
+            Action::PrvFocus => default_keybinds.prv_focus,
+            Action::Quit => default_keybinds.quit,
+            Action::Redo => default_keybinds.redo,
+            Action::ResetUI => default_keybinds.reset_ui,
+            Action::Right => default_keybinds.right,
+            Action::SaveState => default_keybinds.save_state,
+            Action::StopUserInput => default_keybinds.stop_user_input,
+            Action::TakeUserInput => default_keybinds.take_user_input,
+            Action::ToggleCommandPalette => default_keybinds.toggle_command_palette,
+            Action::Undo => default_keybinds.undo,
+            Action::Up => default_keybinds.up,
         }
     }
 
     pub fn all() -> Vec<Action> {
-        Action::iterator().cloned().collect()
+        Action::iter().collect()
     }
 }
 
@@ -156,68 +119,5 @@ impl Display for Action {
             Action::Up => "Go up",
         };
         write!(f, "{}", str)
-    }
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct Actions(Vec<Action>);
-
-impl Actions {
-    pub fn find(&self, key: Key, config: &AppConfig) -> Option<&Action> {
-        let current_bindings = config.keybindings.clone();
-        let action_list = &mut Vec::new();
-        for (k, _v) in current_bindings.iter() {
-            action_list.push(KeyBindings::str_to_action(current_bindings.clone(), &k));
-        }
-        let binding_action = KeyBindings::key_to_action(current_bindings, key);
-        if binding_action.is_some() {
-            binding_action
-        } else {
-            let temp_action = Action::iterator()
-                .filter(|action| self.0.contains(action))
-                .find(|action| action.keys().contains(&key));
-            if temp_action.is_some() && !action_list.contains(&temp_action) {
-                temp_action
-            } else {
-                None
-            }
-        }
-    }
-
-    pub fn actions(&self) -> &[Action] {
-        self.0.as_slice()
-    }
-}
-
-impl From<Vec<Action>> for Actions {
-    fn from(actions: Vec<Action>) -> Self {
-        let mut map: HashMap<Key, Vec<Action>> = HashMap::new();
-        for action in actions.iter() {
-            for key in action.keys().iter() {
-                match map.get_mut(key) {
-                    Some(vec) => vec.push(*action),
-                    None => {
-                        map.insert(*key, vec![*action]);
-                    }
-                }
-            }
-        }
-        let errors = map
-            .iter()
-            .filter(|(_, actions)| actions.len() > 1)
-            .map(|(key, actions)| {
-                let actions = actions
-                    .iter()
-                    .map(Action::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("Conflict key {} with actions {}", key, actions)
-            })
-            .collect::<Vec<_>>();
-        if !errors.is_empty() {
-            panic!("{}", errors.join("; "))
-        }
-
-        Self(actions)
     }
 }

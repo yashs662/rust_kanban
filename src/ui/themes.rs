@@ -458,7 +458,7 @@ pub fn dracula_theme() -> Theme {
             .fg(Color::Rgb(80, 250, 123))
             .bg(Color::Rgb(40, 42, 54)),
         log_error_style: Style::default()
-            .fg(Color::Rgb(248, 248, 242))
+            .fg(Color::Rgb(255, 85, 85))
             .bg(Color::Rgb(40, 42, 54)),
         log_info_style: Style::default()
             .fg(Color::Rgb(139, 233, 253))

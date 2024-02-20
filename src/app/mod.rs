@@ -1,5 +1,4 @@
 use self::{
-    actions::Actions,
     app_helper::{
         handle_edit_keybinding_mode, handle_general_actions, handle_mouse_action,
         handle_user_input_mode, prepare_config_for_new_app,
@@ -8,16 +7,17 @@ use self::{
     state::{AppStatus, Focus, KeyBindings, UiMode},
 };
 use crate::{
-    app::{actions::Action, kanban::CardStatus},
+    app::{actions::Action, kanban::CardStatus, state::KeyBindingEnum},
     constants::{
         DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
         DEFAULT_UI_MODE, FIELD_NA, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE,
-        MAX_NO_CARDS_PER_BOARD, MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD,
+        MAX_NO_CARDS_PER_BOARD, MAX_TICKRATE, MAX_WARNING_DUE_DATE_DAYS, MIN_NO_BOARDS_PER_PAGE,
+        MIN_NO_CARDS_PER_BOARD, MIN_TICKRATE, MIN_WARNING_DUE_DATE_DAYS,
         MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
-        data_handler::{get_available_local_save_files, get_default_save_directory},
+        data_handler::{self, get_available_local_save_files, get_default_save_directory},
         io_handler::{refresh_visible_boards_and_cards, CloudData},
         logger::{get_logs, RUST_KANBAN_LOGGER},
         IoEvent,
@@ -31,7 +31,7 @@ use crate::{
 };
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use linked_hash_map::LinkedHashMap;
-use log::{debug, error, info};
+use log::{debug, error};
 use ratatui::{
     widgets::{ListState, TableState},
     Frame,
@@ -41,9 +41,12 @@ use serde_json::Value;
 use std::{
     fmt::{self, Display, Formatter},
     path::PathBuf,
+    str::FromStr,
     time::{Duration, Instant},
     vec,
 };
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 pub mod actions;
 pub mod app_helper;
@@ -112,7 +115,7 @@ impl Widgets {
 
 pub struct App<'a> {
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
-    actions: Actions,
+    actions: Vec<Action>,
     is_loading: bool,
     pub debug_mode: bool,
     pub state: AppState<'a>,
@@ -130,7 +133,7 @@ pub struct App<'a> {
 
 impl App<'_> {
     pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>, debug_mode: bool) -> Self {
-        let actions = vec![Action::Quit].into();
+        let actions = vec![Action::Quit];
         let is_loading = false;
         let state = AppState::default();
         let boards = vec![];
@@ -207,11 +210,38 @@ impl App<'_> {
     }
 
     pub async fn handle_mouse(&mut self, mouse_action: Mouse) -> AppReturn {
-        handle_mouse_action(self, mouse_action).await
+        if self.config.enable_mouse_support {
+            handle_mouse_action(self, mouse_action).await
+        } else {
+            AppReturn::Continue
+        }
     }
-
-    pub fn actions(&self) -> &Actions {
-        &self.actions
+    pub fn find_action(&self, key: Key) -> Option<Action> {
+        let keybind_search = self
+            .config
+            .keybindings
+            .iter()
+            .filter_map(|(k, _v)| self.config.keybindings.keybind_to_action(k.clone()))
+            .find(|action| action.keys().contains(&key));
+        if keybind_search.is_none() {
+            let actions = Action::all();
+            actions
+                .iter()
+                .find(|action| action.keys().contains(&key))
+                .copied()
+        } else {
+            keybind_search
+        }
+    }
+    pub fn find_keybindings(&self, keybinding_enum: KeyBindingEnum) -> Option<Vec<Key>> {
+        self.config.keybindings.get_keybindings(keybinding_enum)
+    }
+    pub fn get_first_keybinding(&self, keybinding_enum: KeyBindingEnum) -> Option<String> {
+        self.config
+            .keybindings
+            .get_keybindings(keybinding_enum)
+            .and_then(|keys| keys.first().cloned())
+            .map(|key| key.to_string())
     }
     pub fn status(&self) -> &AppStatus {
         &self.state.app_status
@@ -220,7 +250,7 @@ impl App<'_> {
         self.is_loading
     }
     pub fn initialized(&mut self) {
-        self.actions = Action::all().into();
+        self.actions = Action::all();
         if self.state.ui_mode == UiMode::MainMenu {
             self.main_menu_next();
         } else if self.state.focus == Focus::NoFocus {
@@ -416,10 +446,11 @@ impl App<'_> {
         self.state.app_table_states.edit_keybindings.select(Some(i));
     }
     pub fn help_next(&mut self) {
+        let all_keybinds: Vec<_> = self.config.keybindings.iter().collect();
         let i = match self.state.app_table_states.help.selected() {
             Some(i) => {
-                if !self.state.keybinding_store.is_empty() {
-                    if i >= (self.state.keybinding_store.len() / 2) - 1 {
+                if !all_keybinds.is_empty() {
+                    if i >= (all_keybinds.len() / 2) - 1 {
                         0
                     } else {
                         i + 1
@@ -433,11 +464,12 @@ impl App<'_> {
         self.state.app_table_states.help.select(Some(i));
     }
     pub fn help_prv(&mut self) {
+        let all_keybinds: Vec<_> = self.config.keybindings.iter().collect();
         let i = match self.state.app_table_states.help.selected() {
             Some(i) => {
-                if !self.state.keybinding_store.is_empty() {
+                if !all_keybinds.is_empty() {
                     if i == 0 {
-                        (self.state.keybinding_store.len() / 2) - 1
+                        (all_keybinds.len() / 2) - 1
                     } else {
                         i - 1
                     }
@@ -676,45 +708,6 @@ impl App<'_> {
             .app_list_states
             .command_palette_board_search
             .select(Some(i));
-    }
-    pub fn keybinding_list_maker(&mut self) {
-        let keybindings = &self.config.keybindings;
-        let default_actions = &self.actions;
-        let keybinding_action_iter = keybindings.iter();
-        let mut keybinding_action_list: Vec<Vec<String>> = Vec::new();
-
-        for (action, keys) in keybinding_action_iter {
-            let mut keybinding_action = Vec::new();
-            let mut keybinding_string = String::new();
-            for key in keys {
-                keybinding_string.push_str(&key.to_string());
-                keybinding_string.push(' ');
-            }
-            keybinding_action.push(keybinding_string);
-            let action_translated_string = KeyBindings::str_to_action(keybindings.clone(), &action)
-                .unwrap_or(&Action::Quit)
-                .to_string();
-            keybinding_action.push(action_translated_string);
-            keybinding_action_list.push(keybinding_action);
-        }
-
-        let default_action_iter = default_actions.actions().iter();
-        for action in default_action_iter {
-            let str_action = action.to_string();
-            if !keybinding_action_list.iter().any(|x| x[1] == str_action) {
-                let mut keybinding_action = Vec::new();
-                let action_keys = action
-                    .keys()
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",");
-                keybinding_action.push(action_keys);
-                keybinding_action.push(str_action);
-                keybinding_action_list.push(keybinding_action);
-            }
-        }
-        self.state.keybinding_store = keybinding_action_list;
     }
     pub fn send_info_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
@@ -1674,6 +1667,7 @@ pub struct AppState<'a> {
     pub app_table_states: AppTableStates,
     pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
     pub card_description_text_buffer: Option<TextBox<'a>>,
+    pub card_drag_mode: bool,
     pub cloud_data: Option<Vec<CloudData>>,
     pub config_item_being_edited: Option<usize>,
     pub current_board_id: Option<(u64, u64)>,
@@ -1687,12 +1681,10 @@ pub struct AppState<'a> {
     pub encryption_key_from_arguments: Option<String>,
     pub filter_tags: Option<Vec<String>>,
     pub focus: Focus,
-    pub keybinding_store: Vec<Vec<String>>,
-    pub last_mouse_action: Option<Mouse>,
-    pub hovered_card: Option<((u64, u64), (u64, u64))>,
     pub hovered_board: Option<(u64, u64)>,
-    pub card_drag_mode: bool,
     pub hovered_card_dimensions: Option<(u16, u16)>,
+    pub hovered_card: Option<((u64, u64), (u64, u64))>,
+    pub last_mouse_action: Option<Mouse>,
     pub last_reset_password_link_sent_time: Option<Instant>,
     pub mouse_focus: Option<Focus>,
     pub mouse_list_index: Option<u16>,
@@ -1703,6 +1695,7 @@ pub struct AppState<'a> {
     pub preview_boards_and_cards: Option<Vec<Board>>,
     pub preview_file_name: Option<String>,
     pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
+    pub previous_mouse_coordinates: (u16, u16),
     pub term_background_color: (u8, u8, u8),
     pub theme_being_edited: Theme,
     pub ui_mode: UiMode,
@@ -1720,6 +1713,7 @@ impl Default for AppState<'_> {
             app_table_states: AppTableStates::default(),
             card_being_edited: None,
             card_description_text_buffer: None,
+            card_drag_mode: false,
             cloud_data: None,
             config_item_being_edited: None,
             current_board_id: None,
@@ -1733,12 +1727,10 @@ impl Default for AppState<'_> {
             encryption_key_from_arguments: None,
             filter_tags: None,
             focus: Focus::NoFocus,
-            keybinding_store: Vec::new(),
-            last_mouse_action: None,
-            hovered_card: None,
             hovered_board: None,
-            card_drag_mode: false,
             hovered_card_dimensions: None,
+            hovered_card: None,
+            last_mouse_action: None,
             last_reset_password_link_sent_time: None,
             mouse_focus: None,
             mouse_list_index: None,
@@ -1749,6 +1741,7 @@ impl Default for AppState<'_> {
             preview_boards_and_cards: None,
             preview_file_name: None,
             preview_visible_boards_and_cards: LinkedHashMap::new(),
+            previous_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES,
             term_background_color: get_term_bg_color(),
             theme_being_edited: Theme::default(),
             ui_mode: DEFAULT_UI_MODE,
@@ -1774,11 +1767,11 @@ pub struct UserLoginData {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq)]
 pub enum DateFormat {
     DayMonthYear,
-    MonthDayYear,
-    YearMonthDay,
     #[default]
     DayMonthYearTime,
+    MonthDayYear,
     MonthDayYearTime,
+    YearMonthDay,
     YearMonthDayTime,
 }
 
@@ -1786,30 +1779,41 @@ impl DateFormat {
     pub fn to_human_readable_string(&self) -> &str {
         match self {
             DateFormat::DayMonthYear => "DD/MM/YYYY",
-            DateFormat::MonthDayYear => "MM/DD/YYYY",
-            DateFormat::YearMonthDay => "YYYY/MM/DD",
             DateFormat::DayMonthYearTime => "DD/MM/YYYY-HH:MM:SS",
+            DateFormat::MonthDayYear => "MM/DD/YYYY",
             DateFormat::MonthDayYearTime => "MM/DD/YYYY-HH:MM:SS",
+            DateFormat::YearMonthDay => "YYYY/MM/DD",
             DateFormat::YearMonthDayTime => "YYYY/MM/DD-HH:MM:SS",
         }
     }
     pub fn to_parser_string(&self) -> &str {
         match self {
             DateFormat::DayMonthYear => "%d/%m/%Y",
-            DateFormat::MonthDayYear => "%m/%d/%Y",
-            DateFormat::YearMonthDay => "%Y/%m/%d",
             DateFormat::DayMonthYearTime => "%d/%m/%Y-%H:%M:%S",
+            DateFormat::MonthDayYear => "%m/%d/%Y",
             DateFormat::MonthDayYearTime => "%m/%d/%Y-%H:%M:%S",
+            DateFormat::YearMonthDay => "%Y/%m/%d",
             DateFormat::YearMonthDayTime => "%Y/%m/%d-%H:%M:%S",
+        }
+    }
+    pub fn from_json_string(json_string: &str) -> Option<DateFormat> {
+        match json_string {
+            "DayMonthYear" => Some(DateFormat::DayMonthYear),
+            "DayMonthYearTime" => Some(DateFormat::DayMonthYearTime),
+            "MonthDayYear" => Some(DateFormat::MonthDayYear),
+            "MonthDayYearTime" => Some(DateFormat::MonthDayYearTime),
+            "YearMonthDay" => Some(DateFormat::YearMonthDay),
+            "YearMonthDayTime" => Some(DateFormat::YearMonthDayTime),
+            _ => None,
         }
     }
     pub fn get_all_date_formats() -> Vec<DateFormat> {
         vec![
             DateFormat::DayMonthYear,
-            DateFormat::MonthDayYear,
-            DateFormat::YearMonthDay,
             DateFormat::DayMonthYearTime,
+            DateFormat::MonthDayYear,
             DateFormat::MonthDayYearTime,
+            DateFormat::YearMonthDay,
             DateFormat::YearMonthDayTime,
         ]
     }
@@ -1829,24 +1833,30 @@ impl DateFormat {
     }
 }
 
+impl Display for DateFormat {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_human_readable_string())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppConfig {
-    pub save_directory: PathBuf,
-    pub default_view: UiMode,
     pub always_load_last_save: bool,
-    pub save_on_exit: bool,
-    pub disable_scroll_bar: bool,
-    pub warning_delta: u16,
-    pub keybindings: KeyBindings,
-    pub tickrate: u64,
-    pub no_of_cards_to_show: u16,
-    pub no_of_boards_to_show: u16,
-    pub enable_mouse_support: bool,
-    pub default_theme: String,
-    pub date_format: DateFormat,
     pub auto_login: bool,
-    pub show_line_numbers: bool,
+    pub date_format: DateFormat,
+    pub default_theme: String,
+    pub default_view: UiMode,
     pub disable_animations: bool,
+    pub disable_scroll_bar: bool,
+    pub enable_mouse_support: bool,
+    pub keybindings: KeyBindings,
+    pub no_of_boards_to_show: u16,
+    pub no_of_cards_to_show: u16,
+    pub save_directory: PathBuf,
+    pub save_on_exit: bool,
+    pub show_line_numbers: bool,
+    pub tickrate: u16,
+    pub warning_delta: u16,
 }
 
 impl Default for AppConfig {
@@ -1854,331 +1864,119 @@ impl Default for AppConfig {
         let default_view = DEFAULT_UI_MODE;
         let default_theme = Theme::default();
         Self {
-            save_directory: get_default_save_directory(),
-            default_view,
             always_load_last_save: true,
-            save_on_exit: true,
-            disable_scroll_bar: false,
-            warning_delta: DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
-            keybindings: KeyBindings::default(),
-            tickrate: DEFAULT_TICKRATE,
-            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
-            no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
-            enable_mouse_support: true,
-            default_theme: default_theme.name,
-            date_format: DateFormat::default(),
             auto_login: true,
-            show_line_numbers: true,
+            date_format: DateFormat::default(),
+            default_theme: default_theme.name,
+            default_view,
             disable_animations: false,
+            disable_scroll_bar: false,
+            enable_mouse_support: true,
+            keybindings: KeyBindings::default(),
+            no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
+            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
+            save_directory: get_default_save_directory(),
+            save_on_exit: true,
+            show_line_numbers: true,
+            tickrate: DEFAULT_TICKRATE,
+            warning_delta: DEFAULT_CARD_WARNING_DUE_DATE_DAYS,
         }
     }
 }
 
 impl AppConfig {
     pub fn to_view_list(&self) -> Vec<Vec<String>> {
-        vec![
-            vec![
-                String::from("Save Directory"),
-                self.save_directory.to_str().unwrap().to_string(),
-            ],
-            vec![
-                String::from("Select Default View"),
-                self.default_view.to_string(),
-            ],
-            vec![
-                String::from("Auto Load Last Save"),
-                self.always_load_last_save.to_string(),
-            ],
-            vec![
-                String::from("Auto Save on Exit"),
-                self.save_on_exit.to_string(),
-            ],
-            vec![
-                String::from("Disable Scroll Bar"),
-                self.disable_scroll_bar.to_string(),
-            ],
-            vec![
-                String::from("Disable Animations"),
-                self.disable_animations.to_string(),
-            ],
-            vec![String::from("Auto Login"), self.auto_login.to_string()],
-            vec![
-                String::from("Show Line Numbers"),
-                self.show_line_numbers.to_string(),
-            ],
-            vec![
-                String::from("Number of Days to Warn Before Due Date"),
-                self.warning_delta.to_string(),
-            ],
-            vec![String::from("Tickrate"), self.tickrate.to_string()],
-            vec![
-                String::from("Number of Cards to Show per board"),
-                self.no_of_cards_to_show.to_string(),
-            ],
-            vec![
-                String::from("Number of Boards to Show"),
-                self.no_of_boards_to_show.to_string(),
-            ],
-            vec![
-                String::from("Enable Mouse Support"),
-                self.enable_mouse_support.to_string(),
-            ],
-            vec![
-                String::from("Default Theme"),
-                self.default_theme.to_string(),
-            ],
-            vec![
-                String::from("Default Date Format"),
-                self.date_format.to_human_readable_string().to_string(),
-            ],
-            vec![String::from("Edit Keybindings")],
-        ]
+        // Custom ordering
+        let mut view_list = ConfigEnum::iter()
+            .map(|enum_variant| {
+                let (value, index) = match enum_variant {
+                    ConfigEnum::SaveDirectory => {
+                        (self.save_directory.to_string_lossy().to_string(), 0)
+                    }
+                    ConfigEnum::DefaultView => (self.default_view.to_string(), 1),
+                    ConfigEnum::AlwaysLoadLastSave => (self.always_load_last_save.to_string(), 2),
+                    ConfigEnum::SaveOnExit => (self.save_on_exit.to_string(), 3),
+                    ConfigEnum::DisableScrollBar => (self.disable_scroll_bar.to_string(), 4),
+                    ConfigEnum::DisableAnimations => (self.disable_animations.to_string(), 5),
+                    ConfigEnum::AutoLogin => (self.auto_login.to_string(), 6),
+                    ConfigEnum::ShowLineNumbers => (self.show_line_numbers.to_string(), 7),
+                    ConfigEnum::EnableMouseSupport => (self.enable_mouse_support.to_string(), 8),
+                    ConfigEnum::WarningDelta => (self.warning_delta.to_string(), 9),
+                    ConfigEnum::Tickrate => (self.tickrate.to_string(), 10),
+                    ConfigEnum::NoOfCardsToShow => (self.no_of_cards_to_show.to_string(), 11),
+                    ConfigEnum::NoOfBoardsToShow => (self.no_of_boards_to_show.to_string(), 12),
+                    ConfigEnum::DefaultTheme => (self.default_theme.clone(), 13),
+                    ConfigEnum::DateFormat => (self.date_format.to_string(), 14),
+                    ConfigEnum::Keybindings => ("".to_string(), 15),
+                };
+                (enum_variant.to_string(), value.to_string(), index)
+            })
+            .collect::<Vec<(String, String, usize)>>();
+
+        view_list.sort_by(|a, b| a.2.cmp(&b.2));
+        view_list
+            .iter()
+            .map(|(key, value, _)| vec![key.to_owned(), value.to_owned()])
+            .collect::<Vec<Vec<String>>>()
     }
 
-    pub fn edit_with_string(change_str: &str, app: &mut App) -> Self {
-        let mut config = app.config.clone();
-        let lines = change_str.lines();
-        for line in lines {
-            let mut parts = line.split(':');
-            let key = parts.next().unwrap_or("").trim();
-            let value = parts.next().unwrap_or("").trim();
-            match key {
-                "Save Directory" => {
-                    let new_path = PathBuf::from(value);
-                    if new_path.exists() {
-                        config.save_directory = new_path;
-                    } else {
-                        error!("Invalid path: {}", value);
-                        app.send_error_toast(&format!("Invalid path: {}", value), None);
-                        app.send_info_toast("Check if the path exists", None);
-                    }
-                }
-                "Select Default View" => {
-                    let new_ui_mode = UiMode::from_string(value);
-                    if let Some(new_ui_mode) = new_ui_mode {
-                        config.default_view = new_ui_mode;
-                    } else {
-                        error!("Invalid UiMode: {}", value);
-                        app.send_error_toast(&format!("Invalid UiMode: {}", value), None);
-                        info!("Valid UiModes are: {:?}", UiMode::view_modes_as_string());
-                    }
-                }
-                "Auto Load Last Save" => {
-                    if value.to_lowercase() == "true" {
-                        config.always_load_last_save = true;
-                    } else if value.to_lowercase() == "false" {
-                        config.always_load_last_save = false;
-                    } else {
-                        error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
-                    }
-                }
-                "Auto Save on Exit" => {
-                    if value.to_lowercase() == "true" {
-                        config.save_on_exit = true;
-                    } else if value.to_lowercase() == "false" {
-                        config.save_on_exit = false;
-                    } else {
-                        error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
-                    }
-                }
-                "Disable Scroll Bar" => {
-                    if value.to_lowercase() == "true" {
-                        config.disable_scroll_bar = true;
-                    } else if value.to_lowercase() == "false" {
-                        config.disable_scroll_bar = false;
-                    } else {
-                        error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
-                    }
-                }
-                "Disable Animations" => {
-                    if value.to_lowercase() == "true" {
-                        config.disable_animations = true;
-                    } else if value.to_lowercase() == "false" {
-                        config.disable_animations = false;
-                    } else {
-                        error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
-                    }
-                }
-                "Auto Login" => {
-                    if value.to_lowercase() == "true" {
-                        config.auto_login = true;
-                    } else if value.to_lowercase() == "false" {
-                        config.auto_login = false;
-                    } else {
-                        error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
-                    }
-                }
-                "Show Line Numbers" => {
-                    if value.to_lowercase() == "true" {
-                        config.show_line_numbers = true;
-                    } else if value.to_lowercase() == "false" {
-                        config.show_line_numbers = false;
-                    } else {
-                        error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
-                    }
-                }
-                "Enable Mouse Support" => {
-                    if value.to_lowercase() == "true" {
-                        config.enable_mouse_support = true;
-                    } else if value.to_lowercase() == "false" {
-                        config.enable_mouse_support = false;
-                    } else {
-                        error!("Invalid boolean: {}", value);
-                        app.send_error_toast(&format!("Expected boolean, got: {}", value), None);
-                    }
-                }
-                "Number of Days to Warn Before Due Date" => {
-                    let new_delta = value.parse::<u16>();
-                    if let Ok(new_delta) = new_delta {
-                        config.warning_delta = new_delta;
-                    } else {
-                        error!("Invalid number: {}", value);
-                        app.send_error_toast(
-                            &format!("Expected number of days (integer), got: {}", value),
-                            None,
-                        );
-                    }
-                }
-                "Tickrate" => {
-                    let new_tickrate = value.parse::<u64>();
-                    if let Ok(new_tickrate) = new_tickrate {
-                        if new_tickrate < 10 {
-                            error!(
-                                "Tickrate must be greater than 10ms, to avoid overloading the CPU"
-                            );
-                            app.send_error_toast(
-                                "Tickrate must be greater than 10ms, to avoid overloading the CPU",
-                                None,
-                            );
-                        } else if new_tickrate > 1000 {
-                            error!("Tickrate must be less than 1000ms");
-                            app.send_error_toast("Tickrate must be less than 1000ms", None);
-                        } else {
-                            config.tickrate = new_tickrate;
-                            info!("Tickrate set to {}ms", new_tickrate);
-                            info!("Restart the program to apply changes");
-                            info!("If experiencing slow input, or stuttering, try adjusting the tickrate");
-                            app.send_info_toast(
-                                &format!("Tickrate set to {}ms", new_tickrate),
-                                None,
-                            );
-                        }
-                    } else {
-                        error!("Invalid number: {}", value);
-                        app.send_error_toast(
-                            &format!("Expected number of milliseconds (integer), got: {}", value),
-                            None,
-                        );
-                    }
-                }
-                "Number of Cards to Show per board" => {
-                    let new_no_cards = value.parse::<u16>();
-                    if let Ok(new_no_cards) = new_no_cards {
-                        if new_no_cards < MIN_NO_CARDS_PER_BOARD {
-                            error!(
-                                "Number of cards must be greater than {}",
-                                MIN_NO_CARDS_PER_BOARD
-                            );
-                            app.send_error_toast(
-                                &format!(
-                                    "Number of cards must be greater than {}",
-                                    MIN_NO_CARDS_PER_BOARD
-                                ),
-                                None,
-                            );
-                        } else if new_no_cards > MAX_NO_CARDS_PER_BOARD {
-                            error!(
-                                "Number of cards must be less than {}",
-                                MAX_NO_CARDS_PER_BOARD
-                            );
-                            app.send_error_toast(
-                                &format!(
-                                    "Number of cards must be less than {}",
-                                    MAX_NO_CARDS_PER_BOARD
-                                ),
-                                None,
-                            );
-                        } else {
-                            config.no_of_cards_to_show = new_no_cards;
-                            app.send_info_toast(
-                                &format!(
-                                    "Number of cards per board to display set to {}",
-                                    new_no_cards
-                                ),
-                                None,
-                            );
-                        }
-                    } else {
-                        error!("Invalid number: {}", value);
-                        app.send_error_toast(
-                            &format!("Expected number of cards (integer), got: {}", value),
-                            None,
-                        );
-                    }
-                }
-                "Number of Boards to Show" => {
-                    let new_no_boards = value.parse::<u16>();
-                    if let Ok(new_no_boards) = new_no_boards {
-                        if new_no_boards < MIN_NO_BOARDS_PER_PAGE {
-                            error!(
-                                "Number of boards must be greater than {}",
-                                MIN_NO_BOARDS_PER_PAGE
-                            );
-                            app.send_error_toast(
-                                &format!(
-                                    "Number of boards must be greater than {}",
-                                    MIN_NO_BOARDS_PER_PAGE
-                                ),
-                                None,
-                            );
-                        } else if new_no_boards > MAX_NO_BOARDS_PER_PAGE {
-                            error!(
-                                "Number of boards must be less than {}",
-                                MAX_NO_BOARDS_PER_PAGE
-                            );
-                            app.send_error_toast(
-                                &format!(
-                                    "Number of boards must be less than {}",
-                                    MAX_NO_BOARDS_PER_PAGE
-                                ),
-                                None,
-                            );
-                        } else {
-                            config.no_of_boards_to_show = new_no_boards;
-                            app.send_info_toast(
-                                &format!("Number of boards to display set to {}", new_no_boards),
-                                None,
-                            );
-                        }
-                    } else {
-                        error!("Invalid number: {}", value);
-                        app.send_error_toast(
-                            &format!("Expected number of boards (integer), got: {}", value),
-                            None,
-                        );
-                    }
-                }
-                "default_theme" => {
-                    // TODO: check if theme exists
-                }
-                "Default Date Format" => {
-                    // TODO
-                }
-                _ => {
-                    debug!("Invalid key: {}", key);
-                    app.send_error_toast("Something went wrong 😢 ", None);
-                    return config;
-                }
+    pub fn get_value_as_string(&self, config_enum: ConfigEnum) -> String {
+        match config_enum {
+            ConfigEnum::AlwaysLoadLastSave => self.always_load_last_save.to_string(),
+            ConfigEnum::AutoLogin => self.auto_login.to_string(),
+            ConfigEnum::DateFormat => self.date_format.to_string(),
+            ConfigEnum::DefaultTheme => self.default_theme.clone(),
+            ConfigEnum::DefaultView => self.default_view.to_string(),
+            ConfigEnum::DisableAnimations => self.disable_animations.to_string(),
+            ConfigEnum::DisableScrollBar => self.disable_scroll_bar.to_string(),
+            ConfigEnum::EnableMouseSupport => self.enable_mouse_support.to_string(),
+            ConfigEnum::Keybindings => {
+                // This should never be called
+                debug!("Keybindings should not be called from get_value_as_str");
+                "".to_string()
+            }
+            ConfigEnum::NoOfBoardsToShow => self.no_of_boards_to_show.to_string(),
+            ConfigEnum::NoOfCardsToShow => self.no_of_cards_to_show.to_string(),
+            ConfigEnum::SaveDirectory => self.save_directory.to_string_lossy().to_string(),
+            ConfigEnum::SaveOnExit => self.save_on_exit.to_string(),
+            ConfigEnum::ShowLineNumbers => self.show_line_numbers.to_string(),
+            ConfigEnum::Tickrate => self.tickrate.to_string(),
+            ConfigEnum::WarningDelta => self.warning_delta.to_string(),
+        }
+    }
+
+    pub fn get_toggled_value_as_string(&self, config_enum: ConfigEnum) -> String {
+        match config_enum {
+            ConfigEnum::AlwaysLoadLastSave => (!self.always_load_last_save).to_string(),
+            ConfigEnum::AutoLogin => (!self.auto_login).to_string(),
+            ConfigEnum::DisableAnimations => (!self.disable_animations).to_string(),
+            ConfigEnum::DisableScrollBar => (!self.disable_scroll_bar).to_string(),
+            ConfigEnum::EnableMouseSupport => (!self.enable_mouse_support).to_string(),
+            ConfigEnum::SaveOnExit => (!self.save_on_exit).to_string(),
+            ConfigEnum::ShowLineNumbers => (!self.show_line_numbers).to_string(),
+            _ => {
+                debug!("Invalid config enum to toggle: {}", config_enum);
+                "".to_string()
             }
         }
-        refresh_visible_boards_and_cards(app);
-        config
+    }
+
+    pub fn edit_config(app: &mut App, config_enum: ConfigEnum, edited_value: &str) {
+        let mut config_copy = app.config.clone();
+        let result = config_enum.edit_config(&mut config_copy, edited_value);
+        if result.is_ok() {
+            let write_status = data_handler::write_config(&config_copy);
+            if write_status.is_ok() {
+                app.config = config_copy;
+                app.send_info_toast("Config updated", None);
+            } else {
+                app.send_error_toast("Could not write to config file", None);
+            }
+        } else {
+            let error_message = format!("Could not edit config: {}", result.unwrap_err());
+            error!("{}", error_message);
+            app.send_error_toast(&error_message, None);
+        }
     }
 
     pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) -> Result<(), String> {
@@ -2212,41 +2010,187 @@ impl AppConfig {
 
         debug!("Editing keybinding: {} to {:?}", key, value);
 
-        match key.as_str() {
-            "quit" => self.keybindings.quit = value,
-            "next_focus" => self.keybindings.next_focus = value,
-            "prev_focus" => self.keybindings.prev_focus = value,
-            "open_config_menu" => self.keybindings.open_config_menu = value,
-            "up" => self.keybindings.up = value,
-            "down" => self.keybindings.down = value,
-            "right" => self.keybindings.right = value,
-            "left" => self.keybindings.left = value,
-            "take_user_input" => self.keybindings.take_user_input = value,
-            "stop_user_input" => self.keybindings.stop_user_input = value,
-            "hide_ui_element" => self.keybindings.hide_ui_element = value,
-            "save_state" => self.keybindings.save_state = value,
-            "new_board" => self.keybindings.new_board = value,
-            "new_card" => self.keybindings.new_card = value,
-            "delete_card" => self.keybindings.delete_card = value,
-            "delete_board" => self.keybindings.delete_board = value,
-            "change_card_status_to_completed" => {
-                self.keybindings.change_card_status_to_completed = value
+        match key {
+            KeyBindingEnum::ChangeCardStatusToActive => {
+                self.keybindings.change_card_status_to_active = value;
             }
-            "change_card_status_to_active" => self.keybindings.change_card_status_to_active = value,
-            "change_card_status_to_stale" => self.keybindings.change_card_status_to_stale = value,
-            "reset_ui" => self.keybindings.reset_ui = value,
-            "go_to_main_menu" => self.keybindings.go_to_main_menu = value,
-            "toggle_command_palette" => self.keybindings.toggle_command_palette = value,
-            "clear_all_toasts" => self.keybindings.clear_all_toasts = value,
-            "undo" => self.keybindings.undo = value,
-            "redo" => self.keybindings.redo = value,
-            _ => {
-                debug!("Invalid key: {}", key);
-                error!("Unable to edit keybinding");
-                return Err("Something went wrong 😢 ".to_string());
+            KeyBindingEnum::ChangeCardStatusToCompleted => {
+                self.keybindings.change_card_status_to_completed = value;
+            }
+            KeyBindingEnum::ChangeCardStatusToStale => {
+                self.keybindings.change_card_status_to_stale = value;
+            }
+            KeyBindingEnum::ClearAllToasts => {
+                self.keybindings.clear_all_toasts = value;
+            }
+            KeyBindingEnum::DeleteBoard => {
+                self.keybindings.delete_board = value;
+            }
+            KeyBindingEnum::DeleteCard => {
+                self.keybindings.delete_card = value;
+            }
+            KeyBindingEnum::Down => {
+                self.keybindings.down = value;
+            }
+            KeyBindingEnum::GoToMainMenu => {
+                self.keybindings.go_to_main_menu = value;
+            }
+            KeyBindingEnum::HideUiElement => {
+                self.keybindings.hide_ui_element = value;
+            }
+            KeyBindingEnum::Left => {
+                self.keybindings.left = value;
+            }
+            KeyBindingEnum::NewBoard => {
+                self.keybindings.new_board = value;
+            }
+            KeyBindingEnum::NewCard => {
+                self.keybindings.new_card = value;
+            }
+            KeyBindingEnum::NextFocus => {
+                self.keybindings.next_focus = value;
+            }
+            KeyBindingEnum::OpenConfigMenu => {
+                self.keybindings.open_config_menu = value;
+            }
+            KeyBindingEnum::PrvFocus => {
+                self.keybindings.prv_focus = value;
+            }
+            KeyBindingEnum::Quit => {
+                self.keybindings.quit = value;
+            }
+            KeyBindingEnum::Redo => {
+                self.keybindings.redo = value;
+            }
+            KeyBindingEnum::ResetUI => {
+                self.keybindings.reset_ui = value;
+            }
+            KeyBindingEnum::Right => {
+                self.keybindings.right = value;
+            }
+            KeyBindingEnum::SaveState => {
+                self.keybindings.save_state = value;
+            }
+            KeyBindingEnum::StopUserInput => {
+                self.keybindings.stop_user_input = value;
+            }
+            KeyBindingEnum::TakeUserInput => {
+                self.keybindings.take_user_input = value;
+            }
+            KeyBindingEnum::ToggleCommandPalette => {
+                self.keybindings.toggle_command_palette = value;
+            }
+            KeyBindingEnum::Undo => {
+                self.keybindings.undo = value;
+            }
+            KeyBindingEnum::Up => {
+                self.keybindings.up = value;
             }
         }
         Ok(())
+    }
+
+    fn get_bool_or_default(
+        serde_json_object: &serde_json::Value,
+        config_enum: ConfigEnum,
+        default: bool,
+    ) -> bool {
+        match serde_json_object[config_enum.to_json_key()].as_bool() {
+            Some(value) => value,
+            None => {
+                error!(
+                    "{} is not a boolean (true/false), Resetting to default value",
+                    config_enum.to_json_key()
+                );
+                default
+            }
+        }
+    }
+
+    fn get_u16_or_default(
+        serde_json_object: &serde_json::Value,
+        config_enum: ConfigEnum,
+        default: u16,
+        min: Option<u16>,
+        max: Option<u16>,
+    ) -> u16 {
+        match serde_json_object[config_enum.to_json_key()].as_u64() {
+            Some(value) => {
+                if let Some(min) = min {
+                    if value < min as u64 {
+                        error!(
+                            "Invalid value: {} for {}, It must be greater than {}, Resetting to default value",
+                            value, config_enum.to_json_key(), min
+                        );
+                        return default;
+                    }
+                }
+                if let Some(max) = max {
+                    if value > max as u64 {
+                        error!(
+                            "Invalid value: {} for {}, It must be less than {}, Resetting to default value",
+                            value, config_enum.to_json_key(), max
+                        );
+                        return default;
+                    }
+                }
+                value as u16
+            }
+            None => {
+                error!(
+                    "{} is not a number, Resetting to default value",
+                    config_enum.to_json_key()
+                );
+                default
+            }
+        }
+    }
+
+    fn handle_invalid_keybinding(key: &str) {
+        error!(
+            "Invalid keybinding for key {}, Resetting to default keybinding",
+            key
+        );
+    }
+
+    fn json_config_keybindinds_checker(serde_json_object: &Value) -> KeyBindings {
+        if let Some(keybindings) = serde_json_object["keybindings"].as_object() {
+            let mut default_keybinds = KeyBindings::default();
+            for (key, value) in keybindings.iter() {
+                let mut keybindings = vec![];
+                if let Some(value_array) = value.as_array() {
+                    for keybinding_value in value_array {
+                        if let Some(keybinding_value_str) = keybinding_value.as_str() {
+                            let keybinding_value = Key::from(keybinding_value_str);
+                            if keybinding_value != Key::Unknown {
+                                keybindings.push(keybinding_value);
+                            } else {
+                                Self::handle_invalid_keybinding(key);
+                            }
+                        } else if let Some(keybinding_value_obj) = keybinding_value.as_object() {
+                            let keybinding_value = Key::from(keybinding_value_obj);
+                            if keybinding_value != Key::Unknown {
+                                keybindings.push(keybinding_value);
+                            } else {
+                                Self::handle_invalid_keybinding(key);
+                            }
+                        } else {
+                            Self::handle_invalid_keybinding(key);
+                        }
+                    }
+                    if keybindings.is_empty() {
+                        Self::handle_invalid_keybinding(key);
+                    } else {
+                        default_keybinds.edit_keybinding(key, keybindings);
+                    }
+                } else {
+                    Self::handle_invalid_keybinding(key);
+                }
+            }
+            default_keybinds
+        } else {
+            KeyBindings::default()
+        }
     }
 
     pub fn from_json_string(json_string: &str) -> Result<Self, String> {
@@ -2257,6 +2201,7 @@ impl AppConfig {
             return Err("Unable to recover old config. Resetting to default config".to_string());
         }
         let serde_json_object: Value = root.unwrap();
+        let default_config = AppConfig::default();
         let save_directory = match serde_json_object["save_directory"].as_str() {
             Some(path) => {
                 let path = PathBuf::from(path);
@@ -2267,12 +2212,12 @@ impl AppConfig {
                         "Invalid path: {}, Resetting to default save directory",
                         path.to_str().unwrap()
                     );
-                    get_default_save_directory()
+                    default_config.save_directory
                 }
             }
             None => {
                 error!("Save Directory is not a string, Resetting to default save directory");
-                get_default_save_directory()
+                default_config.save_directory
             }
         };
         let default_view = match serde_json_object["default_view"].as_str() {
@@ -2282,170 +2227,83 @@ impl AppConfig {
                     ui_mode
                 } else {
                     error!("Invalid UiMode: {:?}, Resetting to default UiMode", ui_mode);
-                    DEFAULT_UI_MODE
+                    default_config.default_view
                 }
             }
             None => {
                 error!("Default View is not a string, Resetting to default UiMode");
-                DEFAULT_UI_MODE
+                default_config.default_view
             }
         };
-        let always_load_last_save = match serde_json_object["always_load_last_save"].as_bool() {
-            Some(always_load_last_save) => always_load_last_save,
-            None => {
-                error!("Always Load Last Save is not a boolean, Resetting to default value");
-                true
-            }
-        };
-        let save_on_exit = match serde_json_object["save_on_exit"].as_bool() {
-            Some(save_on_exit) => save_on_exit,
-            None => {
-                error!("Save on Exit is not a boolean, Resetting to default value");
-                true
-            }
-        };
-        let disable_scroll_bar = match serde_json_object["disable_scroll_bar"].as_bool() {
-            Some(disable_scroll_bar) => disable_scroll_bar,
-            None => {
-                error!("Disable Scroll Bar is not a boolean, Resetting to default value");
-                false
-            }
-        };
-        let auto_login = match serde_json_object["auto_login"].as_bool() {
-            Some(auto_login) => auto_login,
-            None => {
-                error!("Auto Login is not a boolean, Resetting to default value");
-                true
-            }
-        };
-        let warning_delta = match serde_json_object["warning_delta"].as_u64() {
-            Some(warning_delta) => warning_delta as u16,
-            None => {
-                error!("Warning Delta is not a number, Resetting to default value");
-                DEFAULT_CARD_WARNING_DUE_DATE_DAYS
-            }
-        };
-        let keybindings = match serde_json_object["keybindings"].as_object() {
-            Some(keybindings) => {
-                let mut keybindings = keybindings.clone();
-                let mut keybindings_object = KeyBindings::default();
-                for (key, value) in keybindings.iter_mut() {
-                    let mut keybinding = vec![];
-                    let value_array = value.as_array_mut();
-                    if value_array.is_none() {
-                        error!(
-                            "Invalid keybinding: {} for key {}, Resetting to default keybinding",
-                            value, key
-                        );
-                        keybindings_object.edit_keybinding(key, vec![Key::Unknown]);
-                        continue;
-                    }
-                    for keybinding_value in value_array.unwrap().iter_mut() {
-                        let keybinding_value_str = keybinding_value.as_str();
-                        let keybinding_value_obj = keybinding_value.as_object();
-                        if let Some(keybinding_value_str) = keybinding_value_str {
-                            let keybinding_value = Key::from(keybinding_value_str);
-                            if keybinding_value != Key::Unknown {
-                                keybinding.push(keybinding_value);
-                            } else {
-                                error!(
-                                    "Invalid keybinding: {} for key {}, Resetting to default keybinding",
-                                    keybinding_value_str, key
-                                );
-                                keybinding = match keybindings_object.get_keybinding(key) {
-                                    Some(keybinding) => keybinding.to_vec(),
-                                    None => vec![Key::Unknown],
-                                }
-                            }
-                        } else if let Some(keybinding_value_obj) = keybinding_value_obj {
-                            let keybinding_value = Key::from(keybinding_value_obj);
-                            if keybinding_value != Key::Unknown {
-                                keybinding.push(keybinding_value);
-                            } else {
-                                error!(
-                                    "Invalid keybinding: {:?} for key {}, Resetting to default keybinding",
-                                    keybinding_value_obj, key
-                                );
-                                keybinding = match keybindings_object.get_keybinding(key) {
-                                    Some(keybinding) => keybinding.to_vec(),
-                                    None => vec![Key::Unknown],
-                                }
-                            }
-                        } else {
-                            error!(
-                                "Invalid keybinding for key {}, Resetting to default keybinding",
-                                key
-                            );
-                            keybinding = match keybindings_object.get_keybinding(key) {
-                                Some(keybinding) => keybinding.to_vec(),
-                                None => vec![Key::Unknown],
-                            }
-                        }
-                    }
-                    keybindings_object.edit_keybinding(key, keybinding);
-                }
-                keybindings_object
-            }
-            None => KeyBindings::default(),
-        };
-        let tickrate = match serde_json_object["tickrate"].as_u64() {
-            Some(tickrate) => {
-                if !(10..=1000).contains(&tickrate) {
-                    error!("Invalid tickrate: {}, It must be between 10 and 1000, Resetting to default tickrate", tickrate);
-                    DEFAULT_TICKRATE
-                } else {
-                    tickrate
-                }
-            }
-            None => {
-                error!("Tickrate is not a number, Resetting to default tickrate");
-                DEFAULT_TICKRATE
-            }
-        };
-        let no_of_cards_to_show = match serde_json_object["no_of_cards_to_show"].as_u64() {
-            Some(no_of_cards_to_show) => {
-                if no_of_cards_to_show < MIN_NO_CARDS_PER_BOARD.into()
-                    || no_of_cards_to_show > MAX_NO_CARDS_PER_BOARD.into()
-                {
-                    error!("Invalid number of cards to show: {}, Resetting to default number of cards to show", no_of_cards_to_show);
-                    NO_OF_CARDS_PER_BOARD
-                } else {
-                    no_of_cards_to_show as u16
-                }
-            }
-            None => {
-                error!("Number of cards to show is not a number, Resetting to default number of cards to show");
-                NO_OF_CARDS_PER_BOARD
-            }
-        };
-        let no_of_boards_to_show = match serde_json_object["no_of_boards_to_show"].as_u64() {
-            Some(no_of_boards_to_show) => {
-                if no_of_boards_to_show < MIN_NO_BOARDS_PER_PAGE.into()
-                    || no_of_boards_to_show > MAX_NO_BOARDS_PER_PAGE.into()
-                {
-                    error!("Invalid number of boards to show: {}, Resetting to default number of boards to show", no_of_boards_to_show);
-                    NO_OF_BOARDS_PER_PAGE
-                } else {
-                    no_of_boards_to_show as u16
-                }
-            }
-            None => {
-                error!("Number of boards to show is not a number, Resetting to default number of boards to show");
-                NO_OF_BOARDS_PER_PAGE
-            }
-        };
-        let enable_mouse_support = match serde_json_object["enable_mouse_support"].as_bool() {
-            Some(enable_mouse_support) => enable_mouse_support,
-            None => {
-                error!("Enable Mouse Support is not a boolean, Resetting to default value");
-                true
-            }
-        };
+        let keybindings = AppConfig::json_config_keybindinds_checker(&serde_json_object);
+        let always_load_last_save = AppConfig::get_bool_or_default(
+            &serde_json_object,
+            ConfigEnum::AlwaysLoadLastSave,
+            default_config.always_load_last_save,
+        );
+        let save_on_exit = AppConfig::get_bool_or_default(
+            &serde_json_object,
+            ConfigEnum::SaveOnExit,
+            default_config.save_on_exit,
+        );
+        let disable_scroll_bar = AppConfig::get_bool_or_default(
+            &serde_json_object,
+            ConfigEnum::DisableScrollBar,
+            default_config.disable_scroll_bar,
+        );
+        let auto_login = AppConfig::get_bool_or_default(
+            &serde_json_object,
+            ConfigEnum::AutoLogin,
+            default_config.auto_login,
+        );
+        let show_line_numbers = AppConfig::get_bool_or_default(
+            &serde_json_object,
+            ConfigEnum::ShowLineNumbers,
+            default_config.show_line_numbers,
+        );
+        let disable_animations = AppConfig::get_bool_or_default(
+            &serde_json_object,
+            ConfigEnum::DisableAnimations,
+            default_config.disable_animations,
+        );
+        let enable_mouse_support = AppConfig::get_bool_or_default(
+            &serde_json_object,
+            ConfigEnum::EnableMouseSupport,
+            default_config.enable_mouse_support,
+        );
+        let warning_delta = AppConfig::get_u16_or_default(
+            &serde_json_object,
+            ConfigEnum::WarningDelta,
+            default_config.warning_delta,
+            Some(1),
+            None,
+        );
+        let tickrate = AppConfig::get_u16_or_default(
+            &serde_json_object,
+            ConfigEnum::Tickrate,
+            default_config.tickrate,
+            Some(MIN_TICKRATE),
+            Some(MAX_TICKRATE),
+        );
+        let no_of_cards_to_show = AppConfig::get_u16_or_default(
+            &serde_json_object,
+            ConfigEnum::NoOfCardsToShow,
+            default_config.no_of_cards_to_show,
+            Some(MIN_NO_CARDS_PER_BOARD),
+            Some(MAX_NO_CARDS_PER_BOARD),
+        );
+        let no_of_boards_to_show = AppConfig::get_u16_or_default(
+            &serde_json_object,
+            ConfigEnum::NoOfBoardsToShow,
+            default_config.no_of_boards_to_show,
+            Some(MIN_NO_BOARDS_PER_PAGE),
+            Some(MAX_NO_BOARDS_PER_PAGE),
+        );
         let default_theme = match serde_json_object["default_theme"].as_str() {
             Some(default_theme) => default_theme.to_string(),
             None => {
                 error!("Default Theme is not a string, Resetting to default theme");
-                Theme::default().name
+                default_config.default_theme
             }
         };
         let date_format = match serde_json_object["date_format"].as_str() {
@@ -2461,26 +2319,12 @@ impl AppConfig {
                         "Invalid date format: {}, Resetting to default date format",
                         date_format
                     );
-                    DateFormat::default()
+                    default_config.date_format
                 }
             },
             None => {
                 error!("Date Format is not a string, Resetting to default date format");
-                DateFormat::default()
-            }
-        };
-        let show_line_numbers = match serde_json_object["show_line_numbers"].as_bool() {
-            Some(show_line_numbers) => show_line_numbers,
-            None => {
-                error!("Show Line Numbers is not a boolean, Resetting to default value");
-                true
-            }
-        };
-        let disable_animations = match serde_json_object["disable_animations"].as_bool() {
-            Some(disable_animations) => disable_animations,
-            None => {
-                error!("Disable Animations is not a boolean, Resetting to default value");
-                false
+                default_config.date_format
             }
         };
         Ok(Self {
@@ -2501,6 +2345,240 @@ impl AppConfig {
             show_line_numbers,
             disable_animations,
         })
+    }
+}
+
+#[derive(PartialEq, Copy, Clone, EnumIter)]
+pub enum ConfigEnum {
+    AlwaysLoadLastSave,
+    AutoLogin,
+    DateFormat,
+    DefaultTheme,
+    DefaultView,
+    DisableAnimations,
+    DisableScrollBar,
+    EnableMouseSupport,
+    Keybindings,
+    NoOfBoardsToShow,
+    NoOfCardsToShow,
+    SaveDirectory,
+    SaveOnExit,
+    ShowLineNumbers,
+    Tickrate,
+    WarningDelta,
+}
+
+impl fmt::Display for ConfigEnum {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ConfigEnum::AlwaysLoadLastSave => write!(f, "Auto Load Last Save"),
+            ConfigEnum::AutoLogin => write!(f, "Auto Login"),
+            ConfigEnum::DateFormat => write!(f, "Date Format"),
+            ConfigEnum::DefaultTheme => write!(f, "Default Theme"),
+            ConfigEnum::DefaultView => write!(f, "Select Default View"),
+            ConfigEnum::DisableAnimations => write!(f, "Disable Animations"),
+            ConfigEnum::DisableScrollBar => write!(f, "Disable Scroll Bar"),
+            ConfigEnum::EnableMouseSupport => write!(f, "Enable Mouse Support"),
+            ConfigEnum::Keybindings => write!(f, "Edit Keybindings"),
+            ConfigEnum::NoOfBoardsToShow => write!(f, "Number of Boards to Show"),
+            ConfigEnum::NoOfCardsToShow => write!(f, "Number of Cards to Show"),
+            ConfigEnum::SaveDirectory => write!(f, "Save Directory"),
+            ConfigEnum::SaveOnExit => write!(f, "Auto Save on Exit"),
+            ConfigEnum::ShowLineNumbers => write!(f, "Show Line Numbers"),
+            ConfigEnum::Tickrate => write!(f, "Tickrate"),
+            ConfigEnum::WarningDelta => write!(f, "Number of Days to Warn Before Due Date"),
+        }
+    }
+}
+
+impl FromStr for ConfigEnum {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Auto Load Last Save" => Ok(ConfigEnum::AlwaysLoadLastSave),
+            "Auto Login" => Ok(ConfigEnum::AutoLogin),
+            "Auto Save on Exit" => Ok(ConfigEnum::SaveOnExit),
+            "Date Format" => Ok(ConfigEnum::DateFormat),
+            "Default Theme" => Ok(ConfigEnum::DefaultTheme),
+            "Disable Animations" => Ok(ConfigEnum::DisableAnimations),
+            "Disable Scroll Bar" => Ok(ConfigEnum::DisableScrollBar),
+            "Edit Keybindings" => Ok(ConfigEnum::Keybindings),
+            "Enable Mouse Support" => Ok(ConfigEnum::EnableMouseSupport),
+            "Number of Boards to Show" => Ok(ConfigEnum::NoOfBoardsToShow),
+            "Number of Cards to Show" => Ok(ConfigEnum::NoOfCardsToShow),
+            "Number of Days to Warn Before Due Date" => Ok(ConfigEnum::WarningDelta),
+            "Save Directory" => Ok(ConfigEnum::SaveDirectory),
+            "Select Default View" => Ok(ConfigEnum::DefaultView),
+            "Show Line Numbers" => Ok(ConfigEnum::ShowLineNumbers),
+            "Tickrate" => Ok(ConfigEnum::Tickrate),
+            _ => Err(format!("Invalid ConfigEnum: {}", s)),
+        }
+    }
+}
+
+impl ConfigEnum {
+    pub fn to_json_key(&self) -> &str {
+        match self {
+            ConfigEnum::AlwaysLoadLastSave => "always_load_last_save",
+            ConfigEnum::AutoLogin => "auto_login",
+            ConfigEnum::DateFormat => "date_format",
+            ConfigEnum::DefaultTheme => "default_theme",
+            ConfigEnum::DefaultView => "default_view",
+            ConfigEnum::DisableAnimations => "disable_animations",
+            ConfigEnum::DisableScrollBar => "disable_scroll_bar",
+            ConfigEnum::EnableMouseSupport => "enable_mouse_support",
+            ConfigEnum::Keybindings => "keybindings",
+            ConfigEnum::NoOfBoardsToShow => "no_of_boards_to_show",
+            ConfigEnum::NoOfCardsToShow => "no_of_cards_to_show",
+            ConfigEnum::SaveDirectory => "save_directory",
+            ConfigEnum::SaveOnExit => "save_on_exit",
+            ConfigEnum::ShowLineNumbers => "show_line_numbers",
+            ConfigEnum::Tickrate => "tickrate",
+            ConfigEnum::WarningDelta => "warning_delta",
+        }
+    }
+
+    pub fn validate_value(&self, value: &str) -> Result<(), String> {
+        match self {
+            ConfigEnum::SaveDirectory => {
+                let path = PathBuf::from(value);
+                if path.try_exists().is_ok() && path.try_exists().unwrap() && path.is_dir() {
+                    Ok(())
+                } else {
+                    Err(format!("Invalid path: {}", value))
+                }
+            }
+            ConfigEnum::DefaultView => {
+                let ui_mode = UiMode::from_string(value);
+                if ui_mode.is_some() {
+                    Ok(())
+                } else {
+                    Err(format!("Invalid UiMode: {}", value))
+                }
+            }
+            ConfigEnum::AlwaysLoadLastSave
+            | ConfigEnum::AutoLogin
+            | ConfigEnum::DisableAnimations
+            | ConfigEnum::DisableScrollBar
+            | ConfigEnum::EnableMouseSupport
+            | ConfigEnum::SaveOnExit
+            | ConfigEnum::ShowLineNumbers => {
+                let check = value.parse::<bool>();
+                if check.is_ok() {
+                    Ok(())
+                } else {
+                    Err(format!("Invalid boolean: {}", value))
+                }
+            }
+            ConfigEnum::NoOfBoardsToShow
+            | ConfigEnum::NoOfCardsToShow
+            | ConfigEnum::Tickrate
+            | ConfigEnum::WarningDelta => {
+                let min_value = match self {
+                    ConfigEnum::WarningDelta => MIN_WARNING_DUE_DATE_DAYS,
+                    ConfigEnum::Tickrate => MIN_TICKRATE,
+                    ConfigEnum::NoOfCardsToShow => MIN_NO_CARDS_PER_BOARD,
+                    ConfigEnum::NoOfBoardsToShow => MIN_NO_BOARDS_PER_PAGE,
+                    _ => 0,
+                };
+                let max_value = match self {
+                    ConfigEnum::WarningDelta => MAX_WARNING_DUE_DATE_DAYS,
+                    ConfigEnum::Tickrate => MAX_TICKRATE,
+                    ConfigEnum::NoOfCardsToShow => MAX_NO_CARDS_PER_BOARD,
+                    ConfigEnum::NoOfBoardsToShow => MAX_NO_BOARDS_PER_PAGE,
+                    _ => 0,
+                };
+                let check = value.parse::<u16>();
+                if check.is_ok() {
+                    let value = check.unwrap();
+                    if value >= min_value && value <= max_value {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "Invalid number: {}, It must be between {} and {}",
+                            value, min_value, max_value
+                        ))
+                    }
+                } else {
+                    Err(format!("Invalid number: {}", value))
+                }
+            }
+            ConfigEnum::DefaultTheme => {
+                // TODO: check if theme exists
+                Ok(())
+            }
+            ConfigEnum::DateFormat => {
+                let date_format = DateFormat::from_json_string(value);
+                if date_format.is_some() {
+                    Ok(())
+                } else {
+                    Err(format!("Invalid DateFormat: {}", value))
+                }
+            }
+            ConfigEnum::Keybindings => {
+                debug!("Keybindings should not be called from validate_value");
+                // Keybindings are handled separately
+                Ok(())
+            }
+        }
+    }
+
+    pub fn edit_config(&self, config: &mut AppConfig, value: &str) -> Result<(), String> {
+        let value = value.trim();
+        self.validate_value(value)?;
+        // No need to be safe, since the value has been validated
+        match self {
+            ConfigEnum::SaveDirectory => {
+                config.save_directory = PathBuf::from(value);
+            }
+            ConfigEnum::DefaultView => {
+                config.default_view = UiMode::from_string(value).unwrap();
+            }
+            ConfigEnum::AlwaysLoadLastSave => {
+                config.always_load_last_save = value.parse::<bool>().unwrap();
+            }
+            ConfigEnum::SaveOnExit => {
+                config.save_on_exit = value.parse::<bool>().unwrap();
+            }
+            ConfigEnum::DisableScrollBar => {
+                config.disable_scroll_bar = value.parse::<bool>().unwrap();
+            }
+            ConfigEnum::AutoLogin => {
+                config.auto_login = value.parse::<bool>().unwrap();
+            }
+            ConfigEnum::ShowLineNumbers => {
+                config.show_line_numbers = value.parse::<bool>().unwrap();
+            }
+            ConfigEnum::DisableAnimations => {
+                config.disable_animations = value.parse::<bool>().unwrap();
+            }
+            ConfigEnum::EnableMouseSupport => {
+                config.enable_mouse_support = value.parse::<bool>().unwrap();
+            }
+            ConfigEnum::WarningDelta => {
+                config.warning_delta = value.parse::<u16>().unwrap();
+            }
+            ConfigEnum::Tickrate => {
+                config.tickrate = value.parse::<u16>().unwrap();
+            }
+            ConfigEnum::NoOfCardsToShow => {
+                config.no_of_cards_to_show = value.parse::<u16>().unwrap();
+            }
+            ConfigEnum::NoOfBoardsToShow => {
+                config.no_of_boards_to_show = value.parse::<u16>().unwrap();
+            }
+            ConfigEnum::DefaultTheme => {
+                config.default_theme = value.to_string();
+            }
+            ConfigEnum::DateFormat => {
+                config.date_format = DateFormat::from_json_string(value).unwrap();
+            }
+            ConfigEnum::Keybindings => {
+                debug!("Keybindings should not be called from edit_config");
+                // Keybindings are handled separately
+            }
+        }
+        Ok(())
     }
 }
 

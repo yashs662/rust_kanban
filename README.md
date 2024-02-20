@@ -17,7 +17,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## TODO
 
-- [ ] Improve performance/optimize code (card view can take upwards of 1ms to render)
+- [ ] Add a date picker for the date field
 - [ ] Improve error handling by implementing best practices
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to sync with other services like notion

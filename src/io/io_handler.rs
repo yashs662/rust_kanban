@@ -96,7 +96,6 @@ impl IoAsyncHandler<'_> {
             app.send_error_toast("Cannot create save directory", None);
         }
         app.boards = prepare_boards(&mut app);
-        app.keybinding_list_maker();
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         let saved_themes = get_saved_themes();
         if let Some(saved_themes) = saved_themes {
@@ -718,7 +717,6 @@ impl IoAsyncHandler<'_> {
         new_password: String,
         confirm_password: String,
     ) -> Result<()> {
-        // TODO: remove janky code
         {
             let mut app = self.app.lock().await;
             if reset_link.is_empty() {

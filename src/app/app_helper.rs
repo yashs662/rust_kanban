@@ -6,7 +6,7 @@ use super::{
     App, AppReturn, DateFormat, MainMenuItem, PopupMode,
 };
 use crate::{
-    app::{state::KeyBindings, ActionHistory, AppConfig},
+    app::{state::KeyBindings, ActionHistory, AppConfig, ConfigEnum},
     constants::{
         DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, LOGIN_FORM_DEFAULT_STATE,
         MOUSE_OUT_OF_BOUNDS_COORDINATES, NEW_BOARD_FORM_DEFAULT_STATE, NEW_CARD_FORM_DEFAULT_STATE,
@@ -2590,7 +2590,7 @@ pub async fn handle_edit_keybinding_mode(app: &mut App<'_>, key: Key) -> AppRetu
 }
 
 pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
-    if let Some(action) = app.actions.find(key, &app.config) {
+    if let Some(action) = app.find_action(key) {
         match action {
             Action::Quit => handle_exit(app).await,
             Action::NextFocus => {
@@ -2738,7 +2738,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
+                                .prv_focus
                                 .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
@@ -2763,7 +2763,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
+                                .prv_focus
                                 .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
@@ -2795,7 +2795,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
+                                .prv_focus
                                 .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
@@ -2895,7 +2895,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
+                                .prv_focus
                                 .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
@@ -2920,7 +2920,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
+                                .prv_focus
                                 .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
@@ -2952,7 +2952,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             let prev_focus_key = app
                                 .config
                                 .keybindings
-                                .prev_focus
+                                .prv_focus
                                 .first()
                                 .unwrap_or(&Key::BackTab);
                             app.send_warning_toast(&format!(
@@ -3255,7 +3255,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::HideUiElement => {
                 let current_focus =
-                    if let Ok(current_focus) = Focus::from_str(app.state.focus.to_str()) {
+                    if let Ok(current_focus) = Focus::from_str(app.state.focus.to_string().as_str()) {
                         current_focus
                     } else {
                         Focus::NoFocus
@@ -4124,6 +4124,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
     let mut mouse_scroll_right = false;
     match mouse_action {
         Mouse::Move(x, y) => {
+            app.state.previous_mouse_coordinates = app.state.current_mouse_coordinates;
             app.state.current_mouse_coordinates = (x, y);
         }
         Mouse::Drag(x, y) => {
@@ -4839,6 +4840,10 @@ fn move_dragged_card(app: &mut App<'_>) {
         }
         let dragged_card_index = dragged_card_index.unwrap();
         let hovered_card_index = hovered_card_index.unwrap();
+        if dragged_card_index == hovered_card_index {
+            debug!("No need to move card as it is already in the same position");
+            return;
+        }
         let dragged_card_name = hovered_board.cards[dragged_card_index].name.clone();
         // swap cards
         app.boards.iter_mut().for_each(|board| {
@@ -5079,33 +5084,13 @@ pub fn reset_card_drag_mode(app: &mut App) {
 }
 
 fn handle_config_menu_action(app: &mut App) -> AppReturn {
-    if app.state.focus == Focus::SubmitButton {
-        app.config = AppConfig::default();
-        app.state.focus = Focus::ConfigTable;
-        app.state.app_table_states.config.select(Some(0));
-        let write_config_status = write_config(&app.config);
-        if write_config_status.is_err() {
-            error!(
-                "Error writing config file: {}",
-                write_config_status.clone().unwrap_err()
-            );
-            app.send_error_toast(
-                &format!(
-                    "Error writing config file: {}",
-                    write_config_status.unwrap_err()
-                ),
-                None,
-            );
-        } else {
-            warn!("Reset Config and KeyBindings to default");
-            app.send_warning_toast("Reset Config and KeyBindings to default", None);
-        }
-        app.keybinding_list_maker();
-        return AppReturn::Continue;
-    } else if app.state.focus == Focus::ExtraFocus {
+    fn reset_config(app: &mut App, reset_keybindings: bool, warning_message: &str) {
         let keybindings = app.config.keybindings.clone();
         app.config = AppConfig::default();
-        app.config.keybindings = keybindings;
+        app.current_theme = Theme::default();
+        if !reset_keybindings {
+            app.config.keybindings = keybindings;
+        }
         app.state.focus = Focus::ConfigTable;
         app.state.app_table_states.config.select(Some(0));
         let write_config_status = write_config(&app.config);
@@ -5122,9 +5107,16 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
                 None,
             );
         } else {
-            warn!("Reset Config to default");
-            app.send_warning_toast("Reset Config to default", None);
+            warn!("{}", warning_message);
+            app.send_warning_toast(warning_message, None);
         }
+    }
+
+    if app.state.focus == Focus::SubmitButton {
+        reset_config(app, true, "Reset Config and KeyBindings to default");
+        return AppReturn::Continue;
+    } else if app.state.focus == Focus::ExtraFocus {
+        reset_config(app, false, "Reset Config to default");
         return AppReturn::Continue;
     }
     app.state.config_item_being_edited =
@@ -5135,197 +5127,54 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
         let config_item = &app_config_list[app.state.config_item_being_edited.unwrap_or(0)]
             .first()
             .unwrap_or(&default_config_item);
-        if *config_item == "Edit Keybindings" {
-            app.state.ui_mode = UiMode::EditKeybindings;
-            if app
-                .state
-                .app_table_states
-                .edit_keybindings
-                .selected()
-                .is_none()
-            {
-                app.edit_keybindings_next();
+        let config_enum = ConfigEnum::from_str(config_item);
+        if config_enum.is_err() {
+            error!("Error checking which config item is being edited");
+            return AppReturn::Continue;
+        }
+        let config_enum = config_enum.unwrap();
+        match config_enum {
+            ConfigEnum::Keybindings => {
+                app.state.ui_mode = UiMode::EditKeybindings;
+                if app
+                    .state
+                    .app_table_states
+                    .edit_keybindings
+                    .selected()
+                    .is_none()
+                {
+                    app.edit_keybindings_next();
+                }
             }
-        } else if *config_item == "Select Default View" {
-            if app.state.app_list_states.default_view.selected().is_none() {
-                app.select_default_view_next();
+            ConfigEnum::DefaultView => {
+                if app.state.app_list_states.default_view.selected().is_none() {
+                    app.select_default_view_next();
+                }
+                app.state.popup_mode = Some(PopupMode::SelectDefaultView);
             }
-            app.state.popup_mode = Some(PopupMode::SelectDefaultView);
-        } else if *config_item == "Auto Save on Exit" {
-            let save_on_exit = app.config.save_on_exit;
-            app.config.save_on_exit = !save_on_exit;
-            let config_string = format!("{}: {}", "Auto Save on Exit", app.config.save_on_exit);
-            let app_config = AppConfig::edit_with_string(&config_string, app);
-            app.config = app_config.clone();
-            let write_config_status = write_config(&app_config);
-            if write_config_status.is_err() {
-                error!(
-                    "Error writing config file: {}",
-                    write_config_status.clone().unwrap_err()
+            ConfigEnum::AlwaysLoadLastSave
+            | ConfigEnum::SaveOnExit
+            | ConfigEnum::DisableScrollBar
+            | ConfigEnum::DisableAnimations
+            | ConfigEnum::AutoLogin
+            | ConfigEnum::ShowLineNumbers
+            | ConfigEnum::EnableMouseSupport => {
+                AppConfig::edit_config(
+                    app,
+                    config_enum,
+                    &app.config.get_toggled_value_as_string(config_enum),
                 );
-                app.send_error_toast(
-                    &format!(
-                        "Error writing config file: {}",
-                        write_config_status.unwrap_err()
-                    ),
-                    None,
-                );
-            } else {
-                app.send_info_toast("Config updated Successfully", None);
             }
-        } else if *config_item == "Auto Load Last Save" {
-            let always_load_last_save = app.config.always_load_last_save;
-            app.config.always_load_last_save = !always_load_last_save;
-            let config_string = format!(
-                "{}: {}",
-                "Auto Load Last Save", app.config.always_load_last_save
-            );
-            let app_config = AppConfig::edit_with_string(&config_string, app);
-            app.config = app_config.clone();
-            let write_config_status = write_config(&app_config);
-            if write_config_status.is_err() {
-                error!(
-                    "Error writing config file: {}",
-                    write_config_status.clone().unwrap_err()
-                );
-                app.send_error_toast(
-                    &format!(
-                        "Error writing config file: {}",
-                        write_config_status.unwrap_err()
-                    ),
-                    None,
-                );
-            } else {
-                app.send_info_toast("Config updated Successfully", None);
+            ConfigEnum::DefaultTheme => {
+                app.state.default_theme_mode = true;
+                app.state.popup_mode = Some(PopupMode::ChangeTheme);
             }
-        } else if *config_item == "Disable Scroll Bar" {
-            let disable_scroll_bar = app.config.disable_scroll_bar;
-            app.config.disable_scroll_bar = !disable_scroll_bar;
-            let config_string = format!(
-                "{}: {}",
-                "Disable Scroll Bar", app.config.disable_scroll_bar
-            );
-            let app_config = AppConfig::edit_with_string(&config_string, app);
-            app.config = app_config.clone();
-            let write_config_status = write_config(&app_config);
-            if write_config_status.is_err() {
-                error!(
-                    "Error writing config file: {}",
-                    write_config_status.clone().unwrap_err()
-                );
-                app.send_error_toast(
-                    &format!(
-                        "Error writing config file: {}",
-                        write_config_status.unwrap_err()
-                    ),
-                    None,
-                );
-            } else {
-                app.send_info_toast("Config updated Successfully", None);
+            ConfigEnum::DateFormat => {
+                app.state.popup_mode = Some(PopupMode::ChangeDateFormatPopup);
             }
-        } else if *config_item == "Enable Mouse Support" {
-            let enable_mouse_support = app.config.enable_mouse_support;
-            app.config.enable_mouse_support = !enable_mouse_support;
-            let config_string = format!(
-                "{}: {}",
-                "Enable Mouse Support", app.config.enable_mouse_support
-            );
-            let app_config = AppConfig::edit_with_string(&config_string, app);
-            app.config = app_config.clone();
-            let write_config_status = write_config(&app_config);
-            if write_config_status.is_err() {
-                error!(
-                    "Error writing config file: {}",
-                    write_config_status.clone().unwrap_err()
-                );
-                app.send_error_toast(
-                    &format!(
-                        "Error writing config file: {}",
-                        write_config_status.unwrap_err()
-                    ),
-                    None,
-                );
-            } else {
-                app.send_info_toast("Config updated Successfully", None);
-                app.send_warning_toast("Please restart the app to apply the changes", None);
+            _ => {
+                app.state.popup_mode = Some(PopupMode::EditGeneralConfig);
             }
-        } else if *config_item == "Auto Login" {
-            let auto_login = app.config.auto_login;
-            app.config.auto_login = !auto_login;
-            let config_string = format!("{}: {}", "Auto Login", app.config.auto_login);
-            let app_config = AppConfig::edit_with_string(&config_string, app);
-            app.config = app_config.clone();
-            let write_config_status = write_config(&app_config);
-            if write_config_status.is_err() {
-                error!(
-                    "Error writing config file: {}",
-                    write_config_status.clone().unwrap_err()
-                );
-                app.send_error_toast(
-                    &format!(
-                        "Error writing config file: {}",
-                        write_config_status.unwrap_err()
-                    ),
-                    None,
-                );
-            } else {
-                app.send_info_toast("Config updated Successfully", None);
-            }
-        } else if *config_item == "Show Line Numbers" {
-            let show_line_numbers = app.config.show_line_numbers;
-            app.config.show_line_numbers = !show_line_numbers;
-            let config_string =
-                format!("{}: {}", "Show Line Numbers", app.config.show_line_numbers);
-            let app_config = AppConfig::edit_with_string(&config_string, app);
-            app.config = app_config.clone();
-            let write_config_status = write_config(&app_config);
-            if write_config_status.is_err() {
-                error!(
-                    "Error writing config file: {}",
-                    write_config_status.clone().unwrap_err()
-                );
-                app.send_error_toast(
-                    &format!(
-                        "Error writing config file: {}",
-                        write_config_status.unwrap_err()
-                    ),
-                    None,
-                );
-            } else {
-                app.send_info_toast("Config updated Successfully", None);
-            }
-        } else if *config_item == "Disable Animations" {
-            let disable_animations = app.config.disable_animations;
-            app.config.disable_animations = !disable_animations;
-            let config_string = format!(
-                "{}: {}",
-                "Disable Animations", app.config.disable_animations
-            );
-            let app_config = AppConfig::edit_with_string(&config_string, app);
-            app.config = app_config.clone();
-            let write_config_status = write_config(&app_config);
-            if write_config_status.is_err() {
-                error!(
-                    "Error writing config file: {}",
-                    write_config_status.clone().unwrap_err()
-                );
-                app.send_error_toast(
-                    &format!(
-                        "Error writing config file: {}",
-                        write_config_status.unwrap_err()
-                    ),
-                    None,
-                );
-            } else {
-                app.send_info_toast("Config updated Successfully", None);
-            }
-        } else if *config_item == "Default Theme" {
-            app.state.default_theme_mode = true;
-            app.state.popup_mode = Some(PopupMode::ChangeTheme);
-        } else if *config_item == "Default Date Format" {
-            app.state.popup_mode = Some(PopupMode::ChangeDateFormatPopup);
-        } else {
-            app.state.popup_mode = Some(PopupMode::EditGeneralConfig);
         }
     } else {
         debug!(
@@ -5386,26 +5235,7 @@ fn handle_default_view_selection(app: &mut App) {
         let selected_mode = &all_ui_modes[current_selected_mode];
         app.config.default_view = UiMode::from_string(selected_mode).unwrap_or(UiMode::MainMenu);
         app.state.prev_ui_mode = Some(app.config.default_view);
-        let config_string = format!("{}: {}", "Select Default View", selected_mode);
-        let app_config = AppConfig::edit_with_string(&config_string, app);
-        app.config = app_config.clone();
-        let write_config_status = write_config(&app_config);
-        if write_config_status.is_err() {
-            error!(
-                "Error writing config file: {}",
-                write_config_status.clone().unwrap_err()
-            );
-            app.send_error_toast(
-                &format!(
-                    "Error writing config file: {}",
-                    write_config_status.unwrap_err()
-                ),
-                None,
-            );
-        } else {
-            app.send_info_toast("Config updated Successfully", None);
-        }
-
+        AppConfig::edit_config(app, ConfigEnum::DefaultView, selected_mode);
         app.state.app_list_states.default_view.select(Some(0));
         if app.state.app_table_states.config.selected().is_none() {
             app.config_next();
@@ -5432,30 +5262,11 @@ fn handle_change_date_format(app: &mut App) {
     if current_selected_format < all_date_formats.len() {
         let selected_format = &all_date_formats[current_selected_format];
         app.config.date_format = *selected_format;
-        let config_string = format!(
-            "{}: {}",
-            "Default Date Format",
-            selected_format.to_human_readable_string()
+        AppConfig::edit_config(
+            app,
+            ConfigEnum::DateFormat,
+            selected_format.to_human_readable_string(),
         );
-        let app_config = AppConfig::edit_with_string(&config_string, app);
-        app.config = app_config.clone();
-        let write_config_status = write_config(&app_config);
-        if write_config_status.is_err() {
-            error!(
-                "Error writing config file: {}",
-                write_config_status.clone().unwrap_err()
-            );
-            app.send_error_toast(
-                &format!(
-                    "Error writing config file: {}",
-                    write_config_status.unwrap_err()
-                ),
-                None,
-            );
-        } else {
-            app.send_info_toast("Config updated Successfully", None);
-        }
-
         app.state
             .app_list_states
             .date_format_selector
@@ -5516,7 +5327,6 @@ fn handle_edit_keybindings_action(app: &mut App) {
             error!("Error writing config: {}", error_message);
             app.send_error_toast(&format!("Error writing config: {}", error_message), None);
         }
-        app.keybinding_list_maker();
     }
 }
 
@@ -5840,42 +5650,37 @@ fn handle_change_card_priority(app: &mut App) -> AppReturn {
 fn handle_edit_general_config(app: &mut App) {
     let config_item_index = app.state.app_table_states.config.selected().unwrap_or(0);
     let config_item_list = AppConfig::to_view_list(&app.config);
-    let config_item = config_item_list[config_item_index].clone();
+    let config_item = &config_item_list[config_item_index];
     let default_key = String::from("");
     let config_item_key = config_item.first().unwrap_or(&default_key);
-    let new_value = app.state.current_user_input.clone();
-    if !new_value.is_empty() {
-        let config_string = format!("{}: {}", config_item_key, new_value);
-        let app_config = AppConfig::edit_with_string(&config_string, app);
-        app.config = app_config.clone();
-        let write_config_status = write_config(&app_config);
-        if write_config_status.is_err() {
-            error!(
-                "Error writing config file: {}",
-                write_config_status.clone().unwrap_err()
-            );
-            app.send_error_toast(
-                &format!(
-                    "Error writing config file: {}",
-                    write_config_status.unwrap_err()
-                ),
-                None,
-            );
-        } else {
-            app.send_info_toast("Config updated Successfully", None);
-        }
-
-        app.state.app_table_states.config.select(Some(0));
-        app.state.config_item_being_edited = None;
-        app.state.current_user_input = String::new();
-        app.state.current_cursor_position = None;
-        app.state.ui_mode = UiMode::ConfigMenu;
-        if app.state.app_table_states.config.selected().is_none() {
-            app.config_next();
-        }
-        refresh_visible_boards_and_cards(app);
+    let config_enum = ConfigEnum::from_str(config_item_key);
+    if config_enum.is_err() {
+        error!("Error checking which config item is being edited");
+        return;
     }
+    let config_enum = config_enum.unwrap();
+    let new_value = app.state.current_user_input.clone();
+    if new_value.is_empty() {
+        error!(
+            "Could not find new value for config item {}",
+            config_item_key
+        );
+        app.send_error_toast(
+            &format!(
+                "Could not find new value for config item {}",
+                config_item_key
+            ),
+            None,
+        );
+        return;
+    }
+    AppConfig::edit_config(app, config_enum, &new_value);
     app.state.app_table_states.config.select(Some(0));
+    app.state.config_item_being_edited = None;
+    app.state.current_user_input = String::new();
+    app.state.current_cursor_position = None;
+    app.state.ui_mode = UiMode::ConfigMenu;
+    refresh_visible_boards_and_cards(app);
 }
 
 fn handle_edit_specific_keybinding(app: &mut App) {
@@ -5945,7 +5750,6 @@ fn handle_edit_specific_keybinding(app: &mut App) {
             app.edit_keybindings_next()
         }
     }
-    app.keybinding_list_maker();
 }
 
 fn handle_new_board_action(app: &mut App) {
@@ -6367,26 +6171,7 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
                 if theme_index < app.all_themes.len() {
                     let theme = app.all_themes[theme_index].clone();
                     app.config.default_theme = theme.name.clone();
-                    let config_string = format!("{}: {}", "default_theme", theme.name);
-                    let app_config = AppConfig::edit_with_string(&config_string, app);
-                    app.config = app_config.clone();
-                    let write_config_status = write_config(&app_config);
-                    if write_config_status.is_err() {
-                        error!(
-                            "Error writing config file: {}",
-                            write_config_status.clone().unwrap_err()
-                        );
-                        app.send_error_toast(
-                            &format!(
-                                "Error writing config file: {}",
-                                write_config_status.unwrap_err()
-                            ),
-                            None,
-                        );
-                    } else {
-                        app.send_info_toast("Config updated Successfully", None);
-                        app.current_theme = theme;
-                    }
+                    AppConfig::edit_config(app, ConfigEnum::DefaultTheme, theme.name.as_str());
                 } else {
                     debug!("Theme index {} is not in the theme list", theme_index);
                 }
@@ -7662,7 +7447,7 @@ fn handle_cursor_pos_for_backspace(
     Some(cursor_position - 1)
 }
 
-fn move_cursor_left(cursor_position: Option<usize>, field: &String) -> Option<usize> {
+fn move_cursor_left(cursor_position: Option<usize>, field: &str) -> Option<usize> {
     if let Some(cursor_position) = cursor_position {
         Some(clamp_cursor_position(
             Some(cursor_position.saturating_sub(1)),
@@ -7673,7 +7458,7 @@ fn move_cursor_left(cursor_position: Option<usize>, field: &String) -> Option<us
     }
 }
 
-fn move_cursor_right(cursor_position: Option<usize>, field: &String) -> Option<usize> {
+fn move_cursor_right(cursor_position: Option<usize>, field: &str) -> Option<usize> {
     if let Some(cursor_position) = cursor_position {
         Some(clamp_cursor_position(
             Some(cursor_position.saturating_add(1)),
@@ -7700,7 +7485,7 @@ fn handle_cursor_pos_for_insert_string(
     Some(cursor_position + 1)
 }
 
-fn clamp_cursor_position(cursor_position: Option<usize>, field: &String) -> usize {
+fn clamp_cursor_position(cursor_position: Option<usize>, field: &str) -> usize {
     if let Some(cursor_position) = cursor_position {
         cursor_position.clamp(0, field.len())
     } else {
