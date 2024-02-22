@@ -97,6 +97,7 @@ pub enum Focus {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KeyBindings {
+    pub accept: Vec<Key>,
     pub change_card_status_to_active: Vec<Key>,
     pub change_card_status_to_completed: Vec<Key>,
     pub change_card_status_to_stale: Vec<Key>,
@@ -105,8 +106,13 @@ pub struct KeyBindings {
     pub delete_card: Vec<Key>,
     pub down: Vec<Key>,
     pub go_to_main_menu: Vec<Key>,
+    pub go_to_previous_ui_mode_or_cancel: Vec<Key>,
     pub hide_ui_element: Vec<Key>,
     pub left: Vec<Key>,
+    pub move_card_down: Vec<Key>,
+    pub move_card_left: Vec<Key>,
+    pub move_card_right: Vec<Key>,
+    pub move_card_up: Vec<Key>,
     pub new_board: Vec<Key>,
     pub new_card: Vec<Key>,
     pub next_focus: Vec<Key>,
@@ -126,6 +132,7 @@ pub struct KeyBindings {
 
 #[derive(Serialize, Deserialize, Debug, Clone, EnumIter, PartialEq)]
 pub enum KeyBindingEnum {
+    Accept,
     ChangeCardStatusToActive,
     ChangeCardStatusToCompleted,
     ChangeCardStatusToStale,
@@ -134,8 +141,13 @@ pub enum KeyBindingEnum {
     DeleteCard,
     Down,
     GoToMainMenu,
+    GoToPreviousUIModeorCancel,
     HideUiElement,
     Left,
+    MoveCardDown,
+    MoveCardLeft,
+    MoveCardRight,
+    MoveCardUp,
     NewBoard,
     NewCard,
     NextFocus,
@@ -156,6 +168,7 @@ pub enum KeyBindingEnum {
 impl Display for KeyBindingEnum {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
+            Self::Accept => "accept",
             Self::ChangeCardStatusToActive => "change_card_status_to_active",
             Self::ChangeCardStatusToCompleted => "change_card_status_to_completed",
             Self::ChangeCardStatusToStale => "change_card_status_to_stale",
@@ -164,8 +177,13 @@ impl Display for KeyBindingEnum {
             Self::DeleteCard => "delete_card",
             Self::Down => "down",
             Self::GoToMainMenu => "go_to_main_menu",
+            Self::GoToPreviousUIModeorCancel => "go_to_previous_ui_mode_or_cancel",
             Self::HideUiElement => "hide_ui_element",
             Self::Left => "left",
+            Self::MoveCardDown => "move_card_down",
+            Self::MoveCardLeft => "move_card_left",
+            Self::MoveCardRight => "move_card_right",
+            Self::MoveCardUp => "move_card_up",
             Self::NewBoard => "new_board",
             Self::NewCard => "new_card",
             Self::NextFocus => "next_focus",
@@ -606,6 +624,7 @@ impl KeyBindings {
     pub fn iter(&self) -> impl Iterator<Item = (KeyBindingEnum, &Vec<Key>)> {
         KeyBindingEnum::iter().map(|enum_variant| {
             let value = match enum_variant {
+                KeyBindingEnum::Accept => &self.accept,
                 KeyBindingEnum::ChangeCardStatusToActive => &self.change_card_status_to_active,
                 KeyBindingEnum::ChangeCardStatusToCompleted => {
                     &self.change_card_status_to_completed
@@ -616,8 +635,15 @@ impl KeyBindings {
                 KeyBindingEnum::DeleteCard => &self.delete_card,
                 KeyBindingEnum::Down => &self.down,
                 KeyBindingEnum::GoToMainMenu => &self.go_to_main_menu,
+                KeyBindingEnum::GoToPreviousUIModeorCancel => {
+                    &self.go_to_previous_ui_mode_or_cancel
+                }
                 KeyBindingEnum::HideUiElement => &self.hide_ui_element,
                 KeyBindingEnum::Left => &self.left,
+                KeyBindingEnum::MoveCardDown => &self.move_card_down,
+                KeyBindingEnum::MoveCardLeft => &self.move_card_left,
+                KeyBindingEnum::MoveCardRight => &self.move_card_right,
+                KeyBindingEnum::MoveCardUp => &self.move_card_up,
                 KeyBindingEnum::NewBoard => &self.new_board,
                 KeyBindingEnum::NewCard => &self.new_card,
                 KeyBindingEnum::NextFocus => &self.next_focus,
@@ -638,44 +664,51 @@ impl KeyBindings {
         })
     }
 
-    pub fn key_to_action(&self, key: Key) -> Option<Action> {
-        for (action, keys) in self.iter() {
-            if keys.contains(&key) {
-                return self.keybind_to_action(action);
-            }
+    pub fn key_to_action(&self, key: &Key) -> Option<Action> {
+        let keybinding_enum = self
+            .iter()
+            .find(|(_, keybinding)| keybinding.contains(key))
+            .map(|(keybinding_enum, _)| keybinding_enum);
+        if let Some(keybinding_enum) = keybinding_enum {
+            Some(self.keybinding_enum_to_action(keybinding_enum))
+        } else {
+            None
         }
-        None
     }
 
-    pub fn keybind_to_action(&self, keybinding_enum: KeyBindingEnum) -> Option<Action> {
+    pub fn keybinding_enum_to_action(&self, keybinding_enum: KeyBindingEnum) -> Action {
         match keybinding_enum {
-            KeyBindingEnum::ChangeCardStatusToActive => Some(Action::ChangeCardStatusToActive),
-            KeyBindingEnum::ChangeCardStatusToCompleted => {
-                Some(Action::ChangeCardStatusToCompleted)
-            }
-            KeyBindingEnum::ChangeCardStatusToStale => Some(Action::ChangeCardStatusToStale),
-            KeyBindingEnum::ClearAllToasts => Some(Action::ClearAllToasts),
-            KeyBindingEnum::DeleteBoard => Some(Action::DeleteBoard),
-            KeyBindingEnum::DeleteCard => Some(Action::Delete),
-            KeyBindingEnum::Down => Some(Action::Down),
-            KeyBindingEnum::GoToMainMenu => Some(Action::GoToMainMenu),
-            KeyBindingEnum::HideUiElement => Some(Action::HideUiElement),
-            KeyBindingEnum::Left => Some(Action::Left),
-            KeyBindingEnum::NewBoard => Some(Action::NewBoard),
-            KeyBindingEnum::NewCard => Some(Action::NewCard),
-            KeyBindingEnum::NextFocus => Some(Action::NextFocus),
-            KeyBindingEnum::OpenConfigMenu => Some(Action::OpenConfigMenu),
-            KeyBindingEnum::PrvFocus => Some(Action::PrvFocus),
-            KeyBindingEnum::Quit => Some(Action::Quit),
-            KeyBindingEnum::Redo => Some(Action::Redo),
-            KeyBindingEnum::ResetUI => Some(Action::ResetUI),
-            KeyBindingEnum::Right => Some(Action::Right),
-            KeyBindingEnum::SaveState => Some(Action::SaveState),
-            KeyBindingEnum::StopUserInput => Some(Action::StopUserInput),
-            KeyBindingEnum::TakeUserInput => Some(Action::TakeUserInput),
-            KeyBindingEnum::ToggleCommandPalette => Some(Action::ToggleCommandPalette),
-            KeyBindingEnum::Undo => Some(Action::Undo),
-            KeyBindingEnum::Up => Some(Action::Up),
+            KeyBindingEnum::Accept => Action::Accept,
+            KeyBindingEnum::ChangeCardStatusToActive => Action::ChangeCardStatusToActive,
+            KeyBindingEnum::ChangeCardStatusToCompleted => Action::ChangeCardStatusToCompleted,
+            KeyBindingEnum::ChangeCardStatusToStale => Action::ChangeCardStatusToStale,
+            KeyBindingEnum::ClearAllToasts => Action::ClearAllToasts,
+            KeyBindingEnum::DeleteBoard => Action::DeleteBoard,
+            KeyBindingEnum::DeleteCard => Action::Delete,
+            KeyBindingEnum::Down => Action::Down,
+            KeyBindingEnum::GoToMainMenu => Action::GoToMainMenu,
+            KeyBindingEnum::GoToPreviousUIModeorCancel => Action::GoToPreviousUIModeorCancel,
+            KeyBindingEnum::HideUiElement => Action::HideUiElement,
+            KeyBindingEnum::Left => Action::Left,
+            KeyBindingEnum::MoveCardDown => Action::MoveCardDown,
+            KeyBindingEnum::MoveCardLeft => Action::MoveCardLeft,
+            KeyBindingEnum::MoveCardRight => Action::MoveCardRight,
+            KeyBindingEnum::MoveCardUp => Action::MoveCardUp,
+            KeyBindingEnum::NewBoard => Action::NewBoard,
+            KeyBindingEnum::NewCard => Action::NewCard,
+            KeyBindingEnum::NextFocus => Action::NextFocus,
+            KeyBindingEnum::OpenConfigMenu => Action::OpenConfigMenu,
+            KeyBindingEnum::PrvFocus => Action::PrvFocus,
+            KeyBindingEnum::Quit => Action::Quit,
+            KeyBindingEnum::Redo => Action::Redo,
+            KeyBindingEnum::ResetUI => Action::ResetUI,
+            KeyBindingEnum::Right => Action::Right,
+            KeyBindingEnum::SaveState => Action::SaveState,
+            KeyBindingEnum::StopUserInput => Action::StopUserInput,
+            KeyBindingEnum::TakeUserInput => Action::TakeUserInput,
+            KeyBindingEnum::ToggleCommandPalette => Action::ToggleCommandPalette,
+            KeyBindingEnum::Undo => Action::Undo,
+            KeyBindingEnum::Up => Action::Up,
         }
     }
 
@@ -685,6 +718,7 @@ impl KeyBindings {
         let keybinding_enum = KeyBindingEnum::from_str(key);
         if let Ok(keybinding_enum) = keybinding_enum {
             match keybinding_enum {
+                KeyBindingEnum::Accept => self.accept = keybinding,
                 KeyBindingEnum::ChangeCardStatusToActive => {
                     self.change_card_status_to_active = keybinding
                 }
@@ -699,8 +733,15 @@ impl KeyBindings {
                 KeyBindingEnum::DeleteCard => self.delete_card = keybinding,
                 KeyBindingEnum::Down => self.down = keybinding,
                 KeyBindingEnum::GoToMainMenu => self.go_to_main_menu = keybinding,
+                KeyBindingEnum::GoToPreviousUIModeorCancel => {
+                    self.go_to_previous_ui_mode_or_cancel = keybinding
+                }
                 KeyBindingEnum::HideUiElement => self.hide_ui_element = keybinding,
                 KeyBindingEnum::Left => self.left = keybinding,
+                KeyBindingEnum::MoveCardDown => self.move_card_down = keybinding,
+                KeyBindingEnum::MoveCardLeft => self.move_card_left = keybinding,
+                KeyBindingEnum::MoveCardRight => self.move_card_right = keybinding,
+                KeyBindingEnum::MoveCardUp => self.move_card_up = keybinding,
                 KeyBindingEnum::NewBoard => self.new_board = keybinding,
                 KeyBindingEnum::NewCard => self.new_card = keybinding,
                 KeyBindingEnum::NextFocus => self.next_focus = keybinding,
@@ -725,6 +766,7 @@ impl KeyBindings {
 
     pub fn get_keybindings(&self, keybinding_enum: KeyBindingEnum) -> Option<Vec<Key>> {
         match keybinding_enum {
+            KeyBindingEnum::Accept => Some(self.accept.clone()),
             KeyBindingEnum::ChangeCardStatusToActive => {
                 Some(self.change_card_status_to_active.clone())
             }
@@ -739,8 +781,15 @@ impl KeyBindings {
             KeyBindingEnum::DeleteCard => Some(self.delete_card.clone()),
             KeyBindingEnum::Down => Some(self.down.clone()),
             KeyBindingEnum::GoToMainMenu => Some(self.go_to_main_menu.clone()),
+            KeyBindingEnum::GoToPreviousUIModeorCancel => {
+                Some(self.go_to_previous_ui_mode_or_cancel.clone())
+            }
             KeyBindingEnum::HideUiElement => Some(self.hide_ui_element.clone()),
             KeyBindingEnum::Left => Some(self.left.clone()),
+            KeyBindingEnum::MoveCardDown => Some(self.move_card_down.clone()),
+            KeyBindingEnum::MoveCardLeft => Some(self.move_card_left.clone()),
+            KeyBindingEnum::MoveCardRight => Some(self.move_card_right.clone()),
+            KeyBindingEnum::MoveCardUp => Some(self.move_card_up.clone()),
             KeyBindingEnum::NewBoard => Some(self.new_board.clone()),
             KeyBindingEnum::NewCard => Some(self.new_card.clone()),
             KeyBindingEnum::NextFocus => Some(self.next_focus.clone()),
@@ -763,6 +812,7 @@ impl KeyBindings {
 impl Default for KeyBindings {
     fn default() -> Self {
         Self {
+            accept: vec![Key::Enter],
             change_card_status_to_active: vec![Key::Char('2')],
             change_card_status_to_completed: vec![Key::Char('1')],
             change_card_status_to_stale: vec![Key::Char('3')],
@@ -771,8 +821,13 @@ impl Default for KeyBindings {
             delete_card: vec![Key::Char('d'), Key::Delete],
             down: vec![Key::Down],
             go_to_main_menu: vec![Key::Char('m')],
+            go_to_previous_ui_mode_or_cancel: vec![Key::Esc],
             hide_ui_element: vec![Key::Char('h')],
             left: vec![Key::Left],
+            move_card_down: vec![Key::ShiftDown],
+            move_card_left: vec![Key::ShiftLeft],
+            move_card_right: vec![Key::ShiftRight],
+            move_card_up: vec![Key::ShiftUp],
             new_board: vec![Key::Char('b')],
             new_card: vec![Key::Char('n')],
             next_focus: vec![Key::Tab],

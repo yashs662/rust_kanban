@@ -2590,7 +2590,7 @@ pub async fn handle_edit_keybinding_mode(app: &mut App<'_>, key: Key) -> AppRetu
 }
 
 pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
-    if let Some(action) = app.find_action(key) {
+    if let Some(action) = app.config.keybindings.key_to_action(&key) {
         match action {
             Action::Quit => handle_exit(app).await,
             Action::NextFocus => {
@@ -3066,8 +3066,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 }
                 AppReturn::Continue
             }
-            Action::GoToPreviousUIMode => handle_go_to_previous_ui_mode(app).await,
-            Action::Enter => {
+            Action::GoToPreviousUIModeorCancel => handle_go_to_previous_ui_mode(app).await,
+            Action::Accept => {
                 if app.state.popup_mode.is_some() {
                     let popup_mode = app.state.popup_mode.as_ref().unwrap();
                     match popup_mode {

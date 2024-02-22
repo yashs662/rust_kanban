@@ -1,6 +1,6 @@
 [package]
 name = "rust-kanban"
-version = "0.9.3"
+version = "0.9.4"
 authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -18,8 +18,8 @@ chrono = "0.4.34"
 textwrap = "0.16"
 eyre = "0.6.12"
 home = "0.5.9"
-serde = { version = "1.0.196", features = ["derive"] }
-serde_json = "1.0.113"
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.114"
 clap = { version = "4.5.1", features = ["derive"] }
 uuid = { version = "1.7.0", features = ["v4"] }
 regex = "1.10.3"

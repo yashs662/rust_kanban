@@ -15,7 +15,8 @@ use crate::{
         APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
         HIDDEN_PASSWORD_SYMBOL, LIST_SELECTED_SYMBOL, MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT,
         MIN_TERM_WIDTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK, MOUSE_OUT_OF_BOUNDS_COORDINATES,
-        PATTERN_CHANGE_INTERVAL, SCREEN_TO_TOAST_WIDTH_RATIO, SPINNER_FRAMES,
+        PATTERN_CHANGE_INTERVAL, SCREEN_TO_TOAST_WIDTH_RATIO, SCROLLBAR_BEGIN_SYMBOL,
+        SCROLLBAR_END_SYMBOL, SCROLLBAR_TRACK_SYMBOL, SPINNER_FRAMES,
     },
     io::{
         data_handler::get_available_local_save_files,
@@ -428,10 +429,10 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
     }
 
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(Some("↑"))
+        .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
         .style(scrollbar_style)
-        .end_symbol(Some("↓"))
-        .track_symbol(Some("|"))
+        .end_symbol(SCROLLBAR_END_SYMBOL)
+        .track_symbol(SCROLLBAR_TRACK_SYMBOL)
         .track_style(app.current_theme.inactive_text_style);
 
     let mut scrollbar_state = ScrollbarState::new(total_rows).position(current_index);
@@ -521,7 +522,7 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(5),
+                    Constraint::Length(6),
                     Constraint::Fill(1),
                     Constraint::Length(5),
                     Constraint::Length(3),
@@ -534,7 +535,7 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(5),
+                    Constraint::Length(6),
                     Constraint::Fill(1),
                     Constraint::Length(4),
                 ]
@@ -566,11 +567,46 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             .unwrap()
             .get(1)
             .unwrap()
+            .to_owned()
     } else {
-        &app.state.theme_being_edited.name
+        app.state.theme_being_edited.name.clone()
     };
-    let paragraph_text = format!("Current Value is {}\n{}",config_item_value,
-        "Press 'i' to edit, or 'Esc' to cancel, Press 'Ins' to stop editing and press 'Enter' on Submit to save");
+
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let start_editing_key = app
+        .get_first_keybinding(KeyBindingEnum::TakeUserInput)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
+    let stop_editing_key = app
+        .get_first_keybinding(KeyBindingEnum::StopUserInput)
+        .unwrap_or("".to_string());
+
+    let paragraph_text = vec![
+        Line::from(vec![
+            Span::styled("Current Value is '", app.current_theme.help_text_style),
+            Span::styled(config_item_value, app.current_theme.help_key_style),
+            Span::styled("'", app.current_theme.help_text_style),
+        ]),
+        Line::from(String::from("")),
+        Line::from(vec![
+            Span::styled("Press ", app.current_theme.help_text_style),
+            Span::styled(start_editing_key, app.current_theme.help_key_style),
+            Span::styled(" to edit, or ", app.current_theme.help_text_style),
+            Span::styled(cancel_key, app.current_theme.help_key_style),
+            Span::styled(" to cancel, Press ", app.current_theme.help_text_style),
+            Span::styled(stop_editing_key, app.current_theme.help_key_style),
+            Span::styled(
+                " to stop editing and press ",
+                app.current_theme.help_text_style,
+            ),
+            Span::styled(accept_key, app.current_theme.help_key_style),
+            Span::styled(" on Submit to save", app.current_theme.help_text_style),
+        ]),
+    ];
     let paragraph_title = Line::from(vec![Span::raw(config_item_name)]);
     let config_item = Paragraph::new(paragraph_text)
         .block(
@@ -684,6 +720,12 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
     let down_key = app
         .get_first_keybinding(KeyBindingEnum::Down)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", app.current_theme.help_text_style),
@@ -694,18 +736,18 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
             " to navigate or use the mouse cursor. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Enter>", app.current_theme.help_key_style),
+        Span::styled(accept_key, app.current_theme.help_key_style),
         Span::styled(" or ", app.current_theme.help_text_style),
         Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
         Span::styled(
             " To select a Default View. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Esc>", app.current_theme.help_key_style),
+        Span::styled(cancel_key, app.current_theme.help_key_style),
         Span::styled(" to cancel", app.current_theme.help_text_style),
     ]);
 
-    let config_help = Paragraph::new(help_spans)
+    let default_view_picker_help = Paragraph::new(help_spans)
         .alignment(Alignment::Left)
         .block(
             Block::default()
@@ -719,7 +761,7 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
 
     let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
-        .title("Default HomeScreen Editor")
+        .title("Default View Picker")
         .style(app.current_theme.general_style)
         .borders(Borders::ALL)
         .border_style(app.current_theme.keyboard_focus_style)
@@ -731,7 +773,7 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
         chunks[0],
         &mut app.state.app_list_states.default_view,
     );
-    rect.render_widget(config_help, chunks[1]);
+    rect.render_widget(default_view_picker_help, chunks[1]);
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
     }
@@ -779,6 +821,12 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
     let prv_focus_key = app
         .get_first_keybinding(KeyBindingEnum::PrvFocus)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
 
     let edit_keybinding_help_spans = Line::from(vec![
         Span::styled("Use ", help_text_style),
@@ -787,11 +835,11 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         Span::styled(down_key, help_key_style),
         Span::styled(" or scroll with the mouse", help_text_style),
         Span::styled(" to select a keybinding, Press ", help_text_style),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(accept_key.clone(), help_key_style),
         Span::styled(" or ", help_text_style),
         Span::styled("<Mouse Left Click>", help_key_style),
         Span::styled(" to edit, ", help_text_style),
-        Span::styled("<Esc>", help_key_style),
+        Span::styled(cancel_key, help_key_style),
         Span::styled(
             " to cancel, To Reset Keybindings to Default Press ",
             help_text_style,
@@ -800,7 +848,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         Span::styled(" or ", help_text_style),
         Span::styled(prv_focus_key, help_key_style),
         Span::styled(" to highlight Reset Button and Press ", help_text_style),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(accept_key, help_key_style),
         Span::styled(" on the Reset Keybindings Button", help_text_style),
     ]);
 
@@ -808,7 +856,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
     let keybindings = app.config.keybindings.clone();
     for (key, value) in keybindings.iter() {
         let mut row: Vec<String> = Vec::new();
-        row.push(key.to_string());
+        row.push(keybindings.keybinding_enum_to_action(key).to_string());
         let mut row_value = String::new();
         for v in value.iter() {
             row_value.push_str(&v.to_string());
@@ -839,10 +887,10 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         .selected()
         .unwrap_or(0);
     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(Some("↑"))
+        .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
         .style(scrollbar_style)
-        .end_symbol(Some("↓"))
-        .track_symbol(Some("|"))
+        .end_symbol(SCROLLBAR_END_SYMBOL)
+        .track_symbol(SCROLLBAR_TRACK_SYMBOL)
         .track_style(app.current_theme.inactive_text_style);
     let mut scrollbar_state = ScrollbarState::new(table_items.len()).position(current_index);
     let scrollbar_area = chunks[1].inner(&Margin {
@@ -954,17 +1002,52 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
     if key_id > key_list.len() {
         return;
     }
-    let paragraph_title = key_list[key_id].0.to_string().to_uppercase();
+    let paragraph_title = current_bindings
+        .keybinding_enum_to_action(key_list[key_id].0.clone())
+        .to_string();
     let value = key_list[key_id].1;
     let mut key_value = String::new();
     for v in value.iter() {
-        key_value.push_str(&v.to_string().replace(['<', '>'], ""));
-        key_value.push(' ');
+        key_value.push_str(v.to_string().as_str());
+        if value.iter().last().unwrap() != v {
+            key_value.push_str(", ");
+        }
     }
     let user_input_key = app
         .get_first_keybinding(KeyBindingEnum::TakeUserInput)
         .unwrap_or("".to_string());
-    let paragraph_text = format!("Current Value is '{}'\n\nPress {} to edit, <Esc> to cancel, <Ins> to stop editing and <Enter> to save when stopped editing",key_value,user_input_key);
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
+    let stop_editing_key = app
+        .get_first_keybinding(KeyBindingEnum::StopUserInput)
+        .unwrap_or("".to_string());
+
+    let paragraph_text = vec![
+        Line::from(vec![
+            Span::styled("Current Value is '", app.current_theme.help_text_style),
+            Span::styled(key_value, app.current_theme.help_key_style),
+            Span::styled("'", app.current_theme.help_text_style),
+        ]),
+        Line::from(String::from("")),
+        Line::from(vec![
+            Span::styled("Press ", app.current_theme.help_text_style),
+            Span::styled(user_input_key, app.current_theme.help_key_style),
+            Span::styled(" to edit, ", app.current_theme.help_text_style),
+            Span::styled(cancel_key, app.current_theme.help_key_style),
+            Span::styled(" to cancel, ", app.current_theme.help_text_style),
+            Span::styled(stop_editing_key, app.current_theme.help_key_style),
+            Span::styled(" to stop editing and ", app.current_theme.help_text_style),
+            Span::styled(accept_key, app.current_theme.help_key_style),
+            Span::styled(
+                " to save when stopped editing",
+                app.current_theme.help_text_style,
+            ),
+        ]),
+    ];
     let config_item = Paragraph::new(paragraph_text)
         .block(
             Block::default()
@@ -1309,6 +1392,12 @@ fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
     let prv_focus_key = app
         .get_first_keybinding(KeyBindingEnum::PrvFocus)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", help_text_style),
@@ -1317,11 +1406,11 @@ fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
         Span::styled(down_key, help_key_style),
         Span::styled(" or scroll with the mouse", help_text_style),
         Span::styled(" to navigate. To edit a value press ", help_text_style),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(accept_key.clone(), help_key_style),
         Span::styled(" or ", help_text_style),
         Span::styled("<Mouse Left Click>", help_key_style),
         Span::styled(". Press ", help_text_style),
-        Span::styled("<Esc>", help_key_style),
+        Span::styled(cancel_key, help_key_style),
         Span::styled(
             " to cancel. To Reset Keybindings or config to Default, press ",
             help_text_style,
@@ -1333,7 +1422,7 @@ fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
             " to highlight respective Reset Button then press ",
             help_text_style,
         ),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(accept_key, help_key_style),
         Span::styled(" to reset", help_text_style),
     ]);
 
@@ -1638,10 +1727,10 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
                 .position(|c| c.id == app.state.current_card_id.unwrap_or((0, 0)))
                 .unwrap_or(0);
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalLeft)
-                .begin_symbol(Some("↑"))
+                .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
                 .style(scrollbar_style)
-                .end_symbol(Some("↓"))
-                .track_symbol(Some("|"))
+                .end_symbol(SCROLLBAR_END_SYMBOL)
+                .track_symbol(SCROLLBAR_TRACK_SYMBOL)
                 .track_style(app.current_theme.inactive_text_style);
             let mut scrollbar_state = ScrollbarState::new(board.cards.len())
                 .position(current_card_index)
@@ -2155,22 +2244,31 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
     let prv_focus_key = app
         .get_first_keybinding(KeyBindingEnum::PrvFocus)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
+    let stop_user_input_key = app
+        .get_first_keybinding(KeyBindingEnum::StopUserInput)
+        .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
         Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
         Span::styled(" or ", help_text_style),
-        Span::styled("<Enter> ", help_key_style),
+        Span::styled(accept_key.clone(), help_key_style),
         Span::styled("to start typing. Press ", help_text_style),
-        Span::styled("<Ins>", help_key_style),
+        Span::styled(stop_user_input_key, help_key_style),
         Span::styled(" to stop typing. Press ", help_text_style),
         Span::styled(next_focus_key, help_key_style),
         Span::styled(" or ", help_text_style),
         Span::styled(prv_focus_key, help_key_style),
         Span::styled(" to switch focus. Press ", help_text_style),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(accept_key, help_key_style),
         Span::styled(" to submit. Press ", help_text_style),
-        Span::styled("<Esc>", help_key_style),
+        Span::styled(cancel_key, help_key_style),
         Span::styled(" to cancel", help_text_style),
     ]);
     let help_paragraph = Paragraph::new(help_text)
@@ -2377,22 +2475,31 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
     let prv_focus_key = app
         .get_first_keybinding(KeyBindingEnum::PrvFocus)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
+    let stop_user_input_key = app
+        .get_first_keybinding(KeyBindingEnum::StopUserInput)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Press ", help_text_style),
         Span::styled(input_mode_key, help_key_style),
         Span::styled(" or ", help_text_style),
-        Span::styled("<Enter> ", help_key_style),
+        Span::styled(accept_key.clone(), help_key_style),
         Span::styled("to start typing. Press ", help_text_style),
-        Span::styled("<Ins>", help_key_style),
+        Span::styled(stop_user_input_key, help_key_style),
         Span::styled(" to stop typing. Press ", help_text_style),
         Span::styled(next_focus_key, help_key_style),
         Span::styled(" or ", help_text_style),
         Span::styled(prv_focus_key, help_key_style),
         Span::styled(" to switch focus. Press ", help_text_style),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(accept_key, help_key_style),
         Span::styled(" to submit. Press ", help_text_style),
-        Span::styled("<Esc>", help_key_style),
+        Span::styled(cancel_key, help_key_style),
         Span::styled(" to cancel", help_text_style),
     ]);
 
@@ -2552,6 +2659,12 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
     let delete_key = app
         .get_first_keybinding(KeyBindingEnum::DeleteCard)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
         Span::styled("Use ", help_text_style),
@@ -2559,9 +2672,9 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
         Span::styled(" or ", help_text_style),
         Span::styled(&down_key, help_key_style),
         Span::styled(" to navigate. Press ", help_text_style),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(accept_key, help_key_style),
         Span::styled(" to Load the selected save file. Press ", help_text_style),
-        Span::styled("<Esc>", help_key_style),
+        Span::styled(cancel_key, help_key_style),
         Span::styled(" to cancel. Press ", help_text_style),
         Span::styled(delete_key, help_key_style),
         Span::styled(
@@ -2581,16 +2694,26 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
     rect.render_widget(help_paragraph, chunks[2]);
 
     if app.state.app_list_states.load_save.selected().is_none() {
-        let preview_paragraph =
-            Paragraph::new(format!("Select a save file with {}or {}to preview or Click on a save file to preview if using a mouse", up_key, down_key))
-                .alignment(Alignment::Center)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded),
-                )
-                .style(default_style)
-                .wrap(ratatui::widgets::Wrap { trim: true });
+        // format!("Select a save file with {}or {}to preview or Click on a save file to preview if using a mouse", up_key, down_key)
+        let help_text = Line::from(vec![
+            Span::styled("Select a save file with ", help_text_style),
+            Span::styled(&up_key, help_key_style),
+            Span::styled(" or ", help_text_style),
+            Span::styled(&down_key, help_key_style),
+            Span::styled(
+                " to preview. Click on a save file to preview if using a mouse",
+                help_text_style,
+            ),
+        ]);
+        let preview_paragraph = Paragraph::new(help_text)
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(default_style)
+            .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(preview_paragraph, preview_chunks[1]);
     } else if app.state.preview_boards_and_cards.is_none() {
         let loading_text = if app.config.enable_mouse_support {
@@ -4044,6 +4167,9 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
     let prv_focus_key = app
         .get_first_keybinding(KeyBindingEnum::PrvFocus)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", app.current_theme.help_text_style),
@@ -4054,8 +4180,8 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
             " or scroll with the mouse to highlight a Command/Card/Board. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Enter> ", app.current_theme.help_key_style),
-        Span::styled("to select. Press ", app.current_theme.help_text_style),
+        Span::styled(accept_key, app.current_theme.help_key_style),
+        Span::styled(" to select. Press ", app.current_theme.help_text_style),
         Span::styled(next_focus_key, app.current_theme.help_key_style),
         Span::styled(" or ", app.current_theme.help_text_style),
         Span::styled(prv_focus_key, app.current_theme.help_key_style),
@@ -4123,7 +4249,10 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         let (row_start_index, _) = get_scrollable_widget_row_bounds(
             command_search_results_length.saturating_sub(2),
             current_index,
-            app.state.app_list_states.command_palette_command_search.offset(),
+            app.state
+                .app_list_states
+                .command_palette_command_search
+                .offset(),
             (search_results_chunks[0].height - 2) as usize,
         );
         let current_mouse_y_position = app.state.current_mouse_coordinates.1;
@@ -4147,10 +4276,10 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .select(hovered_index);
         }
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("↑"))
+            .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
             .style(app.current_theme.progress_bar_style)
-            .end_symbol(Some("↓"))
-            .track_symbol(Some("|"))
+            .end_symbol(SCROLLBAR_END_SYMBOL)
+            .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
 
         let mut scrollbar_state =
@@ -4170,7 +4299,10 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         let (row_start_index, _) = get_scrollable_widget_row_bounds(
             card_search_results_length.saturating_sub(2),
             current_index,
-            app.state.app_list_states.command_palette_card_search.offset(),
+            app.state
+                .app_list_states
+                .command_palette_card_search
+                .offset(),
             (search_results_chunks[1].height - 2) as usize,
         );
         let current_mouse_y_position = app.state.current_mouse_coordinates.1;
@@ -4194,10 +4326,10 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .select(hovered_index);
         }
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("↑"))
+            .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
             .style(app.current_theme.progress_bar_style)
-            .end_symbol(Some("↓"))
-            .track_symbol(Some("|"))
+            .end_symbol(SCROLLBAR_END_SYMBOL)
+            .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
 
         let mut scrollbar_state =
@@ -4217,7 +4349,10 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         let (row_start_index, _) = get_scrollable_widget_row_bounds(
             board_search_results_length.saturating_sub(2),
             current_index,
-            app.state.app_list_states.command_palette_board_search.offset(),
+            app.state
+                .app_list_states
+                .command_palette_board_search
+                .offset(),
             (search_results_chunks[2].height - 2) as usize,
         );
         let current_mouse_y_position = app.state.current_mouse_coordinates.1;
@@ -4241,10 +4376,10 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .select(hovered_index);
         }
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("↑"))
+            .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
             .style(app.current_theme.progress_bar_style)
-            .end_symbol(Some("↓"))
-            .track_symbol(Some("|"))
+            .end_symbol(SCROLLBAR_END_SYMBOL)
+            .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
 
         let mut scrollbar_state =
@@ -4304,21 +4439,26 @@ pub fn render_change_ui_mode_popup(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
+    let render_area = centered_rect_with_percentage(70, 70, rect.size());
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
+        .split(render_area);
+
     let all_date_formats = DateFormat::get_all_date_formats();
     let all_date_formats = all_date_formats
         .iter()
         .map(|s| ListItem::new(vec![Line::from(s.to_human_readable_string().to_string())]))
         .collect::<Vec<ListItem>>();
 
-    let popup_area = centered_rect_with_length(30, 8, rect.size());
-
-    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &render_area) {
         app.state.mouse_focus = Some(Focus::ChangeDateFormatPopup);
         app.state.focus = Focus::ChangeDateFormatPopup;
         calculate_mouse_list_select_index(
             app.state.current_mouse_coordinates.1,
             &all_date_formats,
-            popup_area,
+            render_area,
             &mut app.state.app_list_states.date_format_selector,
         );
     }
@@ -4333,12 +4473,66 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
         .highlight_style(app.current_theme.list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    let up_key = app
+        .get_first_keybinding(KeyBindingEnum::Up)
+        .unwrap_or("".to_string());
+    let down_key = app
+        .get_first_keybinding(KeyBindingEnum::Down)
+        .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
+
+    let help_spans = Line::from(vec![
+        Span::styled("Use ", app.current_theme.help_text_style),
+        Span::styled(up_key, app.current_theme.help_key_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
+        Span::styled(down_key, app.current_theme.help_key_style),
+        Span::styled(
+            " to navigate or use the mouse cursor. Press ",
+            app.current_theme.help_text_style,
+        ),
+        Span::styled(accept_key, app.current_theme.help_key_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
+        Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
+        Span::styled(
+            " To select a Default Date Format. Press ",
+            app.current_theme.help_text_style,
+        ),
+        Span::styled(cancel_key, app.current_theme.help_key_style),
+        Span::styled(" to cancel", app.current_theme.help_text_style),
+    ]);
+
+    let default_date_picker_help = Paragraph::new(help_spans)
+        .alignment(Alignment::Left)
+        .block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .style(app.current_theme.general_style)
+                .border_type(BorderType::Rounded),
+        )
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
+    let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+    let clear_area_border = Block::default()
+        .title("Default Date Format Picker")
+        .style(app.current_theme.general_style)
+        .borders(Borders::ALL)
+        .border_style(app.current_theme.keyboard_focus_style)
+        .border_type(BorderType::Rounded);
+    render_blank_styled_canvas(rect, app, clear_area, false);
+    rect.render_widget(clear_area_border, clear_area);
     rect.render_stateful_widget(
         date_formats,
-        popup_area,
+        chunks[0],
         &mut app.state.app_list_states.date_format_selector,
     );
+    rect.render_widget(default_date_picker_help, chunks[1]);
     if app.config.enable_mouse_support {
         render_close_button(rect, app);
     }
@@ -4588,6 +4782,12 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
         let prv_focus_key = app
             .get_first_keybinding(KeyBindingEnum::PrvFocus)
             .unwrap_or("".to_string());
+        let accept_key = app
+            .get_first_keybinding(KeyBindingEnum::Accept)
+            .unwrap_or("".to_string());
+        let cancel_key = app
+            .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+            .unwrap_or("".to_string());
 
         let help_spans = Line::from(vec![
             Span::styled("Use ", app.current_theme.help_text_style),
@@ -4598,17 +4798,17 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
                 " or scroll with the mouse to navigate. Press ",
                 app.current_theme.help_text_style,
             ),
-            Span::styled("<Enter>", app.current_theme.help_key_style),
+            Span::styled(accept_key.clone(), app.current_theme.help_key_style),
             Span::styled(
                 " To select a Tag (multiple tags can be selected). Press ",
                 app.current_theme.help_text_style,
             ),
-            Span::styled("<Enter>", app.current_theme.help_key_style),
+            Span::styled(accept_key, app.current_theme.help_key_style),
             Span::styled(
                 " on an already selected tag to deselect it. Press ",
                 app.current_theme.help_text_style,
             ),
-            Span::styled("<Esc>", app.current_theme.help_key_style),
+            Span::styled(cancel_key, app.current_theme.help_key_style),
             Span::styled(" to cancel, Press ", app.current_theme.help_text_style),
             Span::styled(next_focus_key, app.current_theme.help_key_style),
             Span::styled(" or ", app.current_theme.help_text_style),
@@ -4656,10 +4856,10 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .selected()
             .unwrap_or(0);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("↑"))
+            .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
             .style(scrollbar_style)
-            .end_symbol(Some("↓"))
-            .track_symbol(Some("|"))
+            .end_symbol(SCROLLBAR_END_SYMBOL)
+            .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
         let mut scrollbar_state = ScrollbarState::new(all_tags.len()).position(current_index);
         let scrollbar_area = chunks[0].inner(&Margin {
@@ -4856,6 +5056,12 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
     let down_key = app
         .get_first_keybinding(KeyBindingEnum::Down)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
         Span::styled("Use ", app.current_theme.help_text_style),
@@ -4866,14 +5072,14 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
             " to navigate or use the mouse cursor. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Enter>", app.current_theme.help_key_style),
+        Span::styled(accept_key, app.current_theme.help_key_style),
         Span::styled(" or ", app.current_theme.help_text_style),
         Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
         Span::styled(
             " To select a Theme. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Esc>", app.current_theme.help_key_style),
+        Span::styled(cancel_key, app.current_theme.help_key_style),
         Span::styled(" to cancel", app.current_theme.help_text_style),
     ]);
 
@@ -5292,6 +5498,9 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
     let prv_focus_key = app
         .get_first_keybinding(KeyBindingEnum::PrvFocus)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
 
     let help_spans = vec![
         Span::styled("Use ", app.current_theme.help_text_style),
@@ -5306,7 +5515,7 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
             " to select a Color/Modifier, Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Enter>", app.current_theme.help_key_style),
+        Span::styled(accept_key, app.current_theme.help_key_style),
         Span::styled(" or ", app.current_theme.help_text_style),
         Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
         Span::styled(
@@ -5494,6 +5703,12 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
     let prv_focus_key = app
         .get_first_keybinding(KeyBindingEnum::PrvFocus)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let stop_editing_key = app
+        .get_first_keybinding(KeyBindingEnum::StopUserInput)
+        .unwrap_or("".to_string());
 
     let help_spans = vec![
         Span::styled("Press ", app.current_theme.help_text_style),
@@ -5502,7 +5717,7 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
             " to enter input mode. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Ins>", app.current_theme.help_key_style),
+        Span::styled(stop_editing_key, app.current_theme.help_key_style),
         Span::styled(" to stop editing. Use ", app.current_theme.help_text_style),
         Span::styled(next_focus_key, app.current_theme.help_key_style),
         Span::styled(" or ", app.current_theme.help_text_style),
@@ -5511,7 +5726,7 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
             " to change focus. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Enter>", app.current_theme.help_key_style),
+        Span::styled(accept_key, app.current_theme.help_key_style),
         Span::styled(" to submit.", app.current_theme.help_text_style),
     ];
     let help_text = Paragraph::new(Line::from(help_spans))
@@ -5846,9 +6061,19 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
 
     let crab_paragraph = if app.state.popup_mode.is_some() {
-        draw_crab_pattern(chunks[0], app.current_theme.inactive_text_style, true)
+        draw_crab_pattern(
+            chunks[0],
+            app.current_theme.inactive_text_style,
+            true,
+            app.config.disable_animations,
+        )
     } else {
-        draw_crab_pattern(chunks[0], app.current_theme.general_style, false)
+        draw_crab_pattern(
+            chunks[0],
+            app.current_theme.general_style,
+            false,
+            app.config.disable_animations,
+        )
     };
 
     let info_border = Block::default()
@@ -5861,14 +6086,26 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         .block(Block::default())
         .alignment(Alignment::Center);
 
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let next_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
+
     let help_spans = vec![
         Span::styled("Press ", app.current_theme.help_text_style),
-        Span::styled("<Tab>", app.current_theme.help_key_style),
+        Span::styled(next_focus_key, app.current_theme.help_key_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
+        Span::styled(prv_focus_key, app.current_theme.help_key_style),
         Span::styled(
             " to change focus. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Enter>", app.current_theme.help_key_style),
+        Span::styled(accept_key, app.current_theme.help_key_style),
         Span::styled(" to submit.", app.current_theme.help_text_style),
     ];
 
@@ -5947,7 +6184,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     render_title(app, &main_chunks[0], rect);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
-    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -1);
     rect.render_widget(info_border, info_box);
     rect.render_widget(info_paragraph, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
@@ -6135,9 +6372,19 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
 
     let crab_paragraph = if app.state.popup_mode.is_some() {
-        draw_crab_pattern(chunks[0], app.current_theme.inactive_text_style, true)
+        draw_crab_pattern(
+            chunks[0],
+            app.current_theme.inactive_text_style,
+            true,
+            app.config.disable_animations,
+        )
     } else {
-        draw_crab_pattern(chunks[0], app.current_theme.general_style, false)
+        draw_crab_pattern(
+            chunks[0],
+            app.current_theme.general_style,
+            false,
+            app.config.disable_animations,
+        )
     };
 
     let info_border = Block::default()
@@ -6150,14 +6397,26 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         .block(Block::default())
         .alignment(Alignment::Center);
 
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let next_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
+
     let help_spans = vec![
         Span::styled("Press ", app.current_theme.help_text_style),
-        Span::styled("<Tab>", app.current_theme.help_key_style),
+        Span::styled(next_focus_key, app.current_theme.help_key_style),
+        Span::styled(" or ", app.current_theme.help_text_style),
+        Span::styled(prv_focus_key, app.current_theme.help_key_style),
         Span::styled(
             " to change focus. Press ",
             app.current_theme.help_text_style,
         ),
-        Span::styled("<Enter>", app.current_theme.help_key_style),
+        Span::styled(accept_key, app.current_theme.help_key_style),
         Span::styled(" to submit.", app.current_theme.help_text_style),
     ];
 
@@ -6257,7 +6516,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     render_title(app, &main_chunks[0], rect);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
-    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -1);
     rect.render_widget(info_border, info_box);
     rect.render_widget(info_paragraph, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
@@ -6358,7 +6617,7 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         ])
         .split(main_chunks[1]);
 
-    let info_box = centered_rect_with_length(55, 12, chunks[0]);
+    let info_box = centered_rect_with_length(54, 13, chunks[0]);
 
     let info_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -6513,9 +6772,19 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     );
 
     let crab_paragraph = if app.state.popup_mode.is_some() {
-        draw_crab_pattern(chunks[0], app.current_theme.inactive_text_style, true)
+        draw_crab_pattern(
+            chunks[0],
+            app.current_theme.inactive_text_style,
+            true,
+            app.config.disable_animations,
+        )
     } else {
-        draw_crab_pattern(chunks[0], app.current_theme.general_style, false)
+        draw_crab_pattern(
+            chunks[0],
+            app.current_theme.general_style,
+            false,
+            app.config.disable_animations,
+        )
     };
 
     let info_border = Block::default()
@@ -6527,6 +6796,16 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         .style(app.current_theme.general_style)
         .block(Block::default())
         .alignment(Alignment::Center);
+
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let next_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::NextFocus)
+        .unwrap_or("".to_string());
+    let prv_focus_key = app
+        .get_first_keybinding(KeyBindingEnum::PrvFocus)
+        .unwrap_or("".to_string());
 
     let help_lines = vec![
         Line::from(Span::styled(
@@ -6549,12 +6828,14 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         Line::from(""),
         Line::from(vec![
             Span::styled("Press ", app.current_theme.help_text_style),
-            Span::styled("<Tab>", app.current_theme.help_key_style),
+            Span::styled(next_focus_key, app.current_theme.help_key_style),
+            Span::styled(" or ", app.current_theme.help_text_style),
+            Span::styled(prv_focus_key, app.current_theme.help_key_style),
             Span::styled(
                 " to change focus. Press ",
                 app.current_theme.help_text_style,
             ),
-            Span::styled("<Enter>", app.current_theme.help_key_style),
+            Span::styled(accept_key, app.current_theme.help_key_style),
             Span::styled(" to submit.", app.current_theme.help_text_style),
         ]),
     ];
@@ -6700,7 +6981,7 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     render_title(app, &main_chunks[0], rect);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
-    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -2);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -1);
     rect.render_widget(info_border, info_box);
     rect.render_widget(info_header, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
@@ -6895,6 +7176,12 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
     let delete_key = app
         .get_first_keybinding(KeyBindingEnum::DeleteCard)
         .unwrap_or("".to_string());
+    let accept_key = app
+        .get_first_keybinding(KeyBindingEnum::Accept)
+        .unwrap_or("".to_string());
+    let cancel_key = app
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
         Span::styled("Use ", help_text_style),
@@ -6902,9 +7189,9 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
         Span::styled(" or ", help_text_style),
         Span::styled(&down_key, help_key_style),
         Span::styled(" to navigate. Press ", help_text_style),
-        Span::styled("<Enter>", help_key_style),
+        Span::styled(&accept_key, help_key_style),
         Span::styled(" to Load the selected save file. Press ", help_text_style),
-        Span::styled("<Esc>", help_key_style),
+        Span::styled(&cancel_key, help_key_style),
         Span::styled(" to cancel. Press ", help_text_style),
         Span::styled(delete_key, help_key_style),
         Span::styled(
@@ -6985,8 +7272,13 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
     }
 }
 
-fn draw_crab_pattern(render_area: Rect, style: Style, popup_mode: bool) -> Paragraph<'static> {
-    let crab_pattern = if popup_mode {
+fn draw_crab_pattern(
+    render_area: Rect,
+    style: Style,
+    popup_mode: bool,
+    disable_animations: bool,
+) -> Paragraph<'static> {
+    let crab_pattern = if popup_mode || disable_animations {
         create_crab_pattern_1(render_area.width, render_area.height, popup_mode)
     } else {
         let patterns = vec![
@@ -7205,7 +7497,6 @@ fn get_scrollable_widget_row_bounds(
     max_height: usize,
 ) -> (usize, usize) {
     let offset = offset.min(all_rows_len.saturating_sub(1));
-    debug!("offset: {}, selected_index: {}, total length {}", offset, selected_index, all_rows_len);
     let mut start = offset;
     let mut end = offset;
     let mut height = 0;

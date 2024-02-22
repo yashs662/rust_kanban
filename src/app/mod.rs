@@ -216,26 +216,6 @@ impl App<'_> {
             AppReturn::Continue
         }
     }
-    pub fn find_action(&self, key: Key) -> Option<Action> {
-        let keybind_search = self
-            .config
-            .keybindings
-            .iter()
-            .filter_map(|(k, _v)| self.config.keybindings.keybind_to_action(k.clone()))
-            .find(|action| action.keys().contains(&key));
-        if keybind_search.is_none() {
-            let actions = Action::all();
-            actions
-                .iter()
-                .find(|action| action.keys().contains(&key))
-                .copied()
-        } else {
-            keybind_search
-        }
-    }
-    pub fn find_keybindings(&self, keybinding_enum: KeyBindingEnum) -> Option<Vec<Key>> {
-        self.config.keybindings.get_keybindings(keybinding_enum)
-    }
     pub fn get_first_keybinding(&self, keybinding_enum: KeyBindingEnum) -> Option<String> {
         self.config
             .keybindings
@@ -1807,6 +1787,17 @@ impl DateFormat {
             _ => None,
         }
     }
+    pub fn from_human_readable_string(human_readable_string: &str) -> Option<DateFormat> {
+        match human_readable_string {
+            "DD/MM/YYYY" => Some(DateFormat::DayMonthYear),
+            "DD/MM/YYYY-HH:MM:SS" => Some(DateFormat::DayMonthYearTime),
+            "MM/DD/YYYY" => Some(DateFormat::MonthDayYear),
+            "MM/DD/YYYY-HH:MM:SS" => Some(DateFormat::MonthDayYearTime),
+            "YYYY/MM/DD" => Some(DateFormat::YearMonthDay),
+            "YYYY/MM/DD-HH:MM:SS" => Some(DateFormat::YearMonthDayTime),
+            _ => None,
+        }
+    }
     pub fn get_all_date_formats() -> Vec<DateFormat> {
         vec![
             DateFormat::DayMonthYear,
@@ -2011,6 +2002,7 @@ impl AppConfig {
         debug!("Editing keybinding: {} to {:?}", key, value);
 
         match key {
+            KeyBindingEnum::Accept => self.keybindings.accept = value,
             KeyBindingEnum::ChangeCardStatusToActive => {
                 self.keybindings.change_card_status_to_active = value;
             }
@@ -2035,11 +2027,26 @@ impl AppConfig {
             KeyBindingEnum::GoToMainMenu => {
                 self.keybindings.go_to_main_menu = value;
             }
+            KeyBindingEnum::GoToPreviousUIModeorCancel => {
+                self.keybindings.go_to_previous_ui_mode_or_cancel = value;
+            }
             KeyBindingEnum::HideUiElement => {
                 self.keybindings.hide_ui_element = value;
             }
             KeyBindingEnum::Left => {
                 self.keybindings.left = value;
+            }
+            KeyBindingEnum::MoveCardDown => {
+                self.keybindings.move_card_down = value;
+            }
+            KeyBindingEnum::MoveCardLeft => {
+                self.keybindings.move_card_left = value;
+            }
+            KeyBindingEnum::MoveCardRight => {
+                self.keybindings.move_card_right = value;
+            }
+            KeyBindingEnum::MoveCardUp => {
+                self.keybindings.move_card_up = value;
             }
             KeyBindingEnum::NewBoard => {
                 self.keybindings.new_board = value;
@@ -2508,7 +2515,7 @@ impl ConfigEnum {
                 Ok(())
             }
             ConfigEnum::DateFormat => {
-                let date_format = DateFormat::from_json_string(value);
+                let date_format = DateFormat::from_human_readable_string(value);
                 if date_format.is_some() {
                     Ok(())
                 } else {
@@ -2571,7 +2578,7 @@ impl ConfigEnum {
                 config.default_theme = value.to_string();
             }
             ConfigEnum::DateFormat => {
-                config.date_format = DateFormat::from_json_string(value).unwrap();
+                config.date_format = DateFormat::from_human_readable_string(value).unwrap();
             }
             ConfigEnum::Keybindings => {
                 debug!("Keybindings should not be called from edit_config");
