@@ -1,5 +1,9 @@
+[![License](https://img.shields.io/crates/l/rust-kanban)](https://github.com/yashs662/rust_kanban/blob/main/LICENSE.md)
+[![Build](https://github.com/yashs662/rust_kanban/actions/workflows/build.yml/badge.svg)](https://github.com/yashs662/rust_kanban/releases)
+[![Issues](https://img.shields.io/github/issues/yashs662/rust_kanban)](https://github.com/yashs662/rust_kanban/issues)
 [![Crates.io](https://img.shields.io/crates/v/rust-kanban.svg)](https://crates.io/crates/rust-kanban)
-
+[![Downloads](https://img.shields.io/crates/d/rust-kanban)](https://crates.io/crates/rust-kanban)
+[![Stars](https://img.shields.io/github/stars/yashs662/rust_kanban)](https://github.com/yashs662/rust_kanban/stargazers)
 ![rust_kanban](https://user-images.githubusercontent.com/66156000/232308620-3e96d818-81f3-4229-b58e-c09bc0b067e4.png)
 
 ## Kanban App for the terminal written in rust
