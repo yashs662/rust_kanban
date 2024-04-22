@@ -1,6 +1,9 @@
 use super::io_handler::{get_config_dir, make_file_system_safe_name};
 use crate::{
-    app::{kanban::Board, AppConfig},
+    app::{
+        kanban::{Board, Boards},
+        AppConfig,
+    },
     constants::{
         CONFIG_DIR_NAME, CONFIG_FILE_NAME, SAVE_DIR_NAME, SAVE_FILE_NAME, SAVE_FILE_REGEX,
         THEME_DIR_NAME, THEME_FILE_NAME,
@@ -165,7 +168,7 @@ pub fn get_local_kanban_state(
     file_name: String,
     preview_mode: bool,
     config: &AppConfig,
-) -> Result<Vec<Board>, String> {
+) -> Result<Boards, String> {
     let file_path = config.save_directory.join(file_name);
     if !preview_mode {
         info!("Loading local save file: {:?}", file_path);
@@ -199,7 +202,7 @@ pub fn get_local_kanban_state(
         let parsed_board = Board::from_json(board)?;
         parsed_boards.push(parsed_board);
     }
-    Ok(parsed_boards)
+    Ok(Boards::from(parsed_boards))
 }
 
 pub fn get_available_local_save_files(config: &AppConfig) -> Option<Vec<String>> {

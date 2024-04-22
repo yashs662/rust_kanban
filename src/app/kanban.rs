@@ -1,5 +1,6 @@
 use crate::constants::{FIELD_NA, FIELD_NOT_SET};
 use chrono::Utc;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
@@ -7,7 +8,7 @@ use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Board {
-    pub cards: Vec<Card>,
+    pub cards: Cards,
     pub description: String,
     pub id: (u64, u64),
     pub name: String,
@@ -19,12 +20,8 @@ impl Board {
             id: get_id(),
             name: name.to_owned(),
             description: description.to_owned(),
-            cards: Vec::new(),
+            cards: Cards::default(),
         }
-    }
-
-    pub fn get_card(&self, id: (u64, u64)) -> Option<&Card> {
-        self.cards.iter().find(|c| c.id == id)
     }
 
     pub fn from_json(value: &Value) -> Result<Self, String> {
@@ -62,12 +59,25 @@ impl Board {
             Some(description) => description,
             None => return Err("board description is invalid for board".to_string()),
         };
+        debug!("value: {:#?}", value["cards"]);
         let cards = match value["cards"].as_array() {
             Some(cards) => cards
                 .iter()
                 .map(Card::from_json)
-                .collect::<Result<_, _>>()?,
-            None => return Err("board cards is invalid for board".to_string()),
+                .collect::<Result<Cards, String>>()?,
+            None => {
+                // TODO: Find why this is happening, temp fix - try if it is a object with the key cards
+                match value["cards"]["cards"].as_array() {
+                    Some(cards) => {
+                        debug!("Cards was an object with key cards when trying to load save");
+                        cards
+                            .iter()
+                            .map(Card::from_json)
+                            .collect::<Result<Cards, String>>()?
+                    }
+                    None => return Err("board cards is invalid for board".to_string()),
+                }
+            }
         };
 
         Ok(Self {
@@ -82,11 +92,67 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self {
-            cards: vec![Card::default()],
+            cards: Cards::default(),
             description: String::from("Default Board Description"),
             id: get_id(),
             name: String::from("Default Board"),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct Boards {
+    boards: Vec<Board>,
+}
+
+impl Boards {
+    pub fn add_board(&mut self, board: Board) {
+        self.boards.push(board);
+    }
+    pub fn get_board_with_id(&self, board_id: (u64, u64)) -> Option<&Board> {
+        self.boards.iter().find(|b| b.id == board_id)
+    }
+    pub fn get_mut_board_with_id(&mut self, board_id: (u64, u64)) -> Option<&mut Board> {
+        self.boards.iter_mut().find(|b| b.id == board_id)
+    }
+    pub fn get_board_with_index(&self, index: usize) -> Option<&Board> {
+        self.boards.get(index)
+    }
+    pub fn get_mut_board_with_index(&mut self, index: usize) -> Option<&mut Board> {
+        self.boards.get_mut(index)
+    }
+    pub fn get_boards(&self) -> &Vec<Board> {
+        &self.boards
+    }
+    pub fn get_mut_boards(&mut self) -> &mut Vec<Board> {
+        &mut self.boards
+    }
+    pub fn set_boards(&mut self, boards: Boards) {
+        self.boards = boards.boards;
+    }
+    pub fn is_empty(&self) -> bool {
+        self.boards.is_empty()
+    }
+    pub fn get_first_board_id(&self) -> Option<(u64, u64)> {
+        self.boards.first().map(|b| b.id)
+    }
+    pub fn get_board_index(&self, board_id: (u64, u64)) -> Option<usize> {
+        self.boards.iter().position(|b| b.id == board_id)
+    }
+    pub fn len(&self) -> usize {
+        self.boards.len()
+    }
+    pub fn remove_board_with_id(&mut self, board_id: (u64, u64)) {
+        self.boards.retain(|b| b.id != board_id);
+    }
+    pub fn reset(&mut self) {
+        self.boards.clear();
+    }
+}
+
+impl From<Vec<Board>> for Boards {
+    fn from(boards: Vec<Board>) -> Self {
+        Self { boards }
     }
 }
 
@@ -312,6 +378,83 @@ impl Default for Card {
             name: String::from("Default Card"),
             priority: CardPriority::Low,
             tags: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct Cards {
+    cards: Vec<Card>,
+}
+
+impl Cards {
+    pub fn add_card(&mut self, card: Card) {
+        self.cards.push(card);
+    }
+    pub fn add_card_at_index(&mut self, index: usize, card: Card) {
+        self.cards.insert(index, card);
+    }
+    pub fn get_card_with_id(&self, card_id: (u64, u64)) -> Option<&Card> {
+        self.cards.iter().find(|c| c.id == card_id)
+    }
+    pub fn get_mut_card_with_id(&mut self, card_id: (u64, u64)) -> Option<&mut Card> {
+        self.cards.iter_mut().find(|c| c.id == card_id)
+    }
+    pub fn get_card_with_index(&self, index: usize) -> Option<&Card> {
+        self.cards.get(index)
+    }
+    pub fn get_mut_card_with_index(&mut self, index: usize) -> Option<&mut Card> {
+        self.cards.get_mut(index)
+    }
+    pub fn get_all_cards(&self) -> &Vec<Card> {
+        &self.cards
+    }
+    pub fn get_all_card_ids(&self) -> Vec<(u64, u64)> {
+        self.cards.iter().map(|c| c.id).collect()
+    }
+    pub fn get_cards_with_range(&self, start: usize, end: usize) -> Cards {
+        self.cards[start..end].to_vec().into()
+    }
+    pub fn get_mut_all_cards(&mut self) -> &mut Vec<Card> {
+        &mut self.cards
+    }
+    pub fn set_cards(&mut self, cards: Cards) {
+        self.cards = cards.cards;
+    }
+    pub fn is_empty(&self) -> bool {
+        self.cards.is_empty()
+    }
+    pub fn get_first_card_id(&self) -> Option<(u64, u64)> {
+        self.cards.first().map(|c| c.id)
+    }
+    pub fn get_card_index(&self, card_id: (u64, u64)) -> Option<usize> {
+        self.cards.iter().position(|c| c.id == card_id)
+    }
+    pub fn len(&self) -> usize {
+        self.cards.len()
+    }
+    pub fn remove_card_with_id(&mut self, card_id: (u64, u64)) -> Option<Card> {
+        let index = self.cards.iter().position(|c| c.id == card_id)?;
+        Some(self.cards.remove(index))
+    }
+    pub fn reset(&mut self) {
+        self.cards.clear();
+    }
+    pub fn swap(&mut self, index_1: usize, index_2: usize) {
+        self.cards.swap(index_1, index_2);
+    }
+}
+
+impl From<Vec<Card>> for Cards {
+    fn from(cards: Vec<Card>) -> Self {
+        Self { cards }
+    }
+}
+
+impl FromIterator<Card> for Cards {
+    fn from_iter<I: IntoIterator<Item = Card>>(iter: I) -> Self {
+        Self {
+            cards: iter.into_iter().collect(),
         }
     }
 }

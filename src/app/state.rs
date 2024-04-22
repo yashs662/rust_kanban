@@ -391,7 +391,7 @@ impl UiMode {
             if !self.get_available_targets().contains(&current_focus)
                 && !self.get_available_targets().is_empty()
             {
-                app.state.focus = self.get_available_targets()[0];
+                app.state.set_focus(self.get_available_targets()[0]);
             }
         }
         match self {
@@ -669,11 +669,7 @@ impl KeyBindings {
             .iter()
             .find(|(_, keybinding)| keybinding.contains(key))
             .map(|(keybinding_enum, _)| keybinding_enum);
-        if let Some(keybinding_enum) = keybinding_enum {
-            Some(self.keybinding_enum_to_action(keybinding_enum))
-        } else {
-            None
-        }
+        keybinding_enum.map(|keybinding_enum| self.keybinding_enum_to_action(keybinding_enum))
     }
 
     pub fn keybinding_enum_to_action(&self, keybinding_enum: KeyBindingEnum) -> Action {

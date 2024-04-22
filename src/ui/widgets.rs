@@ -291,21 +291,21 @@ impl CommandPaletteWidget {
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::ConfigMenu;
                         app.state.app_table_states.config.select(Some(0));
-                        app.state.focus = Focus::ConfigTable;
+                        app.state.set_focus(Focus::ConfigTable);
                     }
                     CommandPaletteActions::MainMenu => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::MainMenu;
                         app.state.app_list_states.main_menu.select(Some(0));
-                        app.state.focus = Focus::MainMenu;
+                        app.state.set_focus(Focus::MainMenu);
                     }
                     CommandPaletteActions::HelpMenu => {
                         app.state.popup_mode = None;
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::HelpMenu;
                         app.state.app_table_states.help.select(Some(0));
-                        app.state.focus = Focus::Body;
+                        app.state.set_focus(Focus::Body);
                     }
                     CommandPaletteActions::SaveKanbanState => {
                         app.state.popup_mode = None;
@@ -316,7 +316,7 @@ impl CommandPaletteWidget {
                             app.state.popup_mode = None;
                             app.state.prev_ui_mode = Some(app.state.ui_mode);
                             app.state.ui_mode = UiMode::NewBoard;
-                            app.state.focus = Focus::NewBoardName;
+                            app.state.set_focus(Focus::NewBoardName);
                         } else {
                             app.state.popup_mode = None;
                             app.send_error_toast("Cannot create a new board in this view", None);
@@ -333,7 +333,7 @@ impl CommandPaletteWidget {
                             app.state.popup_mode = None;
                             app.state.prev_ui_mode = Some(app.state.ui_mode);
                             app.state.ui_mode = UiMode::NewCard;
-                            app.state.focus = Focus::CardName;
+                            app.state.set_focus(Focus::CardName);
                         } else {
                             app.state.popup_mode = None;
                             app.send_error_toast("Cannot create a new card in this view", None);
@@ -351,13 +351,13 @@ impl CommandPaletteWidget {
                         if UiMode::view_modes().contains(&app.state.ui_mode) {
                             if let Some(current_board_id) = app.state.current_board_id {
                                 if let Some(current_board) =
-                                    app.boards.iter_mut().find(|b| b.id == current_board_id)
+                                    app.boards.get_mut_board_with_id(current_board_id)
                                 {
                                     if let Some(current_card_id) = app.state.current_card_id {
                                         if current_board
                                             .cards
-                                            .iter_mut()
-                                            .any(|c| c.id == current_card_id)
+                                            .get_card_with_id(current_card_id)
+                                            .is_some()
                                         {
                                             app.state.popup_mode =
                                                 Some(PopupMode::CardStatusSelector);
@@ -418,7 +418,7 @@ impl CommandPaletteWidget {
                         app.state.all_available_tags = None;
                         app.state.app_list_states.filter_by_tag_list.select(None);
                         app.state.popup_mode = None;
-                        app.filtered_boards = vec![];
+                        app.filtered_boards.reset();
                         refresh_visible_boards_and_cards(app);
                     }
                     CommandPaletteActions::ChangeDateFormat => {
@@ -439,7 +439,7 @@ impl CommandPaletteWidget {
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
                         app.state.ui_mode = UiMode::Login;
                         app.state.popup_mode = None;
-                        app.state.focus = Focus::EmailIDField;
+                        app.state.set_focus(Focus::EmailIDField);
                     }
                     CommandPaletteActions::Logout => {
                         app.dispatch(IoEvent::Logout).await;
@@ -447,13 +447,13 @@ impl CommandPaletteWidget {
                     }
                     CommandPaletteActions::SignUp => {
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.focus = Focus::EmailIDField;
+                        app.state.set_focus(Focus::EmailIDField);
                         app.state.ui_mode = UiMode::SignUp;
                         app.state.popup_mode = None;
                     }
                     CommandPaletteActions::ResetPassword => {
                         app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.focus = Focus::EmailIDField;
+                        app.state.set_focus(Focus::EmailIDField);
                         app.state.ui_mode = UiMode::ResetPassword;
                         app.state.popup_mode = None;
                     }
@@ -477,7 +477,7 @@ impl CommandPaletteWidget {
                         }
                     }
                 }
-                app.state.current_user_input = "".to_string();
+                app.clear_user_input_state();
             } else {
                 debug!("No command found for the command palette");
             }
@@ -489,7 +489,7 @@ impl CommandPaletteWidget {
             app.widgets.command_palette.last_focus = None;
         }
         app.state.app_status = AppStatus::Initialized;
-        app.state.current_user_input = String::new();
+        app.clear_user_input_state();
         app.state.current_cursor_position = None;
         AppReturn::Continue
     }
@@ -553,8 +553,8 @@ impl CommandPaletteWidget {
 
             let mut card_search_results: Vec<(String, (u64, u64))> = vec![];
             if !current_search_string.is_empty() {
-                for board in &app.boards {
-                    for card in &board.cards {
+                for board in app.boards.get_boards() {
+                    for card in board.cards.get_all_cards() {
                         let search_helper =
                             if card.name.to_lowercase().contains(&current_search_string) {
                                 format!("{} - Matched in Name", card.name)
@@ -589,7 +589,7 @@ impl CommandPaletteWidget {
 
             let mut board_search_results: Vec<(String, (u64, u64))> = vec![];
             if !current_search_string.is_empty() {
-                for board in &app.boards {
+                for board in app.boards.get_boards() {
                     let search_helper =
                         if board.name.to_lowercase().contains(&current_search_string) {
                             format!("{} - Matched in Name", board.name)
@@ -633,8 +633,8 @@ impl CommandPaletteWidget {
 
     pub fn calculate_tags(app: &App) -> Vec<(String, u32)> {
         let mut tags: Vec<String> = vec![];
-        for board in &app.boards {
-            for card in &board.cards {
+        for board in app.boards.get_boards() {
+            for card in board.cards.get_all_cards() {
                 for tag in &card.tags {
                     if tag.is_empty() {
                         continue;

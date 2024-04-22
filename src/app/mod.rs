@@ -3,7 +3,7 @@ use self::{
         handle_edit_keybinding_mode, handle_general_actions, handle_mouse_action,
         handle_user_input_mode, prepare_config_for_new_app,
     },
-    kanban::{Board, Card, CardPriority},
+    kanban::{Board, Boards, Card, CardPriority},
     state::{AppStatus, Focus, KeyBindings, UiMode},
 };
 use crate::{
@@ -119,8 +119,9 @@ pub struct App<'a> {
     is_loading: bool,
     pub debug_mode: bool,
     pub state: AppState<'a>,
-    pub boards: Vec<Board>,
-    pub filtered_boards: Vec<Board>,
+    pub boards: Boards,
+    pub filtered_boards: Boards,
+    pub preview_boards_and_cards: Option<Boards>,
     pub config: AppConfig,
     pub visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
     pub last_io_event_time: Option<Instant>,
@@ -136,8 +137,8 @@ impl App<'_> {
         let actions = vec![Action::Quit];
         let is_loading = false;
         let state = AppState::default();
-        let boards = vec![];
-        let filtered_boards = vec![];
+        let boards = Boards::default();
+        let filtered_boards = Boards::default();
         let all_themes = Theme::all_default_themes();
         let mut theme = Theme::default();
         let (config, config_errors, toasts) = prepare_config_for_new_app(theme.clone());
@@ -156,6 +157,7 @@ impl App<'_> {
             state,
             boards,
             filtered_boards,
+            preview_boards_and_cards: None,
             config,
             visible_boards_and_cards: LinkedHashMap::new(),
             last_io_event_time: None,
@@ -171,14 +173,6 @@ impl App<'_> {
             }
         }
         app
-    }
-
-    pub fn get_mut_board(&mut self, board_id: (u64, u64)) -> Option<&mut Board> {
-        self.boards.iter_mut().find(|b| b.id == board_id)
-    }
-
-    pub fn get_board(&self, board_id: (u64, u64)) -> Option<&Board> {
-        self.boards.iter().find(|b| b.id == board_id)
     }
 
     pub async fn do_action(&mut self, key: Key) -> AppReturn {
@@ -234,24 +228,19 @@ impl App<'_> {
         if self.state.ui_mode == UiMode::MainMenu {
             self.main_menu_next();
         } else if self.state.focus == Focus::NoFocus {
-            self.state.focus = Focus::Body;
+            self.state.set_focus(Focus::Body);
         }
         self.state.app_status = AppStatus::initialized()
-    }
-    pub fn set_boards(&mut self, boards: Vec<Board>) {
-        self.boards = boards;
     }
     pub fn loaded(&mut self) {
         self.is_loading = false;
     }
-    pub fn current_focus(&self) -> &Focus {
+    pub fn get_current_focus(&self) -> &Focus {
         &self.state.focus
     }
-    pub fn change_focus(&mut self, focus: Focus) {
-        self.state.focus = focus;
-    }
-    pub fn clear_current_user_input(&mut self) {
+    pub fn clear_user_input_state(&mut self) {
         self.state.current_user_input = String::new();
+        self.state.last_user_input = None;
     }
     pub fn set_config_state(&mut self, config_state: TableState) {
         self.state.app_table_states.config = config_state;
@@ -391,9 +380,9 @@ impl App<'_> {
         let available_focus_targets = self.state.ui_mode.get_available_targets();
         if !available_focus_targets.contains(&self.state.focus) {
             if available_focus_targets.is_empty() {
-                self.state.focus = Focus::NoFocus;
+                self.state.set_focus(Focus::NoFocus);
             } else {
-                self.state.focus = available_focus_targets[0];
+                self.state.set_focus(available_focus_targets[0]);
             }
         }
     }
@@ -1074,8 +1063,8 @@ impl App<'_> {
             let history = self.action_history_manager.history[history_index].clone();
             match history {
                 ActionHistory::DeleteCard(card, board_id) => {
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        board.cards.push(card.clone());
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
+                        board.cards.add_card(card.clone());
                         self.action_history_manager.history_index -= 1;
                         refresh_visible_boards_and_cards(self);
                         self.send_info_toast(&format!("Undo Delete Card '{}'", card.name), None);
@@ -1084,8 +1073,8 @@ impl App<'_> {
                     }
                 }
                 ActionHistory::CreateCard(card, board_id) => {
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        board.cards.retain(|c| c.id != card.id);
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
+                        board.cards.remove_card_with_id(card.id);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index -= 1;
                         self.send_info_toast(&format!("Undo Create Card '{}'", card.name), None);
@@ -1100,8 +1089,8 @@ impl App<'_> {
                     moved_from_index,
                     moved_to_index,
                 ) => {
-                    let moved_to_board = self.get_board(moved_to_board_id);
-                    let moved_from_board = self.get_board(moved_from_board_id);
+                    let moved_to_board = self.boards.get_board_with_id(moved_to_board_id);
+                    let moved_from_board = self.boards.get_board_with_id(moved_from_board_id);
                     if moved_to_board.is_none() || moved_from_board.is_none() {
                         debug!("Could not undo move card '{}' as the move to board with id '{:?}' or the move from board with id '{:?}' was not found", card.name, moved_to_board_id, moved_from_board_id);
                         return;
@@ -1119,20 +1108,26 @@ impl App<'_> {
                         );
                     }
 
-                    let moved_to_board = self.get_mut_board(moved_to_board_id).unwrap();
-                    moved_to_board.cards.retain(|c| c.id != card.id);
+                    let moved_to_board = self
+                        .boards
+                        .get_mut_board_with_id(moved_to_board_id)
+                        .unwrap();
+                    moved_to_board.cards.remove_card_with_id(card.id);
 
-                    let moved_from_board = self.get_mut_board(moved_from_board_id).unwrap();
+                    let moved_from_board = self
+                        .boards
+                        .get_mut_board_with_id(moved_from_board_id)
+                        .unwrap();
                     moved_from_board
                         .cards
-                        .insert(moved_from_index, card.clone());
+                        .add_card_at_index(moved_from_index, card.clone());
 
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index -= 1;
                     self.send_info_toast(&format!("Undo Move Card '{}'", card.name), None);
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
                         if moved_from_index >= board.cards.len()
                             || moved_to_index >= board.cards.len()
                         {
@@ -1145,7 +1140,12 @@ impl App<'_> {
                             );
                             return;
                         }
-                        let card_name = board.cards[moved_to_index].name.clone();
+                        let card_name = board
+                            .cards
+                            .get_mut_card_with_index(moved_to_index)
+                            .unwrap()
+                            .name
+                            .clone();
                         board.cards.swap(moved_from_index, moved_to_index);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index -= 1;
@@ -1155,24 +1155,25 @@ impl App<'_> {
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
-                    self.boards.push(board.clone());
+                    self.boards.add_board(board.clone());
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index -= 1;
                     self.send_info_toast(&format!("Undo Delete Board '{}'", board.name), None);
                 }
                 ActionHistory::CreateBoard(board) => {
-                    self.boards.retain(|b| b.id != board.id);
+                    self.boards.remove_board_with_id(board.id);
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index -= 1;
                     self.send_info_toast(&format!("Undo Create Board '{}'", board.name), None);
                 }
                 ActionHistory::EditCard(old_card, _, board_id) => {
                     let mut card_name = String::new();
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        if let Some(card) = board.cards.iter_mut().find(|c| c.id == old_card.id) {
+                    let mut card_found = false;
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
+                        if let Some(card) = board.cards.get_mut_card_with_id(old_card.id) {
                             *card = old_card.clone();
-                            self.action_history_manager.history_index -= 1;
                             card_name = card.name.clone();
+                            card_found = true;
                         } else {
                             self.send_error_toast(
                                 &format!(
@@ -1182,12 +1183,15 @@ impl App<'_> {
                                 None,
                             );
                         }
-                        if !card_name.is_empty() {
-                            self.send_info_toast(&format!("Undo Edit Card '{}'", card_name), None);
-                            refresh_visible_boards_and_cards(self);
-                        }
                     } else {
                         self.send_error_toast(&format!("Could not undo edit card '{}' as the board with id '{:?}' was not found", old_card.name, board_id), None);
+                    }
+                    if card_found {
+                        self.action_history_manager.history_index -= 1;
+                    }
+                    if !card_name.is_empty() {
+                        self.send_info_toast(&format!("Undo Edit Card '{}'", card_name), None);
+                        refresh_visible_boards_and_cards(self);
                     }
                 }
             }
@@ -1202,8 +1206,8 @@ impl App<'_> {
             let history = self.action_history_manager.history[history_index].clone();
             match history {
                 ActionHistory::DeleteCard(card, board_id) => {
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        board.cards.retain(|c| c.id != card.id);
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
+                        board.cards.remove_card_with_id(card.id);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index += 1;
                         self.send_info_toast(&format!("Redo Delete Card '{}'", card.name), None);
@@ -1212,8 +1216,8 @@ impl App<'_> {
                     }
                 }
                 ActionHistory::CreateCard(card, board_id) => {
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        board.cards.push(card.clone());
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
+                        board.cards.add_card(card.clone());
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index += 1;
                         self.send_info_toast(&format!("Redo Create Card '{}'", card.name), None);
@@ -1228,8 +1232,8 @@ impl App<'_> {
                     moved_from_index,
                     moved_to_index,
                 ) => {
-                    let moved_to_board = self.get_board(moved_to_board_id);
-                    let moved_from_board = self.get_board(moved_from_board_id);
+                    let moved_to_board = self.boards.get_board_with_id(moved_to_board_id);
+                    let moved_from_board = self.boards.get_board_with_id(moved_from_board_id);
                     if moved_to_board.is_none() || moved_from_board.is_none() {
                         debug!("Could not undo move card '{}' as the move to board with id '{:?}' or the move from board with id '{:?}' was not found", card.name, moved_to_board_id, moved_from_board_id);
                         return;
@@ -1248,18 +1252,26 @@ impl App<'_> {
                         return;
                     }
 
-                    let moved_from_board = self.get_mut_board(moved_from_board_id).unwrap();
-                    moved_from_board.cards.retain(|c| c.id != card.id);
+                    let moved_from_board = self
+                        .boards
+                        .get_mut_board_with_id(moved_from_board_id)
+                        .unwrap();
+                    moved_from_board.cards.remove_card_with_id(card.id);
 
-                    let moved_to_board = self.get_mut_board(moved_to_board_id).unwrap();
-                    moved_to_board.cards.insert(moved_to_index, card.clone());
+                    let moved_to_board = self
+                        .boards
+                        .get_mut_board_with_id(moved_to_board_id)
+                        .unwrap();
+                    moved_to_board
+                        .cards
+                        .add_card_at_index(moved_to_index, card.clone());
 
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index += 1;
                     self.send_info_toast(&format!("Redo Move Card '{}'", card.name), None);
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
                         if moved_from_index >= board.cards.len()
                             || moved_to_index >= board.cards.len()
                         {
@@ -1272,7 +1284,12 @@ impl App<'_> {
                             );
                             return;
                         }
-                        let card_name = board.cards[moved_to_index].name.clone();
+                        let card_name = board
+                            .cards
+                            .get_card_with_index(moved_to_index)
+                            .unwrap()
+                            .name
+                            .clone();
                         board.cards.swap(moved_from_index, moved_to_index);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index += 1;
@@ -1282,24 +1299,25 @@ impl App<'_> {
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
-                    self.boards.retain(|b| b.id != board.id);
+                    self.boards.remove_board_with_id(board.id);
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index += 1;
                     self.send_info_toast(&format!("Redo Delete Board '{}'", board.name), None);
                 }
                 ActionHistory::CreateBoard(board) => {
-                    self.boards.push(board.clone());
+                    self.boards.add_board(board.clone());
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index += 1;
                     self.send_info_toast(&format!("Redo Create Board '{}'", board.name), None);
                 }
                 ActionHistory::EditCard(_, new_card, board_id) => {
                     let mut card_name = String::new();
-                    if let Some(board) = self.boards.iter_mut().find(|b| b.id == board_id) {
-                        if let Some(card) = board.cards.iter_mut().find(|c| c.id == new_card.id) {
+                    let mut card_found = false;
+                    if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
+                        if let Some(card) = board.cards.get_mut_card_with_id(new_card.id) {
                             *card = new_card.clone();
-                            self.action_history_manager.history_index += 1;
                             card_name = card.name.clone();
+                            card_found = true;
                         } else {
                             self.send_error_toast(
                                 &format!(
@@ -1309,12 +1327,15 @@ impl App<'_> {
                                 None,
                             );
                         }
-                        if !card_name.is_empty() {
-                            self.send_info_toast(&format!("Redo Edit Card '{}'", card_name), None);
-                            refresh_visible_boards_and_cards(self);
-                        }
                     } else {
                         self.send_error_toast(&format!("Could not redo edit card '{}' as the board with id '{:?}' was not found", new_card.name, board_id), None);
+                    }
+                    if card_found {
+                        self.action_history_manager.history_index += 1;
+                    }
+                    if !card_name.is_empty() {
+                        self.send_info_toast(&format!("Redo Edit Card '{}'", card_name), None);
+                        refresh_visible_boards_and_cards(self);
                     }
                 }
             }
@@ -1534,7 +1555,7 @@ impl PopupMode {
         if !self.get_available_targets().contains(&current_focus)
             && !self.get_available_targets().is_empty()
         {
-            app.state.focus = self.get_available_targets()[0];
+            app.state.set_focus(self.get_available_targets()[0]);
         }
         match self {
             PopupMode::ViewCard => {
@@ -1666,13 +1687,13 @@ pub struct AppState<'a> {
     pub hovered_card: Option<((u64, u64), (u64, u64))>,
     pub last_mouse_action: Option<Mouse>,
     pub last_reset_password_link_sent_time: Option<Instant>,
+    pub last_user_input: Option<String>,
     pub mouse_focus: Option<Focus>,
     pub mouse_list_index: Option<u16>,
     pub no_of_cards_to_show: u16,
     pub popup_mode: Option<PopupMode>,
     pub prev_focus: Option<Focus>,
     pub prev_ui_mode: Option<UiMode>,
-    pub preview_boards_and_cards: Option<Vec<Board>>,
     pub preview_file_name: Option<String>,
     pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
     pub previous_mouse_coordinates: (u16, u16),
@@ -1681,6 +1702,29 @@ pub struct AppState<'a> {
     pub ui_mode: UiMode,
     pub ui_render_time: Vec<u128>,
     pub user_login_data: UserLoginData,
+    // TODO: Improve this, it feels like a hack
+    pub path_check_state: PathCheckState,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PathCheckState {
+    pub path_last_checked: String,
+    pub path_exists: bool,
+    pub potential_completion: Option<String>,
+    pub recheck_required: bool,
+    pub path_check_mode: bool,
+}
+
+impl AppState<'_> {
+    pub fn set_focus(&mut self, focus: Focus) {
+        self.focus = focus;
+    }
+    pub fn get_card_being_edited(&self) -> Option<((u64, u64), Card)> {
+        self.card_being_edited.clone()
+    }
+    pub fn get_theme_being_edited(&self) -> Theme {
+        self.theme_being_edited.clone()
+    }
 }
 
 impl Default for AppState<'_> {
@@ -1712,13 +1756,13 @@ impl Default for AppState<'_> {
             hovered_card: None,
             last_mouse_action: None,
             last_reset_password_link_sent_time: None,
+            last_user_input: None,
             mouse_focus: None,
             mouse_list_index: None,
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
             popup_mode: None,
             prev_focus: None,
             prev_ui_mode: None,
-            preview_boards_and_cards: None,
             preview_file_name: None,
             preview_visible_boards_and_cards: LinkedHashMap::new(),
             previous_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES,
@@ -1732,6 +1776,7 @@ impl Default for AppState<'_> {
                 refresh_token: None,
                 user_id: None,
             },
+            path_check_state: PathCheckState::default(),
         }
     }
 }
@@ -2590,7 +2635,7 @@ impl ConfigEnum {
 }
 
 pub fn get_term_bg_color() -> (u8, u8, u8) {
-    // TODO: make this work on windows and unix
+    // TODO: Find a way to get the terminal background color
     (0, 0, 0)
 }
 

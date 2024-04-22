@@ -66,7 +66,7 @@ impl<'a> TextBox<'a> {
             block: None,
             style: Style::default(),
             cursor: (0, 0),
-            tab_len: 4,
+            tab_len: 2,
             hard_tab_indent: false,
             history: TextBoxHistory::new(9999),
             cursor_line_style: Style::default(),

@@ -21,6 +21,9 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## TODO
 
+- [ ] Unify all text input fields and improve the way they are handled (currently there are multiple ways to handle text input)
+- [ ] Optimize logger to handle high volumes of logs (app becomes sluggish when there are a lot of logs)
+- [ ] Make configuration for integer values more user-friendly (e.g. when changing the number of columns in the kanban board)
 - [ ] Add a date picker for the date field
 - [ ] Improve error handling by implementing best practices
 - [ ] Implement animations for UI elements

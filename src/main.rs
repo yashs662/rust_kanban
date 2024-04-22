@@ -72,9 +72,6 @@ async fn main() -> Result<()> {
     let app_widget_manager_instance = Arc::clone(&main_app_instance);
     let app_ui_instance = Arc::clone(&main_app_instance);
 
-    // TODO: get term bg color
-    // let term_bg = get_term_bg_color();
-
     if args.reset {
         reset_app_main();
         return Ok(());

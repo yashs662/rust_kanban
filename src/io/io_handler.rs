@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     app::{
-        app_helper::handle_go_to_previous_ui_mode, kanban::Board, state::UiMode, App, AppConfig,
+        app_helper::handle_go_to_previous_ui_mode, kanban::Boards, state::UiMode, App, AppConfig,
         UserLoginData,
     },
     constants::{
@@ -95,7 +95,7 @@ impl IoAsyncHandler<'_> {
             error!("Cannot create save directory");
             app.send_error_toast("Cannot create save directory", None);
         }
-        app.boards = prepare_boards(&mut app);
+        prepare_boards(&mut app);
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         let saved_themes = get_saved_themes();
         if let Some(saved_themes) = saved_themes {
@@ -170,7 +170,7 @@ impl IoAsyncHandler<'_> {
         info!("🚀 Saving local data");
         let mut app = self.app.lock().await;
         if save_required(&mut app) {
-            let board_data = &app.boards;
+            let board_data = app.boards.get_boards();
             let status = save_kanban_state_locally(board_data.to_vec(), &app.config);
             match status {
                 Ok(_) => {
@@ -211,7 +211,7 @@ impl IoAsyncHandler<'_> {
         let board_data = get_local_kanban_state(save_file_name.clone(), false, &app.config);
         match board_data {
             Ok(boards) => {
-                app.set_boards(boards);
+                app.boards.set_boards(boards);
                 app.action_history_manager.reset();
                 info!("👍 Save file {:?} loaded", save_file_name);
                 app.send_info_toast(&format!("👍 Save file {:?} loaded", save_file_name), None);
@@ -302,7 +302,7 @@ impl IoAsyncHandler<'_> {
         if app.state.app_list_states.load_save.selected().is_none() {
             return Ok(());
         }
-        app.state.preview_boards_and_cards = None;
+        app.preview_boards_and_cards = None;
 
         let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let local_files = get_available_local_save_files(&app.config);
@@ -322,14 +322,14 @@ impl IoAsyncHandler<'_> {
         let board_data = get_local_kanban_state(save_file_name.clone(), true, &app.config);
         match board_data {
             Ok(boards) => {
-                app.state.preview_boards_and_cards = Some(boards);
+                app.preview_boards_and_cards = Some(boards);
                 let mut visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
                     LinkedHashMap::new();
                 for (counter, board) in app
-                    .state
                     .preview_boards_and_cards
                     .as_ref()
                     .unwrap()
+                    .get_boards()
                     .iter()
                     .enumerate()
                 {
@@ -340,13 +340,14 @@ impl IoAsyncHandler<'_> {
                     if board.cards.len() > app.config.no_of_cards_to_show.into() {
                         for card in board
                             .cards
+                            .get_all_cards()
                             .iter()
                             .take(app.config.no_of_cards_to_show.into())
                         {
                             visible_cards.push(card.id);
                         }
                     } else {
-                        for card in &board.cards {
+                        for card in board.cards.get_all_cards() {
                             visible_cards.push(card.id);
                         }
                     }
@@ -904,7 +905,6 @@ impl IoAsyncHandler<'_> {
         };
 
         let mut app = self.app.lock().await;
-        let board_data = app.boards.clone();
         let key = get_user_encryption_key(app.state.encryption_key_from_arguments.clone());
         if key.is_err() {
             error!("Error syncing local data, Could not get encryption key, If you have lost it please generate a new one using the -g flag");
@@ -916,7 +916,7 @@ impl IoAsyncHandler<'_> {
             return Ok(());
         }
         let key = key.unwrap();
-        let encrypt_result = encrypt_save(board_data, &key);
+        let encrypt_result = encrypt_save(&app.boards, &key);
         if encrypt_result.is_err() {
             error!("Error syncing local data");
             debug!(
@@ -1092,14 +1092,14 @@ impl IoAsyncHandler<'_> {
             app.send_error_toast("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", None);
             return Ok(());
         }
-        app.state.preview_boards_and_cards = Some(decrypt_result.unwrap());
+        app.preview_boards_and_cards = Some(decrypt_result.unwrap());
         let mut visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
             LinkedHashMap::new();
         for (counter, board) in app
-            .state
             .preview_boards_and_cards
             .as_ref()
             .unwrap()
+            .get_boards()
             .iter()
             .enumerate()
         {
@@ -1110,13 +1110,14 @@ impl IoAsyncHandler<'_> {
             if board.cards.len() > app.config.no_of_cards_to_show.into() {
                 for card in board
                     .cards
+                    .get_all_cards()
                     .iter()
                     .take(app.config.no_of_cards_to_show.into())
                 {
                     visible_cards.push(card.id);
                 }
             } else {
-                for card in &board.cards {
+                for card in board.cards.get_all_cards() {
                     visible_cards.push(card.id);
                 }
             }
@@ -1189,7 +1190,7 @@ impl IoAsyncHandler<'_> {
             return Ok(());
         }
         let decrypt_result = decrypt_result.unwrap();
-        app.set_boards(decrypt_result);
+        app.boards.set_boards(decrypt_result);
         info!("👍 Save file cloud_save_{} loaded", save_file_number);
         app.send_info_toast(
             &format!("👍 Save file cloud_save_{} loaded", save_file_number),
@@ -1308,8 +1309,8 @@ fn prepare_save_dir() -> bool {
     true
 }
 
-fn prepare_boards(app: &mut App) -> Vec<Board> {
-    if app.config.always_load_last_save {
+fn prepare_boards(app: &mut App) {
+    let boards = if app.config.always_load_last_save {
         let latest_save_file_info = get_latest_save_file(&app.config);
         if let Ok(latest_save_file) = latest_save_file_info {
             let local_data = get_local_kanban_state(latest_save_file.clone(), false, &app.config);
@@ -1326,16 +1327,17 @@ fn prepare_boards(app: &mut App) -> Vec<Board> {
                     debug!("Cannot get local data: {:?}", err);
                     error!("👎 Cannot get local data, Data might be corrupted or is not in the correct format");
                     app.send_error_toast("👎 Cannot get local data, Data might be corrupted or is not in the correct format", None);
-                    vec![]
+                    Boards::default()
                 }
             }
         } else {
-            vec![]
+            Boards::default()
         }
     } else {
         app.set_ui_mode(UiMode::LoadLocalSave);
-        vec![]
-    }
+        Boards::default()
+    };
+    app.boards.set_boards(boards);
 }
 
 fn get_latest_save_file(config: &AppConfig) -> Result<String, String> {
@@ -1390,9 +1392,9 @@ pub fn refresh_visible_boards_and_cards(app: &mut App) {
     let mut visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
         LinkedHashMap::new();
     let boards = if app.filtered_boards.is_empty() {
-        app.boards.clone()
+        app.boards.get_boards()
     } else {
-        app.filtered_boards.clone()
+        app.filtered_boards.get_boards()
     };
     for (i, board) in boards.iter().enumerate() {
         if (i) as u16 == app.config.no_of_boards_to_show {
@@ -1402,13 +1404,14 @@ pub fn refresh_visible_boards_and_cards(app: &mut App) {
         if board.cards.len() > app.config.no_of_cards_to_show.into() {
             for card in board
                 .cards
+                .get_all_cards()
                 .iter()
                 .take(app.config.no_of_cards_to_show.into())
             {
                 visible_cards.push(card.id);
             }
         } else {
-            for card in &board.cards {
+            for card in board.cards.get_all_cards() {
                 visible_cards.push(card.id);
             }
         }
@@ -1444,7 +1447,7 @@ pub fn make_file_system_safe_name(name: &str) -> String {
 
 pub async fn auto_save(app: &mut App<'_>) -> Result<(), String> {
     if save_required(app) {
-        save_kanban_state_locally(app.boards.clone(), &app.config)
+        save_kanban_state_locally(app.boards.get_boards().to_vec(), &app.config)
     } else {
         Ok(())
     }
@@ -1506,7 +1509,7 @@ fn check_for_safe_password(check_password: &str) -> PasswordStatus {
     password_status
 }
 
-fn encrypt_save(boards: Vec<Board>, key: &[u8]) -> Result<(String, String), String> {
+fn encrypt_save(boards: &Boards, key: &[u8]) -> Result<(String, String), String> {
     let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let boards_json = serde_json::to_string(&boards);
     if boards_json.is_err() {
@@ -1531,7 +1534,7 @@ fn decrypt_save(
     encrypted_boards: String,
     key: &[u8],
     encoded_nonce: &str,
-) -> Result<Vec<Board>, String> {
+) -> Result<Boards, String> {
     let base64_engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let encrypted_boards = base64_engine.decode(encrypted_boards);
     if encrypted_boards.is_err() {
