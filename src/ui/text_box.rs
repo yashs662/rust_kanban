@@ -4,6 +4,7 @@ use crate::{
     inputs::key::Key,
     util::{num_digits, replace_tabs, spaces},
 };
+use portable_atomic::{AtomicU64, Ordering};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
@@ -14,7 +15,6 @@ use ratatui::{
 use std::{
     cmp,
     collections::VecDeque,
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 #[derive(Clone, Debug)]
