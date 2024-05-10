@@ -1,12 +1,7 @@
 use super::{key::Key, mouse::Mouse, InputEvent};
 use log::error;
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use portable_atomic::{AtomicBool, Ordering};
+use std::{sync::Arc, time::Duration};
 
 pub struct Events {
     rx: tokio::sync::mpsc::Receiver<InputEvent>,
