@@ -1,5 +1,5 @@
 use super::{
-    text_box::{CursorMove, TextBox},
+    text_box::TextBox,
     widgets::{ToastType, ToastWidget},
     TextColorOptions, TextModifierOptions,
 };
@@ -22,7 +22,7 @@ use crate::{
         data_handler::get_available_local_save_files,
         logger::{get_logs, get_selected_index, RUST_KANBAN_LOGGER},
     },
-    util::calculate_cursor_position,
+    util::num_digits,
 };
 use chrono::{Local, NaiveDate, NaiveDateTime};
 use log::{debug, Level};
@@ -628,14 +628,17 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
                 .border_type(BorderType::Rounded),
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
-    let current_user_input = app.state.current_user_input.clone();
+    let current_user_input = app.state.text_buffers.general_config.get_joined_lines();
     let user_input = if path_check_mode {
         if (current_user_input != app.state.path_check_state.path_last_checked)
             || app.state.path_check_state.recheck_required
         {
             app.state.path_check_state.recheck_required = false;
             app.state.path_check_state.potential_completion = None;
-            app.state.path_check_state.path_last_checked = current_user_input.clone();
+            app.state
+                .path_check_state
+                .path_last_checked
+                .clone_from(&current_user_input);
             app.state.path_check_state.path_exists =
                 std::path::Path::new(&current_user_input).is_dir();
             if !app.state.path_check_state.path_exists {
@@ -763,19 +766,6 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
 
-    if app.state.app_status == AppStatus::UserInput {
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
-        } else {
-            app.state.current_user_input.len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[1].width - 2);
-        let y_offset = current_cursor_position / (chunks[1].width - 2);
-        let x_cursor_position = chunks[1].x + x_offset + 1;
-        let y_cursor_position = chunks[1].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
-    }
-
     let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Config Editor")
@@ -789,6 +779,7 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
     rect.render_widget(config_item, chunks[0]);
     rect.render_widget(edit_item, chunks[1]);
     render_logs(app, false, chunks[2], rect, false);
+
     if app.config.enable_mouse_support {
         let submit_button_style =
             if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[3]) {
@@ -811,6 +802,15 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             .alignment(Alignment::Center);
         rect.render_widget(submit_button, chunks[3]);
         render_close_button(rect, app)
+    }
+
+    if app.state.app_status == AppStatus::UserInput {
+        let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+            &app.state.text_buffers.general_config,
+            &app.config.show_line_numbers,
+            &chunks[1],
+        );
+        rect.set_cursor(x_pos, y_pos);
     }
 }
 
@@ -1003,6 +1003,8 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         row.push(row_value);
         table_items.push(row);
     }
+    // sort according to the first string in the row
+    table_items.sort_by(|a, b| a[0].cmp(&b[0]));
 
     let rows = table_items.iter().map(|item| {
         let height = item
@@ -1208,19 +1210,6 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
                 .border_type(BorderType::Rounded),
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
-
-    if app.state.app_status == AppStatus::KeyBindMode {
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
-        } else {
-            current_edited_keybinding_string.len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[1].width - 2);
-        let y_offset = current_cursor_position / (chunks[1].width - 2);
-        let x_cursor_position = chunks[1].x + x_offset + 1;
-        let y_cursor_position = chunks[1].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
-    }
 
     let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
@@ -2341,44 +2330,38 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let wrapped_title_text = textwrap::wrap(
-        &app.state.app_form_states.new_board[0],
-        (chunks[1].width - 2) as usize,
-    );
-    let board_name_field = wrapped_title_text
-        .iter()
-        .map(|x| Line::from(Span::raw(&**x)))
-        .collect::<Vec<Line>>();
-    let wrapped_description_text = textwrap::wrap(
-        &app.state.app_form_states.new_board[1],
-        (chunks[2].width - 2) as usize,
-    );
-    let board_description_field = wrapped_description_text
-        .iter()
-        .map(|x| Line::from(Span::raw(&**x)))
-        .collect::<Vec<Line>>();
+    let board_name_block = Block::default()
+        .borders(Borders::ALL)
+        .style(name_style)
+        .border_type(BorderType::Rounded)
+        .title("Board Name (required)");
+    app.state
+        .text_buffers
+        .board_name
+        .set_block(board_name_block);
+    rect.render_widget(app.state.text_buffers.board_name.widget(), chunks[1]);
 
-    let board_name = Paragraph::new(board_name_field)
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(name_style)
-                .border_type(BorderType::Rounded)
-                .title("Board Name (required)"),
-        );
-    rect.render_widget(board_name, chunks[1]);
-
-    let board_description = Paragraph::new(board_description_field)
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(description_style)
-                .border_type(BorderType::Rounded)
-                .title("Board Description"),
-        );
-    rect.render_widget(board_description, chunks[2]);
+    let board_description_block = Block::default()
+        .borders(Borders::ALL)
+        .style(description_style)
+        .border_type(BorderType::Rounded)
+        .title("Board Description");
+    app.state
+        .text_buffers
+        .board_description
+        .set_block(board_description_block);
+    if app.config.show_line_numbers {
+        app.state
+            .text_buffers
+            .board_description
+            .set_line_number_style(app.current_theme.general_style)
+    } else {
+        app.state
+            .text_buffers
+            .board_description
+            .remove_line_number()
+    }
+    rect.render_widget(app.state.text_buffers.board_description.widget(), chunks[2]);
 
     let input_mode_key = app
         .get_first_keybinding(KeyBindingEnum::TakeUserInput)
@@ -2435,33 +2418,25 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
     );
     rect.render_widget(submit_button, chunks[4]);
 
-    if app.state.focus == Focus::NewBoardName && app.state.app_status == AppStatus::UserInput {
-        if app.state.current_cursor_position.is_some() {
-            let (x_pos, y_pos) = calculate_cursor_position(
-                wrapped_title_text,
-                app.state
-                    .current_cursor_position
-                    .unwrap_or_else(|| app.state.app_form_states.new_board[0].len()),
-                chunks[1],
-            );
-            rect.set_cursor(x_pos, y_pos);
-        } else {
-            rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
-        }
-    } else if app.state.focus == Focus::NewBoardDescription
-        && app.state.app_status == AppStatus::UserInput
-    {
-        if app.state.current_cursor_position.is_some() {
-            let (x_pos, y_pos) = calculate_cursor_position(
-                wrapped_description_text,
-                app.state
-                    .current_cursor_position
-                    .unwrap_or_else(|| app.state.app_form_states.new_board[1].len()),
-                chunks[2],
-            );
-            rect.set_cursor(x_pos, y_pos);
-        } else {
-            rect.set_cursor(chunks[2].x + 1, chunks[2].y + 1);
+    if app.state.app_status == AppStatus::UserInput {
+        match app.state.focus {
+            Focus::NewBoardName => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.board_name,
+                    &app.config.show_line_numbers,
+                    &chunks[1],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            Focus::NewBoardDescription => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.board_description,
+                    &app.config.show_line_numbers,
+                    &chunks[2],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            _ => {}
         }
     }
 
@@ -2509,83 +2484,43 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let wrapped_card_name_text = textwrap::wrap(
-        &app.state.app_form_states.new_card[0],
-        (chunks[1].width - 2) as usize,
-    );
-    let card_name_field = wrapped_card_name_text
-        .iter()
-        .map(|x| Line::from(Span::raw(&**x)))
-        .collect::<Vec<Line>>();
-    let wrapped_card_due_date_text = textwrap::wrap(
-        &app.state.app_form_states.new_card[2],
-        (chunks[3].width - 2) as usize,
-    );
+    let card_name_block = Block::default()
+        .borders(Borders::ALL)
+        .style(name_style)
+        .border_type(BorderType::Rounded)
+        .title("Card Name (required)");
+    app.state.text_buffers.card_name.set_block(card_name_block);
+    rect.render_widget(app.state.text_buffers.card_name.widget(), chunks[1]);
+    let description_length = app.state.text_buffers.card_description.get_num_lines();
+    let description_block = Block::default()
+        .title(format!("Description ({} line(s))", description_length))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(description_style);
+
+    if app.config.show_line_numbers {
+        app.state
+            .text_buffers
+            .card_description
+            .set_line_number_style(app.current_theme.general_style)
+    } else {
+        app.state.text_buffers.card_description.remove_line_number()
+    }
+    app.state
+        .text_buffers
+        .card_description
+        .set_block(description_block.clone());
+    rect.render_widget(app.state.text_buffers.card_description.widget(), chunks[2]);
+
+    let card_due_date_text = app.state.text_buffers.card_due_date.get_joined_lines();
+    let wrapped_card_due_date_text =
+        textwrap::wrap(&card_due_date_text, (chunks[3].width - 2) as usize);
+    // check if wrapping is actually needed
     let card_due_date_field = wrapped_card_due_date_text
         .iter()
         .map(|x| Line::from(Span::raw(&**x)))
         .collect::<Vec<Line>>();
-    let card_name = Paragraph::new(card_name_field)
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(name_style)
-                .border_type(BorderType::Rounded)
-                .title("Card Name (required)"),
-        );
-    rect.render_widget(card_name, chunks[1]);
-    let description_block = Block::default()
-        .borders(Borders::ALL)
-        .style(description_style)
-        .border_type(BorderType::Rounded)
-        .title("Card Description");
-    let card_description = if app.state.card_description_text_buffer.is_some() {
-        let text_area = &mut app.state.card_description_text_buffer.as_mut().unwrap();
-        if app.state.focus == Focus::CardDescription {
-            if app.state.app_status != AppStatus::UserInput {
-                text_area.disable_cursor();
-            } else {
-                text_area.enable_cursor(
-                    app.current_theme
-                        .keyboard_focus_style
-                        .add_modifier(Modifier::REVERSED),
-                );
-            }
-        } else {
-            text_area.disable_cursor();
-        }
-        text_area.set_block(description_block.clone());
-        text_area.clone()
-    } else {
-        debug!("Creating new card description text area");
-        let mut textarea = TextBox::default();
-        textarea.set_block(description_block.clone());
-        textarea.insert_str(&app.state.app_form_states.new_card[1]);
-        textarea.move_cursor(CursorMove::Jump(0, 0));
-        if app.config.show_line_numbers {
-            textarea.set_line_number_style(app.current_theme.general_style)
-        } else {
-            textarea.remove_line_number()
-        }
-        if app.state.app_status != AppStatus::UserInput {
-            textarea.set_cursor_style(Style::default());
-        } else {
-            textarea.set_cursor_style(
-                app.current_theme
-                    .keyboard_focus_style
-                    .add_modifier(Modifier::REVERSED),
-            );
-        }
-        app.state.card_description_text_buffer = Some(textarea.clone());
-        textarea
-    };
-    rect.render_widget(card_description.widget(), chunks[2]);
-
-    let parsed_due_date = date_format_converter(
-        app.state.app_form_states.new_card[2].trim(),
-        app.config.date_format,
-    );
+    let parsed_due_date = date_format_converter(card_due_date_text.trim(), app.config.date_format);
     let card_due_date = Paragraph::new(card_due_date_field)
         .alignment(Alignment::Left)
         .block(
@@ -2595,7 +2530,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
                 .border_type(BorderType::Rounded)
                 .title("Card Due Date (DD/MM/YYYY-HH:MM:SS), (DD/MM/YYYY), (YYYY/MM/DD-HH:MM:SS), or (YYYY/MM/DD)"),
         );
-    if parsed_due_date.is_err() && !app.state.app_form_states.new_card[2].is_empty() {
+    if parsed_due_date.is_err() && !card_due_date_text.is_empty() {
         let new_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Fill(1), Constraint::Length(21)].as_ref())
@@ -2639,7 +2574,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
         Span::styled(input_mode_key, help_key_style),
         Span::styled(" or ", help_text_style),
         Span::styled(accept_key.clone(), help_key_style),
-        Span::styled("to start typing. Press ", help_text_style),
+        Span::styled(" to start typing. Press ", help_text_style),
         Span::styled(stop_user_input_key, help_key_style),
         Span::styled(" to stop typing. Press ", help_text_style),
         Span::styled(next_focus_key, help_key_style),
@@ -2671,32 +2606,33 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
     );
     rect.render_widget(submit_button, chunks[5]);
 
-    if app.state.focus == Focus::CardName && app.state.app_status == AppStatus::UserInput {
-        if app.state.current_cursor_position.is_some() {
-            let (x_pos, y_pos) = calculate_cursor_position(
-                wrapped_card_name_text,
-                app.state
-                    .current_cursor_position
-                    .unwrap_or_else(|| app.state.app_form_states.new_card[0].len()),
-                chunks[1],
-            );
-            rect.set_cursor(x_pos, y_pos);
-        } else {
-            rect.set_cursor(chunks[1].x + 1, chunks[1].y + 1);
-        }
-    } else if app.state.focus == Focus::CardDueDate && app.state.app_status == AppStatus::UserInput
-    {
-        if app.state.current_cursor_position.is_some() {
-            let (x_pos, y_pos) = calculate_cursor_position(
-                wrapped_card_due_date_text,
-                app.state
-                    .current_cursor_position
-                    .unwrap_or_else(|| app.state.app_form_states.new_card[2].len()),
-                chunks[3],
-            );
-            rect.set_cursor(x_pos, y_pos);
-        } else {
-            rect.set_cursor(chunks[3].x + 1, chunks[3].y + 1);
+    if app.state.app_status == AppStatus::UserInput {
+        match app.state.focus {
+            Focus::CardName => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.card_name,
+                    &app.config.show_line_numbers,
+                    &chunks[1],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            Focus::CardDescription => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.card_description,
+                    &app.config.show_line_numbers,
+                    &chunks[2],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            Focus::CardDueDate => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.card_due_date,
+                    &app.config.show_line_numbers,
+                    &chunks[3],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            _ => {}
         }
     }
 
@@ -2771,7 +2707,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
         let choice_list = List::new(items)
             .block(
                 Block::default()
-                    .title("Available Saves")
+                    .title(format!("Available Saves ({})", item_list.len()))
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
@@ -3135,70 +3071,50 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     };
 
     // Prepare Name Block Widget
-    let name_paragraph_widget = {
+    let name_paragraph_block = {
         let name_style = if app.state.focus == Focus::CardName {
             app.current_theme.keyboard_focus_style
         } else {
             app.current_theme.general_style
         };
 
-        Paragraph::new(card_name).block(
-            Block::default()
-                .title("Name")
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(name_style),
-        )
-    };
-
-    // Process Card Description
-    let card_description = {
-        let description_length = if app.state.card_description_text_buffer.is_some() {
-            app.state
-                .card_description_text_buffer
-                .as_ref()
-                .unwrap()
-                .lines()
-                .len()
-        } else {
-            let text_buffer =
-                TextBox::from(card.description.clone().split('\n').collect::<Vec<&str>>());
-            app.state.card_description_text_buffer = Some(text_buffer.clone());
-            text_buffer.lines().len()
-        };
-        let description_style = if app.state.focus == Focus::CardDescription {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
-
-        let description_block = Block::default()
-            .title(format!("Description ({} lines)", description_length))
+        Block::default()
+            .title("Name")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(description_style);
-
-        let text_area = &mut app.state.card_description_text_buffer.as_mut().unwrap();
-        if app.config.show_line_numbers {
-            text_area.set_line_number_style(app.current_theme.general_style)
-        } else {
-            text_area.remove_line_number()
-        }
-        if app.state.focus == Focus::CardDescription {
-            if app.state.app_status != AppStatus::UserInput {
-                text_area.disable_cursor();
-            } else {
-                text_area.enable_cursor(
-                    app.current_theme
-                        .keyboard_focus_style
-                        .add_modifier(Modifier::REVERSED),
-                );
-            }
-        }
-        text_area.set_block(description_block.clone());
-        text_area.clone()
+            .border_style(name_style)
     };
-    let card_description_widget = card_description.widget();
+    app.state
+        .text_buffers
+        .card_name
+        .set_block(name_paragraph_block);
+
+    // Process Card Description
+    let description_style = if app.state.focus == Focus::CardDescription {
+        app.current_theme.keyboard_focus_style
+    } else {
+        app.current_theme.general_style
+    };
+
+    let description_length = app.state.text_buffers.card_description.get_num_lines();
+    let description_block = Block::default()
+        .title(format!("Description ({} line(s))", description_length))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(description_style);
+
+    if app.config.show_line_numbers {
+        app.state
+            .text_buffers
+            .card_description
+            .set_line_number_style(app.current_theme.general_style)
+    } else {
+        app.state.text_buffers.card_description.remove_line_number()
+    }
+    app.state
+        .text_buffers
+        .card_description
+        .set_block(description_block);
 
     // Process Card Extra Info
     let (card_extra_info_widget, card_extra_info_items_len) = {
@@ -3216,19 +3132,26 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         );
         let card_priority = format!("Priority: {}", card.priority);
         let card_status = format!("Status: {}", card.card_status);
-        let card_due_date = card.due_date.clone();
+        let card_due_date = app.state.text_buffers.card_due_date.get_joined_lines();
+        let card_due_date = if card_due_date.is_empty() {
+            FIELD_NOT_SET.to_string()
+        } else {
+            card_due_date
+        };
         let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
         let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-            if app.state.focus == Focus::CardDueDate {
-                Span::styled(
-                    format!("Due: {}", card.due_date),
-                    app.current_theme.list_select_style,
-                )
-            } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
-                Span::styled(
-                    format!("Due: {}", card.due_date),
-                    app.current_theme.card_due_default_style,
-                )
+            if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+                if app.state.focus == Focus::CardDueDate {
+                    Span::styled(
+                        format!("Due: {}", card_due_date),
+                        app.current_theme.list_select_style,
+                    )
+                } else {
+                    Span::styled(
+                        format!("Due: {}", card_due_date),
+                        app.current_theme.card_due_default_style,
+                    )
+                }
             } else {
                 let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
                 let days_left = match formatted_date_format {
@@ -3261,29 +3184,29 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                 };
                 if days_left <= app.config.warning_delta.into() && days_left >= 0 {
                     Span::styled(
-                        format!("Due: {}", card.due_date),
+                        format!("Due: {}", card_due_date),
                         app.current_theme.card_due_warning_style,
                     )
                 } else if days_left < 0 {
                     Span::styled(
-                        format!("Due: {}", card.due_date),
+                        format!("Due: {}", card_due_date),
                         app.current_theme.card_due_overdue_style,
                     )
                 } else {
                     Span::styled(
-                        format!("Due: {}", card.due_date),
+                        format!("Due: {}", card_due_date),
                         app.current_theme.card_due_default_style,
                     )
                 }
             }
-        } else if app.state.focus == Focus::CardDueDate {
+        } else if card_due_date != FIELD_NOT_SET {
             Span::styled(
-                format!("Due: {}", card.due_date),
-                app.current_theme.list_select_style,
+                format!("Due: {} - Invalid Date Format", card_due_date),
+                app.current_theme.error_text_style,
             )
         } else {
             Span::styled(
-                format!("Due: {}", card.due_date),
+                format!("Due: {}", card_due_date),
                 app.current_theme.card_due_default_style,
             )
         };
@@ -3485,7 +3408,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     // Determine chunk sizes
     let card_chunks = {
         let min_box_height: u16 = 2;
-        let max_box_width: u16 = popup_area.width - 2;
         let border_height: u16 = 2;
         let max_height: u16 = popup_area.height - border_height;
         let submit_button_height: u16 = 3;
@@ -3497,17 +3419,8 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             max_height - card_name_box_height - card_extra_info_height
         };
 
-        let raw_card_description_height = if app.state.card_description_text_buffer.is_some() {
-            app.state
-                .card_description_text_buffer
-                .as_ref()
-                .unwrap()
-                .lines()
-                .len()
-        } else {
-            debug!("Text buffer not set for card description in render view card");
-            card.description.len() / max_box_width as usize
-        } as u16;
+        let raw_card_description_height =
+            app.state.text_buffers.card_description.get_num_lines() as u16;
 
         let raw_tags_height = card_tag_lines.len() as u16;
         let raw_comments_height = card_comment_lines.len() as u16;
@@ -3619,7 +3532,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                         .card_view_comment_list
                         .select(None);
                     app.state.app_list_states.card_view_tag_list.select(None);
-                    app.state.current_cursor_position = None;
                 }
                 4 => {
                     app.state.set_focus(Focus::CardPriority);
@@ -3629,7 +3541,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                         .card_view_comment_list
                         .select(None);
                     app.state.app_list_states.card_view_tag_list.select(None);
-                    app.state.current_cursor_position = None;
                 }
                 5 => {
                     app.state.set_focus(Focus::CardStatus);
@@ -3639,7 +3550,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                         .card_view_comment_list
                         .select(None);
                     app.state.app_list_states.card_view_tag_list.select(None);
-                    app.state.current_cursor_position = None;
                 }
                 _ => {
                     app.state.set_focus(Focus::NoFocus);
@@ -3662,7 +3572,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             .card_view_comment_list
             .select(None);
         app.state.app_list_states.card_view_tag_list.select(None);
-        app.state.current_cursor_position = None;
     }
     if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[1]) {
         app.state.set_focus(Focus::CardDescription);
@@ -3672,7 +3581,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             .card_view_comment_list
             .select(None);
         app.state.app_list_states.card_view_tag_list.select(None);
-        app.state.current_cursor_position = None;
     }
     let card_tags_style = if app.state.focus == Focus::CardTags {
         app.current_theme.keyboard_focus_style
@@ -3723,20 +3631,28 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     if app.state.app_status == AppStatus::UserInput {
         match app.state.focus {
             Focus::CardName => {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(&card.name, card_chunks[0].width as usize),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    card_chunks[0],
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.card_name,
+                    &app.config.show_line_numbers,
+                    &card_chunks[0],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            Focus::CardDescription => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.card_description,
+                    &app.config.show_line_numbers,
+                    &card_chunks[1],
                 );
                 rect.set_cursor(x_pos, y_pos);
             }
             Focus::CardDueDate => {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(&card.due_date, card_chunks[2].width as usize),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    card_chunks[2],
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.card_due_date,
+                    &app.config.show_line_numbers,
+                    &card_chunks[2],
                 );
-                rect.set_cursor(x_pos + 5, y_pos + 2); // +5 and +2 are to account for the "Due: " text and extra info position offset
+                rect.set_cursor(x_pos, y_pos);
             }
             Focus::CardTags => {
                 if app
@@ -3745,6 +3661,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     .card_view_tag_list
                     .selected()
                     .is_some()
+                    && !app.state.text_buffers.card_tags.is_empty()
                 {
                     let selected_index = app
                         .state
@@ -3777,12 +3694,20 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                         length_before_selected_tag = 0;
                     }
                     let digits_in_counter = (counter + 1).to_string().len();
+                    let text_box_cursor = app
+                        .state
+                        .text_buffers
+                        .card_tags
+                        .get(selected_index)
+                        .unwrap()
+                        .cursor();
                     let x_pos = card_chunks[3].left()
                         + length_before_selected_tag as u16
-                        + app.state.current_cursor_position.unwrap_or(0) as u16
+                        + text_box_cursor.1 as u16
                         + tag_offset
                         + digits_in_counter as u16;
                     let y_pos = card_chunks[3].top() + y_index as u16 + 1;
+                    // TODO: Card tags and comments cursor is incorrect as the view does not change when the comment or tag is longer than the screen
                     rect.set_cursor(x_pos, y_pos);
                 }
             }
@@ -3793,6 +3718,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     .card_view_comment_list
                     .selected()
                     .is_some()
+                    && !app.state.text_buffers.card_comments.is_empty()
                 {
                     let selected_index = app
                         .state
@@ -3825,9 +3751,16 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                         length_before_selected_comment = 0;
                     }
                     let digits_in_counter = (counter + 1).to_string().len();
+                    let text_box_cursor = app
+                        .state
+                        .text_buffers
+                        .card_comments
+                        .get(selected_index)
+                        .unwrap()
+                        .cursor();
                     let x_pos = card_chunks[4].left()
                         + length_before_selected_comment as u16
-                        + app.state.current_cursor_position.unwrap_or(0) as u16
+                        + text_box_cursor.1 as u16
                         + comment_offset
                         + digits_in_counter as u16;
                     let y_pos = card_chunks[4].top() + y_index as u16 + 1;
@@ -3840,8 +3773,11 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
 
     // Render everything
     rect.render_widget(main_block_widget, popup_area);
-    rect.render_widget(name_paragraph_widget, card_chunks[0]);
-    rect.render_widget(card_description_widget, card_chunks[1]);
+    rect.render_widget(app.state.text_buffers.card_name.widget(), card_chunks[0]);
+    rect.render_widget(
+        app.state.text_buffers.card_description.widget(),
+        card_chunks[1],
+    );
     rect.render_widget(card_extra_info_widget, card_chunks[2]);
     rect.render_widget(card_tags_widget, card_chunks[3]);
     rect.render_widget(card_comments_widget, card_chunks[4]);
@@ -3856,7 +3792,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                 .card_view_comment_list
                 .select(None);
             app.state.app_list_states.card_view_tag_list.select(None);
-            app.state.current_cursor_position = None;
         }
         let save_changes_style = if app.state.focus == Focus::SubmitButton {
             app.current_theme.keyboard_focus_style
@@ -3953,16 +3888,10 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
             if app.state.app_status != AppStatus::UserInput {
                 app.state.app_status = AppStatus::UserInput;
             }
-            if app.state.focus != Focus::CommandPaletteCommand
-                && app.state.focus != Focus::CommandPaletteBoard
-                && app.state.focus != Focus::CommandPaletteCard
-            {
-                app.state.set_focus(Focus::CommandPaletteCommand);
-            }
         }
     }
 
-    let current_search_text_input = app.state.current_user_input.clone();
+    let current_search_text_input = app.state.text_buffers.command_palette.get_joined_lines();
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
@@ -4223,34 +4152,33 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         rect.render_widget(logged_in_indicator, vertical_chunks[0]);
     }
 
-    let search_box_text = if app.state.current_user_input.is_empty() {
-        vec![Line::from(
-            "Start typing to search for a command, card or board!",
-        )]
-    } else {
-        vec![Line::from(app.state.current_user_input.clone())]
-    };
+    app.state
+        .text_buffers
+        .command_palette
+        .set_placeholder_text("Start typing to search for a command, card or board!");
 
-    let current_cursor_position = if app.state.current_cursor_position.is_some() {
-        app.state.current_cursor_position.unwrap() as u16
-    } else {
-        app.state.current_user_input.len() as u16
-    };
-    let x_offset = current_cursor_position % (search_box_chunk.width - 2);
-    let y_offset = current_cursor_position / (search_box_chunk.width - 2);
-    let x_cursor_position = search_box_chunk.x + x_offset + 1;
-    let y_cursor_position = search_box_chunk.y + y_offset + 1;
-    rect.set_cursor(x_cursor_position, y_cursor_position);
-
-    let search_box = Paragraph::new(search_box_text).block(
-        Block::default()
-            .title("Command Palette")
-            .borders(Borders::ALL)
-            .style(app.current_theme.general_style)
-            .border_type(BorderType::Rounded),
+    let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+        &app.state.text_buffers.command_palette,
+        &app.config.show_line_numbers,
+        &search_box_chunk,
     );
+    rect.set_cursor(x_pos, y_pos);
+
+    let search_box_block = Block::default()
+        .title("Command Palette")
+        .borders(Borders::ALL)
+        .style(app.current_theme.general_style)
+        .border_type(BorderType::Rounded);
+    app.state
+        .text_buffers
+        .command_palette
+        .set_block(search_box_block);
+
     render_blank_styled_canvas(rect, app, search_box_chunk, false);
-    rect.render_widget(search_box, search_box_chunk);
+    rect.render_widget(
+        app.state.text_buffers.command_palette.widget(),
+        search_box_chunk,
+    );
 
     let results_border = Block::default()
         .style(app.current_theme.general_style)
@@ -4369,18 +4297,27 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         app.state.set_focus(Focus::CommandPaletteBoard);
     }
 
-    render_blank_styled_canvas(rect, app, search_results_chunk, false);
+    render_blank_styled_canvas(rect, app, search_results_chunk, true);
     rect.render_widget(results_border, search_results_chunk);
+    if app.state.focus != Focus::CommandPaletteCommand {
+        render_blank_styled_canvas(rect, app, search_results_chunks[0], true);
+    }
     rect.render_stateful_widget(
         command_search_results_list,
         search_results_chunks[0],
         &mut app.state.app_list_states.command_palette_command_search,
     );
+    if app.state.focus != Focus::CommandPaletteCard {
+        render_blank_styled_canvas(rect, app, search_results_chunks[1], true);
+    }
     rect.render_stateful_widget(
         card_search_results_list,
         search_results_chunks[1],
         &mut app.state.app_list_states.command_palette_card_search,
     );
+    if app.state.focus != Focus::CommandPaletteBoard {
+        render_blank_styled_canvas(rect, app, search_results_chunks[2], true);
+    }
     rect.render_stateful_widget(
         board_search_results_list,
         search_results_chunks[2],
@@ -4698,8 +4635,8 @@ pub fn render_change_card_status_popup(rect: &mut Frame, app: &mut App) {
         if let Some(current_board) = boards.get_board_with_id(current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) = current_board.cards.get_card_with_id(current_card_id) {
-                    card_name = current_card.name.clone();
-                    board_name = current_board.name.clone();
+                    card_name.clone_from(&current_card.name);
+                    board_name.clone_from(&current_board.name);
                 }
             }
         }
@@ -4725,7 +4662,7 @@ pub fn render_change_card_status_popup(rect: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .title(format!(
-                    "Changing Status of \"{}\" in {}",
+                    "Changing Status of \"{}\" in \"{}\"",
                     card_name, board_name
                 ))
                 .style(app.current_theme.general_style)
@@ -4758,8 +4695,8 @@ pub fn render_card_priority_selector(rect: &mut Frame, app: &mut App) {
         if let Some(current_board) = boards.get_board_with_id(current_board_id) {
             if let Some(current_card_id) = app.state.current_card_id {
                 if let Some(current_card) = current_board.cards.get_card_with_id(current_card_id) {
-                    card_name = current_card.name.clone();
-                    board_name = current_board.name.clone();
+                    card_name.clone_from(&current_card.name);
+                    board_name.clone_from(&current_board.name);
                 }
             }
         }
@@ -4785,7 +4722,7 @@ pub fn render_card_priority_selector(rect: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .title(format!(
-                    "Changing Priority of \"{}\" in {}",
+                    "Changing Priority of \"{}\" in \"{}\"",
                     card_name, board_name
                 ))
                 .style(app.current_theme.general_style)
@@ -5254,6 +5191,7 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
 }
 
 pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
+    // TODO: add a help section
     let popup_mode = app.state.popup_mode.is_some();
     let render_area = rect.size();
     let main_chunks = Layout::default()
@@ -5320,11 +5258,11 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
         app.current_theme.general_style
     };
     let theme_title_list = Table::new(theme_table_rows.0, [Constraint::Fill(1)])
-        .block(Block::default().style(app.current_theme.general_style))
+        .block(Block::default().style(theme_block_style))
         .highlight_style(list_highlight_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
-    let theme_element_list =
-        Table::new(theme_table_rows.1, [Constraint::Fill(1)]).block(Block::default());
+    let theme_element_list = Table::new(theme_table_rows.1, [Constraint::Fill(1)])
+        .block(Block::default().style(theme_block_style));
     let submit_button = Paragraph::new(vec![Line::from("Create Theme")])
         .block(
             Block::default()
@@ -5349,6 +5287,7 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(theme_block_style);
 
+    render_blank_styled_canvas(rect, app, render_area, app.state.popup_mode.is_some());
     rect.render_stateful_widget(
         theme_title_list,
         chunks[0],
@@ -5469,7 +5408,11 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
     let fg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
         .map(|color| {
             let mut fg_style = Style::default();
-            let current_user_input = app.state.current_user_input.clone();
+            let current_user_input = app
+                .state
+                .text_buffers
+                .theme_editor_fg_rgb
+                .get_joined_lines();
             let mut is_rgb = false;
             if let TextColorOptions::RGB(_, _, _) = color {
                 is_rgb = true;
@@ -5527,7 +5470,11 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
     let bg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
         .map(|color| {
             let mut bg_style = Style::default();
-            let current_user_input = app.state.current_user_input.clone();
+            let current_user_input = app
+                .state
+                .text_buffers
+                .theme_editor_bg_rgb
+                .get_joined_lines();
             let mut is_rgb = false;
             if let TextColorOptions::RGB(_, _, _) = color {
                 is_rgb = true;
@@ -5744,7 +5691,7 @@ pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(app.current_theme.general_style);
 
-    render_blank_styled_canvas(rect, app, popup_area, true);
+    render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
     rect.render_widget(border_block, popup_area);
@@ -5790,7 +5737,7 @@ pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(app.current_theme.general_style);
 
-    render_blank_styled_canvas(rect, app, popup_area, true);
+    render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
     rect.render_widget(border_block, popup_area);
@@ -5831,14 +5778,19 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
         .block(Block::default())
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
-    let text_input = Paragraph::new(app.state.current_user_input.clone())
-        .style(app.current_theme.general_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(text_input_style)
-                .border_type(BorderType::Rounded),
-        );
+    let text_input = Paragraph::new(
+        app.state
+            .text_buffers
+            .theme_editor_custom_rgb
+            .get_joined_lines(),
+    )
+    .style(app.current_theme.general_style)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(text_input_style)
+            .border_type(BorderType::Rounded),
+    );
 
     let input_mode_key = app
         .get_first_keybinding(KeyBindingEnum::TakeUserInput)
@@ -5895,25 +5847,12 @@ pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
-    render_blank_styled_canvas(rect, app, popup_area, true);
+    render_blank_styled_canvas(rect, app, popup_area, false);
     rect.render_widget(prompt_text, chunks[0]);
     rect.render_widget(text_input, chunks[1]);
     rect.render_widget(submit_button, chunks[2]);
     rect.render_widget(help_text, chunks[3]);
     rect.render_widget(border_block, popup_area);
-
-    if app.state.app_status == AppStatus::UserInput {
-        let current_cursor_position = if app.state.current_cursor_position.is_some() {
-            app.state.current_cursor_position.unwrap() as u16
-        } else {
-            app.state.current_user_input.len() as u16
-        };
-        let x_offset = current_cursor_position % (chunks[1].width - 2);
-        let y_offset = current_cursor_position / (chunks[1].width - 2);
-        let x_cursor_position = chunks[1].x + x_offset + 1;
-        let y_cursor_position = chunks[1].y + y_offset + 1;
-        rect.set_cursor(x_cursor_position, y_cursor_position);
-    }
 }
 
 pub fn render_blank_styled_canvas(
@@ -5999,8 +5938,11 @@ pub fn render_logs(
     let date_format = app.config.date_format.to_parser_string();
     let theme = &app.current_theme;
     let all_logs = get_logs();
-    let mut highlight_style =
-        check_for_popup_and_get_style(app, app.current_theme.list_select_style);
+    let mut highlight_style = if popup_mode {
+        app.current_theme.inactive_text_style
+    } else {
+        app.current_theme.list_select_style
+    };
     let mut items = vec![];
     let date_length = date_format.len() + 5;
     let wrap_length = render_area.width as usize - date_length - 6; // Border + arrow + padding
@@ -6043,7 +5985,11 @@ pub fn render_logs(
         Row::new(cells).height(height as u16)
     });
 
-    let log_box_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let log_box_style = if popup_mode {
+        app.current_theme.inactive_text_style
+    } else {
+        app.current_theme.general_style
+    };
 
     let log_list = Table::new(
         rows,
@@ -6266,48 +6212,36 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(separator_style);
 
-    let form_email_id_text = app.state.app_form_states.login.0[0].clone();
-    let email_id_text = if app.state.app_form_states.login.0[0].is_empty() {
-        "Email ID"
-    } else {
-        &form_email_id_text
-    };
-
-    let form_password_text = app.state.app_form_states.login.0[1].clone();
-    let mut hidden_password = String::new();
-    for _ in 0..app.state.app_form_states.login.0[1].len() {
-        hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
-    }
-    let password_text = if app.state.app_form_states.login.0[1].is_empty() {
-        "Password"
-    } else if app.state.app_form_states.login.1 {
-        &form_password_text
-    } else {
-        hidden_password.as_str()
-    };
-
-    let email_id_paragraph = Paragraph::new(email_id_text)
+    let email_id_block = Block::default()
         .style(email_id_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
 
-    let password_paragraph = Paragraph::new(password_text)
+    let password_block = Block::default()
         .style(password_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
+
+    app.state
+        .text_buffers
+        .email_id
+        .set_placeholder_text("Email ID");
+
+    app.state.text_buffers.email_id.set_block(email_id_block);
+
+    app.state
+        .text_buffers
+        .password
+        .set_placeholder_text("Password");
+
+    app.state.text_buffers.password.set_block(password_block);
 
     let show_password_paragraph = Paragraph::new("Show Password")
         .style(show_password_style)
         .block(Block::default())
         .alignment(Alignment::Right);
 
-    let show_password_checkbox_value = if app.state.app_form_states.login.1 {
+    let show_password_checkbox_value = if app.state.show_password {
         "[X]"
     } else {
         "[ ]"
@@ -6338,8 +6272,28 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     rect.render_widget(show_password_paragraph, show_password_chunks[0]);
     rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
     rect.render_widget(submit_button, submit_button_chunks[1]);
-    rect.render_widget(email_id_paragraph, email_id_field_chunk);
-    rect.render_widget(password_paragraph, password_field_chunk);
+    rect.render_widget(
+        app.state.text_buffers.email_id.widget(),
+        email_id_field_chunk,
+    );
+    if app.state.show_password || app.state.text_buffers.password.is_empty() {
+        rect.render_widget(
+            app.state.text_buffers.password.widget(),
+            password_field_chunk,
+        );
+    } else {
+        let hidden_text = HIDDEN_PASSWORD_SYMBOL
+            .to_string()
+            .repeat(app.state.text_buffers.password.get_joined_lines().len());
+        let hidden_paragraph = Paragraph::new(hidden_text)
+            .style(password_field_style)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            );
+        rect.render_widget(hidden_paragraph, password_field_chunk);
+    }
 
     if app.config.enable_mouse_support {
         render_close_button(rect, app)
@@ -6361,40 +6315,24 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     }
 
     if app.state.app_status == AppStatus::UserInput {
-        if app.state.focus == Focus::EmailIDField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.login.0[0],
-                        email_id_field_chunk.width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    email_id_field_chunk,
+        match app.state.focus {
+            Focus::EmailIDField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.email_id,
+                    &app.config.show_line_numbers,
+                    &email_id_field_chunk,
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    email_id_field_chunk.x + 1 + app.state.app_form_states.login.0[0].len() as u16,
-                    email_id_field_chunk.y + 1,
-                );
             }
-        } else if app.state.focus == Focus::PasswordField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.login.0[1],
-                        password_field_chunk.width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    password_field_chunk,
+            Focus::PasswordField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.password,
+                    &app.config.show_line_numbers,
+                    &password_field_chunk,
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    password_field_chunk.x + 1 + app.state.app_form_states.login.0[1].len() as u16,
-                    password_field_chunk.y + 1,
-                );
             }
+            _ => {}
         }
     }
 }
@@ -6577,69 +6515,51 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(separator_style);
 
-    let form_email_id_text = app.state.app_form_states.signup.0[0].clone();
-    let email_id_text = if app.state.app_form_states.signup.0[0].is_empty() {
-        "Email ID"
-    } else {
-        &form_email_id_text
-    };
-
-    let form_password_text = app.state.app_form_states.signup.0[1].clone();
-    let mut hidden_password = String::new();
-    for _ in 0..app.state.app_form_states.signup.0[1].len() {
-        hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
-    }
-    let password_text = if app.state.app_form_states.signup.0[1].is_empty() {
-        "Password"
-    } else if app.state.app_form_states.signup.1 {
-        &form_password_text
-    } else {
-        hidden_password.as_str()
-    };
-
-    let form_confirm_password_text = app.state.app_form_states.signup.0[2].clone();
-    let mut hidden_confirm_password = String::new();
-    for _ in 0..app.state.app_form_states.signup.0[2].len() {
-        hidden_confirm_password.push(HIDDEN_PASSWORD_SYMBOL);
-    }
-    let confirm_password_text = if app.state.app_form_states.signup.0[2].is_empty() {
-        "Confirm Password"
-    } else if app.state.app_form_states.signup.1 {
-        &form_confirm_password_text
-    } else {
-        hidden_confirm_password.as_str()
-    };
-
-    let email_id_paragraph = Paragraph::new(email_id_text)
+    let email_id_block = Block::default()
         .style(email_id_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
 
-    let password_paragraph = Paragraph::new(password_text)
+    let password_block = Block::default()
         .style(password_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
 
-    let confirm_password_paragraph = Paragraph::new(confirm_password_text)
+    let confirm_password_block = Block::default()
         .style(confirm_password_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
+
+    app.state
+        .text_buffers
+        .email_id
+        .set_placeholder_text("Email ID");
+
+    app.state.text_buffers.email_id.set_block(email_id_block);
+
+    app.state
+        .text_buffers
+        .password
+        .set_placeholder_text("Password");
+
+    app.state.text_buffers.password.set_block(password_block);
+
+    app.state
+        .text_buffers
+        .confirm_password
+        .set_placeholder_text("Confirm Password");
+
+    app.state
+        .text_buffers
+        .confirm_password
+        .set_block(confirm_password_block);
 
     let show_password_paragraph = Paragraph::new("Show Password")
         .style(separator_style)
         .block(Block::default())
         .alignment(Alignment::Right);
 
-    let show_password_checkbox_value = if app.state.app_form_states.signup.1 {
+    let show_password_checkbox_value = if app.state.show_password {
         "[X]"
     } else {
         "[ ]"
@@ -6667,9 +6587,54 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     rect.render_widget(info_paragraph, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
     rect.render_widget(separator, chunks[1]);
-    rect.render_widget(email_id_paragraph, form_chunks[1]);
-    rect.render_widget(password_paragraph, form_chunks[2]);
-    rect.render_widget(confirm_password_paragraph, form_chunks[3]);
+    rect.render_widget(app.state.text_buffers.email_id.widget(), form_chunks[1]);
+
+    if app.state.show_password {
+        rect.render_widget(app.state.text_buffers.password.widget(), form_chunks[2]);
+        rect.render_widget(
+            app.state.text_buffers.confirm_password.widget(),
+            form_chunks[3],
+        );
+    } else {
+        if app.state.text_buffers.password.is_empty() {
+            rect.render_widget(app.state.text_buffers.password.widget(), form_chunks[2]);
+        } else {
+            let hidden_text = HIDDEN_PASSWORD_SYMBOL
+                .to_string()
+                .repeat(app.state.text_buffers.password.get_joined_lines().len());
+            let hidden_paragraph = Paragraph::new(hidden_text)
+                .style(password_field_style)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                );
+            rect.render_widget(hidden_paragraph, form_chunks[2]);
+        }
+        if app.state.text_buffers.confirm_password.is_empty() {
+            rect.render_widget(
+                app.state.text_buffers.confirm_password.widget(),
+                form_chunks[3],
+            );
+        } else {
+            let hidden_text = HIDDEN_PASSWORD_SYMBOL.to_string().repeat(
+                app.state
+                    .text_buffers
+                    .confirm_password
+                    .get_joined_lines()
+                    .len(),
+            );
+            let hidden_paragraph = Paragraph::new(hidden_text)
+                .style(confirm_password_field_style)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                );
+            rect.render_widget(hidden_paragraph, form_chunks[3]);
+        }
+    }
+
     rect.render_widget(show_password_paragraph, show_password_chunks[0]);
     rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
     rect.render_widget(submit_button, submit_button_chunks[1]);
@@ -6678,57 +6643,32 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     }
 
     if app.state.app_status == AppStatus::UserInput {
-        if app.state.focus == Focus::EmailIDField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.signup.0[0],
-                        form_chunks[1].width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    form_chunks[1],
+        match app.state.focus {
+            Focus::EmailIDField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.email_id,
+                    &app.config.show_line_numbers,
+                    &form_chunks[1],
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    form_chunks[1].x + 1 + app.state.app_form_states.signup.0[0].len() as u16,
-                    form_chunks[1].y + 1,
-                );
             }
-        } else if app.state.focus == Focus::PasswordField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.signup.0[1],
-                        form_chunks[2].width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    form_chunks[2],
+            Focus::PasswordField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.password,
+                    &app.config.show_line_numbers,
+                    &form_chunks[2],
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    form_chunks[2].x + 1 + app.state.app_form_states.signup.0[1].len() as u16,
-                    form_chunks[2].y + 1,
-                );
             }
-        } else if app.state.focus == Focus::ConfirmPasswordField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.signup.0[2],
-                        form_chunks[3].width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    form_chunks[3],
+            Focus::ConfirmPasswordField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.confirm_password,
+                    &app.config.show_line_numbers,
+                    &form_chunks[3],
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    form_chunks[3].x + 1 + app.state.app_form_states.signup.0[2].len() as u16,
-                    form_chunks[3].y + 1,
-                );
             }
+            _ => {}
         }
     }
 }
@@ -6843,7 +6783,6 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
             &send_reset_link_button_chunk,
         ) {
             if app.state.mouse_focus != Some(Focus::SendResetPasswordLinkButton) {
-                app.state.current_cursor_position = None;
                 app.state.app_status = AppStatus::Initialized;
             } else {
                 app.state.app_status = AppStatus::UserInput;
@@ -6861,7 +6800,6 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         &send_reset_link_button_chunk,
     ) {
         if app.state.mouse_focus != Some(Focus::SendResetPasswordLinkButton) {
-            app.state.current_cursor_position = None;
             app.state.app_status = AppStatus::Initialized;
         } else {
             app.state.app_status = AppStatus::UserInput;
@@ -6996,13 +6934,6 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(separator_style);
 
-    let form_email_id_text = app.state.app_form_states.reset_password.0[0].clone();
-    let email_id_text = if app.state.app_form_states.reset_password.0[0].is_empty() {
-        "Email ID"
-    } else {
-        &form_email_id_text
-    };
-
     let send_reset_link_button_text = if app.state.last_reset_password_link_sent_time.is_some() {
         let last_reset_password_link_sent_time =
             app.state.last_reset_password_link_sent_time.unwrap();
@@ -7020,62 +6951,10 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         "Send Reset Link".to_string()
     };
 
-    let reset_link_field_text = if app.state.app_form_states.reset_password.0[1].is_empty() {
-        "Reset Link".to_string()
-    } else {
-        app.state.app_form_states.reset_password.0[1].clone()
-    };
-    let (windowed_reset_link, reset_link_cursor_pos_x) = get_sliding_window_over_text(
-        &reset_link_field_text,
-        app.state
-            .current_cursor_position
-            .unwrap_or(reset_link_field_text.len()),
-        reset_link_chunk.width - 2,
-    );
-
-    let new_password_field_text = if app.state.app_form_states.reset_password.0[2].is_empty() {
-        "New Password".to_string()
-    } else if app.state.app_form_states.reset_password.1 {
-        app.state.app_form_states.reset_password.0[2].clone()
-    } else {
-        let mut hidden_password = String::new();
-        for _ in 0..app.state.app_form_states.reset_password.0[2].len() {
-            hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
-        }
-        hidden_password
-    };
-
-    let confirm_new_password_field_text =
-        if app.state.app_form_states.reset_password.0[3].is_empty() {
-            "Confirm New Password".to_string()
-        } else if app.state.app_form_states.reset_password.1 {
-            app.state.app_form_states.reset_password.0[3].clone()
-        } else {
-            let mut hidden_password = String::new();
-            for _ in 0..app.state.app_form_states.reset_password.0[3].len() {
-                hidden_password.push(HIDDEN_PASSWORD_SYMBOL);
-            }
-            hidden_password
-        };
-
-    let show_password_paragraph = Paragraph::new("Show Password")
-        .style(show_password_style)
-        .block(Block::default())
-        .alignment(Alignment::Right);
-
-    let show_password_checkbox_value = if app.state.app_form_states.reset_password.1 {
-        "[X]"
-    } else {
-        "[ ]"
-    };
-
-    let email_id_paragraph = Paragraph::new(email_id_text)
+    let email_id_block = Block::default()
         .style(email_id_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
 
     let send_reset_link_button = Paragraph::new(send_reset_link_button_text)
         .style(send_reset_link_button_style)
@@ -7086,29 +6965,68 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
-    let reset_link_paragraph = Paragraph::new(windowed_reset_link)
+    let reset_link_block = Block::default()
         .style(reset_link_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
 
-    let new_password_paragraph = Paragraph::new(new_password_field_text)
+    let new_password_block = Block::default()
         .style(new_password_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
 
-    let confirm_new_password_paragraph = Paragraph::new(confirm_new_password_field_text)
+    let confirm_new_password_block = Block::default()
         .style(confirm_new_password_field_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        );
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
+
+    app.state
+        .text_buffers
+        .email_id
+        .set_placeholder_text("Email ID");
+
+    app.state.text_buffers.email_id.set_block(email_id_block);
+
+    app.state
+        .text_buffers
+        .reset_password_link
+        .set_placeholder_text("Reset Link");
+
+    app.state
+        .text_buffers
+        .reset_password_link
+        .set_block(reset_link_block);
+
+    app.state
+        .text_buffers
+        .password
+        .set_placeholder_text("New Password");
+
+    app.state
+        .text_buffers
+        .password
+        .set_block(new_password_block);
+
+    app.state
+        .text_buffers
+        .confirm_password
+        .set_placeholder_text("Confirm New Password");
+
+    app.state
+        .text_buffers
+        .confirm_password
+        .set_block(confirm_new_password_block);
+
+    let show_password_paragraph = Paragraph::new("Show Password")
+        .style(show_password_style)
+        .block(Block::default())
+        .alignment(Alignment::Right);
+
+    let show_password_checkbox_value = if app.state.show_password {
+        "[X]"
+    } else {
+        "[ ]"
+    };
 
     let show_password_checkbox_paragraph = Paragraph::new(show_password_checkbox_value)
         .style(show_password_style)
@@ -7119,6 +7037,7 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         .style(submit_button_style)
         .block(
             Block::default()
+                // TODO: Think about using the bordered shorthand everywhere
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
@@ -7132,11 +7051,57 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     rect.render_widget(info_header, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
     rect.render_widget(separator, chunks[1]);
-    rect.render_widget(email_id_paragraph, email_id_chunk);
+    rect.render_widget(app.state.text_buffers.email_id.widget(), email_id_chunk);
     rect.render_widget(send_reset_link_button, send_reset_link_button_chunk);
-    rect.render_widget(reset_link_paragraph, reset_link_chunk);
-    rect.render_widget(new_password_paragraph, new_password_chunk);
-    rect.render_widget(confirm_new_password_paragraph, confirm_new_password_chunk);
+    rect.render_widget(
+        app.state.text_buffers.reset_password_link.widget(),
+        reset_link_chunk,
+    );
+    if app.state.show_password {
+        rect.render_widget(app.state.text_buffers.password.widget(), new_password_chunk);
+        rect.render_widget(
+            app.state.text_buffers.confirm_password.widget(),
+            confirm_new_password_chunk,
+        );
+    } else {
+        if app.state.text_buffers.password.is_empty() {
+            rect.render_widget(app.state.text_buffers.password.widget(), new_password_chunk);
+        } else {
+            let hidden_text = HIDDEN_PASSWORD_SYMBOL
+                .to_string()
+                .repeat(app.state.text_buffers.password.get_joined_lines().len());
+            let hidden_paragraph = Paragraph::new(hidden_text)
+                .style(new_password_field_style)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                );
+            rect.render_widget(hidden_paragraph, new_password_chunk);
+        }
+        if app.state.text_buffers.confirm_password.is_empty() {
+            rect.render_widget(
+                app.state.text_buffers.confirm_password.widget(),
+                confirm_new_password_chunk,
+            );
+        } else {
+            let hidden_text = HIDDEN_PASSWORD_SYMBOL.to_string().repeat(
+                app.state
+                    .text_buffers
+                    .confirm_password
+                    .get_joined_lines()
+                    .len(),
+            );
+            let hidden_paragraph = Paragraph::new(hidden_text)
+                .style(confirm_new_password_field_style)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
+                );
+            rect.render_widget(hidden_paragraph, confirm_new_password_chunk);
+        }
+    }
     rect.render_widget(show_password_paragraph, show_password_chunks[0]);
     rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
     rect.render_widget(submit_button, submit_button_chunks[1]);
@@ -7145,68 +7110,40 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     }
 
     if app.state.app_status == AppStatus::UserInput {
-        if app.state.focus == Focus::EmailIDField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.reset_password.0[0],
-                        email_id_chunk.width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    email_id_chunk,
+        match app.state.focus {
+            Focus::EmailIDField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.email_id,
+                    &app.config.show_line_numbers,
+                    &email_id_chunk,
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    email_id_chunk.x
-                        + 1
-                        + app.state.app_form_states.reset_password.0[0].len() as u16,
-                    email_id_chunk.y + 1,
-                );
             }
-        } else if app.state.focus == Focus::ResetPasswordLinkField {
-            rect.set_cursor(
-                reset_link_chunk.x + 1 + reset_link_cursor_pos_x,
-                reset_link_chunk.y + 1,
-            );
-        } else if app.state.focus == Focus::PasswordField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.reset_password.0[2],
-                        new_password_chunk.width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    new_password_chunk,
+            Focus::ResetPasswordLinkField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.reset_password_link,
+                    &app.config.show_line_numbers,
+                    &reset_link_chunk,
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    new_password_chunk.x
-                        + 1
-                        + app.state.app_form_states.reset_password.0[2].len() as u16,
-                    new_password_chunk.y + 1,
-                );
             }
-        } else if app.state.focus == Focus::ConfirmPasswordField {
-            if app.state.current_cursor_position.is_some() {
-                let (x_pos, y_pos) = calculate_cursor_position(
-                    textwrap::wrap(
-                        &app.state.app_form_states.reset_password.0[3],
-                        confirm_new_password_chunk.width as usize - 2,
-                    ),
-                    app.state.current_cursor_position.unwrap_or(0),
-                    confirm_new_password_chunk,
+            Focus::PasswordField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.password,
+                    &app.config.show_line_numbers,
+                    &new_password_chunk,
                 );
                 rect.set_cursor(x_pos, y_pos);
-            } else {
-                rect.set_cursor(
-                    confirm_new_password_chunk.x
-                        + 1
-                        + app.state.app_form_states.reset_password.0[3].len() as u16,
-                    confirm_new_password_chunk.y + 1,
-                );
             }
+            Focus::ConfirmPasswordField => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.confirm_password,
+                    &app.config.show_line_numbers,
+                    &confirm_new_password_chunk,
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            _ => {}
         }
     }
 }
@@ -7274,7 +7211,7 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
             let choice_list = List::new(items)
                 .block(
                     Block::default()
-                        .title("Available Saves")
+                        .title(format!("Available Saves ({})", item_list.len()))
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded),
                 )
@@ -7513,29 +7450,6 @@ fn get_time_offset() -> u64 {
     since_epoch.as_millis() as u64
 }
 
-fn get_sliding_window_over_text(
-    text: &str,
-    cursor_pos: usize,
-    display_box_width: u16,
-) -> (&str, u16) {
-    let text_width = text.chars().count() as u16;
-    if text_width <= display_box_width {
-        return (text, cursor_pos as u16);
-    }
-    let mut start_pos = 0;
-    let mut end_pos = text_width;
-    if cursor_pos < display_box_width as usize / 2 {
-        end_pos = display_box_width;
-    } else if cursor_pos > text_width as usize - display_box_width as usize / 2 {
-        start_pos = text_width - display_box_width;
-    } else {
-        start_pos = cursor_pos as u16 - display_box_width / 2;
-        end_pos = cursor_pos as u16 + display_box_width / 2;
-    }
-    let text = &text[start_pos as usize..end_pos as usize];
-    (text, cursor_pos as u16 - start_pos)
-}
-
 /// Returns the style for the field based on the current focus and mouse position and sets the focus if the mouse is in the field area
 fn get_mouse_focusable_field_style(
     app: &mut App,
@@ -7548,7 +7462,6 @@ fn get_mouse_focusable_field_style(
         app.current_theme.inactive_text_style
     } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, chunk) {
         if app.state.mouse_focus != Some(focus) {
-            app.state.current_cursor_position = None;
             app.state.app_status = AppStatus::Initialized;
         } else if user_input_mode {
             app.state.app_status = AppStatus::UserInput;
@@ -7675,4 +7588,34 @@ fn get_scrollable_widget_row_bounds(
         }
     }
     (start, end - 1)
+}
+
+fn calculate_viewport_corrected_cursor_position(
+    text_box: &TextBox,
+    show_line_numbers: &bool,
+    chunk: &Rect,
+) -> (u16, u16) {
+    let (y_pos, x_pos) = text_box.cursor();
+    let text_box_viewport = text_box.viewport.position();
+    let adjusted_x_cursor: u16 = if x_pos as u16 > text_box_viewport.3 {
+        x_pos as u16 - text_box_viewport.3
+    } else {
+        x_pos as u16
+    };
+    let x_pos = if *show_line_numbers && !text_box.single_line_mode {
+        let mut line_number_padding = 3;
+        let num_lines = text_box.get_num_lines();
+        let num_digits_in_max_line_number = num_digits(num_lines) as u16 - 1; // To account for adjustment in text function of textbox renderer
+        line_number_padding += num_digits_in_max_line_number;
+        chunk.left() + 1 + adjusted_x_cursor - text_box_viewport.1 + line_number_padding
+    } else {
+        chunk.left() + 1 + adjusted_x_cursor - text_box_viewport.1
+    };
+    let adjusted_y_cursor = if y_pos as u16 > text_box_viewport.2 {
+        y_pos as u16 - text_box_viewport.2
+    } else {
+        y_pos as u16
+    };
+    let y_pos = chunk.top() + 1 + adjusted_y_cursor - text_box_viewport.0;
+    (x_pos, y_pos)
 }

@@ -3,15 +3,11 @@ use crate::{inputs::key::Key, ui::ui_helper};
 use log::{debug, error};
 use ratatui::Frame;
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::{self, Display},
-    str::FromStr,
-    vec,
-};
-use strum::IntoEnumIterator;
+use std::{fmt, str::FromStr, vec};
+use strum::{Display, EnumString, IntoEnumIterator};
 use strum_macros::EnumIter;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default, EnumString)]
 pub enum UiMode {
     BodyHelp,
     BodyHelpLog,
@@ -101,6 +97,9 @@ pub struct KeyBindings {
     pub change_card_status_to_active: Vec<Key>,
     pub change_card_status_to_completed: Vec<Key>,
     pub change_card_status_to_stale: Vec<Key>,
+    pub change_card_priority_to_high: Vec<Key>,
+    pub change_card_priority_to_medium: Vec<Key>,
+    pub change_card_priority_to_low: Vec<Key>,
     pub clear_all_toasts: Vec<Key>,
     pub delete_board: Vec<Key>,
     pub delete_card: Vec<Key>,
@@ -130,12 +129,15 @@ pub struct KeyBindings {
     pub up: Vec<Key>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, EnumIter, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, EnumIter, PartialEq, EnumString, Display)]
 pub enum KeyBindingEnum {
     Accept,
     ChangeCardStatusToActive,
     ChangeCardStatusToCompleted,
     ChangeCardStatusToStale,
+    ChangeCardPriorityToHigh,
+    ChangeCardPriorityToMedium,
+    ChangeCardPriorityToLow,
     ClearAllToasts,
     DeleteBoard,
     DeleteCard,
@@ -165,79 +167,6 @@ pub enum KeyBindingEnum {
     Up,
 }
 
-impl Display for KeyBindingEnum {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let str = match self {
-            Self::Accept => "accept",
-            Self::ChangeCardStatusToActive => "change_card_status_to_active",
-            Self::ChangeCardStatusToCompleted => "change_card_status_to_completed",
-            Self::ChangeCardStatusToStale => "change_card_status_to_stale",
-            Self::ClearAllToasts => "clear_all_toasts",
-            Self::DeleteBoard => "delete_board",
-            Self::DeleteCard => "delete_card",
-            Self::Down => "down",
-            Self::GoToMainMenu => "go_to_main_menu",
-            Self::GoToPreviousUIModeorCancel => "go_to_previous_ui_mode_or_cancel",
-            Self::HideUiElement => "hide_ui_element",
-            Self::Left => "left",
-            Self::MoveCardDown => "move_card_down",
-            Self::MoveCardLeft => "move_card_left",
-            Self::MoveCardRight => "move_card_right",
-            Self::MoveCardUp => "move_card_up",
-            Self::NewBoard => "new_board",
-            Self::NewCard => "new_card",
-            Self::NextFocus => "next_focus",
-            Self::OpenConfigMenu => "open_config_menu",
-            Self::PrvFocus => "prev_focus",
-            Self::Quit => "quit",
-            Self::Redo => "redo",
-            Self::ResetUI => "reset_ui",
-            Self::Right => "right",
-            Self::SaveState => "save_state",
-            Self::StopUserInput => "stop_user_input",
-            Self::TakeUserInput => "take_user_input",
-            Self::ToggleCommandPalette => "toggle_command_palette",
-            Self::Undo => "undo",
-            Self::Up => "up",
-        };
-        write!(f, "{}", str)
-    }
-}
-
-impl FromStr for KeyBindingEnum {
-    type Err = KeyBindingEnum;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "change_card_status_to_active" => Ok(Self::ChangeCardStatusToActive),
-            "change_card_status_to_completed" => Ok(Self::ChangeCardStatusToCompleted),
-            "change_card_status_to_stale" => Ok(Self::ChangeCardStatusToStale),
-            "clear_all_toasts" => Ok(Self::ClearAllToasts),
-            "delete_board" => Ok(Self::DeleteBoard),
-            "delete_card" => Ok(Self::DeleteCard),
-            "down" => Ok(Self::Down),
-            "go_to_main_menu" => Ok(Self::GoToMainMenu),
-            "hide_ui_element" => Ok(Self::HideUiElement),
-            "left" => Ok(Self::Left),
-            "new_board" => Ok(Self::NewBoard),
-            "new_card" => Ok(Self::NewCard),
-            "next_focus" => Ok(Self::NextFocus),
-            "open_config_menu" => Ok(Self::OpenConfigMenu),
-            "prev_focus" => Ok(Self::PrvFocus),
-            "quit" => Ok(Self::Quit),
-            "redo" => Ok(Self::Redo),
-            "reset_ui" => Ok(Self::ResetUI),
-            "right" => Ok(Self::Right),
-            "save_state" => Ok(Self::SaveState),
-            "stop_user_input" => Ok(Self::StopUserInput),
-            "take_user_input" => Ok(Self::TakeUserInput),
-            "toggle_command_palette" => Ok(Self::ToggleCommandPalette),
-            "undo" => Ok(Self::Undo),
-            "up" => Ok(Self::Up),
-            _ => Err(Self::ChangeCardStatusToActive),
-        }
-    }
-}
-
 impl UiMode {
     pub fn from_string(s: &str) -> Option<UiMode> {
         match s {
@@ -261,33 +190,6 @@ impl UiMode {
             "Title, Body and Help" => Some(UiMode::TitleBodyHelp),
             "Title, Body, Help and Log" => Some(UiMode::TitleBodyHelpLog),
             "Title, Body and Log" => Some(UiMode::TitleBodyLog),
-            "Zen" => Some(UiMode::Zen),
-            _ => None,
-        }
-    }
-
-    pub fn from_json_string(s: &str) -> Option<UiMode> {
-        match s {
-            "BodyHelp" => Some(UiMode::BodyHelp),
-            "BodyHelpLog" => Some(UiMode::BodyHelpLog),
-            "BodyLog" => Some(UiMode::BodyLog),
-            "ConfigMenu" => Some(UiMode::ConfigMenu),
-            "CreateTheme" => Some(UiMode::CreateTheme),
-            "EditKeybindings" => Some(UiMode::EditKeybindings),
-            "HelpMenu" => Some(UiMode::HelpMenu),
-            "LoadCloudSave" => Some(UiMode::LoadCloudSave),
-            "LoadLocalSave" => Some(UiMode::LoadLocalSave),
-            "Login" => Some(UiMode::Login),
-            "LogsOnly" => Some(UiMode::LogsOnly),
-            "MainMenu" => Some(UiMode::MainMenu),
-            "NewBoard" => Some(UiMode::NewBoard),
-            "NewCard" => Some(UiMode::NewCard),
-            "ResetPassword" => Some(UiMode::ResetPassword),
-            "SignUp" => Some(UiMode::SignUp),
-            "TitleBody" => Some(UiMode::TitleBody),
-            "TitleBodyHelp" => Some(UiMode::TitleBodyHelp),
-            "TitleBodyHelpLog" => Some(UiMode::TitleBodyHelpLog),
-            "TitleBodyLog" => Some(UiMode::TitleBodyLog),
             "Zen" => Some(UiMode::Zen),
             _ => None,
         }
@@ -488,58 +390,6 @@ impl AppStatus {
     }
 }
 
-impl Display for Focus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let str = match self {
-            Self::Body => "Body",
-            Self::CardComments => "Card Comments",
-            Self::CardDescription => "Card Description",
-            Self::CardDueDate => "Card Due Date",
-            Self::CardName => "New Card Name",
-            Self::CardPriority => "Card Priority",
-            Self::CardStatus => "Card Status",
-            Self::CardTags => "Card Tags",
-            Self::ChangeCardPriorityPopup => "Change Card Priority Popup",
-            Self::ChangeCardStatusPopup => "Change Card Status Popup",
-            Self::ChangeDateFormatPopup => "Change Date Format Popup",
-            Self::ChangeUiModePopup => "Change Ui Mode Popup",
-            Self::CloseButton => "Close Button",
-            Self::CommandPaletteBoard => "Command Palette Board",
-            Self::CommandPaletteCard => "Command Palette Card",
-            Self::CommandPaletteCommand => "Command Palette Command",
-            Self::ConfigHelp => "Config Help",
-            Self::ConfigTable => "Config",
-            Self::ConfirmPasswordField => "Confirm Password Field",
-            Self::EditGeneralConfigPopup => "Edit General Config Popup",
-            Self::EditKeybindingsTable => "Edit Keybindings Table",
-            Self::EditSpecificKeyBindingPopup => "Edit Specific Key Binding Popup",
-            Self::EmailIDField => "Email ID Field",
-            Self::ExtraFocus => "Extra Focus",
-            Self::FilterByTagPopup => "Filter By Tag Popup",
-            Self::Help => "Help",
-            Self::LoadSave => "Load Save",
-            Self::Log => "Log",
-            Self::MainMenu => "Main Menu",
-            Self::NewBoardDescription => "New Board Description",
-            Self::NewBoardName => "New Board Name",
-            Self::NoFocus => "No Focus",
-            Self::PasswordField => "Password Field",
-            Self::ResetPasswordLinkField => "Reset Password Link Field",
-            Self::SelectDefaultView => "Select Default View",
-            Self::SendResetPasswordLinkButton => "Send Reset Password Link Button",
-            Self::StyleEditorBG => "Theme Editor BG",
-            Self::StyleEditorFG => "Theme Editor FG",
-            Self::StyleEditorModifier => "Theme Editor Modifier",
-            Self::SubmitButton => "Submit Button",
-            Self::TextInput => "Text Input",
-            Self::ThemeEditor => "Theme Editor",
-            Self::ThemeSelector => "Theme Selector",
-            Self::Title => "Title",
-        };
-        write!(f, "{}", str)
-    }
-}
-
 impl Focus {
     pub fn next(&self, available_tabs: &[Focus]) -> Self {
         if available_tabs.contains(self) {
@@ -567,59 +417,6 @@ impl Focus {
     }
 }
 
-impl FromStr for Focus {
-    type Err = Focus;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Body" => Ok(Self::Body),
-            "Card Comments" => Ok(Self::CardComments),
-            "Card Description" => Ok(Self::CardDescription),
-            "Card Due Date" => Ok(Self::CardDueDate),
-            "Card Priority" => Ok(Self::CardPriority),
-            "Card Status" => Ok(Self::CardStatus),
-            "Card Tags" => Ok(Self::CardTags),
-            "Change Card Priority Popup" => Ok(Self::ChangeCardPriorityPopup),
-            "Change Card Status Popup" => Ok(Self::ChangeCardStatusPopup),
-            "Change Date Format Popup" => Ok(Self::ChangeDateFormatPopup),
-            "Change Ui Mode Popup" => Ok(Self::ChangeUiModePopup),
-            "Close Button" => Ok(Self::CloseButton),
-            "Command Palette Board" => Ok(Self::CommandPaletteBoard),
-            "Command Palette Card" => Ok(Self::CommandPaletteCard),
-            "Command Palette Command" => Ok(Self::CommandPaletteCommand),
-            "Config Help" => Ok(Self::ConfigHelp),
-            "Config" => Ok(Self::ConfigTable),
-            "Confirm Password Field" => Ok(Self::ConfirmPasswordField),
-            "Edit General Config Popup" => Ok(Self::EditGeneralConfigPopup),
-            "Edit Keybindings Table" => Ok(Self::EditKeybindingsTable),
-            "Edit Specific Key Binding Popup" => Ok(Self::EditSpecificKeyBindingPopup),
-            "Email ID Field" => Ok(Self::EmailIDField),
-            "Extra Focus" => Ok(Self::ExtraFocus),
-            "Filter By Tag Popup" => Ok(Self::FilterByTagPopup),
-            "Help" => Ok(Self::Help),
-            "Load Save" => Ok(Self::LoadSave),
-            "Log" => Ok(Self::Log),
-            "Main Menu" => Ok(Self::MainMenu),
-            "New Board Description" => Ok(Self::NewBoardDescription),
-            "New Board Name" => Ok(Self::NewBoardName),
-            "New Card Name" => Ok(Self::CardName),
-            "No Focus" => Ok(Self::NoFocus),
-            "Password Field" => Ok(Self::PasswordField),
-            "Reset Password Link Field" => Ok(Self::ResetPasswordLinkField),
-            "Select Default View" => Ok(Self::SelectDefaultView),
-            "Send Reset Password Link Button" => Ok(Self::SendResetPasswordLinkButton),
-            "Submit Button" => Ok(Self::SubmitButton),
-            "Text Input" => Ok(Self::TextInput),
-            "Theme Editor BG" => Ok(Self::StyleEditorBG),
-            "Theme Editor FG" => Ok(Self::StyleEditorFG),
-            "Theme Editor Modifier" => Ok(Self::StyleEditorModifier),
-            "Theme Editor" => Ok(Self::ThemeEditor),
-            "Theme Selector" => Ok(Self::ThemeSelector),
-            "Title" => Ok(Self::Title),
-            _ => Err(Self::NoFocus),
-        }
-    }
-}
-
 impl KeyBindings {
     pub fn iter(&self) -> impl Iterator<Item = (KeyBindingEnum, &Vec<Key>)> {
         KeyBindingEnum::iter().map(|enum_variant| {
@@ -630,6 +427,9 @@ impl KeyBindings {
                     &self.change_card_status_to_completed
                 }
                 KeyBindingEnum::ChangeCardStatusToStale => &self.change_card_status_to_stale,
+                KeyBindingEnum::ChangeCardPriorityToHigh => &self.change_card_priority_to_high,
+                KeyBindingEnum::ChangeCardPriorityToMedium => &self.change_card_priority_to_medium,
+                KeyBindingEnum::ChangeCardPriorityToLow => &self.change_card_priority_to_low,
                 KeyBindingEnum::ClearAllToasts => &self.clear_all_toasts,
                 KeyBindingEnum::DeleteBoard => &self.delete_board,
                 KeyBindingEnum::DeleteCard => &self.delete_card,
@@ -678,6 +478,9 @@ impl KeyBindings {
             KeyBindingEnum::ChangeCardStatusToActive => Action::ChangeCardStatusToActive,
             KeyBindingEnum::ChangeCardStatusToCompleted => Action::ChangeCardStatusToCompleted,
             KeyBindingEnum::ChangeCardStatusToStale => Action::ChangeCardStatusToStale,
+            KeyBindingEnum::ChangeCardPriorityToHigh => Action::ChangeCardPriorityToHigh,
+            KeyBindingEnum::ChangeCardPriorityToMedium => Action::ChangeCardPriorityToMedium,
+            KeyBindingEnum::ChangeCardPriorityToLow => Action::ChangeCardPriorityToLow,
             KeyBindingEnum::ClearAllToasts => Action::ClearAllToasts,
             KeyBindingEnum::DeleteBoard => Action::DeleteBoard,
             KeyBindingEnum::DeleteCard => Action::Delete,
@@ -723,6 +526,15 @@ impl KeyBindings {
                 }
                 KeyBindingEnum::ChangeCardStatusToStale => {
                     self.change_card_status_to_stale = keybinding
+                }
+                KeyBindingEnum::ChangeCardPriorityToHigh => {
+                    self.change_card_priority_to_high = keybinding
+                }
+                KeyBindingEnum::ChangeCardPriorityToMedium => {
+                    self.change_card_priority_to_medium = keybinding
+                }
+                KeyBindingEnum::ChangeCardPriorityToLow => {
+                    self.change_card_priority_to_low = keybinding
                 }
                 KeyBindingEnum::ClearAllToasts => self.clear_all_toasts = keybinding,
                 KeyBindingEnum::DeleteBoard => self.delete_board = keybinding,
@@ -772,6 +584,15 @@ impl KeyBindings {
             KeyBindingEnum::ChangeCardStatusToStale => {
                 Some(self.change_card_status_to_stale.clone())
             }
+            KeyBindingEnum::ChangeCardPriorityToHigh => {
+                Some(self.change_card_priority_to_high.clone())
+            }
+            KeyBindingEnum::ChangeCardPriorityToMedium => {
+                Some(self.change_card_priority_to_medium.clone())
+            }
+            KeyBindingEnum::ChangeCardPriorityToLow => {
+                Some(self.change_card_priority_to_low.clone())
+            }
             KeyBindingEnum::ClearAllToasts => Some(self.clear_all_toasts.clone()),
             KeyBindingEnum::DeleteBoard => Some(self.delete_board.clone()),
             KeyBindingEnum::DeleteCard => Some(self.delete_card.clone()),
@@ -809,9 +630,12 @@ impl Default for KeyBindings {
     fn default() -> Self {
         Self {
             accept: vec![Key::Enter],
-            change_card_status_to_active: vec![Key::Char('2')],
             change_card_status_to_completed: vec![Key::Char('1')],
+            change_card_status_to_active: vec![Key::Char('2')],
             change_card_status_to_stale: vec![Key::Char('3')],
+            change_card_priority_to_high: vec![Key::Char('4')],
+            change_card_priority_to_medium: vec![Key::Char('5')],
+            change_card_priority_to_low: vec![Key::Char('6')],
             clear_all_toasts: vec![Key::Char('t')],
             delete_board: vec![Key::Char('D')],
             delete_card: vec![Key::Char('d'), Key::Delete],

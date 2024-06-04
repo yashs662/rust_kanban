@@ -72,9 +72,9 @@ impl Theme {
     pub fn to_rows(&self, app: &App) -> (Vec<Row>, Vec<Row>) {
         let popup_mode = app.state.popup_mode.is_some();
         let text_style = if popup_mode {
-            self.inactive_text_style
+            app.current_theme.inactive_text_style
         } else {
-            self.general_style
+            app.current_theme.general_style
         };
         let theme_title_list = vec![
             Span::styled("Name: ", text_style),

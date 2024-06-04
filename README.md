@@ -21,7 +21,11 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## TODO
 
-- [ ] Unify all text input fields and improve the way they are handled (currently there are multiple ways to handle text input)
+- [ ] Create a vs code extension, for adding quick notes and tasks, with / commands for specific boards cards or types etc (think more about this in future)
+- [ ] Create a parallel web ui for the app that can be hosted from the app itself with a startup flag (e.g. --web-ui --port 8080)
+- [ ] Implement selection in text input mode for editing text (e.g. select text with the mouse and delete it)
+- [ ] Add ability to move boards (e.g. move a board to the left or right)
+- [ ] While adding a new tag show a list of existing tags to choose from (like a context menu) (require multiple popups to be implemented)
 - [ ] Optimize logger to handle high volumes of logs (app becomes sluggish when there are a lot of logs)
 - [ ] Make configuration for integer values more user-friendly (e.g. when changing the number of columns in the kanban board)
 - [ ] Add a date picker for the date field
@@ -35,7 +39,8 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## Completed Features
 
-- [x] Drag and Drop cards with the mouse
+- [X] Unify all text input fields and improve the way they are handled (currently there are multiple ways to handle text input)
+- [X] Drag and Drop cards with the mouse
 - [X] Allow for vertical movement in text fields (e.g. card description)
 - [X] Encryption for Cloud Saves
 - [X] Implement Cloud saves
@@ -64,7 +69,9 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## Known Issues
 
-None as of now
+- [ ] Cursor for Card Tags and Comments is incorrect when tag is longer than available space
+- [ ] Custom RGB colors are not working for Create Theme
+- [ ] Emoticons and other non-ascii characters which take up more than one space may overlap with other characters or affect cursor position
 
 ## PSA (i.e. Public service announcement)
 
@@ -97,6 +104,9 @@ None as of now
 | '1'                        | Change Card Status to Completed           |
 | '2'                        | Change Card Status to Active              |
 | '3'                        | Change Card Status to Stale               |
+| '4'                        | Change Card Priority to High              |
+| '5'                        | Change Card Priority to Medium            |
+| '6'                        | Change Card Priority to Low               |
 | 'r'                        | Reset UI to Default                       |
 | 'm'                        | Go to Main Menu                           |
 | 'Ctrl + p'                 | Toggle Command Palette                    |
@@ -109,6 +119,8 @@ None as of now
 | 'Mouse Scroll Down'        | Scroll Down Cards (for cards)             |
 | 'Ctrl + Mouse Scroll Up'   | Scroll to the right (for boards)          |
 | 'Ctrl + Mouse Scroll Down' | Scroll to the left (for boards)           |
+| 'Ctrl + z'                 | Undo                                      |
+| 'Ctrl + y'                 | Redo                                      |
 
 ## Available Themes
 

@@ -86,6 +86,7 @@ impl IoAsyncHandler<'_> {
     async fn do_initialize(&mut self) -> Result<()> {
         info!("🚀 Initialize the application");
         let mut app = self.app.lock().await;
+        let default_ui_mode = app.config.default_ui_mode;
         let prepare_config_dir_status = prepare_config_dir();
         if prepare_config_dir_status.is_err() {
             error!("Cannot create config directory");
@@ -114,7 +115,7 @@ impl IoAsyncHandler<'_> {
         } else {
             app.state.term_background_color = (0, 0, 0)
         }
-        app.state.ui_mode = app.config.default_view;
+        app.set_ui_mode(default_ui_mode);
         info!("👍 Application initialized");
         app.initialized();
         if app.config.save_directory == get_default_save_directory() {
@@ -192,6 +193,7 @@ impl IoAsyncHandler<'_> {
 
     async fn load_save_file_local(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
+        let default_ui_mode = app.config.default_ui_mode;
         let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let local_files = get_available_local_save_files(&app.config);
         let local_files = if let Some(local_files) = local_files {
@@ -222,7 +224,7 @@ impl IoAsyncHandler<'_> {
             }
         }
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
-        app.state.ui_mode = app.config.default_view;
+        app.set_ui_mode(default_ui_mode);
         Ok(())
     }
 
@@ -393,9 +395,14 @@ impl IoAsyncHandler<'_> {
         let login_for_user_status = login_for_user(&email_id, &password, false).await;
         if let Err(err) = login_for_user_status {
             debug!("Error logging in: {:?}", err);
-            error!("Error logging in");
             let mut app = self.app.lock().await;
-            app.send_error_toast("Error logging in", None);
+            if err == "Error logging in: \"Invalid login credentials\"" {
+                error!("Invalid login credentials");
+                app.send_error_toast("Invalid login credentials", None);
+            } else {
+                error!("Error logging in");
+                app.send_error_toast("Error logging in", None);
+            }
             return Ok(());
         }
         let (access_token, user_id, refresh_token) = login_for_user_status.unwrap();
@@ -484,8 +491,8 @@ impl IoAsyncHandler<'_> {
         {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_some() {
-                error!("Already logged in");
-                app.send_error_toast("Already logged in", None);
+                error!("Already logged in, Please logout first");
+                app.send_error_toast("Already logged in, Please logout first", None);
                 return Ok(());
             }
             if email_id.is_empty() {
@@ -818,7 +825,7 @@ impl IoAsyncHandler<'_> {
                 }
                 let error_url = error_url.unwrap();
                 let error_url = error_url.to_string();
-                debug!("Error verifying reset password link: {}", error_url);
+                debug!("error url: {}", error_url);
                 let access_token = error_url.split("access_token=");
                 let access_token = access_token.last();
                 if access_token.is_none() {
@@ -826,8 +833,9 @@ impl IoAsyncHandler<'_> {
                     app.send_error_toast("Error verifying reset password link", None);
                     return Ok(());
                 }
-                let mut access_token = access_token.unwrap().split("&expires_in");
+                let mut access_token = access_token.unwrap().split("&expires_at");
                 let access_token = access_token.next();
+                debug!("access token: {:?}", access_token);
                 if access_token.is_none() {
                     error!("Error verifying reset password link");
                     app.send_error_toast("Error verifying reset password link", None);
@@ -1150,6 +1158,7 @@ impl IoAsyncHandler<'_> {
 
     async fn load_save_file_cloud(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
+        let default_ui_mode = app.config.default_ui_mode;
         let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let cloud_saves = app.state.cloud_data.clone();
         let local_files = if let Some(cloud_saves) = cloud_saves {
@@ -1197,7 +1206,7 @@ impl IoAsyncHandler<'_> {
             None,
         );
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
-        app.state.ui_mode = app.config.default_view;
+        app.set_ui_mode(default_ui_mode);
         Ok(())
     }
 

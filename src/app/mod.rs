@@ -225,11 +225,7 @@ impl App<'_> {
     }
     pub fn initialized(&mut self) {
         self.actions = Action::all();
-        if self.state.ui_mode == UiMode::MainMenu {
-            self.main_menu_next();
-        } else if self.state.focus == Focus::NoFocus {
-            self.state.set_focus(Focus::Body);
-        }
+        self.state.set_focus(Focus::Body);
         self.state.app_status = AppStatus::initialized()
     }
     pub fn loaded(&mut self) {
@@ -237,10 +233,6 @@ impl App<'_> {
     }
     pub fn get_current_focus(&self) -> &Focus {
         &self.state.focus
-    }
-    pub fn clear_user_input_state(&mut self) {
-        self.state.current_user_input = String::new();
-        self.state.last_user_input = None;
     }
     pub fn set_config_state(&mut self, config_state: TableState) {
         self.state.app_table_states.config = config_state;
@@ -373,18 +365,6 @@ impl App<'_> {
     }
     pub fn config_state(&self) -> &TableState {
         &self.state.app_table_states.config
-    }
-    pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
-        self.state.prev_ui_mode = Some(self.state.ui_mode);
-        self.state.ui_mode = ui_mode;
-        let available_focus_targets = self.state.ui_mode.get_available_targets();
-        if !available_focus_targets.contains(&self.state.focus) {
-            if available_focus_targets.is_empty() {
-                self.state.set_focus(Focus::NoFocus);
-            } else {
-                self.state.set_focus(available_focus_targets[0]);
-            }
-        }
     }
     pub fn edit_keybindings_next(&mut self) {
         let keybinding_iterator = self.config.keybindings.iter();
@@ -1172,7 +1152,7 @@ impl App<'_> {
                     if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
                         if let Some(card) = board.cards.get_mut_card_with_id(old_card.id) {
                             *card = old_card.clone();
-                            card_name = card.name.clone();
+                            card_name.clone_from(&card.name);
                             card_found = true;
                         } else {
                             self.send_error_toast(
@@ -1316,7 +1296,7 @@ impl App<'_> {
                     if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
                         if let Some(card) = board.cards.get_mut_card_with_id(new_card.id) {
                             *card = new_card.clone();
-                            card_name = card.name.clone();
+                            card_name.clone_from(&card.name);
                             card_found = true;
                         } else {
                             self.send_error_toast(
@@ -1370,6 +1350,133 @@ impl App<'_> {
             None => 0,
         };
         hot_log.state.select(Some(i));
+    }
+    pub fn set_popup_mode(&mut self, popup_mode: PopupMode) {
+        self.state.popup_mode = Some(popup_mode);
+        let available_focus_targets = popup_mode.get_available_targets();
+        if !available_focus_targets.contains(&self.state.focus) {
+            if available_focus_targets.is_empty() {
+                self.state.set_focus(Focus::NoFocus);
+            } else if available_focus_targets.len() > 1
+                && available_focus_targets[0] == Focus::Title
+            {
+                self.state.set_focus(available_focus_targets[1]);
+            } else {
+                self.state.set_focus(available_focus_targets[0]);
+            }
+        }
+        // TODO:: set other match arms
+        match popup_mode {
+            PopupMode::ViewCard => {
+                if self.state.current_board_id.is_none() || self.state.current_card_id.is_none() {
+                    self.send_error_toast("No card selected", Some(Duration::from_secs(1)));
+                    return;
+                }
+                if let Some(current_board) = self
+                    .boards
+                    .get_board_with_id(self.state.current_board_id.unwrap())
+                {
+                    if let Some(current_card) = current_board
+                        .cards
+                        .get_card_with_id(self.state.current_card_id.unwrap())
+                    {
+                        self.state.set_focus(Focus::CardName);
+                        self.state.text_buffers.card_name =
+                            TextBox::from_string_with_newline_sep(current_card.name.clone(), true);
+                        self.state.text_buffers.card_description =
+                            TextBox::from_string_with_newline_sep(
+                                current_card.description.clone(),
+                                false,
+                            );
+                        self.state.text_buffers.card_due_date =
+                            TextBox::from_string_with_newline_sep(
+                                if current_card.due_date.is_empty() {
+                                    FIELD_NOT_SET.to_string()
+                                } else {
+                                    current_card.due_date.clone()
+                                },
+                                true,
+                            );
+                    } else {
+                        self.send_error_toast("No card selected", Some(Duration::from_secs(1)));
+                    }
+                } else {
+                    self.send_error_toast("No board selected", Some(Duration::from_secs(1)));
+                }
+            }
+            PopupMode::CommandPalette => {
+                self.state.text_buffers.command_palette.reset();
+                self.state.app_status = AppStatus::UserInput;
+                self.state.set_focus(Focus::CommandPaletteCommand);
+            }
+            PopupMode::CardStatusSelector => {
+                self.state.set_focus(Focus::ChangeCardStatusPopup);
+            }
+            PopupMode::CardPrioritySelector => {
+                self.state.set_focus(Focus::ChangeCardPriorityPopup);
+            }
+            PopupMode::EditGeneralConfig => {
+                self.state.set_focus(Focus::EditGeneralConfigPopup);
+            }
+            _ => {
+                debug!("No special logic for setting popup mode: {:?}", popup_mode);
+            }
+        }
+    }
+
+    pub fn close_popup(&mut self) {
+        // TODO: Add logic to clear buffers if needed
+        self.state.popup_mode = None;
+    }
+
+    pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
+        if let Some(prv_ui_mode) = self.state.prev_ui_mode {
+            if prv_ui_mode == ui_mode {
+                self.state.prev_ui_mode = None;
+            } else {
+                self.state.prev_ui_mode = Some(self.state.ui_mode);
+            }
+        } else {
+            self.state.prev_ui_mode = Some(self.state.ui_mode);
+        }
+        self.state.ui_mode = ui_mode;
+        let available_focus_targets = self.state.ui_mode.get_available_targets();
+        if !available_focus_targets.contains(&self.state.focus) {
+            if available_focus_targets.is_empty() {
+                self.state.set_focus(Focus::NoFocus);
+            } else if available_focus_targets.len() > 1
+                && available_focus_targets[0] == Focus::Title
+            {
+                self.state.set_focus(available_focus_targets[1]);
+            } else {
+                self.state.set_focus(available_focus_targets[0]);
+            }
+        }
+        match ui_mode {
+            UiMode::Login => {
+                self.state.text_buffers.email_id.reset();
+                self.state.text_buffers.password.reset();
+            }
+            UiMode::SignUp => {
+                self.state.text_buffers.email_id.reset();
+                self.state.text_buffers.password.reset();
+                self.state.text_buffers.confirm_password.reset();
+            }
+            UiMode::ResetPassword => {
+                self.state.text_buffers.email_id.reset();
+                self.state.text_buffers.password.reset();
+                self.state.text_buffers.confirm_password.reset();
+                self.state.text_buffers.reset_password_link.reset();
+            }
+            UiMode::CreateTheme => {
+                self.state.text_buffers.general_config.reset();
+                self.state.app_table_states.theme_editor.select(Some(0));
+            }
+            UiMode::ConfigMenu => self.state.app_table_states.config.select(Some(0)),
+            _ => {
+                debug!("No special logic for setting ui mode: {:?}", ui_mode);
+            }
+        }
     }
 }
 
@@ -1428,7 +1535,7 @@ impl MainMenu {
                 MainMenuItem::LoadSaveCloud,
                 MainMenuItem::Quit,
             ];
-            self.items = return_vec.clone();
+            self.items.clone_from(&return_vec);
             return_vec
         } else {
             let return_vec = vec![
@@ -1438,7 +1545,7 @@ impl MainMenu {
                 MainMenuItem::LoadSaveLocal,
                 MainMenuItem::Quit,
             ];
-            self.items = return_vec.clone();
+            self.items.clone_from(&return_vec);
             return_vec
         }
     }
@@ -1636,46 +1743,18 @@ pub struct AppTableStates {
 }
 
 #[derive(Debug, Clone)]
-pub struct AppFormStates {
-    pub login: (Vec<String>, bool),
-    pub new_board: Vec<String>,
-    pub new_card: Vec<String>,
-    pub reset_password: (Vec<String>, bool),
-    pub signup: (Vec<String>, bool),
-}
-
-impl Default for AppFormStates {
-    fn default() -> Self {
-        AppFormStates {
-            login: (vec![String::new(), String::new()], false),
-            new_board: vec![String::new(), String::new()],
-            new_card: vec![String::new(), String::new(), String::new()],
-            reset_password: (
-                vec![String::new(), String::new(), String::new(), String::new()],
-                false,
-            ),
-            signup: (vec![String::new(), String::new(), String::new()], false),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct AppState<'a> {
     pub all_available_tags: Option<Vec<(String, u32)>>,
-    pub app_form_states: AppFormStates,
     pub app_list_states: AppListStates,
     pub app_status: AppStatus,
     pub app_table_states: AppTableStates,
     pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
-    pub card_description_text_buffer: Option<TextBox<'a>>,
     pub card_drag_mode: bool,
     pub cloud_data: Option<Vec<CloudData>>,
     pub config_item_being_edited: Option<usize>,
     pub current_board_id: Option<(u64, u64)>,
     pub current_card_id: Option<(u64, u64)>,
-    pub current_cursor_position: Option<usize>,
     pub current_mouse_coordinates: (u16, u16),
-    pub current_user_input: String,
     pub debug_menu_toggled: bool,
     pub default_theme_mode: bool,
     pub edited_keybinding: Option<Vec<Key>>,
@@ -1687,7 +1766,6 @@ pub struct AppState<'a> {
     pub hovered_card: Option<((u64, u64), (u64, u64))>,
     pub last_mouse_action: Option<Mouse>,
     pub last_reset_password_link_sent_time: Option<Instant>,
-    pub last_user_input: Option<String>,
     pub mouse_focus: Option<Focus>,
     pub mouse_list_index: Option<u16>,
     pub no_of_cards_to_show: u16,
@@ -1704,6 +1782,66 @@ pub struct AppState<'a> {
     pub user_login_data: UserLoginData,
     // TODO: Improve this, it feels like a hack
     pub path_check_state: PathCheckState,
+    pub text_buffers: TextBuffers<'a>,
+    pub show_password: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TextBuffers<'a> {
+    pub board_name: TextBox<'a>,
+    pub board_description: TextBox<'a>,
+    pub card_name: TextBox<'a>,
+    pub card_description: TextBox<'a>,
+    pub card_due_date: TextBox<'a>,
+    pub card_tags: Vec<TextBox<'a>>,
+    pub card_comments: Vec<TextBox<'a>>,
+    pub email_id: TextBox<'a>,
+    pub password: TextBox<'a>,
+    pub confirm_password: TextBox<'a>,
+    pub reset_password_link: TextBox<'a>,
+    pub general_config: TextBox<'a>,
+    pub command_palette: TextBox<'a>,
+    pub theme_editor_fg_rgb: TextBox<'a>,
+    pub theme_editor_bg_rgb: TextBox<'a>,
+    pub theme_editor_custom_rgb: TextBox<'a>,
+}
+
+impl<'a> Default for TextBuffers<'a> {
+    fn default() -> Self {
+        TextBuffers {
+            board_name: TextBox::new(vec!["".to_string()], true),
+            board_description: TextBox::new(vec!["".to_string()], false),
+            card_name: TextBox::new(vec!["".to_string()], true),
+            card_description: TextBox::new(vec!["".to_string()], false),
+            card_due_date: TextBox::new(vec!["".to_string()], true),
+            card_tags: Vec::new(),
+            card_comments: Vec::new(),
+            email_id: TextBox::new(vec!["".to_string()], true),
+            password: TextBox::new(vec!["".to_string()], true),
+            confirm_password: TextBox::new(vec!["".to_string()], true),
+            reset_password_link: TextBox::new(vec!["".to_string()], true),
+            general_config: TextBox::new(vec!["".to_string()], true),
+            command_palette: TextBox::new(vec!["".to_string()], true),
+            theme_editor_fg_rgb: TextBox::new(vec!["".to_string()], true),
+            theme_editor_bg_rgb: TextBox::new(vec!["".to_string()], true),
+            theme_editor_custom_rgb: TextBox::new(vec!["".to_string()], true),
+        }
+    }
+}
+
+impl<'a> TextBuffers<'a> {
+    pub fn prepare_tags_and_comments_for_card(&mut self, card: &Card) {
+        self.card_tags = card
+            .tags
+            .iter()
+            .map(|tag| TextBox::new(vec![tag.clone()], true))
+            .collect();
+        self.card_comments = card
+            .comments
+            .iter()
+            .map(|comment| TextBox::new(vec![comment.clone()], true))
+            .collect();
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1731,20 +1869,16 @@ impl Default for AppState<'_> {
     fn default() -> AppState<'static> {
         AppState {
             all_available_tags: None,
-            app_form_states: AppFormStates::default(),
             app_list_states: AppListStates::default(),
             app_status: AppStatus::default(),
             app_table_states: AppTableStates::default(),
             card_being_edited: None,
-            card_description_text_buffer: None,
             card_drag_mode: false,
             cloud_data: None,
             config_item_being_edited: None,
             current_board_id: None,
             current_card_id: None,
-            current_cursor_position: None,
             current_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES, // make sure it's out of bounds when mouse mode is disabled
-            current_user_input: String::new(),
             debug_menu_toggled: false,
             default_theme_mode: false,
             edited_keybinding: None,
@@ -1756,7 +1890,6 @@ impl Default for AppState<'_> {
             hovered_card: None,
             last_mouse_action: None,
             last_reset_password_link_sent_time: None,
-            last_user_input: None,
             mouse_focus: None,
             mouse_list_index: None,
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
@@ -1777,6 +1910,8 @@ impl Default for AppState<'_> {
                 user_id: None,
             },
             path_check_state: PathCheckState::default(),
+            text_buffers: TextBuffers::default(),
+            show_password: false,
         }
     }
 }
@@ -1881,7 +2016,7 @@ pub struct AppConfig {
     pub auto_login: bool,
     pub date_format: DateFormat,
     pub default_theme: String,
-    pub default_view: UiMode,
+    pub default_ui_mode: UiMode,
     pub disable_animations: bool,
     pub disable_scroll_bar: bool,
     pub enable_mouse_support: bool,
@@ -1904,7 +2039,7 @@ impl Default for AppConfig {
             auto_login: true,
             date_format: DateFormat::default(),
             default_theme: default_theme.name,
-            default_view,
+            default_ui_mode: default_view,
             disable_animations: false,
             disable_scroll_bar: false,
             enable_mouse_support: true,
@@ -1929,7 +2064,7 @@ impl AppConfig {
                     ConfigEnum::SaveDirectory => {
                         (self.save_directory.to_string_lossy().to_string(), 0)
                     }
-                    ConfigEnum::DefaultView => (self.default_view.to_string(), 1),
+                    ConfigEnum::DefaultView => (self.default_ui_mode.to_string(), 1),
                     ConfigEnum::AlwaysLoadLastSave => (self.always_load_last_save.to_string(), 2),
                     ConfigEnum::SaveOnExit => (self.save_on_exit.to_string(), 3),
                     ConfigEnum::DisableScrollBar => (self.disable_scroll_bar.to_string(), 4),
@@ -1962,7 +2097,7 @@ impl AppConfig {
             ConfigEnum::AutoLogin => self.auto_login.to_string(),
             ConfigEnum::DateFormat => self.date_format.to_string(),
             ConfigEnum::DefaultTheme => self.default_theme.clone(),
-            ConfigEnum::DefaultView => self.default_view.to_string(),
+            ConfigEnum::DefaultView => self.default_ui_mode.to_string(),
             ConfigEnum::DisableAnimations => self.disable_animations.to_string(),
             ConfigEnum::DisableScrollBar => self.disable_scroll_bar.to_string(),
             ConfigEnum::EnableMouseSupport => self.enable_mouse_support.to_string(),
@@ -2056,6 +2191,15 @@ impl AppConfig {
             }
             KeyBindingEnum::ChangeCardStatusToStale => {
                 self.keybindings.change_card_status_to_stale = value;
+            }
+            KeyBindingEnum::ChangeCardPriorityToHigh => {
+                self.keybindings.change_card_priority_to_high = value;
+            }
+            KeyBindingEnum::ChangeCardPriorityToLow => {
+                self.keybindings.change_card_priority_to_low = value;
+            }
+            KeyBindingEnum::ChangeCardPriorityToMedium => {
+                self.keybindings.change_card_priority_to_medium = value;
             }
             KeyBindingEnum::ClearAllToasts => {
                 self.keybindings.clear_all_toasts = value;
@@ -2274,17 +2418,17 @@ impl AppConfig {
         };
         let default_view = match serde_json_object["default_view"].as_str() {
             Some(ui_mode) => {
-                let ui_mode = UiMode::from_json_string(ui_mode);
-                if let Some(ui_mode) = ui_mode {
+                let ui_mode = UiMode::from_str(ui_mode);
+                if let Ok(ui_mode) = ui_mode {
                     ui_mode
                 } else {
                     error!("Invalid UiMode: {:?}, Resetting to default UiMode", ui_mode);
-                    default_config.default_view
+                    default_config.default_ui_mode
                 }
             }
             None => {
                 error!("Default View is not a string, Resetting to default UiMode");
-                default_config.default_view
+                default_config.default_ui_mode
             }
         };
         let keybindings = AppConfig::json_config_keybindinds_checker(&serde_json_object);
@@ -2381,7 +2525,7 @@ impl AppConfig {
         };
         Ok(Self {
             save_directory,
-            default_view,
+            default_ui_mode: default_view,
             always_load_last_save,
             save_on_exit,
             disable_scroll_bar,
@@ -2584,7 +2728,7 @@ impl ConfigEnum {
                 config.save_directory = PathBuf::from(value);
             }
             ConfigEnum::DefaultView => {
-                config.default_view = UiMode::from_string(value).unwrap();
+                config.default_ui_mode = UiMode::from_string(value).unwrap();
             }
             ConfigEnum::AlwaysLoadLastSave => {
                 config.always_load_last_save = value.parse::<bool>().unwrap();

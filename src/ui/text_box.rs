@@ -8,14 +8,11 @@ use portable_atomic::{AtomicU64, Ordering};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span, Text},
     widgets::{Block, Paragraph, Widget},
 };
-use std::{
-    cmp,
-    collections::VecDeque,
-};
+use std::{cmp, collections::VecDeque};
 
 #[derive(Clone, Debug)]
 pub struct TextBox<'a> {
@@ -31,32 +28,12 @@ pub struct TextBox<'a> {
     pub(crate) viewport: TextBoxViewport,
     cursor_style: Style,
     alignment: Alignment,
-}
-
-impl<'a, I> From<I> for TextBox<'a>
-where
-    I: IntoIterator,
-    I::Item: Into<String>,
-{
-    fn from(i: I) -> Self {
-        Self::new(i.into_iter().map(|s| s.into()).collect::<Vec<String>>())
-    }
-}
-
-impl<'a, S: Into<String>> FromIterator<S> for TextBox<'a> {
-    fn from_iter<I: IntoIterator<Item = S>>(iter: I) -> Self {
-        iter.into()
-    }
-}
-
-impl<'a> Default for TextBox<'a> {
-    fn default() -> Self {
-        Self::new(vec![String::new()])
-    }
+    pub single_line_mode: bool,
+    placeholder: Option<String>,
 }
 
 impl<'a> TextBox<'a> {
-    pub fn new(mut lines: Vec<String>) -> Self {
+    pub fn new(mut lines: Vec<String>, single_line_mode: bool) -> Self {
         if lines.is_empty() {
             lines.push(String::new());
         }
@@ -72,9 +49,50 @@ impl<'a> TextBox<'a> {
             cursor_line_style: Style::default(),
             line_number_style: None,
             viewport: TextBoxViewport::default(),
-            cursor_style: Style::default().add_modifier(Modifier::REVERSED),
+            cursor_style: Style::default(),
             alignment: Alignment::Left,
+            single_line_mode,
+            placeholder: None,
         }
+    }
+
+    pub fn from_list_of_strings(lines: Vec<String>, single_line_mode: bool) -> Self {
+        Self::new(lines, single_line_mode)
+    }
+
+    pub fn from_list_of_str(lines: Vec<&'a str>, single_line_mode: bool) -> Self {
+        Self::new(
+            lines.into_iter().map(|s| s.to_string()).collect(),
+            single_line_mode,
+        )
+    }
+
+    pub fn from_string_with_newline_sep(s: String, single_line_mode: bool) -> Self {
+        Self::new(
+            s.split('\n').map(|s| s.to_string()).collect(),
+            single_line_mode,
+        )
+    }
+
+    pub fn reset(&mut self) {
+        let single_line_mode = self.single_line_mode;
+        *self = Self::new(vec![String::new()], single_line_mode);
+    }
+
+    pub fn get_joined_lines(&self) -> String {
+        self.lines.join("\n")
+    }
+
+    pub fn get_num_lines(&self) -> usize {
+        self.lines.len()
+    }
+
+    pub fn set_placeholder_text<S: Into<String>>(&mut self, text: S) {
+        self.placeholder = Some(text.into());
+    }
+
+    pub fn remove_placeholder_text(&mut self) {
+        self.placeholder = None;
     }
 
     pub fn disable_cursor(&mut self) {
@@ -85,9 +103,13 @@ impl<'a> TextBox<'a> {
         self.cursor_style = cursor_style;
     }
 
+    // TODO: Add keybindings to README
     pub fn input(&mut self, input: Key) -> bool {
         match input {
             Key::Ctrl('m') | Key::Char('\n' | '\r') | Key::Enter => {
+                if self.single_line_mode {
+                    return false;
+                }
                 self.insert_newline();
                 true
             }
@@ -95,7 +117,12 @@ impl<'a> TextBox<'a> {
                 self.insert_char(c);
                 true
             }
-            Key::Tab => self.insert_tab(),
+            Key::Tab => {
+                if self.single_line_mode {
+                    return false;
+                }
+                self.insert_tab()
+            }
             Key::Ctrl('h') | Key::Backspace => self.delete_char(),
             Key::Ctrl('d') | Key::Delete => self.delete_next_char(),
             Key::Ctrl('k') => self.delete_line_by_end(),
@@ -103,10 +130,16 @@ impl<'a> TextBox<'a> {
             Key::Ctrl('w') | Key::Alt('h') | Key::AltBackspace => self.delete_word(),
             Key::AltDelete | Key::Alt('d') => self.delete_next_word(),
             Key::Ctrl('n') | Key::Down => {
+                if self.single_line_mode {
+                    return false;
+                }
                 self.move_cursor(CursorMove::Down);
                 false
             }
             Key::Ctrl('p') | Key::Up => {
+                if self.single_line_mode {
+                    return false;
+                }
                 self.move_cursor(CursorMove::Up);
                 false
             }
@@ -127,10 +160,16 @@ impl<'a> TextBox<'a> {
                 false
             }
             Key::Alt('<') | Key::CtrlAltUp | Key::CtrlAlt('p') => {
+                if self.single_line_mode {
+                    return false;
+                }
                 self.move_cursor(CursorMove::Top);
                 false
             }
             Key::Alt('>') | Key::CtrlAltDown | Key::CtrlAlt('n') => {
+                if self.single_line_mode {
+                    return false;
+                }
                 self.move_cursor(CursorMove::Bottom);
                 false
             }
@@ -150,13 +189,19 @@ impl<'a> TextBox<'a> {
                 self.move_cursor(CursorMove::ParagraphBack);
                 false
             }
-            Key::Ctrl('u') => self.undo(),
-            Key::Ctrl('r') => self.redo(),
+            Key::Ctrl('z') => self.undo(),
+            Key::Ctrl('y') => self.redo(),
             Key::Ctrl('v') | Key::PageDown => {
+                if self.single_line_mode {
+                    return false;
+                }
                 self.scroll(TextBoxScroll::PageDown);
                 false
             }
             Key::Alt('v') | Key::PageUp => {
+                if self.single_line_mode {
+                    return false;
+                }
                 self.scroll(TextBoxScroll::PageUp);
                 false
             }
@@ -506,6 +551,7 @@ impl<'a> TextBox<'a> {
     pub fn lines(&'a self) -> &'a [String] {
         &self.lines
     }
+
     pub fn into_lines(self) -> Vec<String> {
         self.lines
     }
@@ -839,11 +885,25 @@ impl<'a> TextBoxRenderer<'a> {
     #[inline]
     fn text(&self, top_row: usize, height: usize) -> Text<'a> {
         let lines_len = self.0.lines().len();
-        let lnum_len = num_digits(lines_len);
+        let lnum_len = num_digits(lines_len) - 1; // Required for correct viewport calculation
         let bottom_row = cmp::min(top_row + height, lines_len);
         let mut lines = Vec::with_capacity(bottom_row - top_row);
-        for (i, line) in self.0.lines()[top_row..bottom_row].iter().enumerate() {
-            lines.push(self.0.line_spans(line.as_str(), top_row + i, lnum_len));
+        if self.0.is_empty() && self.0.placeholder.is_some() {
+            for (i, line) in self.0.lines()[top_row..bottom_row].iter().enumerate() {
+                if i == 0 {
+                    lines.push(self.0.line_spans(
+                        self.0.placeholder.as_ref().unwrap(),
+                        top_row,
+                        lnum_len,
+                    ));
+                } else {
+                    lines.push(self.0.line_spans(line.as_str(), top_row + i, lnum_len));
+                }
+            }
+        } else {
+            for (i, line) in self.0.lines()[top_row..bottom_row].iter().enumerate() {
+                lines.push(self.0.line_spans(line.as_str(), top_row + i, lnum_len));
+            }
         }
         Text::from(lines)
     }
@@ -855,6 +915,13 @@ impl<'a> Widget for TextBoxRenderer<'a> {
             b.inner(area)
         } else {
             area
+        };
+
+        // Compensating for line numbers
+        let width = if self.0.line_number_style.is_some() {
+            width.saturating_sub(3)
+        } else {
+            width
         };
 
         fn next_scroll_top(prev_top: u16, cursor: u16, length: u16) -> u16 {

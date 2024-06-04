@@ -11,7 +11,6 @@ use crate::{
     util::lerp_between,
 };
 use log::{debug, error, info};
-use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use ratatui::style::{Color, Style};
 use std::{
     collections::HashMap,
@@ -19,6 +18,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use strum::{EnumIter, EnumString, IntoEnumIterator};
 use tokio::time::Instant;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -231,7 +231,6 @@ pub struct CommandPaletteWidget {
     pub available_commands: Vec<CommandPaletteActions>,
     pub board_search_results: Option<Vec<(String, (u64, u64))>>,
     pub card_search_results: Option<Vec<(String, (u64, u64))>>,
-    pub command_palette_actions_corpus: Corpus,
     pub command_search_results: Option<Vec<CommandPaletteActions>>,
     pub last_focus: Option<Focus>,
     pub last_search_string: String,
@@ -240,16 +239,11 @@ pub struct CommandPaletteWidget {
 impl CommandPaletteWidget {
     pub fn new(debug_mode: bool) -> Self {
         let available_commands = CommandPaletteActions::all(debug_mode);
-        let mut corpus = CorpusBuilder::new().arity(2).pad_full(Pad::Auto).finish();
-        for command in &available_commands {
-            corpus.add_text(command.to_string().to_lowercase().as_str());
-        }
         Self {
             already_in_user_input_mode: false,
             available_commands,
             board_search_results: None,
             card_search_results: None,
-            command_palette_actions_corpus: corpus,
             command_search_results: None,
             last_focus: None,
             last_search_string: RANDOM_SEARCH_TERM.to_string(),
@@ -287,38 +281,30 @@ impl CommandPaletteWidget {
                         return handle_exit(app).await;
                     }
                     CommandPaletteActions::ConfigMenu => {
-                        app.state.popup_mode = None;
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.ui_mode = UiMode::ConfigMenu;
+                        app.close_popup();
+                        app.set_ui_mode(UiMode::ConfigMenu);
                         app.state.app_table_states.config.select(Some(0));
-                        app.state.set_focus(Focus::ConfigTable);
                     }
                     CommandPaletteActions::MainMenu => {
-                        app.state.popup_mode = None;
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.ui_mode = UiMode::MainMenu;
+                        app.close_popup();
+                        app.set_ui_mode(UiMode::MainMenu);
                         app.state.app_list_states.main_menu.select(Some(0));
-                        app.state.set_focus(Focus::MainMenu);
                     }
                     CommandPaletteActions::HelpMenu => {
-                        app.state.popup_mode = None;
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.ui_mode = UiMode::HelpMenu;
+                        app.close_popup();
+                        app.set_ui_mode(UiMode::HelpMenu);
                         app.state.app_table_states.help.select(Some(0));
-                        app.state.set_focus(Focus::Body);
                     }
                     CommandPaletteActions::SaveKanbanState => {
-                        app.state.popup_mode = None;
+                        app.close_popup();
                         app.dispatch(IoEvent::SaveLocalData).await;
                     }
                     CommandPaletteActions::NewBoard => {
                         if UiMode::view_modes().contains(&app.state.ui_mode) {
-                            app.state.popup_mode = None;
-                            app.state.prev_ui_mode = Some(app.state.ui_mode);
-                            app.state.ui_mode = UiMode::NewBoard;
-                            app.state.set_focus(Focus::NewBoardName);
+                            app.close_popup();
+                            app.set_ui_mode(UiMode::NewBoard);
                         } else {
-                            app.state.popup_mode = None;
+                            app.close_popup();
                             app.send_error_toast("Cannot create a new board in this view", None);
                         }
                     }
@@ -326,26 +312,24 @@ impl CommandPaletteWidget {
                         if UiMode::view_modes().contains(&app.state.ui_mode) {
                             if app.state.current_board_id.is_none() {
                                 app.send_error_toast("No board Selected / Available", None);
-                                app.state.popup_mode = None;
+                                app.close_popup();
                                 app.state.app_status = AppStatus::Initialized;
                                 return AppReturn::Continue;
                             }
-                            app.state.popup_mode = None;
-                            app.state.prev_ui_mode = Some(app.state.ui_mode);
-                            app.state.ui_mode = UiMode::NewCard;
-                            app.state.set_focus(Focus::CardName);
+                            app.close_popup();
+                            app.set_ui_mode(UiMode::NewCard);
                         } else {
-                            app.state.popup_mode = None;
+                            app.close_popup();
                             app.send_error_toast("Cannot create a new card in this view", None);
                         }
                     }
                     CommandPaletteActions::ResetUI => {
-                        app.state.popup_mode = None;
-                        app.state.ui_mode = app.config.default_view;
+                        app.close_popup();
+                        app.set_ui_mode(app.config.default_ui_mode);
                         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
                     }
                     CommandPaletteActions::ChangeUIMode => {
-                        app.state.popup_mode = Some(PopupMode::ChangeUIMode);
+                        app.set_popup_mode(PopupMode::ChangeUIMode);
                     }
                     CommandPaletteActions::ChangeCurrentCardStatus => {
                         if UiMode::view_modes().contains(&app.state.ui_mode) {
@@ -359,8 +343,7 @@ impl CommandPaletteWidget {
                                             .get_card_with_id(current_card_id)
                                             .is_some()
                                         {
-                                            app.state.popup_mode =
-                                                Some(PopupMode::CardStatusSelector);
+                                            app.set_popup_mode(PopupMode::CardStatusSelector);
                                             app.state.app_status = AppStatus::Initialized;
                                             app.state
                                                 .app_list_states
@@ -373,42 +356,69 @@ impl CommandPaletteWidget {
                             }
                             app.send_error_toast("Could not find current card", None);
                         } else {
-                            app.state.popup_mode = None;
+                            app.close_popup();
                             app.send_error_toast("Cannot change card status in this view", None);
                         }
                     }
+                    CommandPaletteActions::ChangeCurrentCardPriority => {
+                        if UiMode::view_modes().contains(&app.state.ui_mode) {
+                            if let Some(current_board_id) = app.state.current_board_id {
+                                if let Some(current_board) =
+                                    app.boards.get_mut_board_with_id(current_board_id)
+                                {
+                                    if let Some(current_card_id) = app.state.current_card_id {
+                                        if current_board
+                                            .cards
+                                            .get_card_with_id(current_card_id)
+                                            .is_some()
+                                        {
+                                            app.set_popup_mode(PopupMode::CardPrioritySelector);
+                                            app.state.app_status = AppStatus::Initialized;
+                                            app.state
+                                                .app_list_states
+                                                .card_priority_selector
+                                                .select(Some(0));
+                                            return AppReturn::Continue;
+                                        }
+                                    }
+                                }
+                            }
+                            app.send_error_toast("Could not find current card", None);
+                        } else {
+                            app.close_popup();
+                            app.send_error_toast("Cannot change card priority in this view", None);
+                        }
+                    }
                     CommandPaletteActions::LoadASaveLocal => {
-                        app.state.popup_mode = None;
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
+                        app.close_popup();
                         reset_preview_boards(app);
-                        app.state.ui_mode = UiMode::LoadLocalSave;
+                        app.set_ui_mode(UiMode::LoadLocalSave);
                     }
                     CommandPaletteActions::DebugMenu => {
                         app.state.debug_menu_toggled = !app.state.debug_menu_toggled;
-                        app.state.popup_mode = None;
+                        app.close_popup();
                     }
                     CommandPaletteActions::ChangeTheme => {
-                        app.state.popup_mode = Some(PopupMode::ChangeTheme);
+                        app.set_popup_mode(PopupMode::ChangeTheme);
                     }
                     CommandPaletteActions::CreateATheme => {
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.ui_mode = UiMode::CreateTheme;
-                        app.state.popup_mode = None;
+                        app.set_ui_mode(UiMode::CreateTheme);
+                        app.close_popup();
                     }
                     CommandPaletteActions::FilterByTag => {
                         let tags = Self::calculate_tags(app);
                         if tags.is_empty() {
                             app.send_warning_toast("No tags found to filter with", None);
-                            app.state.popup_mode = None;
+                            app.close_popup();
                         } else {
-                            app.state.popup_mode = Some(PopupMode::FilterByTag);
+                            app.set_popup_mode(PopupMode::FilterByTag);
                             app.state.all_available_tags = Some(tags);
                         }
                     }
                     CommandPaletteActions::ClearFilter => {
                         if app.filtered_boards.is_empty() {
                             app.send_warning_toast("No filters to clear", None);
-                            app.state.popup_mode = None;
+                            app.close_popup();
                             app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
                         } else {
@@ -417,67 +427,60 @@ impl CommandPaletteWidget {
                         app.state.filter_tags = None;
                         app.state.all_available_tags = None;
                         app.state.app_list_states.filter_by_tag_list.select(None);
-                        app.state.popup_mode = None;
+                        app.close_popup();
                         app.filtered_boards.reset();
                         refresh_visible_boards_and_cards(app);
                     }
                     CommandPaletteActions::ChangeDateFormat => {
-                        app.state.popup_mode = Some(PopupMode::ChangeDateFormatPopup);
+                        app.set_popup_mode(PopupMode::ChangeDateFormatPopup);
                     }
                     CommandPaletteActions::NoCommandsFound => {
-                        app.state.popup_mode = None;
+                        app.close_popup();
                         app.state.app_status = AppStatus::Initialized;
                         return AppReturn::Continue;
                     }
                     CommandPaletteActions::Login => {
                         if app.state.user_login_data.auth_token.is_some() {
                             app.send_error_toast("Already logged in", None);
-                            app.state.popup_mode = None;
+                            app.close_popup();
                             app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
                         }
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.ui_mode = UiMode::Login;
-                        app.state.popup_mode = None;
-                        app.state.set_focus(Focus::EmailIDField);
+                        app.set_ui_mode(UiMode::Login);
+                        app.close_popup();
                     }
                     CommandPaletteActions::Logout => {
                         app.dispatch(IoEvent::Logout).await;
-                        app.state.popup_mode = None;
+                        app.close_popup();
                     }
                     CommandPaletteActions::SignUp => {
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.set_focus(Focus::EmailIDField);
-                        app.state.ui_mode = UiMode::SignUp;
-                        app.state.popup_mode = None;
+                        app.set_ui_mode(UiMode::SignUp);
+                        app.close_popup();
                     }
                     CommandPaletteActions::ResetPassword => {
-                        app.state.prev_ui_mode = Some(app.state.ui_mode);
-                        app.state.set_focus(Focus::EmailIDField);
-                        app.state.ui_mode = UiMode::ResetPassword;
-                        app.state.popup_mode = None;
+                        app.set_ui_mode(UiMode::ResetPassword);
+                        app.close_popup();
                     }
                     CommandPaletteActions::SyncLocalData => {
                         app.dispatch(IoEvent::SyncLocalData).await;
-                        app.state.popup_mode = None;
+                        app.close_popup();
                     }
                     CommandPaletteActions::LoadASaveCloud => {
                         if app.state.user_login_data.auth_token.is_some() {
-                            app.state.prev_ui_mode = Some(app.state.ui_mode);
-                            app.state.ui_mode = UiMode::LoadCloudSave;
+                            app.set_ui_mode(UiMode::LoadCloudSave);
                             reset_preview_boards(app);
                             app.dispatch(IoEvent::GetCloudData).await;
-                            app.state.popup_mode = None;
+                            app.close_popup();
                         } else {
                             error!("Not logged in");
                             app.send_error_toast("Not logged in", None);
-                            app.state.popup_mode = None;
+                            app.close_popup();
                             app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
                         }
                     }
                 }
-                app.clear_user_input_state();
+                app.state.text_buffers.command_palette.reset();
             } else {
                 debug!("No command found for the command palette");
             }
@@ -489,8 +492,6 @@ impl CommandPaletteWidget {
             app.widgets.command_palette.last_focus = None;
         }
         app.state.app_status = AppStatus::Initialized;
-        app.clear_user_input_state();
-        app.state.current_cursor_position = None;
         AppReturn::Continue
     }
 
@@ -498,21 +499,33 @@ impl CommandPaletteWidget {
         if app.state.popup_mode.is_some()
             && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
         {
-            if app.state.current_user_input.to_lowercase()
+            if app
+                .state
+                .text_buffers
+                .command_palette
+                .get_joined_lines()
+                .to_lowercase()
                 == app.widgets.command_palette.last_search_string
             {
                 return;
             }
-            let current_search_string = app.state.current_user_input.clone().to_lowercase();
-            let result = app
+            let current_search_string = app.state.text_buffers.command_palette.get_joined_lines();
+            let current_search_string = current_search_string.to_lowercase();
+            let search_results = app
                 .widgets
                 .command_palette
-                .command_palette_actions_corpus
-                .search(&current_search_string, 0.2);
-            let mut search_results = vec![];
-            for item in result {
-                search_results.push(CommandPaletteActions::from_string(&item.text, true).unwrap());
-            }
+                .available_commands
+                .iter()
+                .filter(|action| {
+                    action
+                        .to_string()
+                        .to_lowercase()
+                        .contains(&current_search_string)
+                })
+                .cloned()
+                .collect::<Vec<CommandPaletteActions>>();
+
+            // Making sure the results which start with the search string are shown first
             let mut command_search_results = if search_results.is_empty() {
                 if current_search_string.is_empty() {
                     CommandPaletteActions::all(app.debug_mode)
@@ -583,7 +596,9 @@ impl CommandPaletteWidget {
                     }
                 }
             }
-            if !card_search_results.is_empty() {
+            if card_search_results.is_empty() {
+                app.widgets.command_palette.card_search_results = None;
+            } else {
                 app.widgets.command_palette.card_search_results = Some(card_search_results.clone());
             }
 
@@ -607,7 +622,9 @@ impl CommandPaletteWidget {
                     }
                 }
             }
-            if !board_search_results.is_empty() {
+            if board_search_results.is_empty() {
+                app.widgets.command_palette.board_search_results = None;
+            } else {
                 app.widgets.command_palette.board_search_results =
                     Some(board_search_results.clone());
             }
@@ -663,9 +680,10 @@ impl CommandPaletteWidget {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, EnumIter, EnumString)]
 pub enum CommandPaletteActions {
     ChangeCurrentCardStatus,
+    ChangeCurrentCardPriority,
     ChangeDateFormat,
     ChangeTheme,
     ChangeUIMode,
@@ -695,6 +713,7 @@ impl Display for CommandPaletteActions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ChangeCurrentCardStatus => write!(f, "Change Current Card Status"),
+            Self::ChangeCurrentCardPriority => write!(f, "Change Current Card Priority"),
             Self::ChangeDateFormat => write!(f, "Change Date Format"),
             Self::ChangeTheme => write!(f, "Change Theme"),
             Self::ChangeUIMode => write!(f, "Change UI Mode"),
@@ -724,95 +743,16 @@ impl Display for CommandPaletteActions {
 
 impl CommandPaletteActions {
     pub fn all(debug_mode: bool) -> Vec<Self> {
-        let all = vec![
-            Self::ChangeCurrentCardStatus,
-            Self::ChangeDateFormat,
-            Self::ChangeTheme,
-            Self::ChangeUIMode,
-            Self::ClearFilter,
-            Self::ConfigMenu,
-            Self::CreateATheme,
-            Self::FilterByTag,
-            Self::HelpMenu,
-            Self::LoadASaveCloud,
-            Self::LoadASaveLocal,
-            Self::Login,
-            Self::Logout,
-            Self::MainMenu,
-            Self::NewBoard,
-            Self::NewCard,
-            Self::Quit,
-            Self::ResetPassword,
-            Self::ResetUI,
-            Self::SaveKanbanState,
-            Self::SignUp,
-            Self::SyncLocalData,
-        ];
+        let mut all = CommandPaletteActions::iter().collect::<Vec<Self>>();
+        // sort
+        all.sort_by_key(|a| a.to_string());
 
         if cfg!(debug_assertions) || debug_mode {
-            let mut all = all;
-            all.push(Self::DebugMenu);
             all
         } else {
-            all
-        }
-    }
-
-    pub fn from_string(s: &str, lowercase_match: bool) -> Option<Self> {
-        if lowercase_match {
-            match s.to_lowercase().as_str() {
-                "configure" => Some(Self::ConfigMenu),
-                "save kanban state" => Some(Self::SaveKanbanState),
-                "load a save (local)" => Some(Self::LoadASaveLocal),
-                "new board" => Some(Self::NewBoard),
-                "new card" => Some(Self::NewCard),
-                "reset ui" => Some(Self::ResetUI),
-                "open main menu" => Some(Self::MainMenu),
-                "open help menu" => Some(Self::HelpMenu),
-                "change ui mode" => Some(Self::ChangeUIMode),
-                "change current card status" => Some(Self::ChangeCurrentCardStatus),
-                "toggle debug panel" => Some(Self::DebugMenu),
-                "change theme" => Some(Self::ChangeTheme),
-                "create a theme" => Some(Self::CreateATheme),
-                "filter by tag" => Some(Self::FilterByTag),
-                "clear filter" => Some(Self::ClearFilter),
-                "change date format" => Some(Self::ChangeDateFormat),
-                "login" => Some(Self::Login),
-                "sign up" => Some(Self::SignUp),
-                "reset password" => Some(Self::ResetPassword),
-                "logout" => Some(Self::Logout),
-                "sync local data" => Some(Self::SyncLocalData),
-                "load a save (cloud)" => Some(Self::LoadASaveCloud),
-                "quit" => Some(Self::Quit),
-                _ => None,
-            }
-        } else {
-            match s {
-                "Configure" => Some(Self::ConfigMenu),
-                "Save Kanban State" => Some(Self::SaveKanbanState),
-                "Load a Save (Local)" => Some(Self::LoadASaveLocal),
-                "New Board" => Some(Self::NewBoard),
-                "New Card" => Some(Self::NewCard),
-                "Reset UI" => Some(Self::ResetUI),
-                "Open Main Menu" => Some(Self::MainMenu),
-                "Open Help Menu" => Some(Self::HelpMenu),
-                "Change UI Mode" => Some(Self::ChangeUIMode),
-                "Change Current Card Status" => Some(Self::ChangeCurrentCardStatus),
-                "Toggle Debug Panel" => Some(Self::DebugMenu),
-                "Change Theme" => Some(Self::ChangeTheme),
-                "Create a Theme" => Some(Self::CreateATheme),
-                "Filter by Tag" => Some(Self::FilterByTag),
-                "Clear Filter" => Some(Self::ClearFilter),
-                "Change Date Format" => Some(Self::ChangeDateFormat),
-                "Login" => Some(Self::Login),
-                "Sign Up" => Some(Self::SignUp),
-                "Reset Password" => Some(Self::ResetPassword),
-                "Logout" => Some(Self::Logout),
-                "Sync Local Data" => Some(Self::SyncLocalData),
-                "Load a Save (Cloud)" => Some(Self::LoadASaveCloud),
-                "Quit" => Some(Self::Quit),
-                _ => None,
-            }
+            all.into_iter()
+                .filter(|action| !matches!(action, Self::DebugMenu))
+                .collect()
         }
     }
 }
