@@ -93,8 +93,7 @@ async fn main() -> Result<()> {
         println!();
         return Ok(());
     }
-    if args.encryption_key.is_some() {
-        let encryption_key = args.encryption_key.unwrap();
+    if let Some(encryption_key) = args.encryption_key {
         let mut app = main_app_instance.lock().await;
         app.state.encryption_key_from_arguments = Some(encryption_key);
     }

@@ -343,39 +343,15 @@ impl From<&str> for Key {
 impl From<&Map<String, Value>> for Key {
     // TODO: handle more key types
     fn from(value: &Map<String, Value>) -> Self {
-        if value.get("Char").is_some() {
-            Key::Char(
-                value
-                    .get("Char")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .chars()
-                    .next()
-                    .unwrap(),
-            )
-        } else if value.get("Alt").is_some() {
-            Key::Alt(
-                value
-                    .get("Alt")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .chars()
-                    .next()
-                    .unwrap(),
-            )
-        } else if value.get("Ctrl").is_some() {
-            Key::Ctrl(
-                value
-                    .get("Ctrl")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .chars()
-                    .next()
-                    .unwrap(),
-            )
+        fn char_from_value(val: &Value) -> char {
+            val.as_str().and_then(|s| s.chars().next()).unwrap()
+        }
+        if let Some(char_value) = value.get("Char") {
+            Key::Char(char_from_value(char_value))
+        } else if let Some(alt_value) = value.get("Alt") {
+            Key::Alt(char_from_value(alt_value))
+        } else if let Some(ctrl_value) = value.get("Ctrl") {
+            Key::Ctrl(char_from_value(ctrl_value))
         } else {
             Key::Unknown
         }

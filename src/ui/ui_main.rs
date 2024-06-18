@@ -4,11 +4,11 @@ use ratatui::Frame;
 
 /// Main UI Drawing handler
 pub fn draw(rect: &mut Frame, app: &mut App) {
+    // Background
     ui_helper::render_blank_styled_canvas(rect, app, rect.size(), app.state.popup_mode.is_some());
-    let msg = ui_helper::check_size(&rect.size());
-    if &msg != "Size OK" {
+
+    if let Err(msg) = ui_helper::check_size(&rect.size()) {
         ui_helper::draw_size_error(rect, &rect.size(), msg, app);
-        return;
     } else if *app.status() == AppStatus::Init {
         ui_helper::draw_loading_screen(rect, &rect.size(), app);
         return;
@@ -18,8 +18,8 @@ pub fn draw(rect: &mut Frame, app: &mut App) {
     app.state.ui_mode.render(rect, app);
 
     // Render the popup if it exists
-    if app.state.popup_mode.is_some() {
-        app.state.popup_mode.unwrap().render(rect, app);
+    if let Some(popup_mode) = app.state.popup_mode {
+        popup_mode.render(rect, app);
     }
 
     // Render Toasts

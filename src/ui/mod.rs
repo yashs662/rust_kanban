@@ -103,9 +103,12 @@ impl Theme {
             Span::styled("Card Priority High Style: ", text_style),
         ];
         let theme_style_list = if popup_mode {
-            let mut return_vec = vec![Span::styled(&self.name, self.inactive_text_style)];
-            let sample_text = Span::styled(&self.name, self.inactive_text_style);
-            for _ in 0..23 {
+            let mut return_vec = vec![Span::styled(
+                &self.name,
+                app.current_theme.inactive_text_style,
+            )];
+            let sample_text = Span::styled(SAMPLE_TEXT, app.current_theme.inactive_text_style);
+            for _ in 0..theme_title_list.len() - 1 {
                 return_vec.push(sample_text.clone());
             }
             return_vec

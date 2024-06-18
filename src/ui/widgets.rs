@@ -61,8 +61,8 @@ impl ToastWidget {
 
     fn update(app: &mut App) {
         let theme = app.current_theme.clone();
-        let term_background_color = if app.current_theme.general_style.bg.is_some() {
-            TextColorOptions::from(app.current_theme.general_style.bg.unwrap()).to_rgb()
+        let term_background_color = if let Some(bg_color) = app.current_theme.general_style.bg {
+            TextColorOptions::from(bg_color).to_rgb()
         } else {
             app.state.term_background_color
         };
@@ -251,31 +251,20 @@ impl CommandPaletteWidget {
     }
 
     pub async fn handle_command(app: &mut App<'_>) -> AppReturn {
-        if app
+        if let Some(command_index) = app
             .state
             .app_list_states
             .command_palette_command_search
             .selected()
-            .is_some()
         {
-            let command_index = app
-                .state
-                .app_list_states
-                .command_palette_command_search
-                .selected()
-                .unwrap();
-            let command = if app.widgets.command_palette.command_search_results.is_some() {
-                app.widgets
-                    .command_palette
-                    .command_search_results
-                    .as_ref()
-                    .unwrap()
-                    .get(command_index)
-            } else {
-                None
-            };
-            if command.is_some() {
-                match command.unwrap() {
+            if let Some(command) =
+                if let Some(search_results) = &app.widgets.command_palette.command_search_results {
+                    search_results.get(command_index)
+                } else {
+                    None
+                }
+            {
+                match command {
                     CommandPaletteActions::Quit => {
                         info!("Quitting");
                         return handle_exit(app).await;
@@ -496,9 +485,7 @@ impl CommandPaletteWidget {
     }
 
     fn update(app: &mut App) {
-        if app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
-        {
+        if let Some(PopupMode::CommandPalette) = app.state.popup_mode {
             if app
                 .state
                 .text_buffers
@@ -631,19 +618,13 @@ impl CommandPaletteWidget {
 
             app.widgets.command_palette.command_search_results = Some(command_search_results);
             app.widgets.command_palette.last_search_string = current_search_string;
-            if app.widgets.command_palette.command_search_results.is_some()
-                && !app
-                    .widgets
-                    .command_palette
-                    .command_search_results
-                    .as_ref()
-                    .unwrap()
-                    .is_empty()
-            {
-                app.state
-                    .app_list_states
-                    .command_palette_command_search
-                    .select(Some(0));
+            if let Some(search_results) = &app.widgets.command_palette.command_search_results {
+                if !search_results.is_empty() {
+                    app.state
+                        .app_list_states
+                        .command_palette_command_search
+                        .select(Some(0));
+                }
             }
         }
     }

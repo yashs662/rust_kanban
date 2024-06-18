@@ -118,7 +118,7 @@ pub fn lerp_between(
     normalised_time: f32,
 ) -> (u8, u8, u8) {
     // clamp the normalised time between 0 and 1
-    let normalised_time = normalised_time.max(0.0).min(1.0);
+    let normalised_time = normalised_time.clamp(0.0, 1.0);
     let r = (color_a.0 as f32 * (1.0 - normalised_time) + color_b.0 as f32 * normalised_time) as u8;
     let g = (color_a.1 as f32 * (1.0 - normalised_time) + color_b.1 as f32 * normalised_time) as u8;
     let b = (color_a.2 as f32 * (1.0 - normalised_time) + color_b.2 as f32 * normalised_time) as u8;
@@ -151,14 +151,16 @@ pub async fn gen_new_key_main(email_id: String, password: String) -> Result<()> 
         previous_key_lost = true;
     }
     print_info("Trying to login...");
-    let login_for_user_status = login_for_user(&email_id, &password, false).await;
-    if let Err(err) = login_for_user_status {
-        print_debug(&format!("Error logging in: {:?}", err));
-        print_error("Error logging in");
-        print_error("Aborting...");
-        return Ok(());
-    }
-    let (access_token, user_id, _refresh_token) = login_for_user_status.unwrap();
+    let (access_token, user_id, _refresh_token) =
+        match login_for_user(&email_id, &password, false).await {
+            Ok((access_token, user_id, refresh_token)) => (access_token, user_id, refresh_token),
+            Err(err) => {
+                print_debug(&format!("Error logging in: {:?}", err));
+                print_error("Error logging in");
+                print_error("Aborting...");
+                return Ok(());
+            }
+        };
     let save_ids =
         get_all_save_ids_and_creation_dates_for_user(user_id.to_owned(), &access_token, true)
             .await?;
@@ -166,16 +168,20 @@ pub async fn gen_new_key_main(email_id: String, password: String) -> Result<()> 
         print_warn("No Cloud save files found");
         print_info("Generating new encryption key...");
         let key = generate_new_encryption_key();
-        let save_status = save_user_encryption_key(&key);
-        if save_status.is_err() {
-            print_error("Error saving encryption key");
-            print_debug(&format!("Error: {:?}", save_status.err()));
-            return Ok(());
+        match save_user_encryption_key(&key) {
+            Ok(save_location) => {
+                print_info("Encryption key generated and saved");
+                print_info(
+                    "Please keep this key safe as it will be required to access your save files",
+                );
+                print_info(&format!("New Key generated_at: {}", save_location));
+            }
+            Err(err) => {
+                print_error("Error saving encryption key");
+                print_debug(&format!("Error: {:?}", err));
+                return Ok(());
+            }
         }
-        let save_location = save_status.unwrap();
-        print_info("Encryption key generated and saved");
-        print_info("Please keep this key safe as it will be required to access your save files");
-        print_info(&format!("New Key generated_at: {}", save_location));
     } else {
         print_info(&format!("{} save files found", save_ids.len()));
         if previous_key_lost {
@@ -223,18 +229,20 @@ pub async fn gen_new_key_main(email_id: String, password: String) -> Result<()> 
             print_info("All save files deleted");
             print_info("Preparing to generate new encryption key...");
             let key = generate_new_encryption_key();
-            let save_status = save_user_encryption_key(&key);
-            if save_status.is_err() {
-                print_error("Error saving encryption key");
-                print_debug(&format!("Error: {:?}", save_status.err()));
-                return Ok(());
+            match save_user_encryption_key(&key) {
+                Ok(save_location) => {
+                    print_info("Encryption key generated and saved");
+                    print_info(
+                        "Please keep this key safe as it will be required to access your save files",
+                    );
+                    print_info(&format!("New Key generated_at: {}", save_location));
+                }
+                Err(err) => {
+                    print_error("Error saving encryption key");
+                    print_debug(&format!("Error: {:?}", err));
+                    return Ok(());
+                }
             }
-            let save_location = save_status.unwrap();
-            print_info("Encryption key generated and saved");
-            print_info(
-                "Please keep this key safe as it will be required to access your save files",
-            );
-            print_info(&format!("New Key generated_at: {}", save_location));
         } else {
             print_info("Aborting...");
             return Ok(());

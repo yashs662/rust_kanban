@@ -48,62 +48,68 @@ pub fn go_right(app: &mut App) {
         app.state.current_board_id = boards.get_first_board_id();
         app.state.current_board_id.unwrap()
     };
-    let current_board_index = current_visible_boards
+
+    match current_visible_boards
         .iter()
-        .position(|(board_id, _)| *board_id == current_board_id);
-    if current_board_index.is_none() {
-        debug!("Cannot go right: current board not found, trying to assign to the first board");
-        if current_visible_boards.is_empty() {
-            debug!("Cannot go right: current board not found, no visible boards found");
-            app.send_error_toast("Cannot go right: Something went wrong", None);
-            return;
-        } else {
-            app.state.current_board_id = Some(*current_visible_boards.keys().next().unwrap());
+        .position(|(board_id, _)| *board_id == current_board_id)
+    {
+        Some(current_board_index) => {
+            if current_board_index == current_visible_boards.len() - 1 {
+                match boards.get_board_index(current_board_id) {
+                    Some(current_board_index_in_all_boards) => {
+                        if current_board_index_in_all_boards == (boards.len() - 1) {
+                            app.send_error_toast(
+                                "Cannot go right: Already at the last board",
+                                None,
+                            );
+                            return;
+                        }
+                        if let Some(next_board) =
+                            boards.get_board_with_index(current_board_index_in_all_boards + 1)
+                        {
+                            let next_board_card_ids = next_board.cards.get_all_card_ids();
+                            app.visible_boards_and_cards
+                                .insert(next_board.id, next_board_card_ids.clone());
+
+                            if let Some((&first_board_id, _)) =
+                                app.visible_boards_and_cards.iter().next()
+                            {
+                                app.visible_boards_and_cards.remove(&first_board_id);
+                            }
+
+                            app.state.current_board_id = Some(next_board.id);
+                            app.state.current_card_id = next_board_card_ids.first().copied();
+                        }
+                    }
+                    None => {
+                        debug!("Cannot go right: current board not found");
+                        app.send_error_toast("Cannot go right: Something went wrong", None);
+                    }
+                }
+            } else if let Some((next_board_id, _)) =
+                current_visible_boards.iter().nth(current_board_index + 1)
+            {
+                app.state.current_board_id = Some(*next_board_id);
+                if let Some((_, cards)) = current_visible_boards
+                    .iter()
+                    .find(|(board_id, _)| *board_id == next_board_id)
+                {
+                    app.state.current_card_id = if cards.is_empty() {
+                        None
+                    } else {
+                        Some(cards[0])
+                    };
+                }
+            }
         }
-    }
-    let current_board_index = current_board_index.unwrap();
-    if current_board_index == current_visible_boards.len() - 1 {
-        let current_board_index_in_all_boards = boards.get_board_index(current_board_id);
-        if current_board_index_in_all_boards.is_none() {
-            debug!("Cannot go right: current board not found");
-            app.send_error_toast("Cannot go right: Something went wrong", None);
-            return;
-        }
-        let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
-        if current_board_index_in_all_boards == (boards.len() - 1) {
-            app.send_error_toast("Cannot go right: Already at the last board", None);
-            return;
-        }
-        let next_board_index = current_board_index_in_all_boards + 1;
-        let next_board = &boards.get_board_with_index(next_board_index).unwrap();
-        let next_board_card_ids: Vec<(u64, u64)> = next_board.cards.get_all_card_ids();
-        app.visible_boards_and_cards
-            .insert(next_board.id, next_board_card_ids.clone());
-        let first_board_id = *app.visible_boards_and_cards.iter().next().unwrap().0;
-        app.visible_boards_and_cards.remove(&first_board_id);
-        app.state.current_board_id = Some(next_board.id);
-        if next_board_card_ids.is_empty() {
-            app.state.current_card_id = None;
-        } else {
-            app.state.current_card_id = Some(next_board_card_ids[0]);
-        }
-    } else {
-        let next_board_id = *current_visible_boards
-            .iter()
-            .nth(current_board_index + 1)
-            .unwrap()
-            .0;
-        app.state.current_board_id = Some(next_board_id);
-        let current_board_cards = current_visible_boards
-            .iter()
-            .find(|(board_id, _)| **board_id == next_board_id)
-            .unwrap()
-            .1
-            .clone();
-        if current_board_cards.is_empty() {
-            app.state.current_card_id = None;
-        } else {
-            app.state.current_card_id = Some(current_board_cards[0]);
+        None => {
+            debug!("Cannot go right: current board not found, trying to assign to the first board");
+            if current_visible_boards.is_empty() {
+                debug!("Cannot go right: current board not found, no visible boards found");
+                app.send_error_toast("Cannot go right: Something went wrong", None);
+            } else {
+                app.state.current_board_id = Some(*current_visible_boards.keys().next().unwrap());
+            }
         }
     }
 }
@@ -127,63 +133,76 @@ pub fn go_left(app: &mut App) {
         app.state.current_board_id = boards.get_first_board_id();
         app.state.current_board_id.unwrap()
     };
-    let current_board_index = current_visible_boards
+
+    match current_visible_boards
         .iter()
-        .position(|(board_id, _)| *board_id == current_board_id);
-    if current_board_index.is_none() {
-        debug!("Cannot go left: current board not found");
-        app.send_error_toast("Cannot go left: Something went wrong", None);
-        return;
-    }
-    let current_board_index = current_board_index.unwrap();
-    if current_board_index == 0 {
-        let current_board_index_in_all_boards = boards.get_board_index(current_board_id);
-        if current_board_index_in_all_boards.is_none() {
-            debug!("Cannot go left: current board not found");
-            app.send_error_toast("Cannot go left: Something went wrong", None);
-            return;
+        .position(|(board_id, _)| *board_id == current_board_id)
+    {
+        Some(current_board_index) => {
+            if current_board_index == 0 {
+                match boards.get_board_index(current_board_id) {
+                    Some(current_board_index_in_all_boards) => {
+                        if current_board_index_in_all_boards == 0 {
+                            app.send_error_toast(
+                                "Cannot go left: Already at the first board",
+                                None,
+                            );
+                            return;
+                        }
+                        if let Some(previous_board) =
+                            boards.get_board_with_index(current_board_index_in_all_boards - 1)
+                        {
+                            let previous_board_card_ids = previous_board.cards.get_all_card_ids();
+                            let mut new_visible_boards_and_cards: LinkedHashMap<
+                                (u64, u64),
+                                Vec<(u64, u64)>,
+                            > = LinkedHashMap::new();
+                            new_visible_boards_and_cards
+                                .insert(previous_board.id, previous_board_card_ids.clone());
+                            for (board_id, card_ids) in current_visible_boards
+                                .iter()
+                                .take(current_visible_boards.len() - 1)
+                            {
+                                new_visible_boards_and_cards.insert(*board_id, card_ids.clone());
+                            }
+                            app.visible_boards_and_cards = new_visible_boards_and_cards;
+                            app.state.current_board_id = Some(previous_board.id);
+                            app.state.current_card_id = if previous_board_card_ids.is_empty() {
+                                None
+                            } else {
+                                Some(previous_board_card_ids[0])
+                            };
+                        }
+                    }
+                    None => {
+                        debug!("Cannot go left: current board not found");
+                        app.send_error_toast("Cannot go left: Something went wrong", None);
+                    }
+                }
+            } else if let Some((previous_board_id, _)) =
+                current_visible_boards.iter().nth(current_board_index - 1)
+            {
+                app.state.current_board_id = Some(*previous_board_id);
+                if let Some((_, cards)) = current_visible_boards
+                    .iter()
+                    .find(|(board_id, _)| *board_id == previous_board_id)
+                {
+                    app.state.current_card_id = if cards.is_empty() {
+                        None
+                    } else {
+                        Some(cards[0])
+                    };
+                }
+            }
         }
-        let current_board_index_in_all_boards = current_board_index_in_all_boards.unwrap();
-        if current_board_index_in_all_boards == 0 {
-            app.send_error_toast("Cannot go left: Already at the first board", None);
-            return;
-        }
-        let previous_board_index = current_board_index_in_all_boards - 1;
-        let previous_board = boards.get_board_with_index(previous_board_index).unwrap();
-        let previous_board_card_ids: Vec<(u64, u64)> = previous_board.cards.get_all_card_ids();
-        let mut new_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
-            LinkedHashMap::new();
-        new_visible_boards_and_cards.insert(previous_board.id, previous_board_card_ids.clone());
-        for (board_id, card_ids) in current_visible_boards
-            .iter()
-            .take(current_visible_boards.len() - 1)
-        {
-            new_visible_boards_and_cards.insert(*board_id, card_ids.clone());
-        }
-        app.visible_boards_and_cards = new_visible_boards_and_cards;
-        app.state.current_board_id = Some(previous_board.id);
-        if previous_board_card_ids.is_empty() {
-            app.state.current_card_id = None;
-        } else {
-            app.state.current_card_id = Some(previous_board_card_ids[0]);
-        }
-    } else {
-        let previous_board_id = *current_visible_boards
-            .iter()
-            .nth(current_board_index - 1)
-            .unwrap()
-            .0;
-        app.state.current_board_id = Some(previous_board_id);
-        let current_visible_cards = current_visible_boards
-            .iter()
-            .find(|(board_id, _)| **board_id == previous_board_id)
-            .unwrap()
-            .1
-            .clone();
-        if current_visible_cards.is_empty() {
-            app.state.current_card_id = None;
-        } else {
-            app.state.current_card_id = Some(current_visible_cards[0]);
+        None => {
+            debug!("Cannot go left: current board not found, trying to assign to the first board");
+            if current_visible_boards.is_empty() {
+                debug!("Cannot go left: current board not found, no visible boards found");
+                app.send_error_toast("Cannot go left: Something went wrong", None);
+            } else {
+                app.state.current_board_id = Some(*current_visible_boards.keys().next().unwrap());
+            }
         }
     }
 }
@@ -206,90 +225,81 @@ pub fn go_up(app: &mut App) {
         app.state.current_board_id = boards.get_first_board_id();
         app.state.current_board_id.unwrap()
     };
+
     let current_card_id = if let Some(current_card_id) = current_card_id {
         current_card_id
     } else {
-        let current_board = boards.get_board_with_id(current_board_id);
-        if current_board.is_none() {
-            debug!("Cannot go up: current board not found");
-            app.send_error_toast("Cannot go up: Something went wrong", None);
-            return;
+        match boards.get_board_with_id(current_board_id) {
+            Some(current_board) => {
+                if current_board.cards.is_empty() {
+                    debug!("Cannot go up: current board has no cards");
+                    app.send_error_toast("Cannot go up: current board has no cards", None);
+                    return;
+                }
+                current_board.cards.get_first_card_id().unwrap()
+            }
+            None => {
+                debug!("Cannot go up: current board not found");
+                app.send_error_toast("Cannot go up: Something went wrong", None);
+                return;
+            }
         }
-        let current_board = current_board.unwrap();
-        if current_board.cards.is_empty() {
-            debug!("Cannot go up: current board has no cards");
-            app.send_error_toast("Cannot go up: current board has no cards", None);
-            return;
-        }
-        current_board.cards.get_first_card_id().unwrap()
     };
-    let current_card_index = current_visible_boards
+
+    if let Some(current_card_index) = current_visible_boards
         .iter()
         .find(|(board_id, _)| **board_id == current_board_id)
         .unwrap()
         .1
         .iter()
-        .position(|card_id| *card_id == current_card_id);
-    if current_card_index.is_none() {
-        debug!("Cannot go up: current card not found");
-        app.send_error_toast("Cannot go up: Something went wrong", None);
-        return;
-    }
-    let current_card_index = current_card_index.unwrap();
-    if current_card_index == 0 {
-        let current_card_index_in_all_cards = boards
-            .get_board_with_id(current_board_id)
-            .unwrap()
-            .cards
-            .get_card_index(current_card_id);
-        if current_card_index_in_all_cards.is_none() {
-            debug!("Cannot go up: current card not found");
-            app.send_error_toast("Cannot go up: Something went wrong", None);
-            return;
-        }
-        let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
-        if current_card_index_in_all_cards == 0 {
-            app.send_error_toast("Cannot go up: Already at the first card", None);
-            return;
-        }
-        let previous_card_index = current_card_index_in_all_cards - 1;
-        let previous_card_id = boards
-            .get_board_with_id(current_board_id)
-            .unwrap()
-            .cards
-            .get_card_with_index(previous_card_index)
-            .unwrap()
-            .id;
-        let previous_cards = boards
-            .get_board_with_id(current_board_id)
-            .unwrap()
-            .cards
-            .get_cards_with_range(
-                previous_card_index,
-                previous_card_index + app.config.no_of_cards_to_show as usize,
-            );
-        let mut visible_boards_and_cards = app.visible_boards_and_cards.clone();
-        visible_boards_and_cards
-            .entry(current_board_id)
-            .and_modify(|cards| {
-                *cards = previous_cards.get_all_card_ids();
-            });
-        app.visible_boards_and_cards = visible_boards_and_cards;
-        app.state.current_card_id = Some(previous_card_id);
-    } else {
-        let previous_card_id = *current_visible_boards
+        .position(|card_id| *card_id == current_card_id)
+    {
+        if current_card_index == 0 {
+            if let Some(current_card_index_in_all_cards) = boards
+                .get_board_with_id(current_board_id)
+                .unwrap()
+                .cards
+                .get_card_index(current_card_id)
+            {
+                if let Some(board) = boards.get_board_with_id(current_board_id) {
+                    if let Some(previous_card) = board
+                        .cards
+                        .get_card_with_index(current_card_index_in_all_cards - 1)
+                    {
+                        let previous_card_id = previous_card.id;
+                        let previous_cards = board.cards.get_cards_with_range(
+                            current_card_index_in_all_cards - 1,
+                            current_card_index_in_all_cards - 1
+                                + app.config.no_of_cards_to_show as usize,
+                        );
+                        app.visible_boards_and_cards
+                            .entry(current_board_id)
+                            .and_modify(|cards| *cards = previous_cards.get_all_card_ids());
+                        app.state.current_card_id = Some(previous_card_id);
+                    } else {
+                        debug!("Cannot go up: Already at the first card");
+                        app.send_error_toast("Cannot go up: Already at the first card", None);
+                    }
+                }
+            } else {
+                debug!("Cannot go up: current card not found");
+                app.send_error_toast("Cannot go up: Something went wrong", None);
+            }
+        } else if let Some(previous_card_id) = current_visible_boards
             .iter()
             .find(|(board_id, _)| **board_id == current_board_id)
             .unwrap()
             .1
             .get(current_card_index - 1)
-            .unwrap_or(&(0, 0));
-        if previous_card_id == (0, 0) {
+        {
+            app.state.current_card_id = Some(*previous_card_id);
+        } else {
             debug!("Cannot go up: previous card not found");
             app.send_error_toast("Cannot go up: Something went wrong", None);
-        } else {
-            app.state.current_card_id = Some(previous_card_id);
         }
+    } else {
+        debug!("Cannot go up: current card not found");
+        app.send_error_toast("Cannot go up: Something went wrong", None);
     }
 }
 
@@ -314,108 +324,110 @@ pub fn go_down(app: &mut App) {
     let current_card_id = if let Some(current_card_id) = current_card_id {
         current_card_id
     } else {
-        let current_board = boards.get_board_with_id(current_board_id);
-        if current_board.is_none() {
-            debug!("Cannot go down: current board not found, trying to get the first board");
-            if current_visible_boards.is_empty() {
-                debug!("Cannot go down: current board not found, tried to get the first board, but failed");
-                app.send_error_toast("Cannot go down: Something went wrong", None);
-                return;
-            } else {
-                app.state.current_board_id = Some(*current_visible_boards.keys().next().unwrap());
-                app.state.current_card_id =
-                    Some(current_visible_boards.values().next().unwrap()[0]);
-                return;
+        match boards.get_board_with_id(current_board_id) {
+            Some(current_board) => {
+                if current_board.cards.is_empty() {
+                    debug!("Cannot go down: current board has no cards");
+                    app.send_error_toast("Cannot go down: Current board has no cards", None);
+                    return;
+                }
+                current_board.cards.get_first_card_id().unwrap()
+            }
+            None => {
+                debug!("Cannot go down: current board not found, trying to get the first board");
+                if current_visible_boards.is_empty() {
+                    debug!("Cannot go down: current board not found, tried to get the first board, but failed");
+                    app.send_error_toast("Cannot go down: Something went wrong", None);
+                    return;
+                } else {
+                    app.state.current_board_id =
+                        Some(*current_visible_boards.keys().next().unwrap());
+                    app.state.current_card_id =
+                        Some(current_visible_boards.values().next().unwrap()[0]);
+                    return;
+                }
             }
         }
-        let current_board = current_board.unwrap();
-        if current_board.cards.is_empty() {
-            debug!("Cannot go down: current board has no cards");
-            app.send_error_toast("Cannot go down: Current board has no cards", None);
-            return;
-        }
-        current_board.cards.get_first_card_id().unwrap()
     };
-    let current_card_index = current_visible_boards
+    if let Some(current_card_index) = current_visible_boards
         .iter()
         .find(|(board_id, _)| **board_id == current_board_id)
         .unwrap()
         .1
         .iter()
-        .position(|card_id| *card_id == current_card_id);
-    if current_card_index.is_none() {
-        debug!("Cannot go down: current card not found");
-        app.send_error_toast("Cannot go down: Something went wrong", None);
-        return;
-    }
-    let current_card_index = current_card_index.unwrap();
-    let current_board = boards.get_board_with_id(current_board_id).unwrap();
-    if current_card_index == current_board.cards.len() - 1 {
-        app.send_error_toast("Cannot go down: Already at the last card", None);
-        return;
-    }
-    if current_card_index == app.config.no_of_cards_to_show as usize - 1 {
-        let current_card_index_in_all_cards = current_board.cards.get_card_index(current_card_id);
-        if current_card_index_in_all_cards.is_none() {
-            debug!("Cannot go down: current card not found");
-            app.send_error_toast("Cannot go down: Something went wrong", None);
-            return;
-        }
-        let current_card_index_in_all_cards = current_card_index_in_all_cards.unwrap();
-        let next_card_index = current_card_index_in_all_cards + 1;
-        if next_card_index >= current_board.cards.len() {
-            app.send_error_toast("Cannot go down: Already at the last card", None);
-            return;
-        }
-        let next_card_id = current_board
-            .cards
-            .get_card_with_index(next_card_index)
-            .unwrap()
-            .id;
-        let start_index = next_card_index - 1;
-        let end_index = next_card_index - 1 + app.config.no_of_cards_to_show as usize;
-        let end_index = if end_index > current_board.cards.len() {
-            current_board.cards.len()
-        } else {
-            end_index
-        };
-        let next_card_ids = current_board
-            .cards
-            .get_cards_with_range(start_index, end_index)
-            .get_all_card_ids();
-        let next_card_ids = if next_card_ids.len() < app.config.no_of_cards_to_show as usize {
-            let mut next_card_ids = next_card_ids;
-            let mut start_index = start_index;
-            while next_card_ids.len() < app.config.no_of_cards_to_show as usize && start_index > 0 {
-                start_index -= 1;
-                next_card_ids.insert(
-                    0,
-                    current_board
+        .position(|card_id| *card_id == current_card_id)
+    {
+        if current_card_index == app.config.no_of_cards_to_show as usize - 1 {
+            if let Some(current_card_index_in_all_cards) = boards
+                .get_board_with_id(current_board_id)
+                .unwrap()
+                .cards
+                .get_card_index(current_card_id)
+            {
+                if let Some(board) = boards.get_board_with_id(current_board_id) {
+                    if let Some(next_card) = board
                         .cards
-                        .get_card_with_index(start_index)
-                        .unwrap()
-                        .id,
-                );
+                        .get_card_with_index(current_card_index_in_all_cards + 1)
+                    {
+                        let next_card_id = next_card.id;
+                        let start_index = current_card_index_in_all_cards + 1;
+                        let end_index = current_card_index_in_all_cards
+                            + 1
+                            + app.config.no_of_cards_to_show as usize;
+                        let end_index = if end_index > board.cards.len() {
+                            board.cards.len()
+                        } else {
+                            end_index
+                        };
+                        let next_card_ids = board
+                            .cards
+                            .get_cards_with_range(start_index, end_index)
+                            .get_all_card_ids();
+                        let next_card_ids =
+                            if next_card_ids.len() < app.config.no_of_cards_to_show as usize {
+                                let mut next_card_ids = next_card_ids;
+                                let mut start_index = start_index;
+                                while next_card_ids.len() < app.config.no_of_cards_to_show as usize
+                                    && start_index > 0
+                                {
+                                    start_index -= 1;
+                                    next_card_ids.insert(
+                                        0,
+                                        board.cards.get_card_with_index(start_index).unwrap().id,
+                                    );
+                                }
+                                next_card_ids
+                            } else {
+                                next_card_ids
+                            };
+                        app.visible_boards_and_cards
+                            .entry(current_board_id)
+                            .and_modify(|cards| *cards = next_card_ids);
+                        app.state.current_card_id = Some(next_card_id);
+                    } else {
+                        debug!("Cannot go down: Already at the last card");
+                        app.send_error_toast("Cannot go down: Already at the last card", None);
+                    }
+                }
+            } else {
+                debug!("Cannot go down: current card not found");
+                app.send_error_toast("Cannot go down: Something went wrong", None);
             }
-            next_card_ids
-        } else {
-            next_card_ids
-        };
-        app.visible_boards_and_cards
-            .entry(current_board_id)
-            .and_modify(|cards| *cards = next_card_ids);
-        app.state.current_card_id = Some(next_card_id);
-    } else {
-        let next_card_id = *current_visible_boards
+        } else if let Some(next_card_id) = current_visible_boards
             .iter()
             .find(|(board_id, _)| **board_id == current_board_id)
             .unwrap()
             .1
             .get(current_card_index + 1)
-            .unwrap_or(&(0, 0));
-        if next_card_id != (0, 0) {
-            app.state.current_card_id = Some(next_card_id);
+        {
+            app.state.current_card_id = Some(*next_card_id);
+        } else {
+            debug!("Cannot go down: Already at the last card");
+            app.send_error_toast("Cannot go down: Already at the last card", None);
         }
+    } else {
+        debug!("Cannot go down: current card not found");
+        app.send_error_toast("Cannot go down: Something went wrong", None);
     }
 }
 
@@ -424,58 +436,59 @@ pub fn prepare_config_for_new_app(
 ) -> (AppConfig, Vec<&'static str>, Vec<ToastWidget>) {
     let mut toasts = vec![];
     let mut errors = vec![];
-    let get_config_status = get_config(false);
-    if let Err(config_error_msg) = get_config_status {
-        if config_error_msg.contains("Overlapped keybindings found") {
-            error!("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
-            errors.push("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
-            toasts.push(ToastWidget::new(
-                config_error_msg,
-                Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
-                ToastType::Error,
-                theme.clone(),
-            ));
-            toasts.push(ToastWidget::new("Please check your config file and fix the keybindings. Using default keybindings for now.".to_owned(),
-                Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning, theme.clone()));
-            let new_config = get_config(true);
-            if let Err(new_config_error) = new_config {
-                error!("Unable to fix keybindings. Please check your config file. Using default config for now.");
-                errors.push("Unable to fix keybindings. Please check your config file. Using default config for now.");
+    match get_config(false) {
+        Ok(config) => (config, errors, toasts),
+        Err(config_error_msg) => {
+            if config_error_msg.contains("Overlapped keybindings found") {
+                error!("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
+                errors.push("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
                 toasts.push(ToastWidget::new(
-                    new_config_error,
+                    config_error_msg,
                     Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
+                    ToastType::Error,
+                    theme.clone(),
+                ));
+                toasts.push(ToastWidget::new("Please check your config file and fix the keybindings. Using default keybindings for now.".to_owned(),
+                    Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning, theme.clone()));
+                match get_config(true) {
+                    Ok(mut new_config) => {
+                        new_config.keybindings = KeyBindings::default();
+                        (new_config, errors, toasts)
+                    }
+                    Err(new_config_error) => {
+                        error!("Unable to fix keybindings. Please check your config file. Using default config for now.");
+                        errors.push("Unable to fix keybindings. Please check your config file. Using default config for now.");
+                        toasts.push(ToastWidget::new(
+                            new_config_error,
+                            Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
+                            ToastType::Error,
+                            theme.clone(),
+                        ));
+                        toasts.push(ToastWidget::new(
+                            "Using default config for now.".to_owned(),
+                            Duration::from_secs(DEFAULT_TOAST_DURATION),
+                            ToastType::Warning,
+                            theme,
+                        ));
+                        (AppConfig::default(), errors, toasts)
+                    }
+                }
+            } else {
+                toasts.push(ToastWidget::new(
+                    config_error_msg,
+                    Duration::from_secs(DEFAULT_TOAST_DURATION),
                     ToastType::Error,
                     theme.clone(),
                 ));
                 toasts.push(ToastWidget::new(
                     "Using default config for now.".to_owned(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION),
-                    ToastType::Warning,
+                    ToastType::Info,
                     theme,
                 ));
                 (AppConfig::default(), errors, toasts)
-            } else {
-                let mut unwrapped_new_config = new_config.unwrap();
-                unwrapped_new_config.keybindings = KeyBindings::default();
-                (unwrapped_new_config, errors, toasts)
             }
-        } else {
-            toasts.push(ToastWidget::new(
-                config_error_msg,
-                Duration::from_secs(DEFAULT_TOAST_DURATION),
-                ToastType::Error,
-                theme.clone(),
-            ));
-            toasts.push(ToastWidget::new(
-                "Using default config for now.".to_owned(),
-                Duration::from_secs(DEFAULT_TOAST_DURATION),
-                ToastType::Info,
-                theme,
-            ));
-            (AppConfig::default(), errors, toasts)
         }
-    } else {
-        (get_config_status.unwrap(), errors, toasts)
     }
 }
 
@@ -504,37 +517,20 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 );
             }
         }
-        if app.state.popup_mode.is_some() {
-            match app.state.popup_mode.unwrap() {
+        if let Some(popup_mode) = app.state.popup_mode {
+            match popup_mode {
                 PopupMode::CommandPalette => {
                     app.close_popup();
                     if app.widgets.command_palette.already_in_user_input_mode {
                         app.widgets.command_palette.already_in_user_input_mode = false;
-                        if app.widgets.command_palette.last_focus.is_some() {
-                            app.state
-                                .set_focus(app.widgets.command_palette.last_focus.unwrap());
+                        if let Some(last_focus) = app.widgets.command_palette.last_focus {
+                            app.state.set_focus(last_focus);
                         }
                         return AppReturn::Continue;
                     }
                 }
                 PopupMode::ConfirmDiscardCardChanges => {
-                    if app.state.card_being_edited.is_some() {
-                        warn!(
-                            "Discarding changes to card '{}'",
-                            app.state.card_being_edited.as_ref().unwrap().1.name
-                        );
-                        app.send_warning_toast(
-                            &format!(
-                                "Discarding changes to card '{}'",
-                                app.state.card_being_edited.as_ref().unwrap().1.name
-                            ),
-                            None,
-                        );
-                    }
                     app.close_popup();
-                    app.state.card_being_edited = None;
-                    // Move this behaviour to clove popup function
-                    app.state.app_status = AppStatus::Initialized;
                 }
                 PopupMode::ViewCard => {
                     if app.state.card_being_edited.is_some() {
@@ -582,8 +578,10 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
             app.close_popup();
             return AppReturn::Continue;
         }
-        if app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette
+        if app
+            .state
+            .popup_mode
+            .is_some_and(|popup_mode| popup_mode == PopupMode::CommandPalette)
         {
             let stop_input_mode_keys = &app.config.keybindings.stop_user_input;
             match key {
@@ -716,198 +714,212 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 }
             }
             Focus::CardTags => {
-                if app.state.card_being_edited.is_none() {
-                    // cannot add tag or comment to a new card
-                    return AppReturn::Continue;
-                }
-                let current_card = &mut app.state.card_being_edited.as_mut().unwrap().1;
-                let current_selected = app
-                    .state
-                    .app_list_states
-                    .card_view_tag_list
-                    .selected()
-                    .unwrap_or(0);
-                match key {
-                    Key::ShiftRight => {
-                        let max = current_card.tags.len();
-                        if current_selected < max - 1 {
-                            app.state
-                                .app_list_states
-                                .card_view_tag_list
-                                .select(Some(current_selected + 1));
+                if let Some((_, current_card)) = &mut app.state.card_being_edited {
+                    let current_selected = app
+                        .state
+                        .app_list_states
+                        .card_view_tag_list
+                        .selected()
+                        .unwrap_or(0);
+                    match key {
+                        Key::ShiftRight => {
+                            if !current_card.tags.is_empty() {
+                                let max = current_card.tags.len();
+                                if current_selected < max - 1 {
+                                    app.state
+                                        .app_list_states
+                                        .card_view_tag_list
+                                        .select(Some(current_selected + 1));
+                                }
+                            }
                         }
-                    }
-                    Key::ShiftLeft => {
-                        app.state
-                            .app_list_states
-                            .card_view_tag_list
-                            .select(Some(current_selected.saturating_sub(1)));
-                    }
-                    Key::Enter => {
-                        if let Some(insert_index) =
-                            app.state.app_list_states.card_view_tag_list.selected()
-                        {
-                            current_card.tags.insert(insert_index + 1, "".to_owned());
-                            app.state
-                                .text_buffers
-                                .prepare_tags_and_comments_for_card(current_card);
-                            app.state
-                                .app_list_states
-                                .card_view_tag_list
-                                .select(Some(insert_index + 1));
-                        } else {
-                            current_card.tags.push("".to_owned());
-                            app.state
-                                .text_buffers
-                                .prepare_tags_and_comments_for_card(current_card);
-                            app.state
-                                .app_list_states
-                                .card_view_tag_list
-                                .select(Some(current_card.tags.len().saturating_sub(1)));
-                        }
-                    }
-                    Key::Delete => {
-                        if current_card.tags.is_empty() {
-                            app.send_error_toast("No tags to delete", None);
-                        } else if let Some(delete_index) =
-                            app.state.app_list_states.card_view_tag_list.selected()
-                        {
-                            current_card.tags.remove(delete_index);
-                            app.state
-                                .text_buffers
-                                .prepare_tags_and_comments_for_card(current_card);
-                            if delete_index != 0 {
+                        Key::ShiftLeft => {
+                            if !current_card.tags.is_empty() {
                                 app.state
                                     .app_list_states
                                     .card_view_tag_list
-                                    .select(Some(delete_index - 1));
+                                    .select(Some(current_selected.saturating_sub(1)));
                             }
                         }
-                    }
-                    _ if app.config.keybindings.next_focus.contains(&key) => handle_next_focus(app),
-                    _ if app.config.keybindings.prv_focus.contains(&key) => handle_prv_focus(app),
-                    _ => {
-                        if let Some(selected_tag_index) =
-                            app.state.app_list_states.card_view_tag_list.selected()
-                        {
-                            if let Some(current_tag_text_box) =
-                                app.state.text_buffers.card_tags.get_mut(selected_tag_index)
+                        Key::Enter => {
+                            if let Some(insert_index) =
+                                app.state.app_list_states.card_view_tag_list.selected()
                             {
-                                current_tag_text_box.input(key);
-                                current_card.tags[selected_tag_index] =
-                                    current_tag_text_box.get_joined_lines();
+                                current_card.tags.insert(insert_index + 1, "".to_owned());
+                                app.state
+                                    .text_buffers
+                                    .prepare_tags_and_comments_for_card(current_card);
+                                app.state
+                                    .app_list_states
+                                    .card_view_tag_list
+                                    .select(Some(insert_index + 1));
+                            } else {
+                                current_card.tags.push("".to_owned());
+                                app.state
+                                    .text_buffers
+                                    .prepare_tags_and_comments_for_card(current_card);
+                                app.state
+                                    .app_list_states
+                                    .card_view_tag_list
+                                    .select(Some(current_card.tags.len().saturating_sub(1)));
                             }
-                        } else {
-                            app.send_warning_toast(
-                                &format!(
-                                    "No Tag selected to edit, use {} or {}",
-                                    Key::ShiftRight,
-                                    Key::ShiftLeft
-                                ),
-                                None,
-                            );
+                        }
+                        Key::Delete => {
+                            if current_card.tags.is_empty() {
+                                app.send_error_toast("No tags to delete", None);
+                            } else if let Some(delete_index) =
+                                app.state.app_list_states.card_view_tag_list.selected()
+                            {
+                                current_card.tags.remove(delete_index);
+                                app.state
+                                    .text_buffers
+                                    .prepare_tags_and_comments_for_card(current_card);
+                                if delete_index != 0 {
+                                    app.state
+                                        .app_list_states
+                                        .card_view_tag_list
+                                        .select(Some(delete_index - 1));
+                                }
+                            }
+                        }
+                        _ if app.config.keybindings.next_focus.contains(&key) => {
+                            handle_next_focus(app)
+                        }
+                        _ if app.config.keybindings.prv_focus.contains(&key) => {
+                            handle_prv_focus(app)
+                        }
+                        _ => {
+                            if let Some(selected_tag_index) =
+                                app.state.app_list_states.card_view_tag_list.selected()
+                            {
+                                if let Some(current_tag_text_box) =
+                                    app.state.text_buffers.card_tags.get_mut(selected_tag_index)
+                                {
+                                    current_tag_text_box.input(key);
+                                    current_card.tags[selected_tag_index] =
+                                        current_tag_text_box.get_joined_lines();
+                                }
+                            } else {
+                                app.send_warning_toast(
+                                    &format!(
+                                        "No Tag selected to edit, use {} or {}",
+                                        Key::ShiftRight,
+                                        Key::ShiftLeft
+                                    ),
+                                    None,
+                                );
+                            }
                         }
                     }
+                } else {
+                    return AppReturn::Continue;
                 }
             }
             Focus::CardComments => {
-                if app.state.card_being_edited.is_none() {
-                    // cannot add tag or comment to a new card
-                    return AppReturn::Continue;
-                }
-                let current_card = &mut app.state.card_being_edited.as_mut().unwrap().1;
-                let current_selected = app
-                    .state
-                    .app_list_states
-                    .card_view_comment_list
-                    .selected()
-                    .unwrap_or(0);
-                match key {
-                    Key::ShiftRight => {
-                        let max = current_card.comments.len();
-                        if current_selected < max - 1 {
-                            app.state
-                                .app_list_states
-                                .card_view_comment_list
-                                .select(Some(current_selected + 1));
+                if let Some((_, current_card)) = &mut app.state.card_being_edited {
+                    let current_selected = app
+                        .state
+                        .app_list_states
+                        .card_view_comment_list
+                        .selected()
+                        .unwrap_or(0);
+                    match key {
+                        Key::ShiftRight => {
+                            if !current_card.comments.is_empty() {
+                                let max = current_card.comments.len();
+                                if current_selected < max - 1 {
+                                    app.state
+                                        .app_list_states
+                                        .card_view_comment_list
+                                        .select(Some(current_selected + 1));
+                                }
+                            }
                         }
-                    }
-                    Key::ShiftLeft => {
-                        app.state
-                            .app_list_states
-                            .card_view_comment_list
-                            .select(Some(current_selected.saturating_sub(1)));
-                    }
-                    Key::Enter => {
-                        if let Some(insert_index) =
-                            app.state.app_list_states.card_view_comment_list.selected()
-                        {
-                            current_card
-                                .comments
-                                .insert(insert_index + 1, "".to_owned());
-                            app.state
-                                .text_buffers
-                                .prepare_tags_and_comments_for_card(current_card);
-                            app.state
-                                .app_list_states
-                                .card_view_comment_list
-                                .select(Some(insert_index + 1));
-                        } else {
-                            current_card.comments.push("".to_owned());
-                            app.state
-                                .text_buffers
-                                .prepare_tags_and_comments_for_card(current_card);
-                            app.state
-                                .app_list_states
-                                .card_view_comment_list
-                                .select(Some(current_card.comments.len().saturating_sub(1)));
-                        }
-                    }
-                    Key::Delete => {
-                        if current_card.comments.is_empty() {
-                            app.send_error_toast("No comments to delete", None);
-                        } else if let Some(delete_index) =
-                            app.state.app_list_states.card_view_comment_list.selected()
-                        {
-                            current_card.comments.remove(delete_index);
-                            app.state
-                                .text_buffers
-                                .prepare_tags_and_comments_for_card(current_card);
-                            if delete_index != 0 {
+                        Key::ShiftLeft => {
+                            if !current_card.comments.is_empty() {
                                 app.state
                                     .app_list_states
                                     .card_view_comment_list
-                                    .select(Some(delete_index - 1));
+                                    .select(Some(current_selected.saturating_sub(1)));
                             }
                         }
-                    }
-                    _ if app.config.keybindings.next_focus.contains(&key) => handle_next_focus(app),
-                    _ if app.config.keybindings.prv_focus.contains(&key) => handle_prv_focus(app),
-                    _ => {
-                        if let Some(selected_comment_index) =
-                            app.state.app_list_states.card_view_comment_list.selected()
-                        {
-                            if let Some(current_comment_text_box) = app
-                                .state
-                                .text_buffers
-                                .card_comments
-                                .get_mut(selected_comment_index)
+                        Key::Enter => {
+                            if let Some(insert_index) =
+                                app.state.app_list_states.card_view_comment_list.selected()
                             {
-                                current_comment_text_box.input(key);
-                                current_card.comments[selected_comment_index] =
-                                    current_comment_text_box.get_joined_lines();
+                                current_card
+                                    .comments
+                                    .insert(insert_index + 1, "".to_owned());
+                                app.state
+                                    .text_buffers
+                                    .prepare_tags_and_comments_for_card(current_card);
+                                app.state
+                                    .app_list_states
+                                    .card_view_comment_list
+                                    .select(Some(insert_index + 1));
+                            } else {
+                                current_card.comments.push("".to_owned());
+                                app.state
+                                    .text_buffers
+                                    .prepare_tags_and_comments_for_card(current_card);
+                                app.state
+                                    .app_list_states
+                                    .card_view_comment_list
+                                    .select(Some(current_card.comments.len().saturating_sub(1)));
                             }
-                        } else {
-                            app.send_warning_toast(
-                                &format!(
-                                    "No Comment selected to edit, use {} or {}",
-                                    Key::ShiftRight,
-                                    Key::ShiftLeft
-                                ),
-                                None,
-                            );
+                        }
+                        Key::Delete => {
+                            if current_card.comments.is_empty() {
+                                app.send_error_toast("No comments to delete", None);
+                            } else if let Some(delete_index) =
+                                app.state.app_list_states.card_view_comment_list.selected()
+                            {
+                                current_card.comments.remove(delete_index);
+                                app.state
+                                    .text_buffers
+                                    .prepare_tags_and_comments_for_card(current_card);
+                                if delete_index != 0 {
+                                    app.state
+                                        .app_list_states
+                                        .card_view_comment_list
+                                        .select(Some(delete_index - 1));
+                                }
+                            }
+                        }
+                        _ if app.config.keybindings.next_focus.contains(&key) => {
+                            handle_next_focus(app)
+                        }
+                        _ if app.config.keybindings.prv_focus.contains(&key) => {
+                            handle_prv_focus(app)
+                        }
+                        _ => {
+                            if let Some(selected_comment_index) =
+                                app.state.app_list_states.card_view_comment_list.selected()
+                            {
+                                if let Some(current_comment_text_box) = app
+                                    .state
+                                    .text_buffers
+                                    .card_comments
+                                    .get_mut(selected_comment_index)
+                                {
+                                    current_comment_text_box.input(key);
+                                    current_card.comments[selected_comment_index] =
+                                        current_comment_text_box.get_joined_lines();
+                                }
+                            } else {
+                                app.send_warning_toast(
+                                    &format!(
+                                        "No Comment selected to edit, use {} or {}",
+                                        Key::ShiftRight,
+                                        Key::ShiftLeft
+                                    ),
+                                    None,
+                                );
+                            }
                         }
                     }
+                } else {
+                    return AppReturn::Continue;
                 }
             }
             Focus::EmailIDField => {
@@ -964,14 +976,13 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 } else {
                     match key {
                         Key::Right | Key::Tab => {
-                            if app.state.path_check_state.potential_completion.is_some() {
-                                app.state.text_buffers.general_config.insert_str(
-                                    app.state
-                                        .path_check_state
-                                        .potential_completion
-                                        .as_ref()
-                                        .unwrap(),
-                                );
+                            if let Some(potential_completion) =
+                                &app.state.path_check_state.potential_completion
+                            {
+                                app.state
+                                    .text_buffers
+                                    .general_config
+                                    .insert_str(potential_completion);
                             }
                         }
                         Key::Char('%') => {
@@ -1017,17 +1028,18 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
             Focus::SubmitButton => {
                 match key {
                     Key::Enter => {
-                        if app.state.popup_mode.is_some() {
-                            match app.state.popup_mode.unwrap() {
-                                PopupMode::ViewCard if app.state.card_being_edited.is_some() => {
-                                    return handle_edit_card_submit(app);
-                                }
-                                _ => {
-                                    debug!("Dont know what to do with Submit button in user input mode for popup mode: {:?}", app.state.popup_mode);
-                                }
+                        if app
+                            .state
+                            .popup_mode
+                            .is_some_and(|popup_mode| popup_mode == PopupMode::ViewCard)
+                        {
+                            if app.state.card_being_edited.is_some() {
+                                return handle_edit_card_submit(app);
                             }
                             app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
+                        } else {
+                            debug!("Dont know what to do with Submit button in user input mode for popup mode: {:?}", app.state.popup_mode);
                         }
                         match app.state.ui_mode {
                             UiMode::NewCard => {
@@ -1084,26 +1096,20 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
 }
 
 pub async fn handle_edit_keybinding_mode(app: &mut App<'_>, key: Key) -> AppReturn {
-    match key {
-        Key::Esc => {
-            app.state.app_status = AppStatus::Initialized;
-            app.state.edited_keybinding = None;
-            info!("Exiting user Keybinding input mode");
-        }
-        _ => {
-            if app.config.keybindings.stop_user_input.contains(&key) {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user Keybinding input mode");
-                return AppReturn::Continue;
-            }
-            if app.state.edited_keybinding.is_some() {
-                let keybinding = app.state.edited_keybinding.as_mut().unwrap();
-                keybinding.push(key);
-            } else {
-                app.state.edited_keybinding = Some(vec![key]);
-            }
-        }
+    // Handle escape key or other keys that should stop user input
+    if matches!(key, Key::Esc) || app.config.keybindings.stop_user_input.contains(&key) {
+        app.state.app_status = AppStatus::Initialized;
+        app.state.edited_keybinding = None; // Clear edited keybinding on exit
+        info!("Exiting user Keybinding input mode");
+        return AppReturn::Continue;
     }
+
+    // For any other key, add it to the current keybinding being edited
+    match &mut app.state.edited_keybinding {
+        Some(keybinding) => keybinding.push(key),
+        None => app.state.edited_keybinding = Some(vec![key]),
+    }
+
     AppReturn::Continue
 }
 
@@ -1134,13 +1140,10 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::OpenConfigMenu => {
-                match app.state.ui_mode {
-                    UiMode::ConfigMenu => {
-                        handle_go_to_previous_ui_mode(app).await;
-                    }
-                    _ => {
-                        app.set_ui_mode(UiMode::ConfigMenu);
-                    }
+                if matches!(app.state.ui_mode, UiMode::ConfigMenu) {
+                    handle_go_to_previous_ui_mode(app).await;
+                } else {
+                    app.set_ui_mode(UiMode::ConfigMenu);
                 }
                 if app.state.popup_mode.is_some() {
                     app.close_popup();
@@ -1149,8 +1152,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::Up => {
                 reset_mouse(app);
-                if app.state.popup_mode.is_some() {
-                    let popup_mode = app.state.popup_mode.as_ref().unwrap();
+                if let Some(popup_mode) = app.state.popup_mode {
                     match popup_mode {
                         PopupMode::ChangeUIMode => app.select_default_view_prv(),
                         PopupMode::CardStatusSelector => app.select_card_status_prv(),
@@ -1184,18 +1186,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         if app.state.focus == Focus::ConfigTable {
                             app.config_prv();
                         } else {
-                            let next_focus_key = app
-                                .config
-                                .keybindings
-                                .next_focus
-                                .first()
-                                .unwrap_or(&Key::Tab);
-                            let prev_focus_key = app
-                                .config
-                                .keybindings
-                                .prv_focus
-                                .first()
-                                .unwrap_or(&Key::BackTab);
+                            let next_focus_key = app.get_first_next_focus_keybinding();
+                            let prev_focus_key = app.get_first_prv_focus_keybinding();
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1209,18 +1201,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         } else if app.state.focus == Focus::Log {
                             app.log_prv();
                         } else {
-                            let next_focus_key = app
-                                .config
-                                .keybindings
-                                .next_focus
-                                .first()
-                                .unwrap_or(&Key::Tab);
-                            let prev_focus_key = app
-                                .config
-                                .keybindings
-                                .prv_focus
-                                .first()
-                                .unwrap_or(&Key::BackTab);
+                            let next_focus_key = app.get_first_next_focus_keybinding();
+                            let prev_focus_key = app.get_first_prv_focus_keybinding();
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1241,18 +1223,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         if app.state.focus == Focus::ThemeEditor {
                             app.select_create_theme_prv();
                         } else if app.state.focus == Focus::SubmitButton {
-                            let next_focus_key = app
-                                .config
-                                .keybindings
-                                .next_focus
-                                .first()
-                                .unwrap_or(&Key::Tab);
-                            let prev_focus_key = app
-                                .config
-                                .keybindings
-                                .prv_focus
-                                .first()
-                                .unwrap_or(&Key::BackTab);
+                            let next_focus_key = app.get_first_next_focus_keybinding();
+                            let prev_focus_key = app.get_first_prv_focus_keybinding();
                             app.send_warning_toast(&format!(
                                 "Move Focus to the theme editor with {} or {}, to select a style to edit",
                                 next_focus_key, prev_focus_key), None);
@@ -1290,8 +1262,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::Down => {
                 reset_mouse(app);
-                if app.state.popup_mode.is_some() {
-                    let popup_mode = app.state.popup_mode.as_ref().unwrap();
+                if let Some(popup_mode) = app.state.popup_mode {
                     match popup_mode {
                         PopupMode::ChangeUIMode => app.select_default_view_next(),
                         PopupMode::CardStatusSelector => app.select_card_status_next(),
@@ -1325,18 +1296,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         if app.state.focus == Focus::ConfigTable {
                             app.config_next();
                         } else {
-                            let next_focus_key = app
-                                .config
-                                .keybindings
-                                .next_focus
-                                .first()
-                                .unwrap_or(&Key::Tab);
-                            let prev_focus_key = app
-                                .config
-                                .keybindings
-                                .prv_focus
-                                .first()
-                                .unwrap_or(&Key::BackTab);
+                            let next_focus_key = app.get_first_next_focus_keybinding();
+                            let prev_focus_key = app.get_first_prv_focus_keybinding();
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Config Menu with {} or {}, to select a config option using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1350,18 +1311,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         } else if app.state.focus == Focus::Log {
                             app.log_next();
                         } else {
-                            let next_focus_key = app
-                                .config
-                                .keybindings
-                                .next_focus
-                                .first()
-                                .unwrap_or(&Key::Tab);
-                            let prev_focus_key = app
-                                .config
-                                .keybindings
-                                .prv_focus
-                                .first()
-                                .unwrap_or(&Key::BackTab);
+                            let next_focus_key = app.get_first_next_focus_keybinding();
+                            let prev_focus_key = app.get_first_prv_focus_keybinding();
                             app.send_warning_toast(&format!(
                                 "Move Focus to the Main Menu with {} or {}, to navigate the menu using the arrow keys",
                                 next_focus_key, prev_focus_key), None);
@@ -1382,18 +1333,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         if app.state.focus == Focus::ThemeEditor {
                             app.select_create_theme_next();
                         } else if app.state.focus == Focus::SubmitButton {
-                            let next_focus_key = app
-                                .config
-                                .keybindings
-                                .next_focus
-                                .first()
-                                .unwrap_or(&Key::Tab);
-                            let prev_focus_key = app
-                                .config
-                                .keybindings
-                                .prv_focus
-                                .first()
-                                .unwrap_or(&Key::BackTab);
+                            let next_focus_key = app.get_first_next_focus_keybinding();
+                            let prev_focus_key = app.get_first_prv_focus_keybinding();
                             app.send_warning_toast(&format!(
                                 "Move Focus to the theme editor with {} or {}, to select a style to edit",
                                 next_focus_key, prev_focus_key), None);
@@ -1429,39 +1370,39 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::Right => {
                 reset_mouse(app);
-                if app.state.focus == Focus::Body
-                    && UiMode::view_modes().contains(&app.state.ui_mode)
-                    && app.state.popup_mode.is_none()
-                {
-                    go_right(app);
-                } else if app.state.popup_mode.is_some()
-                    && (app.state.popup_mode.unwrap() == PopupMode::ConfirmDiscardCardChanges
-                        || app.state.popup_mode.unwrap() == PopupMode::SaveThemePrompt)
-                {
-                    if app.state.focus == Focus::SubmitButton {
-                        app.state.set_focus(Focus::ExtraFocus);
-                    } else {
-                        app.state.set_focus(Focus::SubmitButton);
+                match app.state.popup_mode {
+                    Some(PopupMode::ConfirmDiscardCardChanges)
+                    | Some(PopupMode::SaveThemePrompt) => {
+                        app.state.set_focus(match app.state.focus {
+                            Focus::SubmitButton => Focus::ExtraFocus,
+                            _ => Focus::SubmitButton,
+                        });
                     }
+                    None if app.state.focus == Focus::Body
+                        && UiMode::view_modes().contains(&app.state.ui_mode) =>
+                    {
+                        go_right(app);
+                    }
+                    _ => {}
                 }
                 AppReturn::Continue
             }
             Action::Left => {
                 reset_mouse(app);
-                if app.state.focus == Focus::Body
-                    && UiMode::view_modes().contains(&app.state.ui_mode)
-                    && app.state.popup_mode.is_none()
-                {
-                    go_left(app);
-                } else if app.state.popup_mode.is_some()
-                    && (app.state.popup_mode.unwrap() == PopupMode::ConfirmDiscardCardChanges
-                        || app.state.popup_mode.unwrap() == PopupMode::SaveThemePrompt)
-                {
-                    if app.state.focus == Focus::SubmitButton {
-                        app.state.set_focus(Focus::ExtraFocus);
-                    } else {
-                        app.state.set_focus(Focus::SubmitButton);
+                match app.state.popup_mode {
+                    Some(PopupMode::ConfirmDiscardCardChanges)
+                    | Some(PopupMode::SaveThemePrompt) => {
+                        app.state.set_focus(match app.state.focus {
+                            Focus::SubmitButton => Focus::ExtraFocus,
+                            _ => Focus::SubmitButton,
+                        });
                     }
+                    None if app.state.focus == Focus::Body
+                        && UiMode::view_modes().contains(&app.state.ui_mode) =>
+                    {
+                        go_left(app);
+                    }
+                    _ => {}
                 }
                 AppReturn::Continue
             }
@@ -1472,8 +1413,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         info!("Taking user input");
                     }
                     _ => {
-                        if app.state.popup_mode.is_some() {
-                            match app.state.popup_mode.unwrap() {
+                        if let Some(popup_mode) = app.state.popup_mode {
+                            match popup_mode {
                                 PopupMode::EditGeneralConfig
                                 | PopupMode::CustomRGBPromptFG
                                 | PopupMode::CustomRGBPromptBG => {
@@ -1503,8 +1444,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::GoToPreviousUIModeorCancel => handle_go_to_previous_ui_mode(app).await,
             Action::Accept => {
-                if app.state.popup_mode.is_some() {
-                    let popup_mode = app.state.popup_mode.as_ref().unwrap();
+                if let Some(popup_mode) = app.state.popup_mode {
                     match popup_mode {
                         PopupMode::ChangeUIMode => handle_change_ui_mode(app),
                         PopupMode::CardStatusSelector => {
@@ -1555,7 +1495,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             _ => {}
                         },
                         PopupMode::CommandPalette => {
-                            // not required to handle here as the command palette is handled in the user input mode
+                            unreachable!("Command palette should not be handled here");
                         }
                         PopupMode::ConfirmDiscardCardChanges => match app.state.focus {
                             Focus::SubmitButton => {
@@ -1563,21 +1503,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 app.close_popup();
                             }
                             Focus::ExtraFocus => {
-                                if app.state.card_being_edited.is_some() {
-                                    warn!(
-                                        "Discarding changes to card '{}'",
-                                        app.state.card_being_edited.as_ref().unwrap().1.name
-                                    );
-                                    app.send_warning_toast(
-                                        &format!(
-                                            "Discarding changes to card '{}'",
-                                            app.state.card_being_edited.as_ref().unwrap().1.name
-                                        ),
-                                        None,
-                                    );
-                                }
                                 app.close_popup();
-                                app.state.card_being_edited = None;
                             }
                             _ => {}
                         },
@@ -1800,86 +1726,92 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         Focus::Body => {
                             if let Some(current_board_id) = app.state.current_board_id {
                                 if let Some(current_card_id) = app.state.current_card_id {
-                                    let current_board =
-                                        app.boards.get_mut_board_with_id(current_board_id);
-                                    if current_board.is_none() {
-                                        debug!("No board available to delete card from");
-                                        return AppReturn::Continue;
-                                    }
-                                    let current_board = current_board.unwrap();
-                                    let current_board_id = current_board.id;
-                                    let card_index =
-                                        current_board.cards.get_card_index(current_card_id);
-                                    if let Some(card_index) = card_index {
-                                        let card = current_board
-                                            .cards
-                                            .get_card_with_index(card_index)
-                                            .unwrap()
-                                            .clone();
-                                        let card_name = card.name.clone();
-                                        current_board.cards.remove_card_with_id(current_card_id);
-                                        if card_index > 0 {
-                                            app.state.current_card_id = Some(
+                                    match app.boards.get_mut_board_with_id(current_board_id) {
+                                        Some(current_board) => {
+                                            let current_board_id = current_board.id;
+                                            let card_index =
+                                                current_board.cards.get_card_index(current_card_id);
+                                            if let Some(card_index) = card_index {
+                                                let card = current_board
+                                                    .cards
+                                                    .get_card_with_index(card_index)
+                                                    .unwrap()
+                                                    .clone();
+                                                let card_name = card.name.clone();
                                                 current_board
                                                     .cards
-                                                    .get_card_with_index(card_index - 1)
-                                                    .unwrap()
-                                                    .id,
-                                            );
-                                        } else if !current_board.cards.is_empty() {
-                                            app.state.current_card_id =
-                                                current_board.cards.get_first_card_id();
-                                        } else {
-                                            app.state.current_card_id = None;
-                                        }
-                                        warn!("Deleted card {}", card_name);
-                                        app.action_history_manager.new_action(
-                                            ActionHistory::DeleteCard(card, current_board.id),
-                                        );
-                                        app.send_warning_toast(
-                                            &format!("Deleted card {}", card_name),
-                                            None,
-                                        );
-                                        if let Some(visible_cards) =
-                                            app.visible_boards_and_cards.get_mut(&current_board_id)
-                                        {
-                                            if let Some(card_index) = visible_cards
-                                                .iter()
-                                                .position(|card_id| *card_id == current_card_id)
-                                            {
-                                                visible_cards.remove(card_index);
+                                                    .remove_card_with_id(current_card_id);
+                                                if card_index > 0 {
+                                                    app.state.current_card_id = Some(
+                                                        current_board
+                                                            .cards
+                                                            .get_card_with_index(card_index - 1)
+                                                            .unwrap()
+                                                            .id,
+                                                    );
+                                                } else if !current_board.cards.is_empty() {
+                                                    app.state.current_card_id =
+                                                        current_board.cards.get_first_card_id();
+                                                } else {
+                                                    app.state.current_card_id = None;
+                                                }
+                                                warn!("Deleted card {}", card_name);
+                                                app.action_history_manager.new_action(
+                                                    ActionHistory::DeleteCard(
+                                                        card,
+                                                        current_board.id,
+                                                    ),
+                                                );
+                                                app.send_warning_toast(
+                                                    &format!("Deleted card {}", card_name),
+                                                    None,
+                                                );
+                                                if let Some(visible_cards) = app
+                                                    .visible_boards_and_cards
+                                                    .get_mut(&current_board_id)
+                                                {
+                                                    if let Some(card_index) =
+                                                        visible_cards.iter().position(|card_id| {
+                                                            *card_id == current_card_id
+                                                        })
+                                                    {
+                                                        visible_cards.remove(card_index);
+                                                    }
+                                                }
+                                                refresh_visible_boards_and_cards(app);
                                             }
                                         }
-                                        refresh_visible_boards_and_cards(app);
-                                    }
-                                } else if let Some(current_board_id) = app.state.current_board_id {
-                                    let board =
-                                        app.boards.get_board_with_id(current_board_id).cloned();
-                                    if let Some(board) = board {
-                                        let board_index =
-                                            app.boards.get_board_index(current_board_id).unwrap();
-                                        let board_name = board.name.clone();
-                                        app.boards.remove_board_with_id(current_board_id);
-                                        if board_index > 0 && !app.boards.is_empty() {
-                                            app.state.current_board_id = Some(
-                                                app.boards
-                                                    .get_board_with_index(board_index - 1)
-                                                    .unwrap()
-                                                    .id,
-                                            );
-                                        } else {
-                                            app.state.current_board_id = None;
+                                        None => {
+                                            debug!("No board available to delete card from");
+                                            return AppReturn::Continue;
                                         }
-                                        warn!("Deleted board {}", board_name);
-                                        app.action_history_manager
-                                            .new_action(ActionHistory::DeleteBoard(board));
-                                        app.send_warning_toast(
-                                            &format!("Deleted board {}", board_name),
-                                            None,
-                                        );
-                                        app.visible_boards_and_cards.remove(&current_board_id);
-                                        refresh_visible_boards_and_cards(app);
                                     }
+                                } else if let Some(board) =
+                                    app.boards.get_board_with_id(current_board_id).cloned()
+                                {
+                                    let board_index =
+                                        app.boards.get_board_index(current_board_id).unwrap();
+                                    let board_name = board.name.clone();
+                                    app.boards.remove_board_with_id(current_board_id);
+                                    if board_index > 0 && !app.boards.is_empty() {
+                                        app.state.current_board_id = Some(
+                                            app.boards
+                                                .get_board_with_index(board_index - 1)
+                                                .unwrap()
+                                                .id,
+                                        );
+                                    } else {
+                                        app.state.current_board_id = None;
+                                    }
+                                    warn!("Deleted board {}", board_name);
+                                    app.action_history_manager
+                                        .new_action(ActionHistory::DeleteBoard(board));
+                                    app.send_warning_toast(
+                                        &format!("Deleted board {}", board_name),
+                                        None,
+                                    );
+                                    app.visible_boards_and_cards.remove(&current_board_id);
+                                    refresh_visible_boards_and_cards(app);
                                 }
                             }
                             AppReturn::Continue
@@ -1895,34 +1827,32 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 match app.state.focus {
                     Focus::Body => {
                         if let Some(current_board_id) = app.state.current_board_id {
-                            let board = app.boards.get_board_with_id(current_board_id).cloned();
-                            if let Some(board) = board {
+                            if let Some(board) =
+                                app.boards.get_board_with_id(current_board_id).cloned()
+                            {
                                 let board_index =
                                     app.boards.get_board_index(current_board_id).unwrap();
                                 let board_name = board.name.clone();
                                 app.boards.remove_board_with_id(current_board_id);
-                                if board_index > 0 {
+                                if board_index > 0 && !app.boards.is_empty() {
                                     app.state.current_board_id = Some(
                                         app.boards
                                             .get_board_with_index(board_index - 1)
                                             .unwrap()
                                             .id,
                                     );
-                                } else if board_index < app.boards.len() {
-                                    app.state.current_board_id = Some(
-                                        app.boards.get_board_with_index(board_index).unwrap().id,
-                                    );
                                 } else {
                                     app.state.current_board_id = None;
                                 }
-                                app.visible_boards_and_cards.remove(&current_board_id);
-                                warn!("Deleted board: {}", board_name);
+                                warn!("Deleted board {}", board_name);
                                 app.action_history_manager
                                     .new_action(ActionHistory::DeleteBoard(board));
                                 app.send_warning_toast(
-                                    &format!("Deleted board: {}", board_name),
+                                    &format!("Deleted board {}", board_name),
                                     None,
                                 );
+                                app.visible_boards_and_cards.remove(&current_board_id);
+                                refresh_visible_boards_and_cards(app);
                             }
                         }
                         AppReturn::Continue
@@ -2028,76 +1958,83 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         }
                         let current_board_id = app.state.current_board_id.unwrap();
                         let current_card_id = app.state.current_card_id.unwrap();
-                        let current_board = boards.get_mut_board_with_id(current_board_id);
-                        if current_board.is_none() {
-                            debug!("Cannot move card up without a current board index");
-                            return AppReturn::Continue;
-                        }
-                        let current_board = current_board.unwrap();
-                        let current_card_index_in_all =
-                            current_board.cards.get_card_index(current_card_id);
-                        if current_card_index_in_all.is_none() {
-                            debug!("Cannot move card up without a current card index");
-                            return AppReturn::Continue;
-                        }
-                        let current_card_index_in_all = current_card_index_in_all.unwrap();
-                        if current_card_index_in_all == 0 {
-                            app.send_error_toast(
+                        match boards.get_mut_board_with_id(current_board_id) {
+                            Some(current_board) => {
+                                let current_card_index_in_all =
+                                    current_board.cards.get_card_index(current_card_id);
+                                if current_card_index_in_all.is_none() {
+                                    debug!("Cannot move card up without a current card index");
+                                    return AppReturn::Continue;
+                                }
+                                let current_card_index_in_all = current_card_index_in_all.unwrap();
+                                if current_card_index_in_all == 0 {
+                                    app.send_error_toast(
                                 "Cannot move card up, it is already at the top of the board",
                                 None,
                             );
-                            error!("Cannot move card up, it is already at the top of the board");
-                            return AppReturn::Continue;
-                        }
-                        let current_card_index_in_visible = app.visible_boards_and_cards
-                            [&current_board_id]
-                            .iter()
-                            .position(|card_id| *card_id == current_card_id);
-                        if current_card_index_in_visible.is_none() {
-                            debug!(
+                                    error!("Cannot move card up, it is already at the top of the board");
+                                    return AppReturn::Continue;
+                                }
+                                let current_card_index_in_visible = app.visible_boards_and_cards
+                                    [&current_board_id]
+                                    .iter()
+                                    .position(|card_id| *card_id == current_card_id);
+                                if current_card_index_in_visible.is_none() {
+                                    debug!(
                                 "Cannot move card up without a current card index in visible cards"
                             );
-                            return AppReturn::Continue;
-                        }
-                        let current_card_index_in_visible = current_card_index_in_visible.unwrap();
-                        if current_card_index_in_visible == 0 {
-                            let card_above_id = current_board
-                                .cards
-                                .get_card_with_index(current_card_index_in_all - 1)
-                                .unwrap()
-                                .id;
-                            let mut visible_cards: Vec<(u64, u64)> = vec![];
-                            visible_cards.push(current_card_id);
-                            visible_cards.push(card_above_id);
-
-                            for card in app.visible_boards_and_cards[&current_board_id].iter() {
-                                if *card != current_card_id
-                                    && visible_cards.len() < app.config.no_of_cards_to_show as usize
-                                {
-                                    visible_cards.push(*card);
+                                    return AppReturn::Continue;
                                 }
-                            }
-                            app.visible_boards_and_cards
-                                .entry(current_board_id)
-                                .and_modify(|cards| *cards = visible_cards);
-                        } else {
-                            app.visible_boards_and_cards
-                                .get_mut(&current_board_id)
-                                .unwrap()
-                                .swap(
-                                    current_card_index_in_visible,
-                                    current_card_index_in_visible - 1,
+                                let current_card_index_in_visible =
+                                    current_card_index_in_visible.unwrap();
+                                if current_card_index_in_visible == 0 {
+                                    let card_above_id = current_board
+                                        .cards
+                                        .get_card_with_index(current_card_index_in_all - 1)
+                                        .unwrap()
+                                        .id;
+                                    let mut visible_cards: Vec<(u64, u64)> = vec![];
+                                    visible_cards.push(current_card_id);
+                                    visible_cards.push(card_above_id);
+
+                                    for card in
+                                        app.visible_boards_and_cards[&current_board_id].iter()
+                                    {
+                                        if *card != current_card_id
+                                            && visible_cards.len()
+                                                < app.config.no_of_cards_to_show as usize
+                                        {
+                                            visible_cards.push(*card);
+                                        }
+                                    }
+                                    app.visible_boards_and_cards
+                                        .entry(current_board_id)
+                                        .and_modify(|cards| *cards = visible_cards);
+                                } else {
+                                    app.visible_boards_and_cards
+                                        .get_mut(&current_board_id)
+                                        .unwrap()
+                                        .swap(
+                                            current_card_index_in_visible,
+                                            current_card_index_in_visible - 1,
+                                        );
+                                }
+                                current_board
+                                    .cards
+                                    .swap(current_card_index_in_all, current_card_index_in_all - 1);
+                                app.action_history_manager.new_action(
+                                    ActionHistory::MoveCardWithinBoard(
+                                        current_board_id,
+                                        current_card_index_in_all,
+                                        current_card_index_in_all - 1,
+                                    ),
                                 );
+                            }
+                            None => {
+                                debug!("Cannot move card up without a current board index");
+                                return AppReturn::Continue;
+                            }
                         }
-                        current_board
-                            .cards
-                            .swap(current_card_index_in_all, current_card_index_in_all - 1);
-                        app.action_history_manager
-                            .new_action(ActionHistory::MoveCardWithinBoard(
-                                current_board_id,
-                                current_card_index_in_all,
-                                current_card_index_in_all - 1,
-                            ));
                     }
                 }
                 AppReturn::Continue
@@ -2439,21 +2376,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             }
                         }
                         PopupMode::ConfirmDiscardCardChanges => {
-                            if app.state.card_being_edited.is_some() {
-                                warn!(
-                                    "Discarding changes to card '{}'",
-                                    app.state.card_being_edited.as_ref().unwrap().1.name
-                                );
-                                app.send_warning_toast(
-                                    &format!(
-                                        "Discarding changes to card '{}'",
-                                        app.state.card_being_edited.as_ref().unwrap().1.name
-                                    ),
-                                    None,
-                                );
-                            }
                             app.close_popup();
-                            app.state.card_being_edited = None;
                             app.set_popup_mode(PopupMode::CommandPalette);
                         }
                         _ => {
@@ -2601,21 +2524,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
                 PopupMode::ConfirmDiscardCardChanges => {
-                    if app.state.card_being_edited.is_some() {
-                        warn!(
-                            "Discarding changes to card '{}'",
-                            app.state.card_being_edited.as_ref().unwrap().1.name
-                        );
-                        app.send_warning_toast(
-                            &format!(
-                                "Discarding changes to card '{}'",
-                                app.state.card_being_edited.as_ref().unwrap().1.name
-                            ),
-                            None,
-                        );
-                    }
                     app.close_popup();
-                    app.state.card_being_edited = None;
                     app.set_popup_mode(PopupMode::CommandPalette);
                 }
                 _ => {
@@ -2626,12 +2535,11 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
         return AppReturn::Continue;
     }
 
-    if app.state.popup_mode.is_some() {
-        let popup_mode = app.state.popup_mode.unwrap();
+    if let (Some(popup_mode), Some(mouse_focus)) = (app.state.popup_mode, app.state.mouse_focus) {
         match popup_mode {
             PopupMode::CommandPalette => {
-                if left_button_pressed && app.state.mouse_focus.is_some() {
-                    match app.state.mouse_focus.unwrap() {
+                if left_button_pressed {
+                    match mouse_focus {
                         Focus::CommandPaletteCommand => {
                             return CommandPaletteWidget::handle_command(app).await;
                         }
@@ -2654,8 +2562,8 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                         }
                         _ => {}
                     }
-                } else if mouse_scroll_up && app.state.mouse_focus.is_some() {
-                    match app.state.mouse_focus.unwrap() {
+                } else if mouse_scroll_up {
+                    match mouse_focus {
                         Focus::CommandPaletteCommand => {
                             app.command_palette_command_search_prv();
                         }
@@ -2663,8 +2571,8 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                         Focus::CommandPaletteBoard => app.command_palette_board_search_prv(),
                         _ => {}
                     }
-                } else if mouse_scroll_down && app.state.mouse_focus.is_some() {
-                    match app.state.mouse_focus.unwrap() {
+                } else if mouse_scroll_down {
+                    match mouse_focus {
                         Focus::CommandPaletteCommand => {
                             app.command_palette_command_search_next();
                         }
@@ -2680,104 +2588,137 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
             }
             PopupMode::SelectDefaultView => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::SelectDefaultView) {
-                        handle_default_view_selection(app);
-                        app.close_popup();
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.close_popup();
+                    match mouse_focus {
+                        Focus::SelectDefaultView => {
+                            handle_default_view_selection(app);
+                            app.close_popup();
+                        }
+                        Focus::CloseButton => {
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::ChangeUIMode => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::ChangeUiModePopup) {
-                        handle_change_ui_mode(app);
-                        app.close_popup();
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.close_popup();
+                    match mouse_focus {
+                        Focus::ChangeUiModePopup => {
+                            handle_change_ui_mode(app);
+                            app.close_popup();
+                        }
+                        Focus::CloseButton => {
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::CardStatusSelector => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::ChangeCardStatusPopup) {
-                        return handle_change_card_status(app, None);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.close_popup();
+                    match mouse_focus {
+                        Focus::ChangeCardStatusPopup => {
+                            return handle_change_card_status(app, None);
+                        }
+                        Focus::CloseButton => {
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::EditGeneralConfig => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::EditGeneralConfigPopup) {
-                        app.state.app_status = AppStatus::UserInput;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.state.app_status = AppStatus::Initialized;
-                        app.close_popup();
-                    } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
-                        if app.state.ui_mode == UiMode::CreateTheme {
-                            handle_create_theme_action(app);
-                        } else {
-                            handle_edit_general_config(app);
+                    match mouse_focus {
+                        Focus::EditGeneralConfigPopup => {
+                            app.state.app_status = AppStatus::UserInput;
                         }
-                        app.state.app_status = AppStatus::Initialized;
-                        app.close_popup();
+                        Focus::CloseButton => {
+                            app.state.app_status = AppStatus::Initialized;
+                            app.close_popup();
+                        }
+                        Focus::SubmitButton => {
+                            if app.state.ui_mode == UiMode::CreateTheme {
+                                handle_create_theme_action(app);
+                            } else {
+                                handle_edit_general_config(app);
+                            }
+                            app.state.app_status = AppStatus::Initialized;
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::EditSpecificKeyBinding => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::EditSpecificKeyBindingPopup) {
-                        app.state.app_status = AppStatus::KeyBindMode;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.state.app_status = AppStatus::Initialized;
-                        app.close_popup();
-                    } else if app.state.mouse_focus == Some(Focus::SubmitButton) {
-                        app.state.app_status = AppStatus::Initialized;
-                        app.close_popup();
-                        handle_edit_specific_keybinding(app);
+                    match mouse_focus {
+                        Focus::EditSpecificKeyBindingPopup => {
+                            app.state.app_status = AppStatus::KeyBindMode;
+                        }
+                        Focus::CloseButton => {
+                            app.state.app_status = AppStatus::Initialized;
+                            app.close_popup();
+                        }
+                        Focus::SubmitButton => {
+                            handle_edit_specific_keybinding(app);
+                            app.state.app_status = AppStatus::Initialized;
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::ChangeDateFormatPopup => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::ChangeDateFormatPopup) {
-                        handle_change_date_format(app);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.close_popup();
+                    match mouse_focus {
+                        Focus::ChangeDateFormatPopup => {
+                            handle_change_date_format(app);
+                        }
+                        Focus::CloseButton => {
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::ChangeTheme => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::ThemeSelector) {
-                        handle_change_theme(app, app.state.default_theme_mode);
-                        app.close_popup();
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        let config_theme = {
-                            let all_themes = Theme::all_default_themes();
-                            let default_theme = app.config.default_theme.clone();
-                            all_themes.iter().find(|t| t.name == default_theme).cloned()
-                        };
-                        if config_theme.is_some() {
-                            app.current_theme = config_theme.unwrap();
+                    match mouse_focus {
+                        Focus::ThemeSelector => {
+                            handle_change_theme(app, app.state.default_theme_mode);
+                            app.close_popup();
                         }
-                        app.close_popup();
+                        Focus::CloseButton => {
+                            let config_theme = {
+                                let all_themes = Theme::all_default_themes();
+                                let default_theme = app.config.default_theme.clone();
+                                all_themes.iter().find(|t| t.name == default_theme).cloned()
+                            };
+                            if let Some(theme) = config_theme {
+                                app.current_theme = theme;
+                            }
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::EditThemeStyle => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.state.app_status = AppStatus::Initialized;
-                        app.close_popup();
-                    } else if app.state.mouse_focus == Some(Focus::SubmitButton)
-                        || app.state.mouse_focus == Some(Focus::StyleEditorFG)
-                        || app.state.mouse_focus == Some(Focus::StyleEditorBG)
-                        || app.state.mouse_focus == Some(Focus::StyleEditorModifier)
-                        || app.state.mouse_focus == Some(Focus::ExtraFocus)
-                    {
-                        handle_create_theme_action(app);
+                    match mouse_focus {
+                        Focus::CloseButton => {
+                            app.state.app_status = AppStatus::Initialized;
+                            app.close_popup();
+                        }
+                        Focus::SubmitButton
+                        | Focus::StyleEditorFG
+                        | Focus::StyleEditorBG
+                        | Focus::StyleEditorModifier
+                        | Focus::ExtraFocus => {
+                            handle_create_theme_action(app);
+                        }
+                        _ => {}
                     }
                 } else if mouse_scroll_up {
                     handle_theme_maker_scroll_up(app);
@@ -2787,47 +2728,54 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
             }
             PopupMode::SaveThemePrompt => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::SubmitButton)
-                        || app.state.mouse_focus == Some(Focus::ExtraFocus)
-                    {
-                        handle_save_theme_prompt(app);
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.close_popup();
+                    match mouse_focus {
+                        Focus::SubmitButton | Focus::ExtraFocus => {
+                            handle_save_theme_prompt(app);
+                        }
+                        Focus::CloseButton => {
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::CustomRGBPromptFG => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::SubmitButton) {
-                        handle_custom_rgb_prompt(app, true);
-                    } else if app.state.mouse_focus == Some(Focus::TextInput) {
-                        app.state.app_status = AppStatus::UserInput;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.close_popup();
+                    match mouse_focus {
+                        Focus::SubmitButton => {
+                            handle_custom_rgb_prompt(app, true);
+                        }
+                        Focus::TextInput => {
+                            app.state.app_status = AppStatus::UserInput;
+                        }
+                        Focus::CloseButton => {
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::CustomRGBPromptBG => {
                 if left_button_pressed {
-                    if app.state.mouse_focus == Some(Focus::SubmitButton) {
-                        handle_custom_rgb_prompt(app, false);
-                    } else if app.state.mouse_focus == Some(Focus::TextInput) {
-                        app.state.app_status = AppStatus::UserInput;
-                    } else if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        app.close_popup();
-                        app.state.app_status = AppStatus::Initialized;
+                    match mouse_focus {
+                        Focus::SubmitButton => {
+                            handle_custom_rgb_prompt(app, false);
+                        }
+                        Focus::TextInput => {
+                            app.state.app_status = AppStatus::UserInput;
+                        }
+                        Focus::CloseButton => {
+                            app.close_popup();
+                        }
+                        _ => {}
                     }
                 }
             }
             PopupMode::ViewCard => {
-                if left_button_pressed && app.state.mouse_focus.is_some() {
-                    match app.state.mouse_focus.unwrap() {
+                if left_button_pressed {
+                    match mouse_focus {
                         Focus::CloseButton => {
                             app.close_popup();
-                            app.state.app_status = AppStatus::Initialized;
-                            if app.state.card_being_edited.is_some() {
-                                app.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
-                            }
                         }
                         Focus::CardName
                         | Focus::CardDescription
@@ -2851,18 +2799,12 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                         Focus::SubmitButton => return handle_edit_card_submit(app),
                         _ => {}
                     }
-                } else if mouse_scroll_down
-                    && app.state.mouse_focus.is_some()
-                    && app.state.mouse_focus.unwrap() == Focus::CardDescription
-                {
+                } else if mouse_scroll_down && (mouse_focus == Focus::CardDescription) {
                     app.state
                         .text_buffers
                         .card_description
                         .scroll(TextBoxScroll::Delta { rows: 1, cols: 0 })
-                } else if mouse_scroll_up
-                    && app.state.mouse_focus.is_some()
-                    && app.state.mouse_focus.unwrap() == Focus::CardDescription
-                {
+                } else if mouse_scroll_up && (mouse_focus == Focus::CardDescription) {
                     app.state
                         .text_buffers
                         .card_description
@@ -2870,8 +2812,8 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                 }
             }
             PopupMode::CardPrioritySelector => {
-                if left_button_pressed && app.state.mouse_focus.is_some() {
-                    match app.state.mouse_focus.unwrap() {
+                if left_button_pressed {
+                    match mouse_focus {
                         Focus::CloseButton => {
                             app.state.app_status = AppStatus::Initialized;
                             if app.state.card_being_edited.is_some() {
@@ -2886,51 +2828,15 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                 }
             }
             PopupMode::ConfirmDiscardCardChanges => {
-                if left_button_pressed && app.state.mouse_focus.is_some() {
-                    match app.state.focus {
-                        Focus::CloseButton => {
+                if left_button_pressed {
+                    match mouse_focus {
+                        Focus::CloseButton | Focus::ExtraFocus => {
                             app.close_popup();
-                            app.state.app_status = AppStatus::Initialized;
-                            if app.state.card_being_edited.is_some() {
-                                if app.state.card_being_edited.is_some() {
-                                    warn!(
-                                        "Discarding changes to card '{}'",
-                                        app.state.card_being_edited.as_ref().unwrap().1.name
-                                    );
-                                    app.send_warning_toast(
-                                        &format!(
-                                            "Discarding changes to card '{}'",
-                                            app.state.card_being_edited.as_ref().unwrap().1.name
-                                        ),
-                                        None,
-                                    );
-                                }
-                                app.close_popup();
-                                app.state.card_being_edited = None;
-                            }
                         }
                         Focus::SubmitButton => {
                             app.state.app_status = AppStatus::Initialized;
                             app.close_popup();
                             return handle_edit_card_submit(app);
-                        }
-                        Focus::ExtraFocus => {
-                            app.state.app_status = AppStatus::Initialized;
-                            if app.state.card_being_edited.is_some() {
-                                warn!(
-                                    "Discarding changes to card '{}'",
-                                    app.state.card_being_edited.as_ref().unwrap().1.name
-                                );
-                                app.send_warning_toast(
-                                    &format!(
-                                        "Discarding changes to card '{}'",
-                                        app.state.card_being_edited.as_ref().unwrap().1.name
-                                    ),
-                                    None,
-                                );
-                            }
-                            app.close_popup();
-                            app.state.card_being_edited = None;
                         }
                         _ => {}
                     }
@@ -2938,6 +2844,22 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
             }
             PopupMode::FilterByTag => {
                 if left_button_pressed {
+                    match mouse_focus {
+                        Focus::FilterByTagPopup => {
+                            handle_filter_by_tag(app);
+                        }
+                        Focus::CloseButton => {
+                            app.state.filter_tags = None;
+                            app.state.all_available_tags = None;
+                            app.state.app_list_states.filter_by_tag_list.select(None);
+                            app.close_popup();
+                        }
+                        Focus::SubmitButton => {
+                            handle_filter_by_tag(app);
+                            app.close_popup();
+                        }
+                        _ => {}
+                    }
                     if app.state.mouse_focus == Some(Focus::FilterByTagPopup) {
                         handle_filter_by_tag(app);
                     } else if app.state.mouse_focus == Some(Focus::CloseButton) {
@@ -3000,17 +2922,17 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                 }
             }
             UiMode::Login => {
-                if left_button_pressed && app.state.mouse_focus.is_some() {
+                if left_button_pressed {
                     handle_login_action(app).await
                 }
             }
             UiMode::SignUp => {
-                if left_button_pressed && app.state.mouse_focus.is_some() {
+                if left_button_pressed {
                     handle_signup_action(app).await
                 }
             }
             UiMode::ResetPassword => {
-                if left_button_pressed && app.state.mouse_focus.is_some() {
+                if left_button_pressed {
                     handle_reset_password_action(app).await
                 }
             }
@@ -3505,14 +3427,13 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
         reset_config(app, false, "Reset Config to default");
         return AppReturn::Continue;
     }
-    app.state.config_item_being_edited =
-        Some(app.state.app_table_states.config.selected().unwrap_or(0));
     let app_config_list = &app.config.to_view_list();
-    if app.state.config_item_being_edited.unwrap_or(0) < app_config_list.len() {
+    if app.state.app_table_states.config.selected().unwrap_or(0) < app_config_list.len() {
         let default_config_item = String::from("");
-        let config_item = &app_config_list[app.state.config_item_being_edited.unwrap_or(0)]
-            .first()
-            .unwrap_or(&default_config_item);
+        let config_item = &app_config_list
+            [app.state.app_table_states.config.selected().unwrap_or(0)]
+        .first()
+        .unwrap_or(&default_config_item);
         let config_enum = ConfigEnum::from_str(config_item);
         if config_enum.is_err() {
             error!("Error checking which config item is being edited");
@@ -3565,15 +3486,14 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
     } else {
         debug!(
             "Config item being edited {} is not in the AppConfig list",
-            app.state.config_item_being_edited.unwrap_or(0)
+            app.state.app_table_states.config.selected().unwrap_or(0)
         );
     }
     AppReturn::Continue
 }
 
 async fn handle_main_menu_action(app: &mut App<'_>) -> AppReturn {
-    if app.state.app_list_states.main_menu.selected().is_some() {
-        let selected_index = app.state.app_list_states.main_menu.selected().unwrap();
+    if let Some(selected_index) = app.state.app_list_states.main_menu.selected() {
         let selected_item = app.main_menu.from_index(selected_index);
         match selected_item {
             MainMenuItem::Quit => return handle_exit(app).await,
@@ -3711,8 +3631,8 @@ fn handle_edit_keybindings_action(app: &mut App) {
 }
 
 pub async fn handle_go_to_previous_ui_mode(app: &mut App<'_>) -> AppReturn {
-    if app.state.popup_mode.is_some() {
-        match app.state.popup_mode.unwrap() {
+    if let Some(popup_mode) = app.state.popup_mode {
+        match popup_mode {
             PopupMode::EditGeneralConfig => {
                 if app.state.ui_mode == UiMode::CreateTheme {
                     app.close_popup();
@@ -3729,38 +3649,10 @@ pub async fn handle_go_to_previous_ui_mode(app: &mut App<'_>) -> AppReturn {
                 app.state.app_table_states.edit_keybindings.select(Some(0));
             }
             PopupMode::ViewCard => {
-                if app.state.card_being_edited.is_some() {
-                    warn!(
-                        "Discarding changes to card '{}'",
-                        app.state.card_being_edited.as_ref().unwrap().1.name
-                    );
-                    app.send_warning_toast(
-                        &format!(
-                            "Discarding changes to card '{}'",
-                            app.state.card_being_edited.as_ref().unwrap().1.name
-                        ),
-                        None,
-                    );
-                }
                 app.close_popup();
-                app.state.card_being_edited = None;
             }
             PopupMode::ConfirmDiscardCardChanges => {
-                if app.state.card_being_edited.is_some() {
-                    warn!(
-                        "Discarding changes to card '{}'",
-                        app.state.card_being_edited.as_ref().unwrap().1.name
-                    );
-                    app.send_warning_toast(
-                        &format!(
-                            "Discarding changes to card '{}'",
-                            app.state.card_being_edited.as_ref().unwrap().1.name
-                        ),
-                        None,
-                    );
-                }
                 app.close_popup();
-                app.state.card_being_edited = None;
             }
             PopupMode::FilterByTag => {
                 app.state.filter_tags = None;
@@ -3773,8 +3665,8 @@ pub async fn handle_go_to_previous_ui_mode(app: &mut App<'_>) -> AppReturn {
                     let default_theme = app.config.default_theme.clone();
                     all_themes.iter().find(|t| t.name == default_theme).cloned()
                 };
-                if config_theme.is_some() {
-                    app.current_theme = config_theme.unwrap();
+                if let Some(theme) = config_theme {
+                    app.current_theme = theme;
                 }
             }
             _ => {}
@@ -3856,17 +3748,14 @@ fn handle_change_card_status(app: &mut App, status: Option<CardStatus>) -> AppRe
         all_statuses[current_index].clone()
     };
 
-    if app.state.card_being_edited.is_some() {
-        let card_being_edited = app.state.card_being_edited.clone().unwrap();
-        let card_coordinates = card_being_edited.0;
-        let mut card = card_being_edited.1;
+    if let Some(card_being_edited) = &mut app.state.card_being_edited {
+        let card = &mut card_being_edited.1;
         if selected_status == CardStatus::Complete {
             card.date_completed = Utc::now().to_string();
         } else {
             card.date_completed = FIELD_NOT_SET.to_string();
         }
         card.card_status = selected_status;
-        app.state.card_being_edited = Some((card_coordinates, card));
         app.set_popup_mode(PopupMode::ViewCard);
         app.state.set_focus(Focus::CardStatus);
         return AppReturn::Continue;
@@ -3940,12 +3829,8 @@ fn handle_change_card_priority(app: &mut App, priority: Option<CardPriority>) ->
         all_priorities[current_index].clone()
     };
 
-    if app.state.card_being_edited.is_some() {
-        let card_being_edited = app.state.card_being_edited.clone().unwrap();
-        let card_coordinates = card_being_edited.0;
-        let mut card = card_being_edited.1;
-        card.priority = selected_priority;
-        app.state.card_being_edited = Some((card_coordinates, card));
+    if let Some(card_being_edited) = &mut app.state.card_being_edited {
+        card_being_edited.1.priority = selected_priority;
         app.set_popup_mode(PopupMode::ViewCard);
         app.state.set_focus(Focus::CardPriority);
         return AppReturn::Continue;
@@ -4023,14 +3908,13 @@ fn handle_edit_general_config(app: &mut App) {
     }
     AppConfig::edit_config(app, config_enum, &new_value);
     app.state.app_table_states.config.select(Some(0));
-    app.state.config_item_being_edited = None;
     app.state.text_buffers.general_config.reset();
     app.set_ui_mode(UiMode::ConfigMenu);
     refresh_visible_boards_and_cards(app);
 }
 
 fn handle_edit_specific_keybinding(app: &mut App) {
-    if app.state.edited_keybinding.is_some() {
+    if let Some(edited_keybinding) = &app.state.edited_keybinding {
         let selected = app
             .state
             .app_table_states
@@ -4038,10 +3922,7 @@ fn handle_edit_specific_keybinding(app: &mut App) {
             .selected()
             .unwrap();
         if selected < app.config.keybindings.iter().count() {
-            let result = app.config.edit_keybinding(
-                selected,
-                app.state.edited_keybinding.clone().unwrap_or_default(),
-            );
+            let result = app.config.edit_keybinding(selected, edited_keybinding);
             if let Err(e) = result {
                 app.send_error_toast(&format!("Error editing Keybinding: {}", e), None);
             } else {
@@ -4051,8 +3932,7 @@ fn handle_edit_specific_keybinding(app: &mut App) {
                 }
                 let (key, _) = &key_list[selected];
                 let key_string = key.to_string();
-                let value = app.state.edited_keybinding.clone().unwrap_or_default();
-                let value = value
+                let value = edited_keybinding
                     .iter()
                     .map(|s| s.to_string())
                     .collect::<Vec<String>>()
@@ -4065,7 +3945,6 @@ fn handle_edit_specific_keybinding(app: &mut App) {
         } else {
             error!("Selected Keybinding with id {} not found", selected);
             app.send_error_toast("Selected Keybinding not found", None);
-            app.state.edited_keybinding = None;
             app.state.app_table_states.edit_keybindings.select(None);
         }
         app.set_ui_mode(UiMode::EditKeybindings);
@@ -4480,29 +4359,20 @@ fn reset_mouse(app: &mut App) {
 fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
     if default_theme_mode {
         app.state.default_theme_mode = false;
-        let config_index = app.state.app_table_states.config.selected();
-        if config_index.is_some() {
-            let config_item_index = &app.state.config_item_being_edited;
-            let list_items = app.config.to_view_list();
-            let config_item_name = if config_item_index.is_some() {
-                list_items[config_item_index.unwrap()].first().unwrap()
-            } else {
-                // NOTE: This is temporary, as only the Theme editor uses this other than config
-                "Theme Name"
-            };
-            if config_item_name == "Default Theme" {
-                let theme_index = app
-                    .state
-                    .app_list_states
-                    .theme_selector
-                    .selected()
-                    .unwrap_or(0);
-                if theme_index < app.all_themes.len() {
-                    let theme = app.all_themes[theme_index].clone();
-                    app.config.default_theme.clone_from(&theme.name);
-                    AppConfig::edit_config(app, ConfigEnum::DefaultTheme, theme.name.as_str());
-                } else {
-                    debug!("Theme index {} is not in the theme list", theme_index);
+        if let Some(config_item_index) = app.state.app_table_states.config.selected() {
+            if app.config.to_view_list()[config_item_index]
+                .first()
+                .unwrap()
+                == "Default Theme"
+            {
+                if let Some(theme_index) = app.state.app_list_states.theme_selector.selected() {
+                    if theme_index < app.all_themes.len() {
+                        let theme = app.all_themes[theme_index].clone();
+                        app.config.default_theme.clone_from(&theme.name);
+                        AppConfig::edit_config(app, ConfigEnum::DefaultTheme, theme.name.as_str());
+                    } else {
+                        debug!("Theme index {} is not in the theme list", theme_index);
+                    }
                 }
             }
             app.close_popup();
@@ -4514,20 +4384,22 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
             AppReturn::Continue
         }
     } else {
-        let selected_item_index = app.state.app_list_states.theme_selector.selected();
-        if selected_item_index.is_none() {
-            debug!("No selected item index found");
-            app.send_error_toast("Something went wrong", None);
-            app.close_popup();
-            return AppReturn::Continue;
-        }
-        let selected_item_index = selected_item_index.unwrap();
-        let selected_theme = if selected_item_index < app.all_themes.len() {
-            app.all_themes[selected_item_index].clone()
-        } else {
-            debug!("Selected item index is out of bounds");
-            app.all_themes[0].clone()
+        let selected_item_index = match app.state.app_list_states.theme_selector.selected() {
+            Some(index) => index,
+            None => {
+                debug!("No selected item index found");
+                app.send_error_toast("Something went wrong", None);
+                app.close_popup();
+                return AppReturn::Continue;
+            }
         };
+
+        let selected_theme = app
+            .all_themes
+            .get(selected_item_index)
+            .unwrap_or_else(|| &app.all_themes[0])
+            .clone();
+
         app.send_info_toast(
             &format!("Theme changed to \"{}\"", selected_theme.name),
             None,
@@ -4539,8 +4411,8 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
 }
 
 fn handle_create_theme_action(app: &mut App) -> AppReturn {
-    if app.state.popup_mode.is_some() {
-        match app.state.popup_mode.unwrap() {
+    if let Some(popup_mode) = app.state.popup_mode {
+        match popup_mode {
             PopupMode::EditGeneralConfig => {
                 if app.state.text_buffers.general_config.is_empty() {
                     app.send_error_toast("Theme name cannot be empty", None);
@@ -4571,54 +4443,17 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                             TextColorOptions::to_iter().collect::<Vec<TextColorOptions>>();
                         let all_modifier_options =
                             TextModifierOptions::to_iter().collect::<Vec<TextModifierOptions>>();
-                        if app
-                            .state
-                            .app_list_states
-                            .edit_specific_style
-                            .0
-                            .selected()
-                            .is_none()
-                        {
-                            app.state
-                                .app_list_states
-                                .edit_specific_style
-                                .0
-                                .select(Some(0));
-                        }
-                        if app
-                            .state
-                            .app_list_states
-                            .edit_specific_style
-                            .1
-                            .selected()
-                            .is_none()
-                        {
-                            app.state
-                                .app_list_states
-                                .edit_specific_style
-                                .1
-                                .select(Some(0));
-                        }
-                        if app
-                            .state
-                            .app_list_states
-                            .edit_specific_style
-                            .2
-                            .selected()
-                            .is_none()
-                        {
-                            app.state
-                                .app_list_states
-                                .edit_specific_style
-                                .2
-                                .select(Some(0));
+                        for list_state in app.state.app_list_states.edit_specific_style.iter_mut() {
+                            if list_state.selected().is_none() {
+                                list_state.select(Some(0));
+                            }
                         }
                         let selected_fg_index =
-                            app.state.app_list_states.edit_specific_style.0.selected();
+                            app.state.app_list_states.edit_specific_style[0].selected();
                         let selected_bg_index =
-                            app.state.app_list_states.edit_specific_style.1.selected();
+                            app.state.app_list_states.edit_specific_style[1].selected();
                         let selected_modifier_index =
-                            app.state.app_list_states.edit_specific_style.2.selected();
+                            app.state.app_list_states.edit_specific_style[2].selected();
 
                         let theme_style_bring_edited_index =
                             app.state.app_table_states.theme_editor.selected();
@@ -4732,7 +4567,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                     }
                     Focus::StyleEditorFG => {
                         let selected_index =
-                            app.state.app_list_states.edit_specific_style.0.selected();
+                            app.state.app_list_states.edit_specific_style[0].selected();
                         if selected_index.is_none() {
                             return AppReturn::Continue;
                         }
@@ -4748,7 +4583,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                     }
                     Focus::StyleEditorBG => {
                         let selected_index =
-                            app.state.app_list_states.edit_specific_style.1.selected();
+                            app.state.app_list_states.edit_specific_style[1].selected();
                         if selected_index.is_none() {
                             return AppReturn::Continue;
                         }
@@ -4800,8 +4635,8 @@ fn handle_next_focus(app: &mut App) {
     if app.config.enable_mouse_support {
         reset_mouse(app)
     }
-    let available_targets = if app.state.popup_mode.is_some() {
-        PopupMode::get_available_targets(&app.state.popup_mode.unwrap())
+    let available_targets = if let Some(popup_mode) = app.state.popup_mode {
+        PopupMode::get_available_targets(&popup_mode)
     } else {
         UiMode::get_available_targets(&app.state.ui_mode)
     };
@@ -4844,8 +4679,8 @@ fn handle_prv_focus(app: &mut App) {
     if app.config.enable_mouse_support {
         reset_mouse(app)
     }
-    let available_targets = if app.state.popup_mode.is_some() {
-        PopupMode::get_available_targets(&app.state.popup_mode.unwrap())
+    let available_targets = if let Some(popup_mode) = app.state.popup_mode {
+        PopupMode::get_available_targets(&popup_mode)
     } else {
         UiMode::get_available_targets(&app.state.ui_mode)
     };
@@ -4940,7 +4775,7 @@ fn handle_custom_rgb_prompt(app: &mut App, fg: bool) -> AppReturn {
         }
         let rgb_values = rgb_values.unwrap();
         let all_color_options = TextColorOptions::to_iter().collect::<Vec<TextColorOptions>>();
-        let selected_index = app.state.app_list_states.edit_specific_style.0.selected();
+        let selected_index = app.state.app_list_states.edit_specific_style[0].selected();
         if selected_index.is_none() {
             debug!("No selected index found");
             app.send_error_toast("Something went wrong", None);
@@ -4984,20 +4819,12 @@ fn handle_custom_rgb_prompt(app: &mut App, fg: bool) -> AppReturn {
 
 fn handle_theme_maker_scroll_up(app: &mut App) {
     if app.state.focus == Focus::StyleEditorFG {
-        let current_index = app.state.app_list_states.edit_specific_style.0.selected();
+        let current_index = app.state.app_list_states.edit_specific_style[0].selected();
         let total_length = TextColorOptions::to_iter().count();
         if current_index.is_none() {
-            app.state
-                .app_list_states
-                .edit_specific_style
-                .0
-                .select(Some(0));
+            app.state.app_list_states.edit_specific_style[0].select(Some(0));
         }
-        let current_index = app
-            .state
-            .app_list_states
-            .edit_specific_style
-            .0
+        let current_index = app.state.app_list_states.edit_specific_style[0]
             .selected()
             .unwrap();
         let selector_index = if current_index > 0 {
@@ -5005,39 +4832,24 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
         } else {
             total_length - 1
         };
-        app.state
-            .app_list_states
-            .edit_specific_style
-            .0
-            .select(Some(selector_index));
+        app.state.app_list_states.edit_specific_style[0].select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
             [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if TextColorOptions::to_iter().nth(selector_index).is_some() {
+        if let Some(fg_color) = TextColorOptions::to_iter().nth(selector_index) {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
-                TextColorOptions::to_iter()
-                    .nth(selector_index)
-                    .unwrap()
-                    .to_color(),
+                fg_color.to_color(),
                 None,
                 None,
             );
         }
     } else if app.state.focus == Focus::StyleEditorBG {
-        let current_index = app.state.app_list_states.edit_specific_style.1.selected();
+        let current_index = app.state.app_list_states.edit_specific_style[1].selected();
         let total_length = TextColorOptions::to_iter().count();
         if current_index.is_none() {
-            app.state
-                .app_list_states
-                .edit_specific_style
-                .1
-                .select(Some(0));
+            app.state.app_list_states.edit_specific_style[1].select(Some(0));
         }
-        let current_index = app
-            .state
-            .app_list_states
-            .edit_specific_style
-            .1
+        let current_index = app.state.app_list_states.edit_specific_style[1]
             .selected()
             .unwrap();
         let selector_index = if current_index > 0 {
@@ -5045,39 +4857,24 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
         } else {
             total_length - 1
         };
-        app.state
-            .app_list_states
-            .edit_specific_style
-            .1
-            .select(Some(selector_index));
+        app.state.app_list_states.edit_specific_style[1].select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
             [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if TextColorOptions::to_iter().nth(selector_index).is_some() {
+        if let Some(bg_color) = TextColorOptions::to_iter().nth(selector_index) {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
                 None,
-                TextColorOptions::to_iter()
-                    .nth(selector_index)
-                    .unwrap()
-                    .to_color(),
+                bg_color.to_color(),
                 None,
             );
         }
     } else if app.state.focus == Focus::StyleEditorModifier {
-        let current_index = app.state.app_list_states.edit_specific_style.2.selected();
+        let current_index = app.state.app_list_states.edit_specific_style[2].selected();
         let total_length = TextModifierOptions::to_iter().count();
         if current_index.is_none() {
-            app.state
-                .app_list_states
-                .edit_specific_style
-                .2
-                .select(Some(0));
+            app.state.app_list_states.edit_specific_style[2].select(Some(0));
         }
-        let current_index = app
-            .state
-            .app_list_states
-            .edit_specific_style
-            .2
+        let current_index = app.state.app_list_states.edit_specific_style[2]
             .selected()
             .unwrap();
         let selector_index = if current_index > 0 {
@@ -5085,24 +4882,15 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
         } else {
             total_length - 1
         };
-        app.state
-            .app_list_states
-            .edit_specific_style
-            .2
-            .select(Some(selector_index));
+        app.state.app_list_states.edit_specific_style[2].select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
             [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if TextModifierOptions::to_iter().nth(selector_index).is_some() {
+        if let Some(modifier) = TextModifierOptions::to_iter().nth(selector_index) {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
                 None,
                 None,
-                Some(
-                    TextModifierOptions::to_iter()
-                        .nth(selector_index)
-                        .unwrap()
-                        .to_modifier(),
-                ),
+                Some(modifier.to_modifier()),
             );
         }
     }
@@ -5110,20 +4898,12 @@ fn handle_theme_maker_scroll_up(app: &mut App) {
 
 fn handle_theme_maker_scroll_down(app: &mut App) {
     if app.state.focus == Focus::StyleEditorFG {
-        let current_index = app.state.app_list_states.edit_specific_style.0.selected();
+        let current_index = app.state.app_list_states.edit_specific_style[0].selected();
         let total_length = TextColorOptions::to_iter().count();
         if current_index.is_none() {
-            app.state
-                .app_list_states
-                .edit_specific_style
-                .0
-                .select(Some(0));
+            app.state.app_list_states.edit_specific_style[0].select(Some(0));
         }
-        let current_index = app
-            .state
-            .app_list_states
-            .edit_specific_style
-            .0
+        let current_index = app.state.app_list_states.edit_specific_style[0]
             .selected()
             .unwrap();
         let selector_index = if current_index < total_length - 1 {
@@ -5131,39 +4911,24 @@ fn handle_theme_maker_scroll_down(app: &mut App) {
         } else {
             0
         };
-        app.state
-            .app_list_states
-            .edit_specific_style
-            .0
-            .select(Some(selector_index));
+        app.state.app_list_states.edit_specific_style[0].select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
             [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if TextColorOptions::to_iter().nth(selector_index).is_some() {
+        if let Some(fg_color) = TextColorOptions::to_iter().nth(selector_index) {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
-                TextColorOptions::to_iter()
-                    .nth(selector_index)
-                    .unwrap()
-                    .to_color(),
+                fg_color.to_color(),
                 None,
                 None,
             );
         }
     } else if app.state.focus == Focus::StyleEditorBG {
-        let current_index = app.state.app_list_states.edit_specific_style.1.selected();
+        let current_index = app.state.app_list_states.edit_specific_style[1].selected();
         let total_length = TextColorOptions::to_iter().count();
         if current_index.is_none() {
-            app.state
-                .app_list_states
-                .edit_specific_style
-                .1
-                .select(Some(0));
+            app.state.app_list_states.edit_specific_style[1].select(Some(0));
         }
-        let current_index = app
-            .state
-            .app_list_states
-            .edit_specific_style
-            .1
+        let current_index = app.state.app_list_states.edit_specific_style[1]
             .selected()
             .unwrap();
         let selector_index = if current_index < total_length - 1 {
@@ -5171,39 +4936,24 @@ fn handle_theme_maker_scroll_down(app: &mut App) {
         } else {
             0
         };
-        app.state
-            .app_list_states
-            .edit_specific_style
-            .1
-            .select(Some(selector_index));
+        app.state.app_list_states.edit_specific_style[1].select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
             [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if TextColorOptions::to_iter().nth(selector_index).is_some() {
+        if let Some(bg_color) = TextColorOptions::to_iter().nth(selector_index) {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
                 None,
-                TextColorOptions::to_iter()
-                    .nth(selector_index)
-                    .unwrap()
-                    .to_color(),
+                bg_color.to_color(),
                 None,
             );
         }
     } else if app.state.focus == Focus::StyleEditorModifier {
-        let current_index = app.state.app_list_states.edit_specific_style.2.selected();
+        let current_index = app.state.app_list_states.edit_specific_style[2].selected();
         let total_length = TextModifierOptions::to_iter().count();
         if current_index.is_none() {
-            app.state
-                .app_list_states
-                .edit_specific_style
-                .2
-                .select(Some(0));
+            app.state.app_list_states.edit_specific_style[2].select(Some(0));
         }
-        let current_index = app
-            .state
-            .app_list_states
-            .edit_specific_style
-            .2
+        let current_index = app.state.app_list_states.edit_specific_style[2]
             .selected()
             .unwrap();
         let selector_index = if current_index < total_length - 1 {
@@ -5211,24 +4961,15 @@ fn handle_theme_maker_scroll_down(app: &mut App) {
         } else {
             0
         };
-        app.state
-            .app_list_states
-            .edit_specific_style
-            .2
-            .select(Some(selector_index));
+        app.state.app_list_states.edit_specific_style[2].select(Some(selector_index));
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
             [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if TextModifierOptions::to_iter().nth(selector_index).is_some() {
+        if let Some(modifier) = TextModifierOptions::to_iter().nth(selector_index) {
             app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
                 theme_style_being_edited,
                 None,
                 None,
-                Some(
-                    TextModifierOptions::to_iter()
-                        .nth(selector_index)
-                        .unwrap()
-                        .to_modifier(),
-                ),
+                Some(modifier.to_modifier()),
             );
         }
     }

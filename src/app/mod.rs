@@ -31,7 +31,7 @@ use crate::{
 };
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use linked_hash_map::LinkedHashMap;
-use log::{debug, error};
+use log::{debug, error, warn};
 use ratatui::{
     widgets::{ListState, TableState},
     Frame,
@@ -464,20 +464,9 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self
-                    .widgets
-                    .command_palette
-                    .command_search_results
-                    .is_some()
-                {
+                if let Some(results) = &self.widgets.command_palette.command_search_results {
                     if i == 0 {
-                        self.widgets
-                            .command_palette
-                            .command_search_results
-                            .clone()
-                            .unwrap()
-                            .len()
-                            - 1
+                        results.len() - 1
                     } else {
                         i - 1
                     }
@@ -500,21 +489,8 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self
-                    .widgets
-                    .command_palette
-                    .command_search_results
-                    .is_some()
-                {
-                    if i >= self
-                        .widgets
-                        .command_palette
-                        .command_search_results
-                        .clone()
-                        .unwrap()
-                        .len()
-                        - 1
-                    {
+                if let Some(results) = &self.widgets.command_palette.command_search_results {
+                    if i >= results.len() - 1 {
                         0
                     } else {
                         i + 1
@@ -538,16 +514,8 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.widgets.command_palette.card_search_results.is_some() {
-                    if i >= self
-                        .widgets
-                        .command_palette
-                        .card_search_results
-                        .clone()
-                        .unwrap()
-                        .len()
-                        - 1
-                    {
+                if let Some(results) = &self.widgets.command_palette.card_search_results {
+                    if i >= results.len() - 1 {
                         0
                     } else {
                         i + 1
@@ -571,15 +539,9 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.widgets.command_palette.card_search_results.is_some() {
+                if let Some(results) = &self.widgets.command_palette.card_search_results {
                     if i == 0 {
-                        self.widgets
-                            .command_palette
-                            .card_search_results
-                            .clone()
-                            .unwrap()
-                            .len()
-                            - 1
+                        results.len() - 1
                     } else {
                         i - 1
                     }
@@ -602,16 +564,8 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.widgets.command_palette.board_search_results.is_some() {
-                    if i >= self
-                        .widgets
-                        .command_palette
-                        .board_search_results
-                        .clone()
-                        .unwrap()
-                        .len()
-                        - 1
-                    {
+                if let Some(results) = &self.widgets.command_palette.board_search_results {
+                    if i >= results.len() - 1 {
                         0
                     } else {
                         i + 1
@@ -635,15 +589,9 @@ impl App<'_> {
             .selected()
         {
             Some(i) => {
-                if self.widgets.command_palette.board_search_results.is_some() {
+                if let Some(results) = &self.widgets.command_palette.board_search_results {
                     if i == 0 {
-                        self.widgets
-                            .command_palette
-                            .board_search_results
-                            .clone()
-                            .unwrap()
-                            .len()
-                            - 1
+                        results.len() - 1
                     } else {
                         i - 1
                     }
@@ -824,7 +772,7 @@ impl App<'_> {
         self.state.app_table_states.theme_editor.select(Some(i));
     }
     pub fn select_edit_style_fg_next(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style.0.selected() {
+        let i = match self.state.app_list_states.edit_specific_style[0].selected() {
             Some(i) => {
                 if i >= TextColorOptions::to_iter().count() - 1 {
                     0
@@ -834,14 +782,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state
-            .app_list_states
-            .edit_specific_style
-            .0
-            .select(Some(i));
+        self.state.app_list_states.edit_specific_style[0].select(Some(i));
     }
     pub fn select_edit_style_fg_prv(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style.0.selected() {
+        let i = match self.state.app_list_states.edit_specific_style[0].selected() {
             Some(i) => {
                 if i == 0 {
                     TextColorOptions::to_iter().count() - 1
@@ -851,14 +795,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state
-            .app_list_states
-            .edit_specific_style
-            .0
-            .select(Some(i));
+        self.state.app_list_states.edit_specific_style[0].select(Some(i));
     }
     pub fn select_edit_style_bg_next(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style.1.selected() {
+        let i = match self.state.app_list_states.edit_specific_style[1].selected() {
             Some(i) => {
                 if i >= TextColorOptions::to_iter().count() - 1 {
                     0
@@ -868,14 +808,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state
-            .app_list_states
-            .edit_specific_style
-            .1
-            .select(Some(i));
+        self.state.app_list_states.edit_specific_style[1].select(Some(i));
     }
     pub fn select_edit_style_bg_prv(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style.1.selected() {
+        let i = match self.state.app_list_states.edit_specific_style[1].selected() {
             Some(i) => {
                 if i == 0 {
                     TextColorOptions::to_iter().count() - 1
@@ -885,14 +821,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state
-            .app_list_states
-            .edit_specific_style
-            .1
-            .select(Some(i));
+        self.state.app_list_states.edit_specific_style[1].select(Some(i));
     }
     pub fn select_edit_style_modifier_next(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style.2.selected() {
+        let i = match self.state.app_list_states.edit_specific_style[2].selected() {
             Some(i) => {
                 if i >= TextModifierOptions::to_iter().count() - 1 {
                     0
@@ -902,14 +834,10 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state
-            .app_list_states
-            .edit_specific_style
-            .2
-            .select(Some(i));
+        self.state.app_list_states.edit_specific_style[2].select(Some(i));
     }
     pub fn select_edit_style_modifier_prv(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style.2.selected() {
+        let i = match self.state.app_list_states.edit_specific_style[2].selected() {
             Some(i) => {
                 if i == 0 {
                     TextModifierOptions::to_iter().count() - 1
@@ -919,11 +847,7 @@ impl App<'_> {
             }
             None => 0,
         };
-        self.state
-            .app_list_states
-            .edit_specific_style
-            .2
-            .select(Some(i));
+        self.state.app_list_states.edit_specific_style[2].select(Some(i));
     }
     pub fn select_card_priority_next(&mut self) {
         let i = match self.state.app_list_states.card_priority_selector.selected() {
@@ -958,8 +882,8 @@ impl App<'_> {
             .select(Some(i));
     }
     pub fn filter_by_tag_popup_next(&mut self) {
-        let all_tags_len = if self.state.all_available_tags.is_some() {
-            self.state.all_available_tags.clone().unwrap().len()
+        let all_tags_len = if let Some(available_tags) = &self.state.all_available_tags {
+            available_tags.len()
         } else {
             0
         };
@@ -981,8 +905,8 @@ impl App<'_> {
         }
     }
     pub fn filter_by_tag_popup_prv(&mut self) {
-        let all_tags_len = if self.state.all_available_tags.is_some() {
-            self.state.all_available_tags.clone().unwrap().len()
+        let all_tags_len = if let Some(available_tags) = &self.state.all_available_tags {
+            available_tags.len()
         } else {
             0
         };
@@ -1425,8 +1349,33 @@ impl App<'_> {
     }
 
     pub fn close_popup(&mut self) {
-        // TODO: Add logic to clear buffers if needed
-        self.state.popup_mode = None;
+        // TODO: Add logic here if needed
+        if let Some(popup_mode) = self.state.popup_mode {
+            match popup_mode {
+                PopupMode::CustomRGBPromptBG | PopupMode::CustomRGBPromptFG => {
+                    self.state.app_status = AppStatus::Initialized;
+                }
+                PopupMode::ViewCard => {
+                    self.state.app_status = AppStatus::Initialized;
+                    if self.state.card_being_edited.is_some() {
+                        self.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                    }
+                }
+                PopupMode::ConfirmDiscardCardChanges => {
+                    self.state.app_status = AppStatus::Initialized;
+                    if let Some(card) = &self.state.card_being_edited {
+                        warn!("Discarding changes to card '{}'", card.1.name);
+                        self.send_warning_toast(
+                            &format!("Discarding changes to card '{}'", card.1.name),
+                            None,
+                        );
+                        self.state.card_being_edited = None;
+                    }
+                }
+                _ => {}
+            }
+            self.state.popup_mode = None;
+        }
     }
 
     pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
@@ -1477,6 +1426,22 @@ impl App<'_> {
                 debug!("No special logic for setting ui mode: {:?}", ui_mode);
             }
         }
+    }
+
+    pub fn get_first_next_focus_keybinding(&self) -> &Key {
+        self.config
+            .keybindings
+            .next_focus
+            .first()
+            .unwrap_or(&Key::Tab)
+    }
+
+    pub fn get_first_prv_focus_keybinding(&self) -> &Key {
+        self.config
+            .keybindings
+            .prv_focus
+            .first()
+            .unwrap_or(&Key::BackTab)
     }
 }
 
@@ -1726,7 +1691,7 @@ pub struct AppListStates {
     pub command_palette_command_search: ListState,
     pub date_format_selector: ListState,
     pub default_view: ListState,
-    pub edit_specific_style: (ListState, ListState, ListState),
+    pub edit_specific_style: [ListState; 3],
     pub filter_by_tag_list: ListState,
     pub load_save: ListState,
     pub logs: ListState,
@@ -1751,7 +1716,6 @@ pub struct AppState<'a> {
     pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
     pub card_drag_mode: bool,
     pub cloud_data: Option<Vec<CloudData>>,
-    pub config_item_being_edited: Option<usize>,
     pub current_board_id: Option<(u64, u64)>,
     pub current_card_id: Option<(u64, u64)>,
     pub current_mouse_coordinates: (u16, u16),
@@ -1875,7 +1839,6 @@ impl Default for AppState<'_> {
             card_being_edited: None,
             card_drag_mode: false,
             cloud_data: None,
-            config_item_being_edited: None,
             current_board_id: None,
             current_card_id: None,
             current_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES, // make sure it's out of bounds when mouse mode is disabled
@@ -2150,7 +2113,7 @@ impl AppConfig {
         }
     }
 
-    pub fn edit_keybinding(&mut self, key_index: usize, value: Vec<Key>) -> Result<(), String> {
+    pub fn edit_keybinding(&mut self, key_index: usize, value: &[Key]) -> Result<(), String> {
         let current_bindings = &self.keybindings;
 
         let mut key_list = vec![];
@@ -2182,105 +2145,105 @@ impl AppConfig {
         debug!("Editing keybinding: {} to {:?}", key, value);
 
         match key {
-            KeyBindingEnum::Accept => self.keybindings.accept = value,
+            KeyBindingEnum::Accept => self.keybindings.accept = value.to_vec(),
             KeyBindingEnum::ChangeCardStatusToActive => {
-                self.keybindings.change_card_status_to_active = value;
+                self.keybindings.change_card_status_to_active = value.to_vec();
             }
             KeyBindingEnum::ChangeCardStatusToCompleted => {
-                self.keybindings.change_card_status_to_completed = value;
+                self.keybindings.change_card_status_to_completed = value.to_vec();
             }
             KeyBindingEnum::ChangeCardStatusToStale => {
-                self.keybindings.change_card_status_to_stale = value;
+                self.keybindings.change_card_status_to_stale = value.to_vec();
             }
             KeyBindingEnum::ChangeCardPriorityToHigh => {
-                self.keybindings.change_card_priority_to_high = value;
+                self.keybindings.change_card_priority_to_high = value.to_vec();
             }
             KeyBindingEnum::ChangeCardPriorityToLow => {
-                self.keybindings.change_card_priority_to_low = value;
+                self.keybindings.change_card_priority_to_low = value.to_vec();
             }
             KeyBindingEnum::ChangeCardPriorityToMedium => {
-                self.keybindings.change_card_priority_to_medium = value;
+                self.keybindings.change_card_priority_to_medium = value.to_vec();
             }
             KeyBindingEnum::ClearAllToasts => {
-                self.keybindings.clear_all_toasts = value;
+                self.keybindings.clear_all_toasts = value.to_vec();
             }
             KeyBindingEnum::DeleteBoard => {
-                self.keybindings.delete_board = value;
+                self.keybindings.delete_board = value.to_vec();
             }
             KeyBindingEnum::DeleteCard => {
-                self.keybindings.delete_card = value;
+                self.keybindings.delete_card = value.to_vec();
             }
             KeyBindingEnum::Down => {
-                self.keybindings.down = value;
+                self.keybindings.down = value.to_vec();
             }
             KeyBindingEnum::GoToMainMenu => {
-                self.keybindings.go_to_main_menu = value;
+                self.keybindings.go_to_main_menu = value.to_vec();
             }
             KeyBindingEnum::GoToPreviousUIModeorCancel => {
-                self.keybindings.go_to_previous_ui_mode_or_cancel = value;
+                self.keybindings.go_to_previous_ui_mode_or_cancel = value.to_vec();
             }
             KeyBindingEnum::HideUiElement => {
-                self.keybindings.hide_ui_element = value;
+                self.keybindings.hide_ui_element = value.to_vec();
             }
             KeyBindingEnum::Left => {
-                self.keybindings.left = value;
+                self.keybindings.left = value.to_vec();
             }
             KeyBindingEnum::MoveCardDown => {
-                self.keybindings.move_card_down = value;
+                self.keybindings.move_card_down = value.to_vec();
             }
             KeyBindingEnum::MoveCardLeft => {
-                self.keybindings.move_card_left = value;
+                self.keybindings.move_card_left = value.to_vec();
             }
             KeyBindingEnum::MoveCardRight => {
-                self.keybindings.move_card_right = value;
+                self.keybindings.move_card_right = value.to_vec();
             }
             KeyBindingEnum::MoveCardUp => {
-                self.keybindings.move_card_up = value;
+                self.keybindings.move_card_up = value.to_vec();
             }
             KeyBindingEnum::NewBoard => {
-                self.keybindings.new_board = value;
+                self.keybindings.new_board = value.to_vec();
             }
             KeyBindingEnum::NewCard => {
-                self.keybindings.new_card = value;
+                self.keybindings.new_card = value.to_vec();
             }
             KeyBindingEnum::NextFocus => {
-                self.keybindings.next_focus = value;
+                self.keybindings.next_focus = value.to_vec();
             }
             KeyBindingEnum::OpenConfigMenu => {
-                self.keybindings.open_config_menu = value;
+                self.keybindings.open_config_menu = value.to_vec();
             }
             KeyBindingEnum::PrvFocus => {
-                self.keybindings.prv_focus = value;
+                self.keybindings.prv_focus = value.to_vec();
             }
             KeyBindingEnum::Quit => {
-                self.keybindings.quit = value;
+                self.keybindings.quit = value.to_vec();
             }
             KeyBindingEnum::Redo => {
-                self.keybindings.redo = value;
+                self.keybindings.redo = value.to_vec();
             }
             KeyBindingEnum::ResetUI => {
-                self.keybindings.reset_ui = value;
+                self.keybindings.reset_ui = value.to_vec();
             }
             KeyBindingEnum::Right => {
-                self.keybindings.right = value;
+                self.keybindings.right = value.to_vec();
             }
             KeyBindingEnum::SaveState => {
-                self.keybindings.save_state = value;
+                self.keybindings.save_state = value.to_vec();
             }
             KeyBindingEnum::StopUserInput => {
-                self.keybindings.stop_user_input = value;
+                self.keybindings.stop_user_input = value.to_vec();
             }
             KeyBindingEnum::TakeUserInput => {
-                self.keybindings.take_user_input = value;
+                self.keybindings.take_user_input = value.to_vec();
             }
             KeyBindingEnum::ToggleCommandPalette => {
-                self.keybindings.toggle_command_palette = value;
+                self.keybindings.toggle_command_palette = value.to_vec();
             }
             KeyBindingEnum::Undo => {
-                self.keybindings.undo = value;
+                self.keybindings.undo = value.to_vec();
             }
             KeyBindingEnum::Up => {
-                self.keybindings.up = value;
+                self.keybindings.up = value.to_vec();
             }
         }
         Ok(())

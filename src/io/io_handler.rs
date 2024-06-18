@@ -109,9 +109,8 @@ impl IoAsyncHandler<'_> {
                 break;
             }
         }
-        let bg = app.current_theme.general_style.bg;
-        if bg.is_some() {
-            app.state.term_background_color = TextColorOptions::from(bg.unwrap()).to_rgb();
+        if let Some(bg_color) = app.current_theme.general_style.bg {
+            app.state.term_background_color = TextColorOptions::from(bg_color).to_rgb();
         } else {
             app.state.term_background_color = (0, 0, 0)
         }

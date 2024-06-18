@@ -553,17 +553,15 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         true,
     );
 
-    let config_item_index = &app.state.config_item_being_edited;
     let list_items = app.config.to_view_list();
-    let config_item_name = if config_item_index.is_some() {
-        list_items[config_item_index.unwrap()].first().unwrap()
+    let config_item_name = if let Some(index) = app.state.app_table_states.config.selected() {
+        list_items[index].first().unwrap()
     } else {
         // NOTE: This is temporary, as only the Theme editor uses this other than config
         "Theme Name"
     };
     let mut path_check_mode = false;
-    if ConfigEnum::from_str(config_item_name).is_ok() {
-        let config_enum = ConfigEnum::from_str(config_item_name).unwrap();
+    if let Ok(config_enum) = ConfigEnum::from_str(config_item_name) {
         if config_enum == ConfigEnum::SaveDirectory {
             path_check_mode = true;
             app.state.path_check_state.path_check_mode = true;
@@ -571,7 +569,7 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             app.state.path_check_state.path_check_mode = false;
         }
     }
-    let config_item_value = if config_item_index.is_some() {
+    let config_item_value = if app.state.app_table_states.config.selected().is_some() {
         list_items
             .iter()
             .find(|x| x.first().unwrap() == config_item_name)
@@ -710,15 +708,11 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             }
         }
         if !current_user_input.is_empty() {
-            if app.state.path_check_state.potential_completion.is_some() {
+            if let Some(potential_completion) = &app.state.path_check_state.potential_completion {
                 Line::from(vec![
                     Span::styled(current_user_input.clone(), app.current_theme.general_style),
                     Span::styled(
-                        app.state
-                            .path_check_state
-                            .potential_completion
-                            .clone()
-                            .unwrap(),
+                        potential_completion.clone(),
                         app.current_theme.inactive_text_style,
                     ),
                     Span::styled(
@@ -1285,8 +1279,8 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
 
     render_title(app, &chunks[0], rect);
 
-    if app.state.user_login_data.email_id.is_some() {
-        let email_id = app.state.user_login_data.email_id.clone().unwrap();
+    if let Some(email_id) = &app.state.user_login_data.email_id {
+        let email_id = email_id.to_string();
         let email_id_len = email_id.len() as u16 + 4;
         let sub_main_menu_chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -2271,22 +2265,20 @@ pub fn draw_title<'a>(app: &mut App, render_area: Rect) -> Paragraph<'a> {
         )
 }
 
-pub fn check_size(rect: &Rect) -> String {
-    let mut msg = String::new();
+pub fn check_size(rect: &Rect) -> Result<(), String> {
     if rect.width < MIN_TERM_WIDTH {
-        msg.push_str(&format!(
+        Err(format!(
             "For optimal viewing experience, Terminal width should be >= {}, (current width {})",
             MIN_TERM_WIDTH, rect.width
-        ));
+        ))
     } else if rect.height < MIN_TERM_HEIGHT {
-        msg.push_str(&format!(
+        Err(format!(
             "For optimal viewing experience, Terminal height should be >= {}, (current height {})",
             MIN_TERM_HEIGHT, rect.height
-        ));
+        ))
     } else {
-        msg.push_str("Size OK");
+        Ok(())
     }
-    msg
 }
 
 pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
@@ -2684,11 +2676,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
     rect.render_widget(title_paragraph, chunks[0]);
 
     let item_list = get_available_local_save_files(&app.config);
-    let item_list = if let Some(item_list) = item_list {
-        item_list
-    } else {
-        Vec::new()
-    };
+    let item_list = item_list.unwrap_or_default();
     if item_list.is_empty() {
         let no_saves_paragraph = Paragraph::new("No saves found")
             .alignment(Alignment::Center)
@@ -2820,8 +2808,8 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
         render_body(rect, preview_chunks[1], app, true)
     }
 
-    let preview_title_paragraph = if app.state.preview_file_name.is_some() {
-        Paragraph::new("Previewing: ".to_string() + &app.state.preview_file_name.clone().unwrap())
+    let preview_title_paragraph = if let Some(file_name) = &app.state.preview_file_name {
+        Paragraph::new("Previewing: ".to_string() + file_name)
             .alignment(Alignment::Center)
             .block(
                 Block::default()
@@ -3825,19 +3813,15 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .command_palette_command_search
                 .selected()
                 .is_none()
-                && app.widgets.command_palette.command_search_results.is_some()
-                && !app
-                    .widgets
-                    .command_palette
-                    .command_search_results
-                    .as_ref()
-                    .unwrap()
-                    .is_empty()
             {
-                app.state
-                    .app_list_states
-                    .command_palette_command_search
-                    .select(Some(0));
+                if let Some(results) = &app.widgets.command_palette.command_search_results {
+                    if !results.is_empty() {
+                        app.state
+                            .app_list_states
+                            .command_palette_command_search
+                            .select(Some(0));
+                    }
+                }
             }
         }
         Focus::CommandPaletteCard => {
@@ -3847,19 +3831,15 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .command_palette_card_search
                 .selected()
                 .is_none()
-                && app.widgets.command_palette.card_search_results.is_some()
-                && !app
-                    .widgets
-                    .command_palette
-                    .card_search_results
-                    .as_ref()
-                    .unwrap()
-                    .is_empty()
             {
-                app.state
-                    .app_list_states
-                    .command_palette_card_search
-                    .select(Some(0));
+                if let Some(results) = &app.widgets.command_palette.card_search_results {
+                    if !results.is_empty() {
+                        app.state
+                            .app_list_states
+                            .command_palette_card_search
+                            .select(Some(0));
+                    }
+                }
             }
         }
         Focus::CommandPaletteBoard => {
@@ -3869,19 +3849,15 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .command_palette_board_search
                 .selected()
                 .is_none()
-                && app.widgets.command_palette.board_search_results.is_some()
-                && !app
-                    .widgets
-                    .command_palette
-                    .board_search_results
-                    .as_ref()
-                    .unwrap()
-                    .is_empty()
             {
-                app.state
-                    .app_list_states
-                    .command_palette_board_search
-                    .select(Some(0));
+                if let Some(results) = &app.widgets.command_palette.board_search_results {
+                    if !results.is_empty() {
+                        app.state
+                            .app_list_states
+                            .command_palette_board_search
+                            .select(Some(0));
+                    }
+                }
             }
         }
         _ => {
@@ -3927,40 +3903,35 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
     let (board_search_border_style, board_search_text_style, board_search_highlight_style) =
         get_command_palette_style(app, Focus::CommandPaletteBoard);
 
-    let command_search_results = if app.widgets.command_palette.command_search_results.is_some() {
-        let raw_search_results = app
-            .widgets
-            .command_palette
-            .command_search_results
-            .as_ref()
-            .unwrap();
-        let mut list_items = vec![];
-        for item in raw_search_results {
-            let mut spans = vec![];
-            for c in item.to_string().chars() {
-                if current_search_text_input
-                    .to_lowercase()
-                    .contains(c.to_string().to_lowercase().as_str())
-                {
-                    spans.push(Span::styled(
-                        c.to_string(),
-                        app.current_theme.keyboard_focus_style,
-                    ));
-                } else {
-                    spans.push(Span::styled(c.to_string(), command_search_text_style));
+    let command_search_results =
+        if let Some(raw_search_results) = &app.widgets.command_palette.command_search_results {
+            let mut list_items = vec![];
+            for item in raw_search_results {
+                let mut spans = vec![];
+                for c in item.to_string().chars() {
+                    if current_search_text_input
+                        .to_lowercase()
+                        .contains(c.to_string().to_lowercase().as_str())
+                    {
+                        spans.push(Span::styled(
+                            c.to_string(),
+                            app.current_theme.keyboard_focus_style,
+                        ));
+                    } else {
+                        spans.push(Span::styled(c.to_string(), command_search_text_style));
+                    }
                 }
+                list_items.push(ListItem::new(Line::from(spans)));
             }
-            list_items.push(ListItem::new(Line::from(spans)));
-        }
-        list_items
-    } else {
-        app.widgets
-            .command_palette
-            .available_commands
-            .iter()
-            .map(|c| ListItem::new(Line::from(format!("Command - {}", c))))
-            .collect::<Vec<ListItem>>()
-    };
+            list_items
+        } else {
+            app.widgets
+                .command_palette
+                .available_commands
+                .iter()
+                .map(|c| ListItem::new(Line::from(format!("Command - {}", c))))
+                .collect::<Vec<ListItem>>()
+        };
 
     let card_search_results = if app.widgets.command_palette.card_search_results.is_some()
         && !current_search_text_input.is_empty()
@@ -4786,7 +4757,7 @@ pub fn render_popup<T: ToString>(
 }
 
 pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
-    if app.state.all_available_tags.is_some() {
+    if let Some(all_available_tags) = &app.state.all_available_tags {
         let submit_style = if app.state.focus == Focus::SubmitButton {
             app.current_theme.keyboard_focus_style
         } else {
@@ -4802,10 +4773,9 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
 
         let popup_area = centered_rect_with_percentage(80, 80, rect.size());
 
-        let all_available_tags = app.state.all_available_tags.as_ref().unwrap();
         let empty_vec = vec![];
-        let selected_tags = if app.state.filter_tags.is_some() {
-            app.state.filter_tags.as_ref().unwrap()
+        let selected_tags = if let Some(filter_tags) = &app.state.filter_tags {
+            filter_tags
         } else {
             &empty_vec
         };
@@ -4909,8 +4879,8 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        let submit_btn_text = if app.state.filter_tags.is_some() {
-            if app.state.filter_tags.as_ref().unwrap().len() > 1 {
+        let submit_btn_text = if let Some(filter_tags) = &app.state.filter_tags {
+            if filter_tags.len() > 1 {
                 "Confirm filters"
             } else {
                 "Confirm filter"
@@ -4975,8 +4945,8 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
 
 pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let current_ui_mode = &app.state.ui_mode.to_string();
-    let popup_mode = if app.state.popup_mode.is_some() {
-        app.state.popup_mode.as_ref().unwrap().to_string()
+    let popup_mode = if let Some(popup_mode) = app.state.popup_mode {
+        format!("{:?}", popup_mode)
     } else {
         "None".to_string()
     };
@@ -5333,19 +5303,11 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         .split(main_chunks[0]);
     let fg_list_border_style =
         if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[0]) {
-            if app
-                .state
-                .app_list_states
-                .edit_specific_style
-                .0
+            if app.state.app_list_states.edit_specific_style[0]
                 .selected()
                 .is_none()
             {
-                app.state
-                    .app_list_states
-                    .edit_specific_style
-                    .0
-                    .select(Some(0));
+                app.state.app_list_states.edit_specific_style[0].select(Some(0));
             }
             app.state.mouse_focus = Some(Focus::StyleEditorFG);
             app.state.set_focus(Focus::StyleEditorFG);
@@ -5357,19 +5319,11 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         };
     let bg_list_border_style =
         if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1]) {
-            if app
-                .state
-                .app_list_states
-                .edit_specific_style
-                .1
+            if app.state.app_list_states.edit_specific_style[1]
                 .selected()
                 .is_none()
             {
-                app.state
-                    .app_list_states
-                    .edit_specific_style
-                    .1
-                    .select(Some(0));
+                app.state.app_list_states.edit_specific_style[1].select(Some(0));
             }
             app.state.mouse_focus = Some(Focus::StyleEditorBG);
             app.state.set_focus(Focus::StyleEditorBG);
@@ -5381,19 +5335,11 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         };
     let modifiers_list_border_style =
         if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[2]) {
-            if app
-                .state
-                .app_list_states
-                .edit_specific_style
-                .2
+            if app.state.app_list_states.edit_specific_style[2]
                 .selected()
                 .is_none()
             {
-                app.state
-                    .app_list_states
-                    .edit_specific_style
-                    .2
-                    .select(Some(0));
+                app.state.app_list_states.edit_specific_style[2].select(Some(0));
             }
             app.state.mouse_focus = Some(Focus::StyleEditorModifier);
             app.state.set_focus(Focus::StyleEditorModifier);
@@ -5443,8 +5389,8 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
                     }
                 }
             }
-            return if color.to_color().is_some() {
-                fg_style.fg = Some(color.to_color().unwrap());
+            return if let Some(color) = color.to_color() {
+                fg_style.fg = Some(color);
                 ListItem::new(vec![Line::from(vec![
                     Span::styled("Sample Text", fg_style),
                     Span::styled(format!(" - {}", color), app.current_theme.general_style),
@@ -5505,8 +5451,8 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
                     }
                 }
             }
-            return if color.to_color().is_some() {
-                bg_style.bg = Some(color.to_color().unwrap());
+            return if let Some(color) = color.to_color() {
+                bg_style.bg = Some(color);
                 ListItem::new(vec![Line::from(vec![
                     Span::styled("Sample Text", bg_style),
                     Span::styled(format!(" - {}", color), app.current_theme.general_style),
@@ -5635,17 +5581,17 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
     rect.render_stateful_widget(
         fg_list,
         chunks[0],
-        &mut app.state.app_list_states.edit_specific_style.0,
+        &mut app.state.app_list_states.edit_specific_style[0],
     );
     rect.render_stateful_widget(
         bg_list,
         chunks[1],
-        &mut app.state.app_list_states.edit_specific_style.1,
+        &mut app.state.app_list_states.edit_specific_style[1],
     );
     rect.render_stateful_widget(
         modifier_list,
         chunks[2],
-        &mut app.state.app_list_states.edit_specific_style.2,
+        &mut app.state.app_list_states.edit_specific_style[2],
     );
     rect.render_widget(help_text, main_chunks[1]);
     rect.render_widget(submit_button, main_chunks[2]);
@@ -6300,10 +6246,10 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     }
 
     if app.state.user_login_data.auth_token.is_some() {
-        let email_id = if app.state.user_login_data.email_id.is_some() {
-            app.state.user_login_data.email_id.clone().unwrap()
+        let email_id = if let Some(email_id) = &app.state.user_login_data.email_id {
+            email_id
         } else {
-            "Unknown".to_string()
+            "Unknown"
         };
         let already_logged_in_indicator =
             Paragraph::new(format!("Already logged in! {}", email_id))
@@ -6339,7 +6285,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
 
 pub fn render_signup(rect: &mut Frame, app: &mut App) {
     let popup_mode = app.state.popup_mode.is_some();
-    if app.state.popup_mode.is_none() {
+    if !popup_mode {
         if app.state.focus == Focus::EmailIDField
             || app.state.focus == Focus::PasswordField
             || app.state.focus == Focus::ConfirmPasswordField
@@ -6675,7 +6621,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
 
 pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     let popup_mode = app.state.popup_mode.is_some();
-    if app.state.popup_mode.is_none() {
+    if !popup_mode {
         if app.state.focus == Focus::EmailIDField
             || app.state.focus == Focus::ResetPasswordLinkField
             || app.state.focus == Focus::PasswordField
@@ -6771,9 +6717,9 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
 
     let send_reset_link_button_style = if popup_mode {
         app.current_theme.inactive_text_style
-    } else if app.state.last_reset_password_link_sent_time.is_some() {
-        let last_reset_password_link_sent_time =
-            app.state.last_reset_password_link_sent_time.unwrap();
+    } else if let Some(last_reset_password_link_sent_time) =
+        app.state.last_reset_password_link_sent_time
+    {
         if last_reset_password_link_sent_time.elapsed()
             < Duration::from_secs(MIN_TIME_BETWEEN_SENDING_RESET_LINK)
         {
@@ -6934,9 +6880,9 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(separator_style);
 
-    let send_reset_link_button_text = if app.state.last_reset_password_link_sent_time.is_some() {
-        let last_reset_password_link_sent_time =
-            app.state.last_reset_password_link_sent_time.unwrap();
+    let send_reset_link_button_text = if let Some(last_reset_password_link_sent_time) =
+        app.state.last_reset_password_link_sent_time
+    {
         if last_reset_password_link_sent_time.elapsed()
             < Duration::from_secs(MIN_TIME_BETWEEN_SENDING_RESET_LINK)
         {
@@ -7190,9 +7136,7 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
         .style(default_style);
     rect.render_widget(title_paragraph, chunks[0]);
 
-    let item_list = &app.state.cloud_data;
-    if item_list.is_some() {
-        let item_list = item_list.as_ref().unwrap();
+    if let Some(item_list) = &app.state.cloud_data {
         if item_list.is_empty() {
             let no_saves_paragraph = Paragraph::new("No saves Found")
                 .alignment(Alignment::Center)
@@ -7325,8 +7269,8 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
         render_body(rect, preview_chunks[1], app, true)
     }
 
-    let preview_title_paragraph = if app.state.preview_file_name.is_some() {
-        Paragraph::new("Previewing: ".to_string() + &app.state.preview_file_name.clone().unwrap())
+    let preview_title_paragraph = if let Some(file_name) = &app.state.preview_file_name {
+        Paragraph::new("Previewing: ".to_string() + file_name)
             .alignment(Alignment::Center)
             .block(
                 Block::default()
