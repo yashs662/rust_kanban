@@ -1,6 +1,6 @@
 use crate::{
-    app::{App, AppReturn},
-    constants::ENCRYPTION_KEY_FILE_NAME,
+    app::{App, AppReturn, DateTimeFormat},
+    constants::{ENCRYPTION_KEY_FILE_NAME, FIELD_NOT_SET},
     inputs::{events::Events, InputEvent},
     io::{
         data_handler::reset_config,
@@ -13,6 +13,7 @@ use crate::{
     },
     ui::ui_main,
 };
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use crossterm::{event::EnableMouseCapture, execute};
 use eyre::Result;
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
@@ -115,14 +116,140 @@ pub fn calculate_cursor_position(
 pub fn lerp_between(
     color_a: (u8, u8, u8),
     color_b: (u8, u8, u8),
-    normalised_time: f32,
+    normalized_time: f32,
 ) -> (u8, u8, u8) {
-    // clamp the normalised time between 0 and 1
-    let normalised_time = normalised_time.clamp(0.0, 1.0);
-    let r = (color_a.0 as f32 * (1.0 - normalised_time) + color_b.0 as f32 * normalised_time) as u8;
-    let g = (color_a.1 as f32 * (1.0 - normalised_time) + color_b.1 as f32 * normalised_time) as u8;
-    let b = (color_a.2 as f32 * (1.0 - normalised_time) + color_b.2 as f32 * normalised_time) as u8;
+    // clamp the normalized time between 0 and 1
+    let normalized_time = normalized_time.clamp(0.0, 1.0);
+    let r = (color_a.0 as f32 * (1.0 - normalized_time) + color_b.0 as f32 * normalized_time) as u8;
+    let g = (color_a.1 as f32 * (1.0 - normalized_time) + color_b.1 as f32 * normalized_time) as u8;
+    let b = (color_a.2 as f32 * (1.0 - normalized_time) + color_b.2 as f32 * normalized_time) as u8;
     (r, g, b)
+}
+
+// parses a string to rgb values from a hex string
+pub fn parse_hex_to_rgb(hex_string: &str) -> Option<(u8, u8, u8)> {
+    if hex_string.len() != 7 {
+        return None;
+    }
+    if !hex_string.starts_with('#') {
+        return None;
+    }
+    let hex_string = hex_string.trim_start_matches('#');
+    let r = u8::from_str_radix(&hex_string[0..2], 16);
+    let g = u8::from_str_radix(&hex_string[2..4], 16);
+    let b = u8::from_str_radix(&hex_string[4..6], 16);
+    match (r, g, b) {
+        (Ok(r), Ok(g), Ok(b)) => Some((r, g, b)),
+        _ => None,
+    }
+}
+
+// TODO: Find a way to get the terminal background color
+pub fn get_term_bg_color() -> (u8, u8, u8) {
+    (0, 0, 0)
+}
+
+pub fn date_format_finder(date_string: &str) -> Result<DateTimeFormat, String> {
+    let all_formats_with_time = DateTimeFormat::all_formats_with_time();
+    for date_format in DateTimeFormat::get_all_date_formats() {
+        if all_formats_with_time.contains(&date_format) {
+            match NaiveDateTime::parse_from_str(date_string, date_format.to_parser_string()) {
+                Ok(_) => return Ok(date_format),
+                Err(_) => {
+                    continue;
+                }
+            }
+        } else {
+            match NaiveDate::parse_from_str(date_string, date_format.to_parser_string()) {
+                Ok(_) => return Ok(date_format),
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+    }
+    Err("Invalid date format".to_string())
+}
+
+pub fn date_format_converter(
+    date_string: &str,
+    date_format: DateTimeFormat,
+) -> Result<String, String> {
+    if date_string == FIELD_NOT_SET || date_string.is_empty() {
+        return Ok(date_string.to_string());
+    }
+    let given_date_format = date_format_finder(date_string)?;
+    if given_date_format == date_format {
+        return Ok(date_string.to_string());
+    }
+    let all_formats_with_time = DateTimeFormat::all_formats_with_time();
+    let all_formats_without_time = DateTimeFormat::all_formats_without_time();
+    if all_formats_with_time.contains(&given_date_format)
+        && all_formats_without_time.contains(&date_format)
+    {
+        let naive_date_time =
+            NaiveDateTime::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date_time) = naive_date_time {
+            let naive_date = NaiveDate::from_ymd_opt(
+                naive_date_time.year(),
+                naive_date_time.month(),
+                naive_date_time.day(),
+            );
+            if let Some(naive_date) = naive_date {
+                return Ok(naive_date
+                    .format(date_format.to_parser_string())
+                    .to_string());
+            } else {
+                Err("Invalid date format".to_string())
+            }
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else if all_formats_without_time.contains(&given_date_format)
+        && all_formats_with_time.contains(&date_format)
+    {
+        let naive_date =
+            NaiveDate::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date) = naive_date {
+            let default_time = NaiveTime::from_hms_opt(0, 0, 0);
+            if let Some(default_time) = default_time {
+                let naive_date_time = NaiveDateTime::new(naive_date, default_time);
+                return Ok(naive_date_time
+                    .format(date_format.to_parser_string())
+                    .to_string());
+            } else {
+                Err("Invalid date format".to_string())
+            }
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else if all_formats_with_time.contains(&given_date_format)
+        && all_formats_with_time.contains(&date_format)
+    {
+        let naive_date_time =
+            NaiveDateTime::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date_time) = naive_date_time {
+            return Ok(naive_date_time
+                .format(date_format.to_parser_string())
+                .to_string());
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else if all_formats_without_time.contains(&given_date_format)
+        && all_formats_without_time.contains(&date_format)
+    {
+        let naive_date =
+            NaiveDate::parse_from_str(date_string, given_date_format.to_parser_string());
+        if let Ok(naive_date) = naive_date {
+            return Ok(naive_date
+                .format(date_format.to_parser_string())
+                .to_string());
+        } else {
+            Err("Invalid date format".to_string())
+        }
+    } else {
+        Err("Invalid date format".to_string())
+    }
 }
 
 /// only to be used as a cli argument function
@@ -156,7 +283,7 @@ pub async fn gen_new_key_main(email_id: String, password: String) -> Result<()> 
             Ok((access_token, user_id, refresh_token)) => (access_token, user_id, refresh_token),
             Err(err) => {
                 print_debug(&format!("Error logging in: {:?}", err));
-                print_error("Error logging in");
+                print_error("Error logging in, please check your credentials and try again");
                 print_error("Aborting...");
                 return Ok(());
             }

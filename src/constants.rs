@@ -48,6 +48,10 @@ pub const THEME_DIR_NAME: &str = "themes";
 pub const THEME_FILE_NAME: &str = "kanban_theme";
 pub const TOAST_FADE_IN_TIME: u64 = 200;
 pub const TOAST_FADE_OUT_TIME: u64 = 400;
+pub const MIN_DATE_PICKER_WIDTH: u16 = 24;
+pub const MIN_DATE_PICKER_HEIGHT: u16 = 2;
+pub const TIME_PICKER_WIDTH: u16 = 12;
+pub const DATE_TIME_PICKER_ANIM_DURATION: u64 = 100; // ms
 
 // Cloud Stuff
 pub const MAX_PASSWORD_LENGTH: usize = 32;
@@ -55,3 +59,4 @@ pub const MIN_PASSWORD_LENGTH: usize = 8;
 pub const MIN_TIME_BETWEEN_SENDING_RESET_LINK: u64 = 60; // seconds
 pub const SUPABASE_ANON_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjcGtiZG9ic3lydGthd29jdWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODA5NDkzOTksImV4cCI6MTk5NjUyNTM5OX0.N1jDZ2rFUDw9VtQbGQhBjonI0zy10lfJL-O2rBJlUOs";
 pub const SUPABASE_URL: &str = "https://kcpkbdobsyrtkawocudz.supabase.co";
+pub const EMAIL_REGEX: &str = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$";

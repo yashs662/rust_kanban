@@ -14,6 +14,7 @@ use ratatui::{
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
+use strum::EnumIter;
 
 pub mod text_box;
 pub mod themes;
@@ -69,8 +70,7 @@ impl Theme {
         ]
     }
 
-    pub fn to_rows(&self, app: &App) -> (Vec<Row>, Vec<Row>) {
-        let popup_mode = app.state.popup_mode.is_some();
+    pub fn to_rows(&self, app: &App, popup_mode: bool) -> (Vec<Row>, Vec<Row>) {
         let text_style = if popup_mode {
             app.current_theme.inactive_text_style
         } else {
@@ -199,11 +199,16 @@ impl Theme {
         }
 
         if let Some(modifier) = modifier {
-            let _ = style.add_modifier(modifier);
+            Self::add_modifier_to_style(style, modifier);
         } else {
             style.sub_modifier = Modifier::empty();
             style.add_modifier = Modifier::empty();
         }
+    }
+
+    pub fn add_modifier_to_style(style: &mut Style, modifier: Modifier) {
+        style.sub_modifier = style.sub_modifier.difference(modifier);
+        style.add_modifier = style.add_modifier.union(modifier);
     }
 
     pub fn edit_style(
@@ -213,6 +218,7 @@ impl Theme {
         bg_color: Option<Color>,
         modifier: Option<Modifier>,
     ) -> Self {
+        // TODO: For style_being_edited, maybe use strum?
         let mut theme = self.clone();
         match style_being_edited {
             "name" => debug!("Cannot edit name"),
@@ -343,7 +349,7 @@ impl Theme {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, EnumIter)]
 pub enum TextColorOptions {
     Black,
     Blue,
@@ -359,7 +365,7 @@ pub enum TextColorOptions {
     LightYellow,
     Magenta,
     None,
-    RGB(u8, u8, u8),
+    HEX(u8, u8, u8),
     Red,
     White,
     Yellow,
@@ -383,9 +389,35 @@ impl Display for TextColorOptions {
             TextColorOptions::Magenta => write!(f, "Magenta"),
             TextColorOptions::None => write!(f, "None"),
             TextColorOptions::Red => write!(f, "Red"),
-            TextColorOptions::RGB(r, g, b) => write!(f, "RGB({}, {}, {})", r, g, b),
+            TextColorOptions::HEX(r, g, b) => write!(f, "#{:02X}{:02X}{:02X}", r, g, b),
             TextColorOptions::White => write!(f, "White"),
             TextColorOptions::Yellow => write!(f, "Yellow"),
+        }
+    }
+}
+
+impl From<Color> for TextColorOptions {
+    fn from(color: Color) -> Self {
+        match color {
+            Color::Black => TextColorOptions::Black,
+            Color::Blue => TextColorOptions::Blue,
+            Color::Cyan => TextColorOptions::Cyan,
+            Color::DarkGray => TextColorOptions::DarkGray,
+            Color::Gray => TextColorOptions::Gray,
+            Color::Green => TextColorOptions::Green,
+            Color::LightBlue => TextColorOptions::LightBlue,
+            Color::LightCyan => TextColorOptions::LightCyan,
+            Color::LightGreen => TextColorOptions::LightGreen,
+            Color::LightMagenta => TextColorOptions::LightMagenta,
+            Color::LightRed => TextColorOptions::LightRed,
+            Color::LightYellow => TextColorOptions::LightYellow,
+            Color::Magenta => TextColorOptions::Magenta,
+            Color::Red => TextColorOptions::Red,
+            Color::Reset => TextColorOptions::None,
+            Color::Rgb(r, g, b) => TextColorOptions::HEX(r, g, b),
+            Color::White => TextColorOptions::White,
+            Color::Yellow => TextColorOptions::Yellow,
+            _ => TextColorOptions::None,
         }
     }
 }
@@ -408,57 +440,12 @@ impl TextColorOptions {
             TextColorOptions::Magenta => Some(Color::Magenta),
             TextColorOptions::None => None,
             TextColorOptions::Red => Some(Color::Red),
-            TextColorOptions::RGB(r, g, b) => Some(Color::Rgb(*r, *g, *b)),
+            TextColorOptions::HEX(r, g, b) => Some(Color::Rgb(*r, *g, *b)),
             TextColorOptions::White => Some(Color::White),
             TextColorOptions::Yellow => Some(Color::Yellow),
         }
     }
-    pub fn to_iter() -> impl Iterator<Item = TextColorOptions> {
-        vec![
-            TextColorOptions::Black,
-            TextColorOptions::Blue,
-            TextColorOptions::Cyan,
-            TextColorOptions::DarkGray,
-            TextColorOptions::Gray,
-            TextColorOptions::Green,
-            TextColorOptions::LightBlue,
-            TextColorOptions::LightCyan,
-            TextColorOptions::LightGreen,
-            TextColorOptions::LightMagenta,
-            TextColorOptions::LightRed,
-            TextColorOptions::LightYellow,
-            TextColorOptions::Magenta,
-            TextColorOptions::None,
-            TextColorOptions::Red,
-            TextColorOptions::RGB(128, 128, 128),
-            TextColorOptions::White,
-            TextColorOptions::Yellow,
-        ]
-        .into_iter()
-    }
-    pub fn from(color: Color) -> TextColorOptions {
-        match color {
-            Color::Black => TextColorOptions::Black,
-            Color::Blue => TextColorOptions::Blue,
-            Color::Cyan => TextColorOptions::Cyan,
-            Color::DarkGray => TextColorOptions::DarkGray,
-            Color::Gray => TextColorOptions::Gray,
-            Color::Green => TextColorOptions::Green,
-            Color::LightBlue => TextColorOptions::LightBlue,
-            Color::LightCyan => TextColorOptions::LightCyan,
-            Color::LightGreen => TextColorOptions::LightGreen,
-            Color::LightMagenta => TextColorOptions::LightMagenta,
-            Color::LightRed => TextColorOptions::LightRed,
-            Color::LightYellow => TextColorOptions::LightYellow,
-            Color::Magenta => TextColorOptions::Magenta,
-            Color::Red => TextColorOptions::Red,
-            Color::Reset => TextColorOptions::None,
-            Color::Rgb(r, g, b) => TextColorOptions::RGB(r, g, b),
-            Color::White => TextColorOptions::White,
-            Color::Yellow => TextColorOptions::Yellow,
-            _ => TextColorOptions::None,
-        }
-    }
+
     // TODO: This is a hack to get around the fact that the Color struct doesn't have a way to get the RGB values, find a better way to do this
     pub fn to_rgb(&self) -> (u8, u8, u8) {
         match self {
@@ -477,7 +464,7 @@ impl TextColorOptions {
             TextColorOptions::Magenta => (128, 0, 128),
             TextColorOptions::None => (0, 0, 0),
             TextColorOptions::Red => (128, 0, 0),
-            TextColorOptions::RGB(r, g, b) => (*r, *g, *b),
+            TextColorOptions::HEX(r, g, b) => (*r, *g, *b),
             TextColorOptions::White => (255, 255, 255),
             TextColorOptions::Yellow => (128, 128, 0),
         }

@@ -28,7 +28,6 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 - [ ] While adding a new tag show a list of existing tags to choose from (like a context menu) (require multiple popups to be implemented)
 - [ ] Optimize logger to handle high volumes of logs (app becomes sluggish when there are a lot of logs)
 - [ ] Make configuration for integer values more user-friendly (e.g. when changing the number of columns in the kanban board)
-- [ ] Add a date picker for the date field
 - [ ] Improve error handling by implementing best practices
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to sync with other services like notion
@@ -39,6 +38,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## Completed Features
 
+- [X] Add a date picker for the date field
 - [X] Unify all text input fields and improve the way they are handled (currently there are multiple ways to handle text input)
 - [X] Drag and Drop cards with the mouse
 - [X] Allow for vertical movement in text fields (e.g. card description)
@@ -70,8 +70,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 ## Known Issues
 
 - [ ] Cursor for Card Tags and Comments is incorrect when tag is longer than available space
-- [ ] Custom RGB colors are not working for Create Theme
-- [ ] Emoticons and other non-ascii characters which take up more than one space may overlap with other characters or affect cursor position
+- [ ] Text Selection is working but not visually selecting text
 
 ## PSA (i.e. Public service announcement)
 

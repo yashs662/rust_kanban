@@ -1,10 +1,11 @@
 use crate::constants::{FIELD_NA, FIELD_NOT_SET};
-use chrono::Utc;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 use uuid::Uuid;
+
+use super::DateTimeFormat;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Board {
@@ -148,6 +149,12 @@ impl Boards {
     pub fn reset(&mut self) {
         self.boards.clear();
     }
+    pub fn find_board_with_card_id(&self, card_id: (u64, u64)) -> Option<(usize, &Board)> {
+        self.boards
+            .iter()
+            .enumerate()
+            .find(|(_, b)| b.cards.get_card_with_id(card_id).is_some())
+    }
 }
 
 impl From<Vec<Board>> for Boards {
@@ -198,7 +205,7 @@ impl fmt::Display for CardPriority {
 
 impl CardPriority {
     pub fn all() -> Vec<CardPriority> {
-        vec![CardPriority::High, CardPriority::Low, CardPriority::Medium]
+        vec![CardPriority::Low, CardPriority::Medium, CardPriority::High]
     }
 }
 
@@ -225,6 +232,7 @@ impl Card {
         priority: CardPriority,
         tags: Vec<String>,
         comments: Vec<String>,
+        date_time_format: DateTimeFormat,
     ) -> Self {
         let name = if name.is_empty() { FIELD_NOT_SET } else { name };
         let description = if description.is_empty() {
@@ -253,8 +261,12 @@ impl Card {
             id: get_id(),
             name: name.to_string(),
             description: description.to_string(),
-            date_created: Utc::now().to_string(),
-            date_modified: Utc::now().to_string(),
+            date_created: chrono::Local::now()
+                .format(date_time_format.to_parser_string())
+                .to_string(),
+            date_modified: chrono::Local::now()
+                .format(date_time_format.to_parser_string())
+                .to_string(),
             due_date: due_date.to_string(),
             date_completed: FIELD_NA.to_string(),
             priority,
@@ -370,8 +382,12 @@ impl Default for Card {
             card_status: CardStatus::Active,
             comments: Vec::new(),
             date_completed: FIELD_NOT_SET.to_string(),
-            date_created: Utc::now().to_string(),
-            date_modified: Utc::now().to_string(),
+            date_created: chrono::Local::now()
+                .format(DateTimeFormat::default().to_parser_string())
+                .to_string(),
+            date_modified: chrono::Local::now()
+                .format(DateTimeFormat::default().to_parser_string())
+                .to_string(),
             description: String::from("Default Card Description"),
             due_date: FIELD_NOT_SET.to_string(),
             id: get_id(),

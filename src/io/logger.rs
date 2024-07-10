@@ -34,7 +34,7 @@ pub struct ExtLogRecord {
 
 #[derive(Debug)]
 struct HotSelect {
-    hashtable: HashMap<u64, LevelFilter>,
+    hash_table: HashMap<u64, LevelFilter>,
     default: LevelFilter,
 }
 
@@ -128,8 +128,8 @@ impl<T> CircularBuffer<T> {
             consumed.append(&mut self.buffer);
         } else {
             let pos = self.next_write_pos % max_depth;
-            let mut xvec = self.buffer.split_off(pos);
-            consumed.append(&mut xvec);
+            let mut remaining_buffer = self.buffer.split_off(pos);
+            consumed.append(&mut remaining_buffer);
             consumed.append(&mut self.buffer)
         }
         self.next_write_pos = 0;
@@ -211,20 +211,20 @@ pub fn move_events() {
     RUST_KANBAN_LOGGER.move_events();
 }
 
-pub fn set_default_level(levelfilter: LevelFilter) {
-    RUST_KANBAN_LOGGER.hot_select.lock().default = levelfilter;
-    RUST_KANBAN_LOGGER.inner.lock().default = levelfilter;
+pub fn set_default_level(level_filter: LevelFilter) {
+    RUST_KANBAN_LOGGER.hot_select.lock().default = level_filter;
+    RUST_KANBAN_LOGGER.inner.lock().default = level_filter;
 }
 
-pub fn set_level_for_target(target: &str, levelfilter: LevelFilter) {
+pub fn set_level_for_target(target: &str, level_filter: LevelFilter) {
     let h = fxhash::hash64(&target);
     RUST_KANBAN_LOGGER
         .inner
         .lock()
         .targets
-        .set(target, levelfilter);
+        .set(target, level_filter);
     let mut hs = RUST_KANBAN_LOGGER.hot_select.lock();
-    hs.hashtable.insert(h, levelfilter);
+    hs.hash_table.insert(h, level_filter);
 }
 
 impl RustKanbanLogger {
@@ -245,8 +245,8 @@ impl Log for RustKanbanLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         let h = fxhash::hash64(metadata.target());
         let hs = self.hot_select.lock();
-        if let Some(&levelfilter) = hs.hashtable.get(&h) {
-            metadata.level() <= levelfilter
+        if let Some(&level_filter) = hs.hash_table.get(&h) {
+            metadata.level() <= level_filter
         } else {
             metadata.level() <= hs.default
         }
@@ -264,7 +264,7 @@ impl Log for RustKanbanLogger {
 lazy_static! {
     pub static ref RUST_KANBAN_LOGGER: RustKanbanLogger = {
         let hs = HotSelect {
-            hashtable: HashMap::with_capacity(1000),
+            hash_table: HashMap::with_capacity(1000),
             default: LevelFilter::Info,
         };
         let hl = HotLog {

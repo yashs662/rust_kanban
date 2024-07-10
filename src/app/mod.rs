@@ -1,43 +1,39 @@
 use self::{
+    actions::Action,
     app_helper::{
         handle_edit_keybinding_mode, handle_general_actions, handle_mouse_action,
         handle_user_input_mode, prepare_config_for_new_app,
     },
-    kanban::{Board, Boards, Card, CardPriority},
-    state::{AppStatus, Focus, KeyBindings, UiMode},
+    kanban::{Board, Boards, Card, CardPriority, CardStatus},
+    state::{AppStatus, Focus, KeyBindingEnum, KeyBindings, UiMode},
 };
 use crate::{
-    app::{actions::Action, kanban::CardStatus, state::KeyBindingEnum},
     constants::{
         DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
-        DEFAULT_UI_MODE, FIELD_NA, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE,
+        DEFAULT_UI_MODE, FIELD_NA, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE,
         MAX_NO_CARDS_PER_BOARD, MAX_TICKRATE, MAX_WARNING_DUE_DATE_DAYS, MIN_NO_BOARDS_PER_PAGE,
-        MIN_NO_CARDS_PER_BOARD, MIN_TICKRATE, MIN_WARNING_DUE_DATE_DAYS,
-        MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
+        MIN_NO_CARDS_PER_BOARD, MIN_TICKRATE, MIN_WARNING_DUE_DATE_DAYS, NO_OF_BOARDS_PER_PAGE,
+        NO_OF_CARDS_PER_BOARD,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
         data_handler::{self, get_available_local_save_files, get_default_save_directory},
-        io_handler::{refresh_visible_boards_and_cards, CloudData},
+        io_handler::refresh_visible_boards_and_cards,
         logger::{get_logs, RUST_KANBAN_LOGGER},
         IoEvent,
     },
     ui::{
         text_box::TextBox,
-        ui_helper,
-        widgets::{CloseButtonWidget, CommandPaletteWidget, ToastType, ToastWidget},
+        widgets::{CalenderType, ToastType, ToastWidget, Widgets},
         TextColorOptions, TextModifierOptions, Theme,
     },
 };
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, warn};
-use ratatui::{
-    widgets::{ListState, TableState},
-    Frame,
-};
+use ratatui::widgets::TableState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use state::{AppState, PopupMode};
 use std::{
     fmt::{self, Display, Formatter},
     path::PathBuf,
@@ -97,22 +93,6 @@ impl ActionHistoryManager {
     }
 }
 
-pub struct Widgets {
-    pub command_palette: CommandPaletteWidget,
-    pub close_button_widget: CloseButtonWidget,
-    pub toasts: Vec<ToastWidget>,
-}
-
-impl Widgets {
-    pub fn new(theme: Theme, debug_mode: bool) -> Self {
-        Self {
-            command_palette: CommandPaletteWidget::new(debug_mode),
-            close_button_widget: CloseButtonWidget::new(theme.general_style),
-            toasts: vec![],
-        }
-    }
-}
-
 pub struct App<'a> {
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
     actions: Vec<Action>,
@@ -129,7 +109,7 @@ pub struct App<'a> {
     pub current_theme: Theme,
     pub action_history_manager: ActionHistoryManager,
     pub main_menu: MainMenu,
-    pub widgets: Widgets,
+    pub widgets: Widgets<'a>,
 }
 
 impl App<'_> {
@@ -147,7 +127,11 @@ impl App<'_> {
         if let Some(theme_in_all) = theme_in_all {
             theme = theme_in_all.clone();
         }
-        let mut widgets = Widgets::new(theme.clone(), debug_mode);
+        let mut widgets = Widgets::new(
+            theme.clone(),
+            debug_mode,
+            config.date_picker_calender_format.clone(),
+        );
         widgets.toasts = toasts;
         let mut app = Self {
             io_tx,
@@ -395,11 +379,11 @@ impl App<'_> {
         self.state.app_table_states.edit_keybindings.select(Some(i));
     }
     pub fn help_next(&mut self) {
-        let all_keybinds: Vec<_> = self.config.keybindings.iter().collect();
+        let all_keybindings: Vec<_> = self.config.keybindings.iter().collect();
         let i = match self.state.app_table_states.help.selected() {
             Some(i) => {
-                if !all_keybinds.is_empty() {
-                    if i >= (all_keybinds.len() / 2) - 1 {
+                if !all_keybindings.is_empty() {
+                    if i >= (all_keybindings.len() / 2) - 1 {
                         0
                     } else {
                         i + 1
@@ -413,12 +397,12 @@ impl App<'_> {
         self.state.app_table_states.help.select(Some(i));
     }
     pub fn help_prv(&mut self) {
-        let all_keybinds: Vec<_> = self.config.keybindings.iter().collect();
+        let all_keybindings: Vec<_> = self.config.keybindings.iter().collect();
         let i = match self.state.app_table_states.help.selected() {
             Some(i) => {
-                if !all_keybinds.is_empty() {
+                if !all_keybindings.is_empty() {
                     if i == 0 {
-                        (all_keybinds.len() / 2) - 1
+                        (all_keybindings.len() / 2) - 1
                     } else {
                         i - 1
                     }
@@ -744,7 +728,8 @@ impl App<'_> {
         self.current_theme = self.all_themes[i].clone();
     }
     pub fn select_create_theme_next(&mut self) {
-        let theme_rows_len = Theme::default().to_rows(self).1.len();
+        // popup_mode doesn't matter here, as we only want the length of the rows
+        let theme_rows_len = Theme::default().to_rows(self, true).1.len();
         let i = match self.state.app_table_states.theme_editor.selected() {
             Some(i) => {
                 if i >= theme_rows_len - 1 {
@@ -758,7 +743,8 @@ impl App<'_> {
         self.state.app_table_states.theme_editor.select(Some(i));
     }
     pub fn select_create_theme_prv(&mut self) {
-        let theme_rows_len = Theme::default().to_rows(self).1.len();
+        // popup_mode doesn't matter here, as we only want the length of the rows
+        let theme_rows_len = Theme::default().to_rows(self, true).1.len();
         let i = match self.state.app_table_states.theme_editor.selected() {
             Some(i) => {
                 if i == 0 {
@@ -774,7 +760,7 @@ impl App<'_> {
     pub fn select_edit_style_fg_next(&mut self) {
         let i = match self.state.app_list_states.edit_specific_style[0].selected() {
             Some(i) => {
-                if i >= TextColorOptions::to_iter().count() - 1 {
+                if i >= TextColorOptions::iter().count() - 1 {
                     0
                 } else {
                     i + 1
@@ -788,7 +774,7 @@ impl App<'_> {
         let i = match self.state.app_list_states.edit_specific_style[0].selected() {
             Some(i) => {
                 if i == 0 {
-                    TextColorOptions::to_iter().count() - 1
+                    TextColorOptions::iter().count() - 1
                 } else {
                     i - 1
                 }
@@ -800,7 +786,7 @@ impl App<'_> {
     pub fn select_edit_style_bg_next(&mut self) {
         let i = match self.state.app_list_states.edit_specific_style[1].selected() {
             Some(i) => {
-                if i >= TextColorOptions::to_iter().count() - 1 {
+                if i >= TextColorOptions::iter().count() - 1 {
                     0
                 } else {
                     i + 1
@@ -814,7 +800,7 @@ impl App<'_> {
         let i = match self.state.app_list_states.edit_specific_style[1].selected() {
             Some(i) => {
                 if i == 0 {
-                    TextColorOptions::to_iter().count() - 1
+                    TextColorOptions::iter().count() - 1
                 } else {
                     i - 1
                 }
@@ -930,7 +916,7 @@ impl App<'_> {
     pub fn change_date_format_popup_next(&mut self) {
         let i = match self.state.app_list_states.date_format_selector.selected() {
             Some(i) => {
-                if i >= DateFormat::get_all_date_formats().len() - 1 {
+                if i >= DateTimeFormat::get_all_date_formats().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -947,7 +933,7 @@ impl App<'_> {
         let i = match self.state.app_list_states.date_format_selector.selected() {
             Some(i) => {
                 if i == 0 {
-                    DateFormat::get_all_date_formats().len() - 1
+                    DateTimeFormat::get_all_date_formats().len() - 1
                 } else {
                     i - 1
                 }
@@ -1276,7 +1262,14 @@ impl App<'_> {
         hot_log.state.select(Some(i));
     }
     pub fn set_popup_mode(&mut self, popup_mode: PopupMode) {
-        self.state.popup_mode = Some(popup_mode);
+        if self.state.z_stack.contains(&popup_mode) {
+            debug!(
+                "Popup mode already set: {:?}, z_stack {:?}",
+                popup_mode, self.state.z_stack
+            );
+            return;
+        }
+        self.state.z_stack.push(popup_mode);
         let available_focus_targets = popup_mode.get_available_targets();
         if !available_focus_targets.contains(&self.state.focus) {
             if available_focus_targets.is_empty() {
@@ -1289,7 +1282,6 @@ impl App<'_> {
                 self.state.set_focus(available_focus_targets[0]);
             }
         }
-        // TODO:: set other match arms
         match popup_mode {
             PopupMode::ViewCard => {
                 if self.state.current_board_id.is_none() || self.state.current_card_id.is_none() {
@@ -1312,15 +1304,6 @@ impl App<'_> {
                                 current_card.description.clone(),
                                 false,
                             );
-                        self.state.text_buffers.card_due_date =
-                            TextBox::from_string_with_newline_sep(
-                                if current_card.due_date.is_empty() {
-                                    FIELD_NOT_SET.to_string()
-                                } else {
-                                    current_card.due_date.clone()
-                                },
-                                true,
-                            );
                     } else {
                         self.send_error_toast("No card selected", Some(Duration::from_secs(1)));
                     }
@@ -1329,7 +1312,7 @@ impl App<'_> {
                 }
             }
             PopupMode::CommandPalette => {
-                self.state.text_buffers.command_palette.reset();
+                self.widgets.command_palette.reset(&mut self.state);
                 self.state.app_status = AppStatus::UserInput;
                 self.state.set_focus(Focus::CommandPaletteCommand);
             }
@@ -1342,6 +1325,13 @@ impl App<'_> {
             PopupMode::EditGeneralConfig => {
                 self.state.set_focus(Focus::EditGeneralConfigPopup);
             }
+            PopupMode::CustomHexColorPromptBG | PopupMode::CustomHexColorPromptFG => {
+                self.state.set_focus(Focus::TextInput);
+                self.state.app_status = AppStatus::UserInput;
+            }
+            PopupMode::DateTimePicker => {
+                self.widgets.date_time_picker.open_date_picker();
+            }
             _ => {
                 debug!("No special logic for setting popup mode: {:?}", popup_mode);
             }
@@ -1349,10 +1339,9 @@ impl App<'_> {
     }
 
     pub fn close_popup(&mut self) {
-        // TODO: Add logic here if needed
-        if let Some(popup_mode) = self.state.popup_mode {
+        if let Some(popup_mode) = self.state.z_stack.pop() {
             match popup_mode {
-                PopupMode::CustomRGBPromptBG | PopupMode::CustomRGBPromptFG => {
+                PopupMode::CustomHexColorPromptBG | PopupMode::CustomHexColorPromptFG => {
                     self.state.app_status = AppStatus::Initialized;
                 }
                 PopupMode::ViewCard => {
@@ -1372,9 +1361,11 @@ impl App<'_> {
                         self.state.card_being_edited = None;
                     }
                 }
+                PopupMode::DateTimePicker => {
+                    self.widgets.date_time_picker.close_date_picker();
+                }
                 _ => {}
             }
-            self.state.popup_mode = None;
         }
     }
 
@@ -1445,6 +1436,7 @@ impl App<'_> {
     }
 }
 
+// TODO: Refactor to keep all structs and enums separate from other code (maybe? think about this)
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MainMenuItem {
     View,
@@ -1539,356 +1531,8 @@ impl MainMenu {
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Copy)]
-pub enum PopupMode {
-    ViewCard,
-    CommandPalette,
-    EditSpecificKeyBinding,
-    ChangeUIMode,
-    CardStatusSelector,
-    EditGeneralConfig,
-    SelectDefaultView,
-    ChangeDateFormatPopup,
-    ChangeTheme,
-    EditThemeStyle,
-    SaveThemePrompt,
-    CustomRGBPromptFG,
-    CustomRGBPromptBG,
-    ConfirmDiscardCardChanges,
-    CardPrioritySelector,
-    FilterByTag,
-}
-
-impl Display for PopupMode {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
-            PopupMode::ViewCard => write!(f, "Card View"),
-            PopupMode::CommandPalette => write!(f, "Command Palette"),
-            PopupMode::EditSpecificKeyBinding => write!(f, "Edit Specific Key Binding"),
-            PopupMode::ChangeUIMode => write!(f, "Change UI Mode"),
-            PopupMode::CardStatusSelector => write!(f, "Change Card Status"),
-            PopupMode::EditGeneralConfig => write!(f, "Edit General Config"),
-            PopupMode::SelectDefaultView => write!(f, "Select Default View"),
-            PopupMode::ChangeDateFormatPopup => write!(f, "Change Date Format"),
-            PopupMode::ChangeTheme => write!(f, "Change Theme"),
-            PopupMode::EditThemeStyle => write!(f, "Edit Theme Style"),
-            PopupMode::SaveThemePrompt => write!(f, "Save Theme Prompt"),
-            PopupMode::CustomRGBPromptFG => write!(f, "Custom RGB Prompt"),
-            PopupMode::CustomRGBPromptBG => write!(f, "Custom RGB Prompt"),
-            PopupMode::ConfirmDiscardCardChanges => write!(f, "Confirm Discard Card Changes"),
-            PopupMode::CardPrioritySelector => write!(f, "Change Card Priority"),
-            PopupMode::FilterByTag => write!(f, "Filter By Tag"),
-        }
-    }
-}
-
-impl PopupMode {
-    fn get_available_targets(&self) -> Vec<Focus> {
-        match self {
-            PopupMode::ViewCard => vec![
-                Focus::CardName,
-                Focus::CardDescription,
-                Focus::CardDueDate,
-                Focus::CardPriority,
-                Focus::CardStatus,
-                Focus::CardTags,
-                Focus::CardComments,
-                Focus::SubmitButton,
-            ],
-            PopupMode::CommandPalette => vec![
-                Focus::CommandPaletteCommand,
-                Focus::CommandPaletteCard,
-                Focus::CommandPaletteBoard,
-            ],
-            PopupMode::EditSpecificKeyBinding => vec![],
-            PopupMode::ChangeUIMode => vec![],
-            PopupMode::CardStatusSelector => vec![],
-            PopupMode::EditGeneralConfig => vec![],
-            PopupMode::SelectDefaultView => vec![],
-            PopupMode::ChangeDateFormatPopup => vec![],
-            PopupMode::ChangeTheme => vec![],
-            PopupMode::EditThemeStyle => vec![
-                Focus::StyleEditorFG,
-                Focus::StyleEditorBG,
-                Focus::StyleEditorModifier,
-                Focus::SubmitButton,
-            ],
-            PopupMode::SaveThemePrompt => vec![Focus::SubmitButton, Focus::ExtraFocus],
-            PopupMode::CustomRGBPromptFG => vec![Focus::TextInput, Focus::SubmitButton],
-            PopupMode::CustomRGBPromptBG => vec![Focus::TextInput, Focus::SubmitButton],
-            PopupMode::ConfirmDiscardCardChanges => vec![Focus::SubmitButton, Focus::ExtraFocus],
-            PopupMode::CardPrioritySelector => vec![],
-            PopupMode::FilterByTag => vec![Focus::FilterByTagPopup, Focus::SubmitButton],
-        }
-    }
-
-    pub fn render(self, rect: &mut Frame, app: &mut App) {
-        let current_focus = app.state.focus;
-        if !self.get_available_targets().contains(&current_focus)
-            && !self.get_available_targets().is_empty()
-        {
-            app.state.set_focus(self.get_available_targets()[0]);
-        }
-        match self {
-            PopupMode::ViewCard => {
-                ui_helper::render_view_card(rect, app);
-            }
-            PopupMode::CardStatusSelector => {
-                ui_helper::render_change_card_status_popup(rect, app);
-            }
-            PopupMode::ChangeUIMode => {
-                ui_helper::render_change_ui_mode_popup(rect, app);
-            }
-            PopupMode::CommandPalette => {
-                ui_helper::render_command_palette(rect, app);
-            }
-            PopupMode::EditGeneralConfig => {
-                ui_helper::render_edit_config(rect, app);
-            }
-            PopupMode::EditSpecificKeyBinding => {
-                ui_helper::render_edit_specific_keybinding(rect, app);
-            }
-            PopupMode::SelectDefaultView => {
-                ui_helper::render_select_default_view(rect, app);
-            }
-            PopupMode::ChangeTheme => {
-                ui_helper::render_change_theme_popup(rect, app);
-            }
-            PopupMode::EditThemeStyle => {
-                ui_helper::render_edit_specific_style_popup(rect, app);
-            }
-            PopupMode::SaveThemePrompt => {
-                ui_helper::render_save_theme_prompt(rect, app);
-            }
-            PopupMode::CustomRGBPromptFG | PopupMode::CustomRGBPromptBG => {
-                ui_helper::render_custom_rgb_color_prompt(rect, app);
-            }
-            PopupMode::ConfirmDiscardCardChanges => {
-                ui_helper::render_confirm_discard_card_changes(rect, app);
-            }
-            PopupMode::CardPrioritySelector => {
-                ui_helper::render_card_priority_selector(rect, app);
-            }
-            PopupMode::FilterByTag => {
-                ui_helper::render_filter_by_tag_popup(rect, app);
-            }
-            PopupMode::ChangeDateFormatPopup => {
-                ui_helper::render_change_date_format_popup(rect, app);
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct AppListStates {
-    pub card_priority_selector: ListState,
-    pub card_status_selector: ListState,
-    pub card_view_comment_list: ListState,
-    pub card_view_list: ListState,
-    pub card_view_tag_list: ListState,
-    pub command_palette_board_search: ListState,
-    pub command_palette_card_search: ListState,
-    pub command_palette_command_search: ListState,
-    pub date_format_selector: ListState,
-    pub default_view: ListState,
-    pub edit_specific_style: [ListState; 3],
-    pub filter_by_tag_list: ListState,
-    pub load_save: ListState,
-    pub logs: ListState,
-    pub main_menu: ListState,
-    pub theme_selector: ListState,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct AppTableStates {
-    pub config: TableState,
-    pub edit_keybindings: TableState,
-    pub help: TableState,
-    pub theme_editor: TableState,
-}
-
-#[derive(Debug, Clone)]
-pub struct AppState<'a> {
-    pub all_available_tags: Option<Vec<(String, u32)>>,
-    pub app_list_states: AppListStates,
-    pub app_status: AppStatus,
-    pub app_table_states: AppTableStates,
-    pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
-    pub card_drag_mode: bool,
-    pub cloud_data: Option<Vec<CloudData>>,
-    pub current_board_id: Option<(u64, u64)>,
-    pub current_card_id: Option<(u64, u64)>,
-    pub current_mouse_coordinates: (u16, u16),
-    pub debug_menu_toggled: bool,
-    pub default_theme_mode: bool,
-    pub edited_keybinding: Option<Vec<Key>>,
-    pub encryption_key_from_arguments: Option<String>,
-    pub filter_tags: Option<Vec<String>>,
-    pub focus: Focus,
-    pub hovered_board: Option<(u64, u64)>,
-    pub hovered_card_dimensions: Option<(u16, u16)>,
-    pub hovered_card: Option<((u64, u64), (u64, u64))>,
-    pub last_mouse_action: Option<Mouse>,
-    pub last_reset_password_link_sent_time: Option<Instant>,
-    pub mouse_focus: Option<Focus>,
-    pub mouse_list_index: Option<u16>,
-    pub no_of_cards_to_show: u16,
-    pub popup_mode: Option<PopupMode>,
-    pub prev_focus: Option<Focus>,
-    pub prev_ui_mode: Option<UiMode>,
-    pub preview_file_name: Option<String>,
-    pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
-    pub previous_mouse_coordinates: (u16, u16),
-    pub term_background_color: (u8, u8, u8),
-    pub theme_being_edited: Theme,
-    pub ui_mode: UiMode,
-    pub ui_render_time: Vec<u128>,
-    pub user_login_data: UserLoginData,
-    // TODO: Improve this, it feels like a hack
-    pub path_check_state: PathCheckState,
-    pub text_buffers: TextBuffers<'a>,
-    pub show_password: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct TextBuffers<'a> {
-    pub board_name: TextBox<'a>,
-    pub board_description: TextBox<'a>,
-    pub card_name: TextBox<'a>,
-    pub card_description: TextBox<'a>,
-    pub card_due_date: TextBox<'a>,
-    pub card_tags: Vec<TextBox<'a>>,
-    pub card_comments: Vec<TextBox<'a>>,
-    pub email_id: TextBox<'a>,
-    pub password: TextBox<'a>,
-    pub confirm_password: TextBox<'a>,
-    pub reset_password_link: TextBox<'a>,
-    pub general_config: TextBox<'a>,
-    pub command_palette: TextBox<'a>,
-    pub theme_editor_fg_rgb: TextBox<'a>,
-    pub theme_editor_bg_rgb: TextBox<'a>,
-    pub theme_editor_custom_rgb: TextBox<'a>,
-}
-
-impl<'a> Default for TextBuffers<'a> {
-    fn default() -> Self {
-        TextBuffers {
-            board_name: TextBox::new(vec!["".to_string()], true),
-            board_description: TextBox::new(vec!["".to_string()], false),
-            card_name: TextBox::new(vec!["".to_string()], true),
-            card_description: TextBox::new(vec!["".to_string()], false),
-            card_due_date: TextBox::new(vec!["".to_string()], true),
-            card_tags: Vec::new(),
-            card_comments: Vec::new(),
-            email_id: TextBox::new(vec!["".to_string()], true),
-            password: TextBox::new(vec!["".to_string()], true),
-            confirm_password: TextBox::new(vec!["".to_string()], true),
-            reset_password_link: TextBox::new(vec!["".to_string()], true),
-            general_config: TextBox::new(vec!["".to_string()], true),
-            command_palette: TextBox::new(vec!["".to_string()], true),
-            theme_editor_fg_rgb: TextBox::new(vec!["".to_string()], true),
-            theme_editor_bg_rgb: TextBox::new(vec!["".to_string()], true),
-            theme_editor_custom_rgb: TextBox::new(vec!["".to_string()], true),
-        }
-    }
-}
-
-impl<'a> TextBuffers<'a> {
-    pub fn prepare_tags_and_comments_for_card(&mut self, card: &Card) {
-        self.card_tags = card
-            .tags
-            .iter()
-            .map(|tag| TextBox::new(vec![tag.clone()], true))
-            .collect();
-        self.card_comments = card
-            .comments
-            .iter()
-            .map(|comment| TextBox::new(vec![comment.clone()], true))
-            .collect();
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct PathCheckState {
-    pub path_last_checked: String,
-    pub path_exists: bool,
-    pub potential_completion: Option<String>,
-    pub recheck_required: bool,
-    pub path_check_mode: bool,
-}
-
-impl AppState<'_> {
-    pub fn set_focus(&mut self, focus: Focus) {
-        self.focus = focus;
-    }
-    pub fn get_card_being_edited(&self) -> Option<((u64, u64), Card)> {
-        self.card_being_edited.clone()
-    }
-    pub fn get_theme_being_edited(&self) -> Theme {
-        self.theme_being_edited.clone()
-    }
-}
-
-impl Default for AppState<'_> {
-    fn default() -> AppState<'static> {
-        AppState {
-            all_available_tags: None,
-            app_list_states: AppListStates::default(),
-            app_status: AppStatus::default(),
-            app_table_states: AppTableStates::default(),
-            card_being_edited: None,
-            card_drag_mode: false,
-            cloud_data: None,
-            current_board_id: None,
-            current_card_id: None,
-            current_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES, // make sure it's out of bounds when mouse mode is disabled
-            debug_menu_toggled: false,
-            default_theme_mode: false,
-            edited_keybinding: None,
-            encryption_key_from_arguments: None,
-            filter_tags: None,
-            focus: Focus::NoFocus,
-            hovered_board: None,
-            hovered_card_dimensions: None,
-            hovered_card: None,
-            last_mouse_action: None,
-            last_reset_password_link_sent_time: None,
-            mouse_focus: None,
-            mouse_list_index: None,
-            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
-            popup_mode: None,
-            prev_focus: None,
-            prev_ui_mode: None,
-            preview_file_name: None,
-            preview_visible_boards_and_cards: LinkedHashMap::new(),
-            previous_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES,
-            term_background_color: get_term_bg_color(),
-            theme_being_edited: Theme::default(),
-            ui_mode: DEFAULT_UI_MODE,
-            ui_render_time: Vec::new(),
-            user_login_data: UserLoginData {
-                email_id: None,
-                auth_token: None,
-                refresh_token: None,
-                user_id: None,
-            },
-            path_check_state: PathCheckState::default(),
-            text_buffers: TextBuffers::default(),
-            show_password: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct UserLoginData {
-    pub auth_token: Option<String>,
-    pub email_id: Option<String>,
-    pub refresh_token: Option<String>,
-    pub user_id: Option<String>,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq)]
-pub enum DateFormat {
+pub enum DateTimeFormat {
     DayMonthYear,
     #[default]
     DayMonthYearTime,
@@ -1898,76 +1542,76 @@ pub enum DateFormat {
     YearMonthDayTime,
 }
 
-impl DateFormat {
+impl DateTimeFormat {
     pub fn to_human_readable_string(&self) -> &str {
         match self {
-            DateFormat::DayMonthYear => "DD/MM/YYYY",
-            DateFormat::DayMonthYearTime => "DD/MM/YYYY-HH:MM:SS",
-            DateFormat::MonthDayYear => "MM/DD/YYYY",
-            DateFormat::MonthDayYearTime => "MM/DD/YYYY-HH:MM:SS",
-            DateFormat::YearMonthDay => "YYYY/MM/DD",
-            DateFormat::YearMonthDayTime => "YYYY/MM/DD-HH:MM:SS",
+            DateTimeFormat::DayMonthYear => "DD/MM/YYYY",
+            DateTimeFormat::DayMonthYearTime => "DD/MM/YYYY-HH:MM:SS",
+            DateTimeFormat::MonthDayYear => "MM/DD/YYYY",
+            DateTimeFormat::MonthDayYearTime => "MM/DD/YYYY-HH:MM:SS",
+            DateTimeFormat::YearMonthDay => "YYYY/MM/DD",
+            DateTimeFormat::YearMonthDayTime => "YYYY/MM/DD-HH:MM:SS",
         }
     }
     pub fn to_parser_string(&self) -> &str {
         match self {
-            DateFormat::DayMonthYear => "%d/%m/%Y",
-            DateFormat::DayMonthYearTime => "%d/%m/%Y-%H:%M:%S",
-            DateFormat::MonthDayYear => "%m/%d/%Y",
-            DateFormat::MonthDayYearTime => "%m/%d/%Y-%H:%M:%S",
-            DateFormat::YearMonthDay => "%Y/%m/%d",
-            DateFormat::YearMonthDayTime => "%Y/%m/%d-%H:%M:%S",
+            DateTimeFormat::DayMonthYear => "%d/%m/%Y",
+            DateTimeFormat::DayMonthYearTime => "%d/%m/%Y-%H:%M:%S",
+            DateTimeFormat::MonthDayYear => "%m/%d/%Y",
+            DateTimeFormat::MonthDayYearTime => "%m/%d/%Y-%H:%M:%S",
+            DateTimeFormat::YearMonthDay => "%Y/%m/%d",
+            DateTimeFormat::YearMonthDayTime => "%Y/%m/%d-%H:%M:%S",
         }
     }
-    pub fn from_json_string(json_string: &str) -> Option<DateFormat> {
+    pub fn from_json_string(json_string: &str) -> Option<DateTimeFormat> {
         match json_string {
-            "DayMonthYear" => Some(DateFormat::DayMonthYear),
-            "DayMonthYearTime" => Some(DateFormat::DayMonthYearTime),
-            "MonthDayYear" => Some(DateFormat::MonthDayYear),
-            "MonthDayYearTime" => Some(DateFormat::MonthDayYearTime),
-            "YearMonthDay" => Some(DateFormat::YearMonthDay),
-            "YearMonthDayTime" => Some(DateFormat::YearMonthDayTime),
+            "DayMonthYear" => Some(DateTimeFormat::DayMonthYear),
+            "DayMonthYearTime" => Some(DateTimeFormat::DayMonthYearTime),
+            "MonthDayYear" => Some(DateTimeFormat::MonthDayYear),
+            "MonthDayYearTime" => Some(DateTimeFormat::MonthDayYearTime),
+            "YearMonthDay" => Some(DateTimeFormat::YearMonthDay),
+            "YearMonthDayTime" => Some(DateTimeFormat::YearMonthDayTime),
             _ => None,
         }
     }
-    pub fn from_human_readable_string(human_readable_string: &str) -> Option<DateFormat> {
+    pub fn from_human_readable_string(human_readable_string: &str) -> Option<DateTimeFormat> {
         match human_readable_string {
-            "DD/MM/YYYY" => Some(DateFormat::DayMonthYear),
-            "DD/MM/YYYY-HH:MM:SS" => Some(DateFormat::DayMonthYearTime),
-            "MM/DD/YYYY" => Some(DateFormat::MonthDayYear),
-            "MM/DD/YYYY-HH:MM:SS" => Some(DateFormat::MonthDayYearTime),
-            "YYYY/MM/DD" => Some(DateFormat::YearMonthDay),
-            "YYYY/MM/DD-HH:MM:SS" => Some(DateFormat::YearMonthDayTime),
+            "DD/MM/YYYY" => Some(DateTimeFormat::DayMonthYear),
+            "DD/MM/YYYY-HH:MM:SS" => Some(DateTimeFormat::DayMonthYearTime),
+            "MM/DD/YYYY" => Some(DateTimeFormat::MonthDayYear),
+            "MM/DD/YYYY-HH:MM:SS" => Some(DateTimeFormat::MonthDayYearTime),
+            "YYYY/MM/DD" => Some(DateTimeFormat::YearMonthDay),
+            "YYYY/MM/DD-HH:MM:SS" => Some(DateTimeFormat::YearMonthDayTime),
             _ => None,
         }
     }
-    pub fn get_all_date_formats() -> Vec<DateFormat> {
+    pub fn get_all_date_formats() -> Vec<DateTimeFormat> {
         vec![
-            DateFormat::DayMonthYear,
-            DateFormat::DayMonthYearTime,
-            DateFormat::MonthDayYear,
-            DateFormat::MonthDayYearTime,
-            DateFormat::YearMonthDay,
-            DateFormat::YearMonthDayTime,
+            DateTimeFormat::DayMonthYear,
+            DateTimeFormat::DayMonthYearTime,
+            DateTimeFormat::MonthDayYear,
+            DateTimeFormat::MonthDayYearTime,
+            DateTimeFormat::YearMonthDay,
+            DateTimeFormat::YearMonthDayTime,
         ]
     }
-    pub fn all_formats_with_time() -> Vec<DateFormat> {
+    pub fn all_formats_with_time() -> Vec<DateTimeFormat> {
         vec![
-            DateFormat::DayMonthYearTime,
-            DateFormat::MonthDayYearTime,
-            DateFormat::YearMonthDayTime,
+            DateTimeFormat::DayMonthYearTime,
+            DateTimeFormat::MonthDayYearTime,
+            DateTimeFormat::YearMonthDayTime,
         ]
     }
-    pub fn all_formats_without_time() -> Vec<DateFormat> {
+    pub fn all_formats_without_time() -> Vec<DateTimeFormat> {
         vec![
-            DateFormat::DayMonthYear,
-            DateFormat::MonthDayYear,
-            DateFormat::YearMonthDay,
+            DateTimeFormat::DayMonthYear,
+            DateTimeFormat::MonthDayYear,
+            DateTimeFormat::YearMonthDay,
         ]
     }
 }
 
-impl Display for DateFormat {
+impl Display for DateTimeFormat {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.to_human_readable_string())
     }
@@ -1977,7 +1621,7 @@ impl Display for DateFormat {
 pub struct AppConfig {
     pub always_load_last_save: bool,
     pub auto_login: bool,
-    pub date_format: DateFormat,
+    pub date_time_format: DateTimeFormat,
     pub default_theme: String,
     pub default_ui_mode: UiMode,
     pub disable_animations: bool,
@@ -1986,6 +1630,7 @@ pub struct AppConfig {
     pub keybindings: KeyBindings,
     pub no_of_boards_to_show: u16,
     pub no_of_cards_to_show: u16,
+    pub date_picker_calender_format: CalenderType,
     pub save_directory: PathBuf,
     pub save_on_exit: bool,
     pub show_line_numbers: bool,
@@ -2000,7 +1645,7 @@ impl Default for AppConfig {
         Self {
             always_load_last_save: true,
             auto_login: true,
-            date_format: DateFormat::default(),
+            date_time_format: DateTimeFormat::default(),
             default_theme: default_theme.name,
             default_ui_mode: default_view,
             disable_animations: false,
@@ -2009,6 +1654,7 @@ impl Default for AppConfig {
             keybindings: KeyBindings::default(),
             no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
             no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
+            date_picker_calender_format: CalenderType::default(),
             save_directory: get_default_save_directory(),
             save_on_exit: true,
             show_line_numbers: true,
@@ -2039,9 +1685,12 @@ impl AppConfig {
                     ConfigEnum::Tickrate => (self.tickrate.to_string(), 10),
                     ConfigEnum::NoOfCardsToShow => (self.no_of_cards_to_show.to_string(), 11),
                     ConfigEnum::NoOfBoardsToShow => (self.no_of_boards_to_show.to_string(), 12),
-                    ConfigEnum::DefaultTheme => (self.default_theme.clone(), 13),
-                    ConfigEnum::DateFormat => (self.date_format.to_string(), 14),
-                    ConfigEnum::Keybindings => ("".to_string(), 15),
+                    ConfigEnum::DatePickerCalenderFormat => {
+                        (self.date_picker_calender_format.to_string(), 13)
+                    }
+                    ConfigEnum::DefaultTheme => (self.default_theme.clone(), 14),
+                    ConfigEnum::DateFormat => (self.date_time_format.to_string(), 15),
+                    ConfigEnum::Keybindings => ("".to_string(), 16),
                 };
                 (enum_variant.to_string(), value.to_string(), index)
             })
@@ -2058,7 +1707,7 @@ impl AppConfig {
         match config_enum {
             ConfigEnum::AlwaysLoadLastSave => self.always_load_last_save.to_string(),
             ConfigEnum::AutoLogin => self.auto_login.to_string(),
-            ConfigEnum::DateFormat => self.date_format.to_string(),
+            ConfigEnum::DateFormat => self.date_time_format.to_string(),
             ConfigEnum::DefaultTheme => self.default_theme.clone(),
             ConfigEnum::DefaultView => self.default_ui_mode.to_string(),
             ConfigEnum::DisableAnimations => self.disable_animations.to_string(),
@@ -2071,6 +1720,7 @@ impl AppConfig {
             }
             ConfigEnum::NoOfBoardsToShow => self.no_of_boards_to_show.to_string(),
             ConfigEnum::NoOfCardsToShow => self.no_of_cards_to_show.to_string(),
+            ConfigEnum::DatePickerCalenderFormat => self.date_picker_calender_format.to_string(),
             ConfigEnum::SaveDirectory => self.save_directory.to_string_lossy().to_string(),
             ConfigEnum::SaveOnExit => self.save_on_exit.to_string(),
             ConfigEnum::ShowLineNumbers => self.show_line_numbers.to_string(),
@@ -2088,6 +1738,10 @@ impl AppConfig {
             ConfigEnum::EnableMouseSupport => (!self.enable_mouse_support).to_string(),
             ConfigEnum::SaveOnExit => (!self.save_on_exit).to_string(),
             ConfigEnum::ShowLineNumbers => (!self.show_line_numbers).to_string(),
+            ConfigEnum::DatePickerCalenderFormat => match self.date_picker_calender_format {
+                CalenderType::MondayFirst => CalenderType::SundayFirst.to_string(),
+                CalenderType::SundayFirst => CalenderType::MondayFirst.to_string(),
+            },
             _ => {
                 debug!("Invalid config enum to toggle: {}", config_enum);
                 "".to_string()
@@ -2179,7 +1833,7 @@ impl AppConfig {
             KeyBindingEnum::GoToMainMenu => {
                 self.keybindings.go_to_main_menu = value.to_vec();
             }
-            KeyBindingEnum::GoToPreviousUIModeorCancel => {
+            KeyBindingEnum::GoToPreviousUIModeOrCancel => {
                 self.keybindings.go_to_previous_ui_mode_or_cancel = value.to_vec();
             }
             KeyBindingEnum::HideUiElement => {
@@ -2312,9 +1966,9 @@ impl AppConfig {
         );
     }
 
-    fn json_config_keybindinds_checker(serde_json_object: &Value) -> KeyBindings {
+    fn json_config_keybindings_checker(serde_json_object: &Value) -> KeyBindings {
         if let Some(keybindings) = serde_json_object["keybindings"].as_object() {
-            let mut default_keybinds = KeyBindings::default();
+            let mut default_keybindings = KeyBindings::default();
             for (key, value) in keybindings.iter() {
                 let mut keybindings = vec![];
                 if let Some(value_array) = value.as_array() {
@@ -2340,19 +1994,20 @@ impl AppConfig {
                     if keybindings.is_empty() {
                         Self::handle_invalid_keybinding(key);
                     } else {
-                        default_keybinds.edit_keybinding(key, keybindings);
+                        default_keybindings.edit_keybinding(key, keybindings);
                     }
                 } else {
                     Self::handle_invalid_keybinding(key);
                 }
             }
-            default_keybinds
+            default_keybindings
         } else {
             KeyBindings::default()
         }
     }
 
     pub fn from_json_string(json_string: &str) -> Result<Self, String> {
+        // TODO: try to reduce the usage of strings, use strum maybe?
         let root = serde_json::from_str(json_string);
         if root.is_err() {
             error!("Unable to recover old config. Resetting to default config");
@@ -2394,7 +2049,7 @@ impl AppConfig {
                 default_config.default_ui_mode
             }
         };
-        let keybindings = AppConfig::json_config_keybindinds_checker(&serde_json_object);
+        let keybindings = AppConfig::json_config_keybindings_checker(&serde_json_object);
         let always_load_last_save = AppConfig::get_bool_or_default(
             &serde_json_object,
             ConfigEnum::AlwaysLoadLastSave,
@@ -2467,25 +2122,43 @@ impl AppConfig {
         };
         let date_format = match serde_json_object["date_format"].as_str() {
             Some(date_format) => match date_format {
-                "DayMonthYear" => DateFormat::DayMonthYear,
-                "MonthDayYear" => DateFormat::MonthDayYear,
-                "YearMonthDay" => DateFormat::YearMonthDay,
-                "DayMonthYearTime" => DateFormat::DayMonthYearTime,
-                "MonthDayYearTime" => DateFormat::MonthDayYearTime,
-                "YearMonthDayTime" => DateFormat::YearMonthDayTime,
+                "DayMonthYear" => DateTimeFormat::DayMonthYear,
+                "MonthDayYear" => DateTimeFormat::MonthDayYear,
+                "YearMonthDay" => DateTimeFormat::YearMonthDay,
+                "DayMonthYearTime" => DateTimeFormat::DayMonthYearTime,
+                "MonthDayYearTime" => DateTimeFormat::MonthDayYearTime,
+                "YearMonthDayTime" => DateTimeFormat::YearMonthDayTime,
                 _ => {
                     error!(
                         "Invalid date format: {}, Resetting to default date format",
                         date_format
                     );
-                    default_config.date_format
+                    default_config.date_time_format
                 }
             },
             None => {
                 error!("Date Format is not a string, Resetting to default date format");
-                default_config.date_format
+                default_config.date_time_format
             }
         };
+        let date_picker_calender_format =
+            match serde_json_object["date_picker_calender_format"].as_str() {
+                Some(calender_format) => match calender_format {
+                    "SundayFirst" => CalenderType::SundayFirst,
+                    "MondayFirst" => CalenderType::MondayFirst,
+                    _ => {
+                        error!(
+                            "Invalid calender format: {}, Resetting to default calender format",
+                            calender_format
+                        );
+                        CalenderType::default()
+                    }
+                },
+                None => {
+                    error!("Calender Format is not a string, Resetting to default calender format");
+                    CalenderType::default()
+                }
+            };
         Ok(Self {
             save_directory,
             default_ui_mode: default_view,
@@ -2498,9 +2171,10 @@ impl AppConfig {
             tickrate,
             no_of_cards_to_show,
             no_of_boards_to_show,
+            date_picker_calender_format,
             enable_mouse_support,
             default_theme,
-            date_format,
+            date_time_format: date_format,
             show_line_numbers,
             disable_animations,
         })
@@ -2520,6 +2194,7 @@ pub enum ConfigEnum {
     Keybindings,
     NoOfBoardsToShow,
     NoOfCardsToShow,
+    DatePickerCalenderFormat,
     SaveDirectory,
     SaveOnExit,
     ShowLineNumbers,
@@ -2541,6 +2216,7 @@ impl fmt::Display for ConfigEnum {
             ConfigEnum::Keybindings => write!(f, "Edit Keybindings"),
             ConfigEnum::NoOfBoardsToShow => write!(f, "Number of Boards to Show"),
             ConfigEnum::NoOfCardsToShow => write!(f, "Number of Cards to Show"),
+            ConfigEnum::DatePickerCalenderFormat => write!(f, "Date Picker Calender Format"),
             ConfigEnum::SaveDirectory => write!(f, "Save Directory"),
             ConfigEnum::SaveOnExit => write!(f, "Auto Save on Exit"),
             ConfigEnum::ShowLineNumbers => write!(f, "Show Line Numbers"),
@@ -2565,6 +2241,7 @@ impl FromStr for ConfigEnum {
             "Enable Mouse Support" => Ok(ConfigEnum::EnableMouseSupport),
             "Number of Boards to Show" => Ok(ConfigEnum::NoOfBoardsToShow),
             "Number of Cards to Show" => Ok(ConfigEnum::NoOfCardsToShow),
+            "Date Picker Calender Format" => Ok(ConfigEnum::DatePickerCalenderFormat),
             "Number of Days to Warn Before Due Date" => Ok(ConfigEnum::WarningDelta),
             "Save Directory" => Ok(ConfigEnum::SaveDirectory),
             "Select Default View" => Ok(ConfigEnum::DefaultView),
@@ -2589,6 +2266,7 @@ impl ConfigEnum {
             ConfigEnum::Keybindings => "keybindings",
             ConfigEnum::NoOfBoardsToShow => "no_of_boards_to_show",
             ConfigEnum::NoOfCardsToShow => "no_of_cards_to_show",
+            ConfigEnum::DatePickerCalenderFormat => "date_picker_calender_format",
             ConfigEnum::SaveDirectory => "save_directory",
             ConfigEnum::SaveOnExit => "save_on_exit",
             ConfigEnum::ShowLineNumbers => "show_line_numbers",
@@ -2667,11 +2345,19 @@ impl ConfigEnum {
                 Ok(())
             }
             ConfigEnum::DateFormat => {
-                let date_format = DateFormat::from_human_readable_string(value);
+                let date_format = DateTimeFormat::from_human_readable_string(value);
                 if date_format.is_some() {
                     Ok(())
                 } else {
                     Err(format!("Invalid DateFormat: {}", value))
+                }
+            }
+            ConfigEnum::DatePickerCalenderFormat => {
+                let calender_format = CalenderType::try_from(value);
+                if calender_format.is_ok() {
+                    Ok(())
+                } else {
+                    Err(format!("Invalid CalenderFormat: {}", value))
                 }
             }
             ConfigEnum::Keybindings => {
@@ -2730,7 +2416,11 @@ impl ConfigEnum {
                 config.default_theme = value.to_string();
             }
             ConfigEnum::DateFormat => {
-                config.date_format = DateFormat::from_human_readable_string(value).unwrap();
+                config.date_time_format =
+                    DateTimeFormat::from_human_readable_string(value).unwrap();
+            }
+            ConfigEnum::DatePickerCalenderFormat => {
+                config.date_picker_calender_format = CalenderType::try_from(value).unwrap();
             }
             ConfigEnum::Keybindings => {
                 debug!("Keybindings should not be called from edit_config");
@@ -2738,108 +2428,6 @@ impl ConfigEnum {
             }
         }
         Ok(())
-    }
-}
-
-pub fn get_term_bg_color() -> (u8, u8, u8) {
-    // TODO: Find a way to get the terminal background color
-    (0, 0, 0)
-}
-
-pub fn date_format_finder(date_string: &str) -> Result<DateFormat, String> {
-    let date_formats = DateFormat::get_all_date_formats();
-    for date_format in date_formats {
-        if DateFormat::all_formats_with_time().contains(&date_format) {
-            match NaiveDateTime::parse_from_str(date_string, date_format.to_parser_string()) {
-                Ok(_) => return Ok(date_format),
-                Err(_) => {
-                    continue;
-                }
-            }
-        } else {
-            match NaiveDate::parse_from_str(date_string, date_format.to_parser_string()) {
-                Ok(_) => return Ok(date_format),
-                Err(_) => {
-                    continue;
-                }
-            }
-        }
-    }
-    Err("Invalid date format".to_string())
-}
-
-pub fn date_format_converter(date_string: &str, date_format: DateFormat) -> Result<String, String> {
-    if date_string == FIELD_NOT_SET || date_string.is_empty() {
-        return Ok(date_string.to_string());
-    }
-    let given_date_format = date_format_finder(date_string)?;
-    let all_formats_with_time = DateFormat::all_formats_with_time();
-    let all_formats_without_time = DateFormat::all_formats_without_time();
-    if all_formats_with_time.contains(&given_date_format)
-        && all_formats_without_time.contains(&date_format)
-    {
-        let naive_date_time =
-            NaiveDateTime::parse_from_str(date_string, given_date_format.to_parser_string());
-        if let Ok(naive_date_time) = naive_date_time {
-            let naive_date = NaiveDate::from_ymd_opt(
-                naive_date_time.year(),
-                naive_date_time.month(),
-                naive_date_time.day(),
-            );
-            if let Some(naive_date) = naive_date {
-                return Ok(naive_date
-                    .format(date_format.to_parser_string())
-                    .to_string());
-            } else {
-                Err("Invalid date format".to_string())
-            }
-        } else {
-            Err("Invalid date format".to_string())
-        }
-    } else if all_formats_without_time.contains(&given_date_format)
-        && all_formats_with_time.contains(&date_format)
-    {
-        let naive_date =
-            NaiveDate::parse_from_str(date_string, given_date_format.to_parser_string());
-        if let Ok(naive_date) = naive_date {
-            let default_time = NaiveTime::from_hms_opt(0, 0, 0);
-            if let Some(default_time) = default_time {
-                let naive_date_time = NaiveDateTime::new(naive_date, default_time);
-                return Ok(naive_date_time
-                    .format(date_format.to_parser_string())
-                    .to_string());
-            } else {
-                Err("Invalid date format".to_string())
-            }
-        } else {
-            Err("Invalid date format".to_string())
-        }
-    } else if all_formats_with_time.contains(&given_date_format)
-        && all_formats_with_time.contains(&date_format)
-    {
-        let naive_date_time =
-            NaiveDateTime::parse_from_str(date_string, given_date_format.to_parser_string());
-        if let Ok(naive_date_time) = naive_date_time {
-            return Ok(naive_date_time
-                .format(date_format.to_parser_string())
-                .to_string());
-        } else {
-            Err("Invalid date format".to_string())
-        }
-    } else if all_formats_without_time.contains(&given_date_format)
-        && all_formats_without_time.contains(&date_format)
-    {
-        let naive_date =
-            NaiveDate::parse_from_str(date_string, given_date_format.to_parser_string());
-        if let Ok(naive_date) = naive_date {
-            return Ok(naive_date
-                .format(date_format.to_parser_string())
-                .to_string());
-        } else {
-            Err("Invalid date format".to_string())
-        }
-    } else {
-        Err("Invalid date format".to_string())
     }
 }
 

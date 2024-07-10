@@ -1,11 +1,230 @@
-use super::{actions::Action, App};
-use crate::{inputs::key::Key, ui::ui_helper};
+use super::{actions::Action, kanban::Card, App};
+use crate::{
+    constants::{DEFAULT_UI_MODE, MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_CARDS_PER_BOARD},
+    inputs::{key::Key, mouse::Mouse},
+    io::io_handler::CloudData,
+    ui::{text_box::TextBox, ui_helper, Theme},
+    util::get_term_bg_color,
+};
+use linked_hash_map::LinkedHashMap;
 use log::{debug, error};
-use ratatui::Frame;
+use ratatui::{
+    widgets::{ListState, TableState},
+    Frame,
+};
 use serde::{Deserialize, Serialize};
-use std::{fmt, str::FromStr, vec};
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+    time::Instant,
+    vec,
+};
 use strum::{Display, EnumString, IntoEnumIterator};
 use strum_macros::EnumIter;
+
+#[derive(Debug, Clone)]
+pub struct AppState<'a> {
+    pub all_available_tags: Option<Vec<(String, u32)>>,
+    pub app_list_states: AppListStates,
+    pub app_status: AppStatus,
+    pub app_table_states: AppTableStates,
+    pub card_being_edited: Option<((u64, u64), Card)>, // (board_id, card)
+    pub card_drag_mode: bool,
+    pub cloud_data: Option<Vec<CloudData>>,
+    pub current_board_id: Option<(u64, u64)>,
+    pub current_card_id: Option<(u64, u64)>,
+    pub current_mouse_coordinates: (u16, u16),
+    pub debug_menu_toggled: bool,
+    pub default_theme_mode: bool,
+    pub edited_keybinding: Option<Vec<Key>>,
+    pub encryption_key_from_arguments: Option<String>,
+    pub filter_tags: Option<Vec<String>>,
+    pub focus: Focus,
+    pub hovered_board: Option<(u64, u64)>,
+    pub hovered_card_dimensions: Option<(u16, u16)>,
+    pub hovered_card: Option<((u64, u64), (u64, u64))>,
+    pub last_mouse_action: Option<Mouse>,
+    pub last_reset_password_link_sent_time: Option<Instant>,
+    pub mouse_focus: Option<Focus>,
+    pub mouse_list_index: Option<u16>,
+    pub no_of_cards_to_show: u16,
+    pub z_stack: Vec<PopupMode>,
+    pub prev_focus: Option<Focus>,
+    pub prev_ui_mode: Option<UiMode>,
+    pub preview_file_name: Option<String>,
+    pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
+    pub previous_mouse_coordinates: (u16, u16),
+    pub term_background_color: (u8, u8, u8),
+    pub theme_being_edited: Theme,
+    pub ui_mode: UiMode,
+    pub ui_render_time: Vec<u128>,
+    pub user_login_data: UserLoginData,
+    // TODO: Improve this, it feels like a hack
+    pub path_check_state: PathCheckState,
+    pub text_buffers: TextBuffers<'a>,
+    pub show_password: bool,
+}
+
+impl AppState<'_> {
+    pub fn set_focus(&mut self, focus: Focus) {
+        self.focus = focus;
+    }
+    pub fn get_card_being_edited(&self) -> Option<((u64, u64), Card)> {
+        self.card_being_edited.clone()
+    }
+    pub fn get_theme_being_edited(&self) -> Theme {
+        self.theme_being_edited.clone()
+    }
+}
+
+impl Default for AppState<'_> {
+    fn default() -> AppState<'static> {
+        AppState {
+            all_available_tags: None,
+            app_list_states: AppListStates::default(),
+            app_status: AppStatus::default(),
+            app_table_states: AppTableStates::default(),
+            card_being_edited: None,
+            card_drag_mode: false,
+            cloud_data: None,
+            current_board_id: None,
+            current_card_id: None,
+            current_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES, // make sure it's out of bounds when mouse mode is disabled
+            debug_menu_toggled: false,
+            default_theme_mode: false,
+            edited_keybinding: None,
+            encryption_key_from_arguments: None,
+            filter_tags: None,
+            focus: Focus::NoFocus,
+            hovered_board: None,
+            hovered_card_dimensions: None,
+            hovered_card: None,
+            last_mouse_action: None,
+            last_reset_password_link_sent_time: None,
+            mouse_focus: None,
+            mouse_list_index: None,
+            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
+            z_stack: Vec::new(),
+            prev_focus: None,
+            prev_ui_mode: None,
+            preview_file_name: None,
+            preview_visible_boards_and_cards: LinkedHashMap::new(),
+            previous_mouse_coordinates: MOUSE_OUT_OF_BOUNDS_COORDINATES,
+            term_background_color: get_term_bg_color(),
+            theme_being_edited: Theme::default(),
+            ui_mode: DEFAULT_UI_MODE,
+            ui_render_time: Vec::new(),
+            user_login_data: UserLoginData {
+                email_id: None,
+                auth_token: None,
+                refresh_token: None,
+                user_id: None,
+            },
+            path_check_state: PathCheckState::default(),
+            text_buffers: TextBuffers::default(),
+            show_password: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AppListStates {
+    pub card_priority_selector: ListState,
+    pub card_status_selector: ListState,
+    pub card_view_comment_list: ListState,
+    pub card_view_list: ListState,
+    pub card_view_tag_list: ListState,
+    pub command_palette_board_search: ListState,
+    pub command_palette_card_search: ListState,
+    pub command_palette_command_search: ListState,
+    pub date_format_selector: ListState,
+    pub default_view: ListState,
+    pub edit_specific_style: [ListState; 3],
+    pub filter_by_tag_list: ListState,
+    pub load_save: ListState,
+    pub logs: ListState,
+    pub main_menu: ListState,
+    pub theme_selector: ListState,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AppTableStates {
+    pub config: TableState,
+    pub edit_keybindings: TableState,
+    pub help: TableState,
+    pub theme_editor: TableState,
+}
+
+#[derive(Debug, Clone)]
+pub struct TextBuffers<'a> {
+    pub board_name: TextBox<'a>,
+    pub board_description: TextBox<'a>,
+    pub card_name: TextBox<'a>,
+    pub card_description: TextBox<'a>,
+    pub card_tags: Vec<TextBox<'a>>,
+    pub card_comments: Vec<TextBox<'a>>,
+    pub email_id: TextBox<'a>,
+    pub password: TextBox<'a>,
+    pub confirm_password: TextBox<'a>,
+    pub reset_password_link: TextBox<'a>,
+    pub general_config: TextBox<'a>,
+    pub command_palette: TextBox<'a>,
+    pub theme_editor_fg_hex: TextBox<'a>,
+    pub theme_editor_bg_hex: TextBox<'a>,
+}
+
+impl<'a> Default for TextBuffers<'a> {
+    fn default() -> Self {
+        TextBuffers {
+            board_name: TextBox::new(vec!["".to_string()], true),
+            board_description: TextBox::new(vec!["".to_string()], false),
+            card_name: TextBox::new(vec!["".to_string()], true),
+            card_description: TextBox::new(vec!["".to_string()], false),
+            card_tags: Vec::new(),
+            card_comments: Vec::new(),
+            email_id: TextBox::new(vec!["".to_string()], true),
+            password: TextBox::new(vec!["".to_string()], true),
+            confirm_password: TextBox::new(vec!["".to_string()], true),
+            reset_password_link: TextBox::new(vec!["".to_string()], true),
+            general_config: TextBox::new(vec!["".to_string()], true),
+            command_palette: TextBox::new(vec!["".to_string()], true),
+            theme_editor_fg_hex: TextBox::new(vec!["".to_string()], true),
+            theme_editor_bg_hex: TextBox::new(vec!["".to_string()], true),
+        }
+    }
+}
+
+impl<'a> TextBuffers<'a> {
+    pub fn prepare_tags_and_comments_for_card(&mut self, card: &Card) {
+        self.card_tags = card
+            .tags
+            .iter()
+            .map(|tag| TextBox::new(vec![tag.clone()], true))
+            .collect();
+        self.card_comments = card
+            .comments
+            .iter()
+            .map(|comment| TextBox::new(vec![comment.clone()], true))
+            .collect();
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PathCheckState {
+    pub path_last_checked: String,
+    pub path_exists: bool,
+    pub potential_completion: Option<String>,
+    pub recheck_required: bool,
+    pub path_check_mode: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UserLoginData {
+    pub auth_token: Option<String>,
+    pub email_id: Option<String>,
+    pub refresh_token: Option<String>,
+    pub user_id: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default, EnumString)]
 pub enum UiMode {
@@ -89,6 +308,13 @@ pub enum Focus {
     ThemeEditor,
     ThemeSelector,
     Title,
+    DTPCalender,
+    DTPMonth,
+    DTPYear,
+    DTPToggleTimePicker,
+    DTPHour,
+    DTPMinute,
+    DTPSecond,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -143,7 +369,7 @@ pub enum KeyBindingEnum {
     DeleteCard,
     Down,
     GoToMainMenu,
-    GoToPreviousUIModeorCancel,
+    GoToPreviousUIModeOrCancel,
     HideUiElement,
     Left,
     MoveCardDown,
@@ -165,6 +391,162 @@ pub enum KeyBindingEnum {
     ToggleCommandPalette,
     Undo,
     Up,
+}
+
+#[derive(Clone, PartialEq, Debug, Copy)]
+pub enum PopupMode {
+    ViewCard,
+    CommandPalette,
+    EditSpecificKeyBinding,
+    ChangeUIMode,
+    CardStatusSelector,
+    EditGeneralConfig,
+    SelectDefaultView,
+    ChangeDateFormatPopup,
+    ChangeTheme,
+    EditThemeStyle,
+    SaveThemePrompt,
+    CustomHexColorPromptFG,
+    CustomHexColorPromptBG,
+    ConfirmDiscardCardChanges,
+    CardPrioritySelector,
+    FilterByTag,
+    DateTimePicker,
+}
+
+impl Display for PopupMode {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            PopupMode::ViewCard => write!(f, "Card View"),
+            PopupMode::CommandPalette => write!(f, "Command Palette"),
+            PopupMode::EditSpecificKeyBinding => write!(f, "Edit Specific Key Binding"),
+            PopupMode::ChangeUIMode => write!(f, "Change UI Mode"),
+            PopupMode::CardStatusSelector => write!(f, "Change Card Status"),
+            PopupMode::EditGeneralConfig => write!(f, "Edit General Config"),
+            PopupMode::SelectDefaultView => write!(f, "Select Default View"),
+            PopupMode::ChangeDateFormatPopup => write!(f, "Change Date Format"),
+            PopupMode::ChangeTheme => write!(f, "Change Theme"),
+            PopupMode::EditThemeStyle => write!(f, "Edit Theme Style"),
+            PopupMode::SaveThemePrompt => write!(f, "Save Theme Prompt"),
+            PopupMode::CustomHexColorPromptFG => write!(f, "Custom Hex Color Prompt FG"),
+            PopupMode::CustomHexColorPromptBG => write!(f, "Custom Hex Color Prompt BG"),
+            PopupMode::ConfirmDiscardCardChanges => write!(f, "Confirm Discard Card Changes"),
+            PopupMode::CardPrioritySelector => write!(f, "Change Card Priority"),
+            PopupMode::FilterByTag => write!(f, "Filter By Tag"),
+            PopupMode::DateTimePicker => write!(f, "Date Time Picker"),
+        }
+    }
+}
+
+impl PopupMode {
+    pub fn get_available_targets(&self) -> Vec<Focus> {
+        match self {
+            PopupMode::ViewCard => vec![
+                Focus::CardName,
+                Focus::CardDescription,
+                Focus::CardDueDate,
+                Focus::CardPriority,
+                Focus::CardStatus,
+                Focus::CardTags,
+                Focus::CardComments,
+                Focus::SubmitButton,
+            ],
+            PopupMode::CommandPalette => vec![
+                Focus::CommandPaletteCommand,
+                Focus::CommandPaletteCard,
+                Focus::CommandPaletteBoard,
+            ],
+            PopupMode::EditSpecificKeyBinding => vec![],
+            PopupMode::ChangeUIMode => vec![],
+            PopupMode::CardStatusSelector => vec![],
+            PopupMode::EditGeneralConfig => vec![],
+            PopupMode::SelectDefaultView => vec![],
+            PopupMode::ChangeDateFormatPopup => vec![],
+            PopupMode::ChangeTheme => vec![],
+            PopupMode::EditThemeStyle => vec![
+                Focus::StyleEditorFG,
+                Focus::StyleEditorBG,
+                Focus::StyleEditorModifier,
+                Focus::SubmitButton,
+            ],
+            PopupMode::SaveThemePrompt => vec![Focus::SubmitButton, Focus::ExtraFocus],
+            PopupMode::CustomHexColorPromptFG => vec![Focus::TextInput, Focus::SubmitButton],
+            PopupMode::CustomHexColorPromptBG => vec![Focus::TextInput, Focus::SubmitButton],
+            PopupMode::ConfirmDiscardCardChanges => vec![Focus::SubmitButton, Focus::ExtraFocus],
+            PopupMode::CardPrioritySelector => vec![],
+            PopupMode::FilterByTag => vec![Focus::FilterByTagPopup, Focus::SubmitButton],
+            PopupMode::DateTimePicker => vec![
+                Focus::DTPCalender,
+                Focus::DTPMonth,
+                Focus::DTPYear,
+                Focus::DTPToggleTimePicker,
+                Focus::DTPHour,
+                Focus::DTPMinute,
+                Focus::DTPSecond,
+            ],
+        }
+    }
+
+    pub fn render(self, rect: &mut Frame, app: &mut App, popup_mode: bool) {
+        if !popup_mode {
+            let current_focus = app.state.focus;
+            if !self.get_available_targets().contains(&current_focus)
+                && !self.get_available_targets().is_empty()
+            {
+                app.state.set_focus(self.get_available_targets()[0]);
+            }
+        }
+        match self {
+            PopupMode::ViewCard => {
+                ui_helper::render_view_card(rect, app, popup_mode);
+            }
+            PopupMode::CardStatusSelector => {
+                ui_helper::render_change_card_status_popup(rect, app, popup_mode);
+            }
+            PopupMode::ChangeUIMode => {
+                ui_helper::render_change_ui_mode_popup(rect, app, popup_mode);
+            }
+            PopupMode::CommandPalette => {
+                ui_helper::render_command_palette(rect, app, popup_mode);
+            }
+            PopupMode::EditGeneralConfig => {
+                ui_helper::render_edit_config(rect, app, popup_mode);
+            }
+            PopupMode::EditSpecificKeyBinding => {
+                ui_helper::render_edit_specific_keybinding(rect, app, popup_mode);
+            }
+            PopupMode::SelectDefaultView => {
+                ui_helper::render_select_default_view(rect, app, popup_mode);
+            }
+            PopupMode::ChangeTheme => {
+                ui_helper::render_change_theme_popup(rect, app, popup_mode);
+            }
+            PopupMode::EditThemeStyle => {
+                ui_helper::render_edit_specific_style_popup(rect, app, popup_mode);
+            }
+            PopupMode::SaveThemePrompt => {
+                ui_helper::render_save_theme_prompt(rect, app, popup_mode);
+            }
+            PopupMode::CustomHexColorPromptFG | PopupMode::CustomHexColorPromptBG => {
+                ui_helper::render_custom_hex_color_prompt(rect, app, popup_mode);
+            }
+            PopupMode::ConfirmDiscardCardChanges => {
+                ui_helper::render_confirm_discard_card_changes(rect, app, popup_mode);
+            }
+            PopupMode::CardPrioritySelector => {
+                ui_helper::render_card_priority_selector(rect, app, popup_mode);
+            }
+            PopupMode::FilterByTag => {
+                ui_helper::render_filter_by_tag_popup(rect, app, popup_mode);
+            }
+            PopupMode::ChangeDateFormatPopup => {
+                ui_helper::render_change_date_format_popup(rect, app, popup_mode);
+            }
+            PopupMode::DateTimePicker => {
+                ui_helper::render_date_time_widget(rect, app, popup_mode);
+            }
+        }
+    }
 }
 
 impl UiMode {
@@ -287,8 +669,8 @@ impl UiMode {
         ]
     }
 
-    pub fn render(self, rect: &mut Frame, app: &mut App) {
-        if app.state.popup_mode.is_none() {
+    pub fn render(self, rect: &mut Frame, app: &mut App, popup_mode: bool) {
+        if !popup_mode {
             let current_focus = app.state.focus;
             if !self.get_available_targets().contains(&current_focus)
                 && !self.get_available_targets().is_empty()
@@ -298,56 +680,56 @@ impl UiMode {
         }
         match self {
             UiMode::Zen => {
-                ui_helper::render_zen_mode(rect, app);
+                ui_helper::render_zen_mode(rect, app, popup_mode);
             }
             UiMode::TitleBody => {
-                ui_helper::render_title_body(rect, app);
+                ui_helper::render_title_body(rect, app, popup_mode);
             }
             UiMode::BodyHelp => {
-                ui_helper::render_body_help(rect, app);
+                ui_helper::render_body_help(rect, app, popup_mode);
             }
             UiMode::BodyLog => {
-                ui_helper::render_body_log(rect, app);
+                ui_helper::render_body_log(rect, app, popup_mode);
             }
             UiMode::TitleBodyHelp => {
-                ui_helper::render_title_body_help(rect, app);
+                ui_helper::render_title_body_help(rect, app, popup_mode);
             }
             UiMode::TitleBodyLog => {
-                ui_helper::render_title_body_log(rect, app);
+                ui_helper::render_title_body_log(rect, app, popup_mode);
             }
             UiMode::BodyHelpLog => {
-                ui_helper::render_body_help_log(rect, app);
+                ui_helper::render_body_help_log(rect, app, popup_mode);
             }
             UiMode::TitleBodyHelpLog => {
-                ui_helper::render_title_body_help_log(rect, app);
+                ui_helper::render_title_body_help_log(rect, app, popup_mode);
             }
             UiMode::ConfigMenu => {
-                ui_helper::render_config(rect, app);
+                ui_helper::render_config(rect, app, popup_mode);
             }
             UiMode::EditKeybindings => {
-                ui_helper::render_edit_keybindings(rect, app);
+                ui_helper::render_edit_keybindings(rect, app, popup_mode);
             }
             UiMode::MainMenu => {
-                ui_helper::render_main_menu(rect, app);
+                ui_helper::render_main_menu(rect, app, popup_mode);
             }
             UiMode::HelpMenu => {
-                ui_helper::render_help_menu(rect, app);
+                ui_helper::render_help_menu(rect, app, popup_mode);
             }
             UiMode::LogsOnly => {
-                ui_helper::render_logs_only(rect, app);
+                ui_helper::render_logs_only(rect, app, popup_mode);
             }
             UiMode::NewBoard => {
-                ui_helper::render_new_board_form(rect, app);
+                ui_helper::render_new_board_form(rect, app, popup_mode);
             }
-            UiMode::NewCard => ui_helper::render_new_card_form(rect, app),
+            UiMode::NewCard => ui_helper::render_new_card_form(rect, app, popup_mode),
             UiMode::LoadLocalSave => {
-                ui_helper::render_load_a_save(rect, app);
+                ui_helper::render_load_a_save(rect, app, popup_mode);
             }
-            UiMode::CreateTheme => ui_helper::render_create_theme(rect, app),
-            UiMode::Login => ui_helper::render_login(rect, app),
-            UiMode::SignUp => ui_helper::render_signup(rect, app),
-            UiMode::ResetPassword => ui_helper::render_reset_password(rect, app),
-            UiMode::LoadCloudSave => ui_helper::render_load_cloud_save(rect, app),
+            UiMode::CreateTheme => ui_helper::render_create_theme(rect, app, popup_mode),
+            UiMode::Login => ui_helper::render_login(rect, app, popup_mode),
+            UiMode::SignUp => ui_helper::render_signup(rect, app, popup_mode),
+            UiMode::ResetPassword => ui_helper::render_reset_password(rect, app, popup_mode),
+            UiMode::LoadCloudSave => ui_helper::render_load_cloud_save(rect, app, popup_mode),
         }
     }
 }
@@ -435,7 +817,7 @@ impl KeyBindings {
                 KeyBindingEnum::DeleteCard => &self.delete_card,
                 KeyBindingEnum::Down => &self.down,
                 KeyBindingEnum::GoToMainMenu => &self.go_to_main_menu,
-                KeyBindingEnum::GoToPreviousUIModeorCancel => {
+                KeyBindingEnum::GoToPreviousUIModeOrCancel => {
                     &self.go_to_previous_ui_mode_or_cancel
                 }
                 KeyBindingEnum::HideUiElement => &self.hide_ui_element,
@@ -486,7 +868,7 @@ impl KeyBindings {
             KeyBindingEnum::DeleteCard => Action::Delete,
             KeyBindingEnum::Down => Action::Down,
             KeyBindingEnum::GoToMainMenu => Action::GoToMainMenu,
-            KeyBindingEnum::GoToPreviousUIModeorCancel => Action::GoToPreviousUIModeorCancel,
+            KeyBindingEnum::GoToPreviousUIModeOrCancel => Action::GoToPreviousUIModeOrCancel,
             KeyBindingEnum::HideUiElement => Action::HideUiElement,
             KeyBindingEnum::Left => Action::Left,
             KeyBindingEnum::MoveCardDown => Action::MoveCardDown,
@@ -541,7 +923,7 @@ impl KeyBindings {
                 KeyBindingEnum::DeleteCard => self.delete_card = keybinding,
                 KeyBindingEnum::Down => self.down = keybinding,
                 KeyBindingEnum::GoToMainMenu => self.go_to_main_menu = keybinding,
-                KeyBindingEnum::GoToPreviousUIModeorCancel => {
+                KeyBindingEnum::GoToPreviousUIModeOrCancel => {
                     self.go_to_previous_ui_mode_or_cancel = keybinding
                 }
                 KeyBindingEnum::HideUiElement => self.hide_ui_element = keybinding,
@@ -598,7 +980,7 @@ impl KeyBindings {
             KeyBindingEnum::DeleteCard => Some(self.delete_card.clone()),
             KeyBindingEnum::Down => Some(self.down.clone()),
             KeyBindingEnum::GoToMainMenu => Some(self.go_to_main_menu.clone()),
-            KeyBindingEnum::GoToPreviousUIModeorCancel => {
+            KeyBindingEnum::GoToPreviousUIModeOrCancel => {
                 Some(self.go_to_previous_ui_mode_or_cancel.clone())
             }
             KeyBindingEnum::HideUiElement => Some(self.hide_ui_element.clone()),

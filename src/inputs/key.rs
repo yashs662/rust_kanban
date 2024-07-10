@@ -6,6 +6,7 @@ use std::fmt::{self, Display, Formatter};
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum Key {
     Alt(char),
+    AltShift(char),
     AltBackspace,
     AltDelete,
     BackTab,
@@ -13,10 +14,20 @@ pub enum Key {
     Char(char),
     Ctrl(char),
     CtrlAlt(char),
+    CtrlShift(char),
+    CtrlShiftRight,
+    CtrlShiftLeft,
+    CtrlShiftUp,
+    CtrlShiftDown,
+    CtrlAltShift(char),
     CtrlAltDown,
+    CtrlAltShiftDown,
     CtrlAltLeft,
+    CtrlAltShiftLeft,
     CtrlAltRight,
+    CtrlAltShiftRight,
     CtrlAltUp,
+    CtrlAltShiftUp,
     CtrlDown,
     CtrlLeft,
     CtrlRight,
@@ -43,8 +54,12 @@ pub enum Key {
     Ins,
     Left,
     PageDown,
+    ShiftPageDown,
     PageUp,
+    ShiftPageUp,
     Right,
+    ShiftHome,
+    ShiftEnd,
     ShiftDown,
     ShiftLeft,
     ShiftRight,
@@ -71,7 +86,10 @@ impl Key {
             10 => Key::F10,
             11 => Key::F11,
             12 => Key::F12,
-            _ => panic!("unknown function key: F{}", n),
+            _ => {
+                log::warn!("Unknown Function key: F{}", n);
+                Key::Unknown
+            }
         }
     }
 }

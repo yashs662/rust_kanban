@@ -209,16 +209,16 @@ pub fn get_available_local_save_files(config: &AppConfig) -> Option<Vec<String>>
     let read_dir_status = fs::read_dir(&config.save_directory);
     match read_dir_status {
         Ok(files) => {
-            let mut savefiles = Vec::new();
+            let mut save_files = Vec::new();
             for file in files {
                 let file = file.unwrap();
                 let file_name = file.file_name().into_string().unwrap();
-                savefiles.push(file_name);
+                save_files.push(file_name);
             }
             let re = Regex::new(SAVE_FILE_REGEX).unwrap();
 
-            savefiles.retain(|file| re.is_match(file));
-            savefiles.sort_by(|a, b| {
+            save_files.retain(|file| re.is_match(file));
+            save_files.sort_by(|a, b| {
                 let a_date = a.split('_').nth(1).unwrap();
                 let b_date = b.split('_').nth(1).unwrap();
                 let a_version = a.split('_').nth(2).unwrap();
@@ -251,7 +251,7 @@ pub fn get_available_local_save_files(config: &AppConfig) -> Option<Vec<String>>
                     std::cmp::Ordering::Equal
                 }
             });
-            Some(savefiles)
+            Some(save_files)
         }
         Err(_) => {
             let default_save_path = env::temp_dir().join(SAVE_DIR_NAME);
@@ -280,8 +280,8 @@ pub fn export_kanban_to_json(
     let version = env!("CARGO_PKG_VERSION");
     let date = format!(
         "{} ({})",
-        chrono::Local::now().format(config.date_format.to_parser_string()),
-        config.date_format.to_human_readable_string()
+        chrono::Local::now().format(config.date_time_format.to_parser_string()),
+        config.date_time_format.to_human_readable_string()
     );
     let export_struct = ExportStruct {
         boards: boards.to_vec(),

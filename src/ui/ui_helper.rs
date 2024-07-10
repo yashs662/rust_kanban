@@ -1,15 +1,14 @@
 use super::{
     text_box::TextBox,
     widgets::{ToastType, ToastWidget},
-    TextColorOptions, TextModifierOptions,
+    TextColorOptions, TextModifierOptions, Theme,
 };
 use crate::{
     app::{
         app_helper::reset_card_drag_mode,
-        date_format_converter, date_format_finder,
         kanban::{Boards, Card, CardPriority, CardStatus},
-        state::{AppStatus, Focus, KeyBindingEnum, UiMode},
-        App, ConfigEnum, DateFormat, PopupMode,
+        state::{AppStatus, Focus, KeyBindingEnum, PopupMode, UiMode},
+        App, ConfigEnum, DateTimeFormat,
     },
     constants::{
         APP_TITLE, DEFAULT_BOARD_TITLE_LENGTH, DEFAULT_CARD_TITLE_LENGTH, FIELD_NOT_SET,
@@ -22,7 +21,7 @@ use crate::{
         data_handler::get_available_local_save_files,
         logger::{get_logs, get_selected_index, RUST_KANBAN_LOGGER},
     },
-    util::num_digits,
+    util::{date_format_converter, date_format_finder, num_digits, parse_hex_to_rgb},
 };
 use chrono::{Local, NaiveDate, NaiveDateTime};
 use log::{debug, Level};
@@ -41,35 +40,36 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use strum::IntoEnumIterator;
 
-pub fn render_zen_mode(rect: &mut Frame, app: &mut App) {
+pub fn render_zen_mode(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
-    render_body(rect, chunks[0], app, false);
+    render_body(rect, chunks[0], app, false, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[0], app, rect);
+    render_card_being_dragged(chunks[0], app, rect, popup_mode);
 }
 
-pub fn render_title_body(rect: &mut Frame, app: &mut App) {
+pub fn render_title_body(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
-    render_title(app, &chunks[0], rect);
-    render_body(rect, chunks[1], app, false);
+    rect.render_widget(draw_title(app, chunks[0], popup_mode), chunks[0]);
+    render_body(rect, chunks[1], app, false, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[1], app, rect);
+    render_card_being_dragged(chunks[1], app, rect, popup_mode);
 }
 
-pub fn render_body_help(rect: &mut Frame, app: &mut App) {
+pub fn render_body_help(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
@@ -88,41 +88,43 @@ pub fn render_body_help(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[1]);
 
-    let help = draw_help(app, chunks[1]);
-    let help_separator =
-        Block::default()
-            .borders(Borders::LEFT)
-            .border_style(check_for_popup_and_get_style(
-                app,
-                app.current_theme.general_style,
-            ));
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
 
-    render_body(rect, chunks[0], app, false);
+    let help = draw_help(app, chunks[1], popup_mode);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(general_style);
+
+    render_body(rect, chunks[0], app, false, popup_mode);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[0], app, rect);
+    render_card_being_dragged(chunks[0], app, rect, popup_mode);
 }
 
-pub fn render_body_log(rect: &mut Frame, app: &mut App) {
+pub fn render_body_log(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
         .split(rect.size());
 
-    render_body(rect, chunks[0], app, false);
-    render_logs(app, true, chunks[1], rect, app.state.popup_mode.is_some());
+    render_body(rect, chunks[0], app, false, popup_mode);
+    render_logs(app, true, chunks[1], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[0], app, rect);
+    render_card_being_dragged(chunks[0], app, rect, popup_mode);
 }
 
-pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
+pub fn render_title_body_help(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -148,28 +150,30 @@ pub fn render_title_body_help(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[2]);
 
-    let help = draw_help(app, chunks[2]);
-    let help_separator =
-        Block::default()
-            .borders(Borders::LEFT)
-            .border_style(check_for_popup_and_get_style(
-                app,
-                app.current_theme.general_style,
-            ));
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
 
-    render_title(app, &chunks[0], rect);
-    render_body(rect, chunks[1], app, false);
+    let help = draw_help(app, chunks[2], popup_mode);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(general_style);
+
+    rect.render_widget(draw_title(app, chunks[0], popup_mode), chunks[0]);
+    render_body(rect, chunks[1], app, false, popup_mode);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[1], app, rect);
+    render_card_being_dragged(chunks[1], app, rect, popup_mode);
 }
 
-pub fn render_title_body_log(rect: &mut Frame, app: &mut App) {
+pub fn render_title_body_log(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -182,16 +186,21 @@ pub fn render_title_body_log(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    render_title(app, &chunks[0], rect);
-    render_body(rect, chunks[1], app, false);
-    render_logs(app, true, chunks[2], rect, app.state.popup_mode.is_some());
+    rect.render_widget(draw_title(app, chunks[0], popup_mode), chunks[0]);
+    render_body(rect, chunks[1], app, false, popup_mode);
+    render_logs(app, true, chunks[2], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[1], app, rect);
+    render_card_being_dragged(chunks[1], app, rect, popup_mode);
 }
 
-fn render_card_being_dragged(parent_body_area: Rect, app: &mut App<'_>, rect: &mut Frame<'_>) {
+fn render_card_being_dragged(
+    parent_body_area: Rect,
+    app: &mut App<'_>,
+    rect: &mut Frame<'_>,
+    popup_mode: bool,
+) {
     if app.state.card_drag_mode {
         if app.state.hovered_card.is_none() {
             debug!("Hovered card is none");
@@ -253,18 +262,19 @@ fn render_card_being_dragged(parent_body_area: Rect, app: &mut App<'_>, rect: &m
         }
         let card = card.unwrap();
 
-        render_blank_styled_canvas(rect, app, render_area, app.state.popup_mode.is_some());
+        render_blank_styled_canvas(rect, &app.current_theme, render_area, popup_mode);
         render_a_single_card(
             app,
             render_area,
             app.current_theme.error_text_style,
             &card,
             rect,
+            popup_mode,
         )
     }
 }
 
-pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
+pub fn render_body_help_log(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -290,28 +300,30 @@ pub fn render_body_help_log(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[1]);
 
-    let help = draw_help(app, chunks[1]);
-    let help_separator =
-        Block::default()
-            .borders(Borders::LEFT)
-            .border_style(check_for_popup_and_get_style(
-                app,
-                app.current_theme.general_style,
-            ));
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
 
-    render_body(rect, chunks[0], app, false);
+    let help = draw_help(app, chunks[1], popup_mode);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(general_style);
+
+    render_body(rect, chunks[0], app, false, popup_mode);
     rect.render_widget(help.0, chunks[1]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
-    render_logs(app, true, chunks[2], rect, app.state.popup_mode.is_some());
+    render_logs(app, true, chunks[2], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[0], app, rect);
+    render_card_being_dragged(chunks[0], app, rect, popup_mode);
 }
 
-pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
+pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -338,30 +350,31 @@ pub fn render_title_body_help_log(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[2]);
 
-    let help = draw_help(app, chunks[2]);
-    let help_separator =
-        Block::default()
-            .borders(Borders::LEFT)
-            .border_style(check_for_popup_and_get_style(
-                app,
-                app.current_theme.general_style,
-            ));
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
 
-    render_title(app, &chunks[0], rect);
-    render_body(rect, chunks[1], app, false);
+    let help = draw_help(app, chunks[2], popup_mode);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(general_style);
+
+    rect.render_widget(draw_title(app, chunks[0], popup_mode), chunks[0]);
+    render_body(rect, chunks[1], app, false, popup_mode);
     rect.render_widget(help.0, chunks[2]);
     rect.render_stateful_widget(help.1, help_chunks[0], &mut app.state.app_table_states.help);
     rect.render_widget(help_separator, help_chunks[1]);
     rect.render_stateful_widget(help.2, help_chunks[2], &mut app.state.app_table_states.help);
-    render_logs(app, true, chunks[3], rect, app.state.popup_mode.is_some());
+    render_logs(app, true, chunks[3], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
-    render_card_being_dragged(chunks[1], app, rect);
+    render_card_being_dragged(chunks[1], app, rect, popup_mode);
 }
 
-pub fn render_config(rect: &mut Frame, app: &mut App) {
-    let popup_mode = app.state.popup_mode.is_some();
+pub fn render_config(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -381,24 +394,35 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())
         .split(chunks[2]);
 
-    let reset_both_style = get_button_style_with_default_error_style(
+    let reset_both_style = get_button_style(
         app,
         Focus::SubmitButton,
-        &reset_btn_chunks[0],
+        Some(&reset_btn_chunks[0]),
         popup_mode,
+        true,
     );
-    let reset_config_style = get_button_style_with_default_error_style(
+    let reset_config_style = get_button_style(
         app,
         Focus::ExtraFocus,
-        &reset_btn_chunks[1],
+        Some(&reset_btn_chunks[1]),
         popup_mode,
+        true,
     );
-    let scrollbar_style = check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
-    let config_text_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let scrollbar_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.progress_bar_style,
+    );
+    let config_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
     let default_style =
         get_mouse_focusable_field_style(app, Focus::ConfigTable, &chunks[1], popup_mode, false);
 
-    let config_table = draw_config_table_selector(app, config_text_style, default_style);
+    let config_table =
+        draw_config_table_selector(app, config_text_style, default_style, popup_mode);
     let all_rows = app.config.to_view_list();
     let total_rows = all_rows.len();
     let current_index = app
@@ -437,7 +461,7 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
         .track_style(app.current_theme.inactive_text_style);
 
     let mut scrollbar_state = ScrollbarState::new(total_rows).position(current_index);
-    let scrollbar_area = chunks[1].inner(&Margin {
+    let scrollbar_area = chunks[1].inner(Margin {
         horizontal: 0,
         vertical: 1,
     });
@@ -464,7 +488,7 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
 
     let config_help = draw_config_help(app, popup_mode);
 
-    render_title(app, &chunks[0], rect);
+    rect.render_widget(draw_title(app, chunks[0], popup_mode), chunks[0]);
     rect.render_stateful_widget(
         config_table,
         chunks[1],
@@ -474,9 +498,9 @@ pub fn render_config(rect: &mut Frame, app: &mut App) {
     rect.render_widget(reset_both_button, reset_btn_chunks[0]);
     rect.render_widget(reset_config_button, reset_btn_chunks[1]);
     rect.render_widget(config_help, chunks[3]);
-    render_logs(app, true, chunks[4], rect, app.state.popup_mode.is_some());
+    render_logs(app, true, chunks[4], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
@@ -484,6 +508,7 @@ fn draw_config_table_selector(
     app: &mut App,
     config_text_style: Style,
     default_style: Style,
+    popup_mode: bool,
 ) -> Table<'static> {
     let config_list = app.config.to_view_list();
     let rows = config_list.iter().map(|item| {
@@ -497,7 +522,11 @@ fn draw_config_table_selector(
         Row::new(cells).height(height as u16)
     });
 
-    let highlight_style = check_for_popup_and_get_style(app, app.current_theme.list_select_style);
+    let highlight_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
 
     Table::new(
         rows,
@@ -515,7 +544,7 @@ fn draw_config_table_selector(
     .highlight_symbol(">> ")
 }
 
-pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
+pub fn render_edit_config(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let area = centered_rect_with_percentage(70, 70, rect.size());
 
     let chunks = if app.config.enable_mouse_support {
@@ -549,8 +578,43 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         app,
         Focus::EditGeneralConfigPopup,
         &chunks[1],
-        false,
+        popup_mode,
         true,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let error_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.error_text_style,
+    );
+    let card_status_active_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.card_status_active_style,
+    );
+    let keyboard_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.keyboard_focus_style,
+    );
+    let mouse_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.mouse_focus_style,
     );
 
     let list_items = app.config.to_view_list();
@@ -560,14 +624,8 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         // NOTE: This is temporary, as only the Theme editor uses this other than config
         "Theme Name"
     };
-    let mut path_check_mode = false;
     if let Ok(config_enum) = ConfigEnum::from_str(config_item_name) {
-        if config_enum == ConfigEnum::SaveDirectory {
-            path_check_mode = true;
-            app.state.path_check_state.path_check_mode = true;
-        } else {
-            app.state.path_check_state.path_check_mode = false;
-        }
+        app.state.path_check_state.path_check_mode = config_enum == ConfigEnum::SaveDirectory;
     }
     let config_item_value = if app.state.app_table_states.config.selected().is_some() {
         list_items
@@ -588,7 +646,7 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::TakeUserInput)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
     let stop_editing_key = app
         .get_first_keybinding(KeyBindingEnum::StopUserInput)
@@ -596,24 +654,21 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
 
     let paragraph_text = vec![
         Line::from(vec![
-            Span::styled("Current Value is '", app.current_theme.help_text_style),
-            Span::styled(config_item_value, app.current_theme.help_key_style),
-            Span::styled("'", app.current_theme.help_text_style),
+            Span::styled("Current Value is '", help_text_style),
+            Span::styled(config_item_value, help_key_style),
+            Span::styled("'", help_text_style),
         ]),
         Line::from(String::from("")),
         Line::from(vec![
-            Span::styled("Press ", app.current_theme.help_text_style),
-            Span::styled(start_editing_key, app.current_theme.help_key_style),
-            Span::styled(" to edit, or ", app.current_theme.help_text_style),
-            Span::styled(cancel_key, app.current_theme.help_key_style),
-            Span::styled(" to cancel, Press ", app.current_theme.help_text_style),
-            Span::styled(stop_editing_key, app.current_theme.help_key_style),
-            Span::styled(
-                " to stop editing and press ",
-                app.current_theme.help_text_style,
-            ),
-            Span::styled(accept_key, app.current_theme.help_key_style),
-            Span::styled(" on Submit to save", app.current_theme.help_text_style),
+            Span::styled("Press ", help_text_style),
+            Span::styled(start_editing_key, help_key_style),
+            Span::styled(" to edit, or ", help_text_style),
+            Span::styled(cancel_key, help_key_style),
+            Span::styled(" to cancel, Press ", help_text_style),
+            Span::styled(stop_editing_key, help_key_style),
+            Span::styled(" to stop editing and press ", help_text_style),
+            Span::styled(accept_key, help_key_style),
+            Span::styled(" on Submit to save", help_text_style),
         ]),
     ];
     let paragraph_title = Line::from(vec![Span::raw(config_item_name)]);
@@ -621,13 +676,13 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .title(paragraph_title)
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
     let current_user_input = app.state.text_buffers.general_config.get_joined_lines();
-    let user_input = if path_check_mode {
+    let user_input = if app.state.path_check_state.path_check_mode {
         if (current_user_input != app.state.path_check_state.path_last_checked)
             || app.state.path_check_state.recheck_required
         {
@@ -710,30 +765,30 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
         if !current_user_input.is_empty() {
             if let Some(potential_completion) = &app.state.path_check_state.potential_completion {
                 Line::from(vec![
-                    Span::styled(current_user_input.clone(), app.current_theme.general_style),
+                    Span::styled(current_user_input.clone(), general_style),
                     Span::styled(
                         potential_completion.clone(),
                         app.current_theme.inactive_text_style,
                     ),
                     Span::styled(
                         " (Press 'Tab' or 'Right Arrow' to autocomplete)",
-                        app.current_theme.help_text_style,
+                        help_text_style,
                     ),
                 ])
             } else if app.state.path_check_state.path_exists {
                 Line::from(Span::styled(
                     current_user_input.clone(),
-                    app.current_theme.card_status_active_style,
+                    card_status_active_style,
                 ))
             } else {
                 Line::from(vec![
                     Span::styled(
                         current_user_input.clone(),
-                        app.current_theme.error_text_style,
+                        error_text_style,
                     ),
                     Span::styled(
                         " (Path does not exist) - Press '%' to create a new directory at this location",
-                        app.current_theme.help_text_style,
+                        help_text_style,
                     ),
                 ])
             }
@@ -744,16 +799,13 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             ))
         }
     } else {
-        Line::from(Span::styled(
-            current_user_input,
-            app.current_theme.general_style,
-        ))
+        Line::from(Span::styled(current_user_input, general_style))
     };
     let edit_item = Paragraph::new(user_input)
         .block(
             Block::default()
                 .title("Edit")
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .borders(Borders::ALL)
                 .border_style(edit_box_style)
                 .border_type(BorderType::Rounded),
@@ -763,12 +815,12 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
     let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Config Editor")
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
+        .border_style(keyboard_focus_style)
         .border_type(BorderType::Rounded);
 
-    render_blank_styled_canvas(rect, app, clear_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     rect.render_widget(config_item, chunks[0]);
     rect.render_widget(edit_item, chunks[1]);
@@ -779,23 +831,23 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
             if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[3]) {
                 app.state.mouse_focus = Some(Focus::SubmitButton);
                 app.state.set_focus(Focus::SubmitButton);
-                app.current_theme.mouse_focus_style
+                mouse_focus_style
             } else if app.state.app_status == AppStatus::KeyBindMode {
-                app.current_theme.keyboard_focus_style
+                keyboard_focus_style
             } else {
-                app.current_theme.general_style
+                general_style
             };
         let submit_button = Paragraph::new("Submit")
             .block(
                 Block::default()
-                    .style(app.current_theme.general_style)
+                    .style(general_style)
                     .borders(Borders::ALL)
                     .border_style(submit_button_style)
                     .border_type(BorderType::Rounded),
             )
             .alignment(Alignment::Center);
         rect.render_widget(submit_button, chunks[3]);
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 
     if app.state.app_status == AppStatus::UserInput {
@@ -808,13 +860,39 @@ pub fn render_edit_config(rect: &mut Frame, app: &mut App) {
     }
 }
 
-pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
+pub fn render_select_default_view(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let render_area = centered_rect_with_percentage(70, 70, rect.size());
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
         .split(render_area);
+
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let keyboard_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.keyboard_focus_style,
+    );
 
     let list_items = UiMode::view_modes_as_string();
     let list_items: Vec<ListItem> = list_items
@@ -837,10 +915,10 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(app.current_theme.general_style)
+                .border_style(general_style)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(app.current_theme.list_select_style)
+        .highlight_style(list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     let up_key = app
@@ -853,27 +931,24 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
-        Span::styled("Use ", app.current_theme.help_text_style),
-        Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(down_key, app.current_theme.help_key_style),
+        Span::styled("Use ", help_text_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(down_key, help_key_style),
         Span::styled(
             " to navigate or use the mouse cursor. Press ",
-            app.current_theme.help_text_style,
+            help_text_style,
         ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
-        Span::styled(
-            " To select a Default View. Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(cancel_key, app.current_theme.help_key_style),
-        Span::styled(" to cancel", app.current_theme.help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled("<Mouse Left Click>", help_key_style),
+        Span::styled(" To select a Default View. Press ", help_text_style),
+        Span::styled(cancel_key, help_key_style),
+        Span::styled(" to cancel", help_text_style),
     ]);
 
     let default_view_picker_help = Paragraph::new(help_spans)
@@ -882,7 +957,7 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .title("Help")
                 .borders(Borders::ALL)
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
@@ -891,11 +966,11 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
     let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Default View Picker")
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
+        .border_style(keyboard_focus_style)
         .border_type(BorderType::Rounded);
-    render_blank_styled_canvas(rect, app, clear_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     rect.render_stateful_widget(
         default_view_list,
@@ -904,12 +979,11 @@ pub fn render_select_default_view(rect: &mut Frame, app: &mut App) {
     );
     rect.render_widget(default_view_picker_help, chunks[1]);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
-pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
-    let popup_mode = app.state.popup_mode.is_some();
+pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .constraints(
             [
@@ -922,12 +996,23 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let scrollbar_style = check_for_popup_and_get_style(app, app.current_theme.progress_bar_style);
+    let default_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let scrollbar_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.progress_bar_style,
+    );
     let reset_style =
-        get_button_style_with_default_error_style(app, Focus::SubmitButton, &chunks[3], popup_mode);
-    let current_element_style =
-        check_for_popup_and_get_style(app, app.current_theme.list_select_style);
+        get_button_style(app, Focus::SubmitButton, Some(&chunks[3]), popup_mode, true);
+    let current_element_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
     let table_border_style = get_mouse_focusable_field_style(
         app,
         Focus::EditKeybindingsTable,
@@ -935,8 +1020,16 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         popup_mode,
         false,
     );
-    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
-    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
 
     let up_key = app
         .get_first_keybinding(KeyBindingEnum::Up)
@@ -954,7 +1047,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
 
     let edit_keybinding_help_spans = Line::from(vec![
@@ -1024,7 +1117,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         .track_symbol(SCROLLBAR_TRACK_SYMBOL)
         .track_style(app.current_theme.inactive_text_style);
     let mut scrollbar_state = ScrollbarState::new(table_items.len()).position(current_index);
-    let scrollbar_area = chunks[1].inner(&Margin {
+    let scrollbar_area = chunks[1].inner(Margin {
         vertical: 1,
         horizontal: 0,
     });
@@ -1062,7 +1155,7 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
         .style(reset_style)
         .alignment(Alignment::Center);
 
-    render_title(app, &chunks[0], rect);
+    rect.render_widget(draw_title(app, chunks[0], popup_mode), chunks[0]);
     rect.render_stateful_widget(
         t,
         chunks[1],
@@ -1072,11 +1165,11 @@ pub fn render_edit_keybindings(rect: &mut Frame, app: &mut App) {
     rect.render_widget(edit_keybinding_help, chunks[2]);
     rect.render_widget(reset_button, chunks[3]);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
-pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
+pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let area = centered_rect_with_percentage(70, 70, rect.size());
 
     let chunks = if app.config.enable_mouse_support {
@@ -1106,15 +1199,41 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
             .split(area)
     };
 
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let keyboard_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.keyboard_focus_style,
+    );
+    let mouse_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.mouse_focus_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+
     let edit_box_style =
         if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1]) {
             app.state.mouse_focus = Some(Focus::EditSpecificKeyBindingPopup);
             app.state.set_focus(Focus::EditSpecificKeyBindingPopup);
-            app.current_theme.mouse_focus_style
+            mouse_focus_style
         } else if app.state.app_status == AppStatus::KeyBindMode {
-            app.current_theme.keyboard_focus_style
+            keyboard_focus_style
         } else {
-            app.current_theme.general_style
+            general_style
         };
 
     let key_id = app
@@ -1151,7 +1270,7 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
     let stop_editing_key = app
         .get_first_keybinding(KeyBindingEnum::StopUserInput)
@@ -1159,24 +1278,21 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
 
     let paragraph_text = vec![
         Line::from(vec![
-            Span::styled("Current Value is '", app.current_theme.help_text_style),
-            Span::styled(key_value, app.current_theme.help_key_style),
-            Span::styled("'", app.current_theme.help_text_style),
+            Span::styled("Current Value is '", help_text_style),
+            Span::styled(key_value, help_key_style),
+            Span::styled("'", help_text_style),
         ]),
         Line::from(String::from("")),
         Line::from(vec![
-            Span::styled("Press ", app.current_theme.help_text_style),
-            Span::styled(user_input_key, app.current_theme.help_key_style),
-            Span::styled(" to edit, ", app.current_theme.help_text_style),
-            Span::styled(cancel_key, app.current_theme.help_key_style),
-            Span::styled(" to cancel, ", app.current_theme.help_text_style),
-            Span::styled(stop_editing_key, app.current_theme.help_key_style),
-            Span::styled(" to stop editing and ", app.current_theme.help_text_style),
-            Span::styled(accept_key, app.current_theme.help_key_style),
-            Span::styled(
-                " to save when stopped editing",
-                app.current_theme.help_text_style,
-            ),
+            Span::styled("Press ", help_text_style),
+            Span::styled(user_input_key, help_key_style),
+            Span::styled(" to edit, ", help_text_style),
+            Span::styled(cancel_key, help_key_style),
+            Span::styled(" to cancel, ", help_text_style),
+            Span::styled(stop_editing_key, help_key_style),
+            Span::styled(" to stop editing and ", help_text_style),
+            Span::styled(accept_key, help_key_style),
+            Span::styled(" to save when stopped editing", help_text_style),
         ]),
     ];
     let config_item = Paragraph::new(paragraph_text)
@@ -1209,10 +1325,10 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
     let clear_area_border = Block::default()
         .title("Edit Keybindings")
         .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
+        .border_style(keyboard_focus_style)
         .border_type(BorderType::Rounded);
 
-    render_blank_styled_canvas(rect, app, clear_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     rect.render_widget(config_item, chunks[0]);
     rect.render_widget(edit_item, chunks[1]);
@@ -1222,11 +1338,11 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
             if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[3]) {
                 app.state.mouse_focus = Some(Focus::SubmitButton);
                 app.state.set_focus(Focus::SubmitButton);
-                app.current_theme.mouse_focus_style
+                mouse_focus_style
             } else if app.state.app_status == AppStatus::KeyBindMode {
-                app.current_theme.keyboard_focus_style
+                keyboard_focus_style
             } else {
-                app.current_theme.general_style
+                general_style
             };
         let submit_button = Paragraph::new("Submit")
             .block(
@@ -1237,11 +1353,11 @@ pub fn render_edit_specific_keybinding(rect: &mut Frame, app: &mut App) {
             )
             .alignment(Alignment::Center);
         rect.render_widget(submit_button, chunks[3]);
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
+pub fn render_main_menu(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -1268,16 +1384,23 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[2]);
 
-    let main_menu_help = draw_help(app, chunks[2]);
-    let help_separator =
-        Block::default()
-            .borders(Borders::LEFT)
-            .border_style(check_for_popup_and_get_style(
-                app,
-                app.current_theme.general_style,
-            ));
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let rapid_blink_general_style = if popup_mode {
+        general_style
+    } else {
+        general_style.add_modifier(Modifier::RAPID_BLINK)
+    };
 
-    render_title(app, &chunks[0], rect);
+    let main_menu_help = draw_help(app, chunks[2], popup_mode);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(general_style);
+
+    rect.render_widget(draw_title(app, chunks[0], popup_mode), chunks[0]);
 
     if let Some(email_id) = &app.state.user_login_data.email_id {
         let email_id = email_id.to_string();
@@ -1295,11 +1418,7 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
 
         let border_block = Block::default()
             .borders(Borders::ALL)
-            .border_style(
-                app.current_theme
-                    .general_style
-                    .add_modifier(Modifier::RAPID_BLINK),
-            )
+            .border_style(rapid_blink_general_style)
             .border_type(BorderType::Rounded);
 
         let email_chunks = Layout::default()
@@ -1317,33 +1436,21 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
             .split(sub_main_menu_chunks[1]);
 
         let heading_text = Paragraph::new("Logged in as:")
-            .block(
-                Block::default().style(
-                    app.current_theme
-                        .general_style
-                        .add_modifier(Modifier::RAPID_BLINK),
-                ),
-            )
+            .block(Block::default().style(rapid_blink_general_style))
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         let email_id_text = Paragraph::new(email_id)
-            .block(
-                Block::default().style(
-                    app.current_theme
-                        .general_style
-                        .add_modifier(Modifier::RAPID_BLINK),
-                ),
-            )
+            .block(Block::default().style(rapid_blink_general_style))
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        draw_main_menu(app, sub_main_menu_chunks[0], rect);
+        draw_main_menu(app, sub_main_menu_chunks[0], rect, popup_mode);
         rect.render_widget(border_block, sub_main_menu_chunks[1]);
         rect.render_widget(heading_text, email_chunks[1]);
         rect.render_widget(email_id_text, email_chunks[3]);
     } else {
-        draw_main_menu(app, chunks[1], rect);
+        draw_main_menu(app, chunks[1], rect, popup_mode);
     }
 
     rect.render_widget(main_menu_help.0, chunks[2]);
@@ -1358,13 +1465,13 @@ pub fn render_main_menu(rect: &mut Frame, app: &mut App) {
         help_chunks[2],
         &mut app.state.app_table_states.help,
     );
-    render_logs(app, true, chunks[3], rect, app.state.popup_mode.is_some());
+    render_logs(app, true, chunks[3], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
+pub fn render_help_menu(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Fill(1), Constraint::Length(4)].as_ref())
@@ -1383,14 +1490,16 @@ pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
         .margin(1)
         .split(chunks[0]);
 
-    let help_menu = draw_help(app, chunks[0]);
-    let help_separator =
-        Block::default()
-            .borders(Borders::LEFT)
-            .border_style(check_for_popup_and_get_style(
-                app,
-                app.current_theme.general_style,
-            ));
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+
+    let help_menu = draw_help(app, chunks[0], popup_mode);
+    let help_separator = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(general_style);
 
     rect.render_widget(help_menu.0, chunks[0]);
     rect.render_stateful_widget(
@@ -1404,36 +1513,46 @@ pub fn render_help_menu(rect: &mut Frame, app: &mut App) {
         help_chunks[2],
         &mut app.state.app_table_states.help,
     );
-    render_logs(app, true, chunks[1], rect, app.state.popup_mode.is_some());
+    render_logs(app, true, chunks[1], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_logs_only(rect: &mut Frame, app: &mut App) {
+pub fn render_logs_only(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Fill(1)].as_ref())
         .split(rect.size());
 
-    render_logs(app, true, chunks[0], rect, app.state.popup_mode.is_some());
+    render_logs(app, true, chunks[0], rect, popup_mode);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Table<'a>) {
-    let border_style = get_mouse_focusable_field_style(
-        app,
-        Focus::Help,
-        &render_area,
-        app.state.popup_mode.is_some(),
-        false,
+fn draw_help<'a>(
+    app: &mut App,
+    render_area: Rect,
+    popup_mode: bool,
+) -> (Block<'a>, Table<'a>, Table<'a>) {
+    let border_style =
+        get_mouse_focusable_field_style(app, Focus::Help, &render_area, popup_mode, false);
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
     );
-    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
-    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
-    let current_element_style =
-        check_for_popup_and_get_style(app, app.current_theme.list_select_style);
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let current_element_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
 
     let rows: Vec<Row> = app
         .config
@@ -1487,16 +1606,17 @@ fn draw_help<'a>(app: &mut App, render_area: Rect) -> (Block<'a>, Table<'a>, Tab
 }
 
 fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
-    let focus = app.state.focus;
-    let help_box_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else if matches!(focus, Focus::ConfigHelp) {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
-    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+    let help_box_style = get_button_style(app, Focus::ConfigHelp, None, popup_mode, false);
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
 
     let up_key = app
         .get_first_keybinding(KeyBindingEnum::Up)
@@ -1514,7 +1634,7 @@ fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
@@ -1557,16 +1677,24 @@ fn draw_config_help<'a>(app: &mut App, popup_mode: bool) -> Paragraph<'a> {
         .wrap(ratatui::widgets::Wrap { trim: true })
 }
 
-fn draw_main_menu(app: &mut App, render_area: Rect, rect: &mut Frame) {
+fn draw_main_menu(app: &mut App, render_area: Rect, rect: &mut Frame, popup_mode: bool) {
     let main_menu_items = app.main_menu.all();
     let menu_style = get_mouse_focusable_field_style_with_vertical_list_selection(
         app,
         &main_menu_items,
         render_area,
-        app.state.popup_mode.is_some(),
+        popup_mode,
     );
-    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let highlight_style = check_for_popup_and_get_style(app, app.current_theme.list_select_style);
+    let default_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let highlight_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
     let list_items = main_menu_items
         .iter()
         .map(|i| ListItem::new(i.to_string()))
@@ -1590,7 +1718,13 @@ fn draw_main_menu(app: &mut App, render_area: Rect, rect: &mut Frame) {
     );
 }
 
-pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bool) {
+pub fn render_body(
+    rect: &mut Frame,
+    area: Rect,
+    app: &mut App,
+    preview_mode: bool,
+    popup_mode: bool,
+) {
     let mut current_board_set = false;
     let mut current_card_set = false;
     let app_preview_boards_and_cards = app.preview_boards_and_cards.clone().unwrap_or_default();
@@ -1605,16 +1739,18 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
     } else {
         app.boards.clone()
     };
-    let scrollbar_style = if app.state.card_drag_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        check_for_popup_and_get_style(app, app.current_theme.progress_bar_style)
-    };
-    let error_text_style = if app.state.card_drag_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        check_for_popup_and_get_style(app, app.current_theme.error_text_style)
-    };
+    let scrollbar_style = check_for_card_drag_and_get_style(
+        app.state.card_drag_mode,
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.progress_bar_style,
+    );
+    let error_text_style = check_for_card_drag_and_get_style(
+        app.state.card_drag_mode,
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.error_text_style,
+    );
     let current_board_id = &app.state.current_board_id.unwrap_or((0, 0));
 
     let new_board_key = app
@@ -1757,12 +1893,14 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             continue;
         }
 
-        let board_style = if app.state.popup_mode.is_some() || app.state.card_drag_mode {
-            app.current_theme.inactive_text_style
-        } else {
-            app.current_theme.general_style
-        };
-        let board_border_style = if app.state.popup_mode.is_some() {
+        let board_style = check_for_card_drag_and_get_style(
+            app.state.card_drag_mode,
+            popup_mode,
+            app.current_theme.inactive_text_style,
+            app.current_theme.general_style,
+        );
+        // Exception to not using check_for_card_drag_and_get_style as we have to manage other state
+        let board_border_style = if popup_mode {
             app.current_theme.inactive_text_style
         } else if check_if_mouse_is_in_area(
             &app.state.current_mouse_coordinates,
@@ -1843,7 +1981,7 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             let mut scrollbar_state = ScrollbarState::new(board.cards.len())
                 .position(current_card_index)
                 .viewport_content_length((card_chunks[0].height) as usize);
-            let scrollbar_area = card_area_chunks[0].inner(&Margin {
+            let scrollbar_area = card_area_chunks[0].inner(Margin {
                 vertical: 1,
                 horizontal: 0,
             });
@@ -1861,7 +1999,8 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
                 continue;
             }
             let card = card.unwrap();
-            let card_style = if app.state.popup_mode.is_some() {
+            // Exception to not using get_button_style as we have to manage other state
+            let card_style = if popup_mode {
                 app.current_theme.inactive_text_style
             } else if check_if_mouse_is_in_area(
                 &app.state.current_mouse_coordinates,
@@ -1891,7 +2030,14 @@ pub fn render_body(rect: &mut Frame, area: Rect, app: &mut App, preview_mode: bo
             } else {
                 app.current_theme.general_style
             };
-            render_a_single_card(app, card_chunks[card_index], card_style, card, rect);
+            render_a_single_card(
+                app,
+                card_chunks[card_index],
+                card_style,
+                card,
+                rect,
+                popup_mode,
+            );
         }
 
         if app.state.card_drag_mode {
@@ -1925,6 +2071,7 @@ fn render_a_single_card(
     card_style: Style,
     card: &Card,
     frame_to_render_on: &mut Frame,
+    popup_mode: bool,
 ) {
     let inner_card_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1949,67 +2096,77 @@ fn render_a_single_card(
         card.description.clone()
     };
 
+    let card_due_default_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.card_due_default_style,
+    );
+    let card_due_warning_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.card_due_warning_style,
+    );
+    let card_due_overdue_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.card_due_overdue_style,
+    );
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+
     let mut card_extra_info = vec![Line::from("")];
     if card.due_date == FIELD_NOT_SET {
-        if app.state.popup_mode.is_some() {
-            card_extra_info.push(Line::from(Span::styled(
-                format!("Due: {}", FIELD_NOT_SET),
-                app.current_theme.inactive_text_style,
-            )))
-        } else {
-            card_extra_info.push(Line::from(Span::styled(
-                format!("Due: {}", FIELD_NOT_SET),
-                app.current_theme.card_due_default_style,
-            )))
-        }
+        card_extra_info.push(Line::from(Span::styled(
+            format!("Due: {}", FIELD_NOT_SET),
+            card_due_default_style,
+        )))
     } else {
         let card_due_date = card.due_date.clone();
-        let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
+        let parsed_due_date =
+            date_format_converter(card_due_date.trim(), app.config.date_time_format);
         let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-            if app.state.popup_mode.is_some() {
+            if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
                 Line::from(Span::styled(
                     format!("Due: {}", parsed_due_date),
-                    app.current_theme.inactive_text_style,
-                ))
-            } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
-                Line::from(Span::styled(
-                    format!("Due: {}", parsed_due_date),
-                    app.current_theme.card_due_default_style,
+                    card_due_default_style,
                 ))
             } else {
                 let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
                 let (days_left, parsed_due_date) = match formatted_date_format {
-                    DateFormat::DayMonthYear
-                    | DateFormat::MonthDayYear
-                    | DateFormat::YearMonthDay => {
+                    DateTimeFormat::DayMonthYear
+                    | DateTimeFormat::MonthDayYear
+                    | DateTimeFormat::YearMonthDay => {
                         let today = Local::now().date_naive();
                         let string_to_naive_date_format = NaiveDate::parse_from_str(
                             &parsed_due_date,
-                            app.config.date_format.to_parser_string(),
+                            app.config.date_time_format.to_parser_string(),
                         )
                         .unwrap();
                         let days_left = string_to_naive_date_format
                             .signed_duration_since(today)
                             .num_days();
                         let parsed_due_date = string_to_naive_date_format
-                            .format(app.config.date_format.to_parser_string())
+                            .format(app.config.date_time_format.to_parser_string())
                             .to_string();
                         (days_left, parsed_due_date)
                     }
-                    DateFormat::DayMonthYearTime
-                    | DateFormat::MonthDayYearTime
-                    | DateFormat::YearMonthDayTime {} => {
+                    DateTimeFormat::DayMonthYearTime
+                    | DateTimeFormat::MonthDayYearTime
+                    | DateTimeFormat::YearMonthDayTime {} => {
                         let today = Local::now().naive_local();
                         let string_to_naive_date_format = NaiveDateTime::parse_from_str(
                             &parsed_due_date,
-                            app.config.date_format.to_parser_string(),
+                            app.config.date_time_format.to_parser_string(),
                         )
                         .unwrap();
                         let days_left = string_to_naive_date_format
                             .signed_duration_since(today)
                             .num_days();
                         let parsed_due_date = string_to_naive_date_format
-                            .format(app.config.date_format.to_parser_string())
+                            .format(app.config.date_time_format.to_parser_string())
                             .to_string();
                         (days_left, parsed_due_date)
                     }
@@ -2018,29 +2175,24 @@ fn render_a_single_card(
                     match days_left.cmp(&(app.config.warning_delta as i64)) {
                         Ordering::Less | Ordering::Equal => Line::from(Span::styled(
                             format!("Due: {}", parsed_due_date),
-                            app.current_theme.card_due_warning_style,
+                            card_due_warning_style,
                         )),
                         Ordering::Greater => Line::from(Span::styled(
                             format!("Due: {}", parsed_due_date),
-                            app.current_theme.card_due_default_style,
+                            card_due_default_style,
                         )),
                     }
                 } else {
                     Line::from(Span::styled(
                         format!("Due: {}", parsed_due_date),
-                        app.current_theme.card_due_overdue_style,
+                        card_due_overdue_style,
                     ))
                 }
             }
-        } else if app.state.popup_mode.is_some() {
-            Line::from(Span::styled(
-                format!("Due: {}", card_due_date),
-                app.current_theme.inactive_text_style,
-            ))
         } else {
             Line::from(Span::styled(
                 format!("Due: {}", card_due_date),
-                app.current_theme.card_due_default_style,
+                card_due_default_style,
             ))
         };
         card_extra_info.extend(vec![card_due_date_styled]);
@@ -2056,12 +2208,8 @@ fn render_a_single_card(
         card_status = format!("S: {}", card.card_status.clone());
         card_priority = format!("P: {}", card.priority.clone());
     }
-    let spacer_span = if app.state.popup_mode.is_some() {
-        Span::styled(" | ", app.current_theme.inactive_text_style)
-    } else {
-        Span::styled(" | ", app.current_theme.general_style)
-    };
-    let card_status = if app.state.popup_mode.is_some() {
+    let spacer_span = Span::styled(" | ", general_style);
+    let card_status = if popup_mode {
         Span::styled(card_status, app.current_theme.inactive_text_style)
     } else {
         match card.card_status {
@@ -2076,7 +2224,7 @@ fn render_a_single_card(
             }
         }
     };
-    let card_priority = if app.state.popup_mode.is_some() {
+    let card_priority = if popup_mode {
         Span::styled(card_priority, app.current_theme.inactive_text_style)
     } else {
         match card.priority {
@@ -2113,14 +2261,14 @@ fn render_a_single_card(
     frame_to_render_on.render_widget(card_extra_info, inner_card_chunks[1]);
 }
 
-fn centered_rect_with_percentage(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+fn centered_rect_with_percentage(percent_width: u16, percent_height: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage((100 - percent_height) / 2),
+                Constraint::Percentage(percent_height),
+                Constraint::Percentage((100 - percent_height) / 2),
             ]
             .as_ref(),
         )
@@ -2130,23 +2278,23 @@ fn centered_rect_with_percentage(percent_x: u16, percent_y: u16, r: Rect) -> Rec
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage((100 - percent_width) / 2),
+                Constraint::Percentage(percent_width),
+                Constraint::Percentage((100 - percent_width) / 2),
             ]
             .as_ref(),
         )
         .split(popup_layout[1])[1]
 }
 
-fn centered_rect_with_length(length_x: u16, length_y: u16, r: Rect) -> Rect {
+fn centered_rect_with_length(width: u16, height: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Length((r.height - length_y) / 2),
-                Constraint::Length(length_y),
-                Constraint::Length((r.height - length_y) / 2),
+                Constraint::Length((r.height - height) / 2),
+                Constraint::Length(height),
+                Constraint::Length((r.height - height) / 2),
             ]
             .as_ref(),
         )
@@ -2156,23 +2304,23 @@ fn centered_rect_with_length(length_x: u16, length_y: u16, r: Rect) -> Rect {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Length((r.width - length_x) / 2),
-                Constraint::Length(length_x),
-                Constraint::Length((r.width - length_x) / 2),
+                Constraint::Length((r.width - width) / 2),
+                Constraint::Length(width),
+                Constraint::Length((r.width - width) / 2),
             ]
             .as_ref(),
         )
         .split(popup_layout[1])[1]
 }
 
-fn top_left_rect(length_x: u16, length_y: u16, r: Rect) -> Rect {
+fn top_left_rect(width: u16, height: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Length(length_y),
-                Constraint::Length((r.width - length_y) / 2),
-                Constraint::Length((r.width - length_y) / 2),
+                Constraint::Length(height),
+                Constraint::Length((r.height - height) / 2),
+                Constraint::Length((r.height - height) / 2),
             ]
             .as_ref(),
         )
@@ -2182,9 +2330,9 @@ fn top_left_rect(length_x: u16, length_y: u16, r: Rect) -> Rect {
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Length(length_x),
-                Constraint::Length((r.width - length_x) / 2),
-                Constraint::Length((r.width - length_x) / 2),
+                Constraint::Length(width),
+                Constraint::Length((r.width - width) / 2),
+                Constraint::Length((r.width - width) / 2),
             ]
             .as_ref(),
         )
@@ -2209,7 +2357,7 @@ pub fn draw_size_error(rect: &mut Frame, size: &Rect, msg: String, app: &mut App
         .block(Block::default().borders(Borders::ALL).borders(Borders::ALL))
         .alignment(Alignment::Center);
 
-    rect.render_widget(draw_title(app, *size), chunks[0]);
+    rect.render_widget(draw_title(app, *size, false), chunks[0]);
     rect.render_widget(body, chunks[1]);
 }
 
@@ -2241,19 +2389,18 @@ pub fn draw_loading_screen(rect: &mut Frame, size: &Rect, app: &mut App) {
         .block(Block::default().borders(Borders::ALL))
         .alignment(Alignment::Center);
 
-    rect.render_widget(draw_title(app, *size), chunks[0]);
+    rect.render_widget(draw_title(app, *size, false), chunks[0]);
     rect.render_widget(body, chunks[1]);
 }
 
-pub fn draw_title<'a>(app: &mut App, render_area: Rect) -> Paragraph<'a> {
-    let title_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let border_style = get_mouse_focusable_field_style(
-        app,
-        Focus::Title,
-        &render_area,
-        app.state.popup_mode.is_some(),
-        false,
+pub fn draw_title<'a>(app: &mut App, render_area: Rect, popup_mode: bool) -> Paragraph<'a> {
+    let title_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
     );
+    let border_style =
+        get_mouse_focusable_field_style(app, Focus::Title, &render_area, popup_mode, false);
     Paragraph::new(APP_TITLE)
         .alignment(Alignment::Center)
         .block(
@@ -2281,8 +2428,7 @@ pub fn check_size(rect: &Rect) -> Result<(), String> {
     }
 }
 
-pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
-    let popup_mode = app.state.popup_mode.is_some();
+pub fn render_new_board_form(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -2297,9 +2443,21 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
-    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
     let name_style =
         get_mouse_focusable_field_style(app, Focus::NewBoardName, &chunks[1], popup_mode, false);
     let description_style = get_mouse_focusable_field_style(
@@ -2318,7 +2476,7 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .style(default_style),
+                .style(general_style),
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
@@ -2346,7 +2504,7 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
         app.state
             .text_buffers
             .board_description
-            .set_line_number_style(app.current_theme.general_style)
+            .set_line_number_style(general_style)
     } else {
         app.state
             .text_buffers
@@ -2368,7 +2526,7 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
     let stop_user_input_key = app
         .get_first_keybinding(KeyBindingEnum::StopUserInput)
@@ -2397,7 +2555,7 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(default_style),
+                .border_style(general_style),
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[3]);
@@ -2433,12 +2591,11 @@ pub fn render_new_board_form(rect: &mut Frame, app: &mut App) {
     }
 
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
-    let popup_mode = app.state.popup_mode.is_some();
+pub fn render_new_card_form(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
@@ -2454,15 +2611,27 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
         )
         .split(rect.size());
 
-    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
     let name_style =
         get_mouse_focusable_field_style(app, Focus::CardName, &chunks[1], popup_mode, false);
     let description_style =
         get_mouse_focusable_field_style(app, Focus::CardDescription, &chunks[2], popup_mode, false);
     let due_date_style =
         get_mouse_focusable_field_style(app, Focus::CardDueDate, &chunks[3], popup_mode, false);
-    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
-    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
     let submit_style =
         get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[5], popup_mode, false);
 
@@ -2472,7 +2641,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .style(default_style),
+                .style(general_style),
         );
     rect.render_widget(title_paragraph, chunks[0]);
 
@@ -2494,7 +2663,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
         app.state
             .text_buffers
             .card_description
-            .set_line_number_style(app.current_theme.general_style)
+            .set_line_number_style(general_style)
     } else {
         app.state.text_buffers.card_description.remove_line_number()
     }
@@ -2504,43 +2673,17 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
         .set_block(description_block.clone());
     rect.render_widget(app.state.text_buffers.card_description.widget(), chunks[2]);
 
-    let card_due_date_text = app.state.text_buffers.card_due_date.get_joined_lines();
-    let wrapped_card_due_date_text =
-        textwrap::wrap(&card_due_date_text, (chunks[3].width - 2) as usize);
-    // check if wrapping is actually needed
-    let card_due_date_field = wrapped_card_due_date_text
-        .iter()
-        .map(|x| Line::from(Span::raw(&**x)))
-        .collect::<Vec<Line>>();
-    let parsed_due_date = date_format_converter(card_due_date_text.trim(), app.config.date_format);
-    let card_due_date = Paragraph::new(card_due_date_field)
-        .alignment(Alignment::Left)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(due_date_style)
-                .border_type(BorderType::Rounded)
-                .title("Card Due Date (DD/MM/YYYY-HH:MM:SS), (DD/MM/YYYY), (YYYY/MM/DD-HH:MM:SS), or (YYYY/MM/DD)"),
-        );
-    if parsed_due_date.is_err() && !card_due_date_text.is_empty() {
-        let new_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Fill(1), Constraint::Length(21)].as_ref())
-            .split(chunks[3]);
-        rect.render_widget(card_due_date, new_chunks[0]);
-        let error_text = Line::from(vec![Span::raw("Invalid date format")]);
-        let error_paragraph = Paragraph::new(error_text)
-            .alignment(Alignment::Center)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .style(app.current_theme.error_text_style),
-            );
-        rect.render_widget(error_paragraph, new_chunks[1]);
-    } else {
-        rect.render_widget(card_due_date, chunks[3]);
-    }
+    let card_due_date = app
+        .widgets
+        .date_time_picker
+        .get_date_time_as_string(app.config.date_time_format);
+    let card_due_date_paragraph = Paragraph::new(card_due_date).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .style(due_date_style)
+            .border_type(BorderType::Rounded),
+    );
+    rect.render_widget(card_due_date_paragraph, chunks[3]);
 
     let input_mode_key = app
         .get_first_keybinding(KeyBindingEnum::TakeUserInput)
@@ -2555,7 +2698,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
     let stop_user_input_key = app
         .get_first_keybinding(KeyBindingEnum::StopUserInput)
@@ -2585,7 +2728,7 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(default_style),
+                .border_style(general_style),
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[4]);
@@ -2616,27 +2759,16 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App) {
                 );
                 rect.set_cursor(x_pos, y_pos);
             }
-            Focus::CardDueDate => {
-                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
-                    &app.state.text_buffers.card_due_date,
-                    &app.config.show_line_numbers,
-                    &chunks[3],
-                );
-                rect.set_cursor(x_pos, y_pos);
-            }
             _ => {}
         }
     }
 
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
-    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
-    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+pub fn render_load_a_save(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let main_chunks = {
         Layout::default()
             .direction(Direction::Horizontal)
@@ -2665,6 +2797,32 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Fill(1), Constraint::Length(3)].as_ref())
         .split(preview_chunks[0]);
 
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let error_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.error_text_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
+
     let title_paragraph = Paragraph::new("Load a Save (Local)")
         .alignment(Alignment::Center)
         .block(
@@ -2672,7 +2830,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .style(default_style);
+        .style(general_style);
     rect.render_widget(title_paragraph, chunks[0]);
 
     let item_list = get_available_local_save_files(&app.config);
@@ -2685,7 +2843,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .style(app.current_theme.error_text_style);
+            .style(error_text_style);
         rect.render_widget(no_saves_paragraph, chunks[1]);
     } else {
         let items: Vec<ListItem> = item_list
@@ -2699,12 +2857,11 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .highlight_style(app.current_theme.list_select_style)
+            .highlight_style(list_select_style)
             .highlight_symbol(LIST_SELECTED_SYMBOL)
-            .style(default_style);
+            .style(general_style);
 
-        if !(app.state.popup_mode.is_some()
-            && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
+        if !popup_mode
             && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1])
         {
             app.state.mouse_focus = Some(Focus::LoadSave);
@@ -2736,7 +2893,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
@@ -2762,12 +2919,11 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .style(default_style)
+        .style(general_style)
         .wrap(ratatui::widgets::Wrap { trim: true });
     rect.render_widget(help_paragraph, chunks[2]);
 
     if app.state.app_list_states.load_save.selected().is_none() {
-        // format!("Select a save file with {}or {}to preview or Click on a save file to preview if using a mouse", up_key, down_key)
         let help_text = Line::from(vec![
             Span::styled("Select a save file with ", help_text_style),
             Span::styled(&up_key, help_key_style),
@@ -2785,7 +2941,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .style(default_style)
+            .style(general_style)
             .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(preview_paragraph, preview_chunks[1]);
     } else if app.preview_boards_and_cards.is_none() {
@@ -2801,11 +2957,11 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .style(default_style)
+            .style(general_style)
             .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(preview_paragraph, preview_chunks[1]);
     } else {
-        render_body(rect, preview_chunks[1], app, true)
+        render_body(rect, preview_chunks[1], app, true, popup_mode)
     }
 
     let preview_title_paragraph = if let Some(file_name) = &app.state.preview_file_name {
@@ -2816,7 +2972,7 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .style(default_style)
+            .style(general_style)
             .wrap(ratatui::widgets::Wrap { trim: true })
     } else {
         Paragraph::new("Select a file to preview")
@@ -2826,13 +2982,13 @@ pub fn render_load_a_save(rect: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .style(default_style)
+            .style(general_style)
             .wrap(ratatui::widgets::Wrap { trim: true })
     };
 
     if app.config.enable_mouse_support {
         rect.render_widget(preview_title_paragraph, title_bar_chunks[0]);
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     } else {
         rect.render_widget(preview_title_paragraph, preview_chunks[0]);
     }
@@ -2981,13 +3137,40 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
         .style(app.current_theme.general_style);
     let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
 
-    render_blank_styled_canvas(rect, app, message_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, message_area, false);
     rect.render_widget(toast_count_paragraph, message_area);
 }
 
-pub fn render_view_card(rect: &mut Frame, app: &mut App) {
+pub fn render_view_card(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let popup_area = centered_rect_with_percentage(90, 90, rect.size());
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    // TODO: look through the code base to find where render_blank_styled_canvas is used and see if it can be removed
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, popup_mode);
+    let error_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.error_text_style,
+    );
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let keyboard_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.keyboard_focus_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
+    let card_tags_style = get_button_style(app, Focus::CardTags, None, popup_mode, false);
+    let card_comments_style = get_button_style(app, Focus::CardComments, None, popup_mode, false);
+    let save_changes_style = get_button_style(app, Focus::SubmitButton, None, popup_mode, false);
+    let name_style = get_button_style(app, Focus::CardName, None, popup_mode, false);
+    let description_style = get_button_style(app, Focus::CardDescription, None, popup_mode, false);
+    let card_due_default_style = get_button_style(app, Focus::CardDueDate, None, popup_mode, false);
     if app.state.current_board_id.is_none() || app.state.current_card_id.is_none() {
         let no_board_or_card_selected = Paragraph::new("No board or card selected.")
             .block(
@@ -2995,7 +3178,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     .title("Card Info")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .style(app.current_theme.error_text_style),
+                    .style(error_style),
             )
             .alignment(Alignment::Center);
         rect.render_widget(no_board_or_card_selected, popup_area);
@@ -3012,7 +3195,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     .title("Card Info")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .style(app.current_theme.error_text_style),
+                    .style(error_style),
             )
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
@@ -3031,7 +3214,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     .title("Card Info")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .style(app.current_theme.error_text_style),
+                    .style(error_style),
             )
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
@@ -3045,7 +3228,20 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     } else {
         card.unwrap().to_owned()
     };
-
+    if app.widgets.date_time_picker.selected_date_time.is_none()
+        && !card.due_date.is_empty()
+        && card.due_date != FIELD_NOT_SET
+    {
+        if let Ok(current_format) = date_format_finder(card.due_date.trim()) {
+            app.widgets.date_time_picker.selected_date_time = Some(
+                NaiveDateTime::parse_from_str(
+                    card.due_date.trim(),
+                    current_format.to_parser_string(),
+                )
+                .unwrap(),
+            );
+        }
+    }
     let board_name = board.name.clone();
     let card_name = card.name.clone();
 
@@ -3055,35 +3251,22 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             .title(format!("{} >> Board({})", card_name, board_name))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(app.current_theme.general_style)
+            .border_style(general_style)
     };
 
     // Prepare Name Block Widget
-    let name_paragraph_block = {
-        let name_style = if app.state.focus == Focus::CardName {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
+    let name_paragraph_block = Block::default()
+        .title("Name")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(name_style);
 
-        Block::default()
-            .title("Name")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(name_style)
-    };
     app.state
         .text_buffers
         .card_name
         .set_block(name_paragraph_block);
 
     // Process Card Description
-    let description_style = if app.state.focus == Focus::CardDescription {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-
     let description_length = app.state.text_buffers.card_description.get_num_lines();
     let description_block = Block::default()
         .title(format!("Description ({} line(s))", description_length))
@@ -3095,7 +3278,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         app.state
             .text_buffers
             .card_description
-            .set_line_number_style(app.current_theme.general_style)
+            .set_line_number_style(general_style)
     } else {
         app.state.text_buffers.card_description.remove_line_number()
     }
@@ -3105,64 +3288,75 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         .set_block(description_block);
 
     // Process Card Extra Info
-    let (card_extra_info_widget, card_extra_info_items_len) = {
-        let card_date_created = Span::styled(
-            format!("Created: {}", card.date_created),
-            app.current_theme.general_style,
-        );
-        let card_date_modified = Span::styled(
-            format!("Modified: {}", card.date_modified),
-            app.current_theme.general_style,
-        );
-        let card_date_completed = Span::styled(
-            format!("Completed: {}", card.date_completed),
-            app.current_theme.general_style,
-        );
+    let (card_extra_info_widget, card_extra_info_items_len, card_due_date_width) = {
+        let card_date_created = if date_format_finder(&card.date_created).is_ok() {
+            if let Ok(parsed_date) =
+                date_format_converter(&card.date_created, app.config.date_time_format)
+            {
+                Span::styled(format!("Created: {}", parsed_date), general_style)
+            } else {
+                Span::styled(format!("Created: {}", card.date_created), general_style)
+            }
+        } else {
+            Span::styled(format!("Created: {}", card.date_created), general_style)
+        };
+        let card_date_modified = if date_format_finder(&card.date_modified).is_ok() {
+            if let Ok(parsed_date) =
+                date_format_converter(&card.date_modified, app.config.date_time_format)
+            {
+                Span::styled(format!("Modified: {}", parsed_date), general_style)
+            } else {
+                Span::styled(format!("Modified: {}", card.date_modified), general_style)
+            }
+        } else {
+            Span::styled(format!("Modified: {}", card.date_modified), general_style)
+        };
+        let card_date_completed = if date_format_finder(&card.date_completed).is_ok() {
+            if let Ok(parsed_date) =
+                date_format_converter(&card.date_completed, app.config.date_time_format)
+            {
+                Span::styled(format!("Completed: {}", parsed_date), general_style)
+            } else {
+                Span::styled(format!("Completed: {}", card.date_completed), general_style)
+            }
+        } else {
+            Span::styled(format!("Completed: {}", card.date_completed), general_style)
+        };
         let card_priority = format!("Priority: {}", card.priority);
         let card_status = format!("Status: {}", card.card_status);
-        let card_due_date = app.state.text_buffers.card_due_date.get_joined_lines();
-        let card_due_date = if card_due_date.is_empty() {
-            FIELD_NOT_SET.to_string()
+        let parsed_due_date = if date_format_finder(&card.due_date).is_ok() {
+            date_format_converter(&card.due_date, app.config.date_time_format)
         } else {
-            card_due_date
+            Ok(FIELD_NOT_SET.to_string())
         };
-        let parsed_due_date = date_format_converter(card_due_date.trim(), app.config.date_format);
         let card_due_date_styled = if let Ok(parsed_due_date) = parsed_due_date {
-            if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
-                if app.state.focus == Focus::CardDueDate {
-                    Span::styled(
-                        format!("Due: {}", card_due_date),
-                        app.current_theme.list_select_style,
-                    )
-                } else {
-                    Span::styled(
-                        format!("Due: {}", card_due_date),
-                        app.current_theme.card_due_default_style,
-                    )
-                }
+            if app.state.focus == Focus::CardDueDate {
+                Span::styled(format!("Due: {}", parsed_due_date), list_select_style)
+            } else if parsed_due_date == FIELD_NOT_SET || parsed_due_date.is_empty() {
+                Span::styled(format!("Due: {}", parsed_due_date), card_due_default_style)
             } else {
                 let formatted_date_format = date_format_finder(&parsed_due_date).unwrap();
                 let days_left = match formatted_date_format {
-                    DateFormat::DayMonthYear
-                    | DateFormat::MonthDayYear
-                    | DateFormat::YearMonthDay => {
+                    DateTimeFormat::DayMonthYear
+                    | DateTimeFormat::MonthDayYear
+                    | DateTimeFormat::YearMonthDay => {
                         let today = Local::now().date_naive();
                         let string_to_naive_date_format = NaiveDate::parse_from_str(
                             &parsed_due_date,
-                            app.config.date_format.to_parser_string(),
+                            app.config.date_time_format.to_parser_string(),
                         )
                         .unwrap();
                         string_to_naive_date_format
                             .signed_duration_since(today)
                             .num_days()
                     }
-                    DateFormat::DayMonthYearTime
-                    | DateFormat::MonthDayYearTime
-                    | DateFormat::YearMonthDayTime {} => {
+                    DateTimeFormat::DayMonthYearTime
+                    | DateTimeFormat::MonthDayYearTime
+                    | DateTimeFormat::YearMonthDayTime {} => {
                         let today = Local::now().naive_local();
                         let string_to_naive_date_format = NaiveDateTime::parse_from_str(
                             &parsed_due_date,
-                            app.config.date_format.to_parser_string(),
+                            app.config.date_time_format.to_parser_string(),
                         )
                         .unwrap();
                         string_to_naive_date_format
@@ -3170,35 +3364,33 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                             .num_days()
                     }
                 };
-                if days_left <= app.config.warning_delta.into() && days_left >= 0 {
+                if popup_mode {
                     Span::styled(
-                        format!("Due: {}", card_due_date),
+                        format!("Due: {}", parsed_due_date),
+                        app.current_theme.inactive_text_style,
+                    )
+                } else if days_left <= app.config.warning_delta.into() && days_left >= 0 {
+                    Span::styled(
+                        format!("Due: {}", parsed_due_date),
                         app.current_theme.card_due_warning_style,
                     )
                 } else if days_left < 0 {
                     Span::styled(
-                        format!("Due: {}", card_due_date),
+                        format!("Due: {}", parsed_due_date),
                         app.current_theme.card_due_overdue_style,
                     )
                 } else {
-                    Span::styled(
-                        format!("Due: {}", card_due_date),
-                        app.current_theme.card_due_default_style,
-                    )
+                    Span::styled(format!("Due: {}", parsed_due_date), card_due_default_style)
                 }
             }
-        } else if card_due_date != FIELD_NOT_SET {
-            Span::styled(
-                format!("Due: {} - Invalid Date Format", card_due_date),
-                app.current_theme.error_text_style,
-            )
+        } else if app.state.focus == Focus::CardDueDate {
+            Span::styled(format!("Due: {}", FIELD_NOT_SET), list_select_style)
         } else {
-            Span::styled(
-                format!("Due: {}", card_due_date),
-                app.current_theme.card_due_default_style,
-            )
+            Span::styled(format!("Due: {}", FIELD_NOT_SET), general_style)
         };
-        let card_priority_styled = if app.state.focus == Focus::CardPriority {
+        let card_priority_styled = if popup_mode {
+            Span::styled(card_priority, app.current_theme.inactive_text_style)
+        } else if app.state.focus == Focus::CardPriority {
             Span::styled(card_priority, app.current_theme.list_select_style)
         } else if card.priority == CardPriority::High {
             Span::styled(card_priority, app.current_theme.card_priority_high_style)
@@ -3209,7 +3401,9 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         } else {
             Span::styled(card_priority, app.current_theme.general_style)
         };
-        let card_status_styled = if app.state.focus == Focus::CardStatus {
+        let card_status_styled = if popup_mode {
+            Span::styled(card_status, app.current_theme.inactive_text_style)
+        } else if app.state.focus == Focus::CardStatus {
             Span::styled(card_status, app.current_theme.list_select_style)
         } else if card.card_status == CardStatus::Complete {
             Span::styled(card_status, app.current_theme.card_status_completed_style)
@@ -3223,7 +3417,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         let card_extra_info_items = vec![
             ListItem::new(vec![Line::from(card_date_created)]),
             ListItem::new(vec![Line::from(card_date_modified)]),
-            ListItem::new(vec![Line::from(card_due_date_styled)]),
+            ListItem::new(vec![Line::from(card_due_date_styled.clone())]),
             ListItem::new(vec![Line::from(card_date_completed)]),
             ListItem::new(vec![Line::from(card_priority_styled)]),
             ListItem::new(vec![Line::from(card_status_styled)]),
@@ -3234,11 +3428,16 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                 .title("Card Info")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(app.current_theme.general_style),
+                .border_style(general_style),
         );
-        (card_extra_info, card_extra_info_items_len)
+        (
+            card_extra_info,
+            card_extra_info_items_len,
+            card_due_date_styled.width(),
+        )
     };
 
+    // TODO: Refactor card tag and comments processing
     // Process Card Tags
     let card_tag_lines = {
         let card_tags = if app.state.focus == Focus::CardTags {
@@ -3253,7 +3452,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                 for (index, tag) in card.tags.iter().enumerate() {
                     tags.push(Span::styled(
                         format!("{}) {} ", index + 1, tag),
-                        app.current_theme.general_style,
+                        general_style,
                     ));
                 }
             } else {
@@ -3267,12 +3466,12 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     if index == selected_tag {
                         tags.push(Span::styled(
                             format!("{}) {} ", index + 1, tag),
-                            app.current_theme.keyboard_focus_style,
+                            keyboard_focus_style,
                         ));
                     } else {
                         tags.push(Span::styled(
                             format!("{}) {} ", index + 1, tag),
-                            app.current_theme.general_style,
+                            general_style,
                         ));
                     }
                 }
@@ -3283,7 +3482,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             for (index, tag) in card.tags.iter().enumerate() {
                 tags.push(Span::styled(
                     format!("{}) {} ", index + 1, tag),
-                    app.current_theme.general_style,
+                    general_style,
                 ));
             }
             tags
@@ -3331,7 +3530,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                 for (index, comment) in card.comments.iter().enumerate() {
                     comments.push(Span::styled(
                         format!("{}) {} ", index + 1, comment),
-                        app.current_theme.general_style,
+                        general_style,
                     ));
                 }
             } else {
@@ -3345,12 +3544,12 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     if index == selected_comment {
                         comments.push(Span::styled(
                             format!("{}) {} ", index + 1, comment),
-                            app.current_theme.keyboard_focus_style,
+                            keyboard_focus_style,
                         ));
                     } else {
                         comments.push(Span::styled(
                             format!("{}) {} ", index + 1, comment),
-                            app.current_theme.general_style,
+                            general_style,
                         ));
                     }
                 }
@@ -3361,7 +3560,7 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             for (index, comment) in card.comments.iter().enumerate() {
                 comments.push(Span::styled(
                     format!("{}) {} ", index + 1, comment),
-                    app.current_theme.general_style,
+                    general_style,
                 ));
             }
             comments
@@ -3503,7 +3702,23 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         }
     };
 
-    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[2]) {
+    if app.state.z_stack.last() == Some(&PopupMode::DateTimePicker) {
+        if app.widgets.date_time_picker.anchor.is_none() {
+            app.widgets.date_time_picker.anchor = Some((
+                card_chunks[2].x + card_due_date_width as u16 + 2,
+                card_chunks[2].y + 3,
+            )); // offsets to make sure date is visible
+            debug!(
+                "Setting anchor for date time picker to: {:?}",
+                app.widgets.date_time_picker.anchor
+            );
+        }
+        app.widgets.date_time_picker.current_viewport = Some(rect.size());
+    }
+
+    if !popup_mode
+        && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[2])
+    {
         let top_of_list = card_chunks[2].y + 1;
         let mut bottom_of_list = card_chunks[2].y + card_extra_info_items_len as u16;
         if bottom_of_list > card_chunks[2].bottom() {
@@ -3552,7 +3767,9 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             app.state.app_list_states.card_view_list.select(None);
         }
     };
-    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[0]) {
+    if !popup_mode
+        && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[0])
+    {
         app.state.set_focus(Focus::CardName);
         app.state.mouse_focus = Some(Focus::CardName);
         app.state
@@ -3561,7 +3778,9 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             .select(None);
         app.state.app_list_states.card_view_tag_list.select(None);
     }
-    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[1]) {
+    if !popup_mode
+        && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[1])
+    {
         app.state.set_focus(Focus::CardDescription);
         app.state.mouse_focus = Some(Focus::CardDescription);
         app.state
@@ -3570,16 +3789,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             .select(None);
         app.state.app_list_states.card_view_tag_list.select(None);
     }
-    let card_tags_style = if app.state.focus == Focus::CardTags {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
-    let card_comments_style = if app.state.focus == Focus::CardComments {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
 
     let card_tags_widget = Paragraph::new(card_tag_lines.clone())
         .block(
@@ -3601,7 +3810,9 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Left);
 
-    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[3]) {
+    if !popup_mode
+        && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[3])
+    {
         app.state.set_focus(Focus::CardTags);
         app.state.mouse_focus = Some(Focus::CardTags);
         app.state
@@ -3610,7 +3821,9 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
             .select(None);
     }
 
-    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[4]) {
+    if !popup_mode
+        && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[4])
+    {
         app.state.set_focus(Focus::CardComments);
         app.state.mouse_focus = Some(Focus::CardComments);
         app.state.app_list_states.card_view_tag_list.select(None);
@@ -3631,14 +3844,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                     &app.state.text_buffers.card_description,
                     &app.config.show_line_numbers,
                     &card_chunks[1],
-                );
-                rect.set_cursor(x_pos, y_pos);
-            }
-            Focus::CardDueDate => {
-                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
-                    &app.state.text_buffers.card_due_date,
-                    &app.config.show_line_numbers,
-                    &card_chunks[2],
                 );
                 rect.set_cursor(x_pos, y_pos);
             }
@@ -3772,7 +3977,9 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
 
     // Render Submit button if card is being edited
     if app.state.card_being_edited.is_some() {
-        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[5]) {
+        if !popup_mode
+            && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &card_chunks[5])
+        {
             app.state.set_focus(Focus::SubmitButton);
             app.state.mouse_focus = Some(Focus::SubmitButton);
             app.state
@@ -3781,11 +3988,6 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
                 .select(None);
             app.state.app_list_states.card_view_tag_list.select(None);
         }
-        let save_changes_style = if app.state.focus == Focus::SubmitButton {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
         let save_changes_button = Paragraph::new("Save Changes")
             .block(
                 Block::default()
@@ -3799,11 +4001,11 @@ pub fn render_view_card(rect: &mut Frame, app: &mut App) {
     }
 
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
+pub fn render_command_palette(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     // Housekeeping
     match app.state.focus {
         Focus::CommandPaletteCommand => {
@@ -3902,6 +4104,36 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         get_command_palette_style(app, Focus::CommandPaletteCard);
     let (board_search_border_style, board_search_text_style, board_search_highlight_style) =
         get_command_palette_style(app, Focus::CommandPaletteBoard);
+    let keyboard_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.keyboard_focus_style,
+    );
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let progress_bar_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.progress_bar_style,
+    );
+    let rapid_blink_general_style = if popup_mode {
+        general_style
+    } else {
+        general_style.add_modifier(Modifier::RAPID_BLINK)
+    };
 
     let command_search_results =
         if let Some(raw_search_results) = &app.widgets.command_palette.command_search_results {
@@ -3913,10 +4145,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                         .to_lowercase()
                         .contains(c.to_string().to_lowercase().as_str())
                     {
-                        spans.push(Span::styled(
-                            c.to_string(),
-                            app.current_theme.keyboard_focus_style,
-                        ));
+                        spans.push(Span::styled(c.to_string(), keyboard_focus_style));
                     } else {
                         spans.push(Span::styled(c.to_string(), command_search_text_style));
                     }
@@ -4108,11 +4337,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
             "Logged in as: {}",
             app.state.user_login_data.email_id.clone().unwrap()
         ))
-        .style(
-            app.current_theme
-                .general_style
-                .add_modifier(Modifier::RAPID_BLINK),
-        )
+        .style(rapid_blink_general_style)
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -4138,21 +4363,21 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
     let search_box_block = Block::default()
         .title("Command Palette")
         .borders(Borders::ALL)
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .border_type(BorderType::Rounded);
     app.state
         .text_buffers
         .command_palette
         .set_block(search_box_block);
 
-    render_blank_styled_canvas(rect, app, search_box_chunk, false);
+    render_blank_styled_canvas(rect, &app.current_theme, search_box_chunk, false);
     rect.render_widget(
         app.state.text_buffers.command_palette.widget(),
         search_box_chunk,
     );
 
     let results_border = Block::default()
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded);
 
@@ -4219,20 +4444,20 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
-        Span::styled("Use ", app.current_theme.help_text_style),
-        Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled(" and ", app.current_theme.help_text_style),
-        Span::styled(down_key, app.current_theme.help_key_style),
+        Span::styled("Use ", help_text_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled(" and ", help_text_style),
+        Span::styled(down_key, help_key_style),
         Span::styled(
             " or scroll with the mouse to highlight a Command/Card/Board. Press ",
-            app.current_theme.help_text_style,
+            help_text_style,
         ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" to select. Press ", app.current_theme.help_text_style),
-        Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(prv_focus_key, app.current_theme.help_key_style),
-        Span::styled(" to change focus", app.current_theme.help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" to select. Press ", help_text_style),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
+        Span::styled(" to change focus", help_text_style),
     ]);
 
     let help_paragraph = Paragraph::new(help_spans)
@@ -4241,7 +4466,7 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
                 .title("Help")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .style(app.current_theme.general_style),
+                .style(general_style),
         )
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: false });
@@ -4268,10 +4493,15 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         app.state.set_focus(Focus::CommandPaletteBoard);
     }
 
-    render_blank_styled_canvas(rect, app, search_results_chunk, true);
+    render_blank_styled_canvas(rect, &app.current_theme, search_results_chunk, popup_mode);
     rect.render_widget(results_border, search_results_chunk);
     if app.state.focus != Focus::CommandPaletteCommand {
-        render_blank_styled_canvas(rect, app, search_results_chunks[0], true);
+        render_blank_styled_canvas(
+            rect,
+            &app.current_theme,
+            search_results_chunks[0],
+            popup_mode,
+        );
     }
     rect.render_stateful_widget(
         command_search_results_list,
@@ -4279,7 +4509,12 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         &mut app.state.app_list_states.command_palette_command_search,
     );
     if app.state.focus != Focus::CommandPaletteCard {
-        render_blank_styled_canvas(rect, app, search_results_chunks[1], true);
+        render_blank_styled_canvas(
+            rect,
+            &app.current_theme,
+            search_results_chunks[1],
+            popup_mode,
+        );
     }
     rect.render_stateful_widget(
         card_search_results_list,
@@ -4287,7 +4522,12 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         &mut app.state.app_list_states.command_palette_card_search,
     );
     if app.state.focus != Focus::CommandPaletteBoard {
-        render_blank_styled_canvas(rect, app, search_results_chunks[2], true);
+        render_blank_styled_canvas(
+            rect,
+            &app.current_theme,
+            search_results_chunks[2],
+            popup_mode,
+        );
     }
     rect.render_stateful_widget(
         board_search_results_list,
@@ -4333,14 +4573,14 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         }
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
-            .style(app.current_theme.progress_bar_style)
+            .style(progress_bar_style)
             .end_symbol(SCROLLBAR_END_SYMBOL)
             .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
 
         let mut scrollbar_state =
             ScrollbarState::new(command_search_results.len()).position(current_index);
-        let scrollbar_area = search_results_chunks[0].inner(&Margin {
+        let scrollbar_area = search_results_chunks[0].inner(Margin {
             horizontal: 0,
             vertical: 1,
         });
@@ -4383,14 +4623,14 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         }
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
-            .style(app.current_theme.progress_bar_style)
+            .style(progress_bar_style)
             .end_symbol(SCROLLBAR_END_SYMBOL)
             .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
 
         let mut scrollbar_state =
             ScrollbarState::new(card_search_results.len()).position(current_index);
-        let scrollbar_area = search_results_chunks[1].inner(&Margin {
+        let scrollbar_area = search_results_chunks[1].inner(Margin {
             horizontal: 0,
             vertical: 1,
         });
@@ -4433,34 +4673,45 @@ pub fn render_command_palette(rect: &mut Frame, app: &mut App) {
         }
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
-            .style(app.current_theme.progress_bar_style)
+            .style(progress_bar_style)
             .end_symbol(SCROLLBAR_END_SYMBOL)
             .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
 
         let mut scrollbar_state =
             ScrollbarState::new(board_search_results.len()).position(current_index);
-        let scrollbar_area = search_results_chunks[2].inner(&Margin {
+        let scrollbar_area = search_results_chunks[2].inner(Margin {
             horizontal: 0,
             vertical: 1,
         });
         rect.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
     }
 
-    render_blank_styled_canvas(rect, app, help_chunk, false);
+    render_blank_styled_canvas(rect, &app.current_theme, help_chunk, false);
     rect.render_widget(help_paragraph, help_chunk);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_change_ui_mode_popup(rect: &mut Frame, app: &mut App) {
+pub fn render_change_ui_mode_popup(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let all_ui_modes = UiMode::view_modes_as_string()
         .iter()
         .map(|s| ListItem::new(vec![Line::from(s.as_str().to_string())]))
         .collect::<Vec<ListItem>>();
 
     let popup_area = centered_rect_with_length(40, 10, rect.size());
+
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
 
     if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
         app.state.mouse_focus = Some(Focus::ChangeUiModePopup);
@@ -4476,25 +4727,25 @@ pub fn render_change_ui_mode_popup(rect: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .title("Change UI Mode")
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(app.current_theme.list_select_style)
+        .highlight_style(list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, false);
     rect.render_stateful_widget(
         ui_modes,
         popup_area,
         &mut app.state.app_list_states.default_view,
     );
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
+pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let render_area = centered_rect_with_percentage(70, 70, rect.size());
 
     let chunks = Layout::default()
@@ -4502,7 +4753,33 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
         .split(render_area);
 
-    let all_date_formats = DateFormat::get_all_date_formats();
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
+    let keyboard_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.keyboard_focus_style,
+    );
+
+    let all_date_formats = DateTimeFormat::get_all_date_formats();
     let all_date_formats = all_date_formats
         .iter()
         .map(|s| ListItem::new(vec![Line::from(s.to_human_readable_string().to_string())]))
@@ -4522,11 +4799,11 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .title("Change Date Format")
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(app.current_theme.list_select_style)
+        .highlight_style(list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     let up_key = app
@@ -4539,27 +4816,24 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
-        Span::styled("Use ", app.current_theme.help_text_style),
-        Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(down_key, app.current_theme.help_key_style),
+        Span::styled("Use ", help_text_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(down_key, help_key_style),
         Span::styled(
             " to navigate or use the mouse cursor. Press ",
-            app.current_theme.help_text_style,
+            help_text_style,
         ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
-        Span::styled(
-            " To select a Default Date Format. Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(cancel_key, app.current_theme.help_key_style),
-        Span::styled(" to cancel", app.current_theme.help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled("<Mouse Left Click>", help_key_style),
+        Span::styled(" To select a Default Date Format. Press ", help_text_style),
+        Span::styled(cancel_key, help_key_style),
+        Span::styled(" to cancel", help_text_style),
     ]);
 
     let default_date_picker_help = Paragraph::new(help_spans)
@@ -4568,7 +4842,7 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .title("Help")
                 .borders(Borders::ALL)
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
@@ -4577,11 +4851,11 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
     let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Default Date Format Picker")
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
+        .border_style(keyboard_focus_style)
         .border_type(BorderType::Rounded);
-    render_blank_styled_canvas(rect, app, clear_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     rect.render_stateful_widget(
         date_formats,
@@ -4590,11 +4864,21 @@ pub fn render_change_date_format_popup(rect: &mut Frame, app: &mut App) {
     );
     rect.render_widget(default_date_picker_help, chunks[1]);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_change_card_status_popup(rect: &mut Frame, app: &mut App) {
+pub fn render_change_card_status_popup(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
     let mut card_name = String::new();
     let mut board_name = String::new();
     let boards = if app.filtered_boards.is_empty() {
@@ -4636,25 +4920,35 @@ pub fn render_change_card_status_popup(rect: &mut Frame, app: &mut App) {
                     "Changing Status of \"{}\" in \"{}\"",
                     card_name, board_name
                 ))
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(app.current_theme.list_select_style)
+        .highlight_style(list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, false);
     rect.render_stateful_widget(
         statuses,
         popup_area,
         &mut app.state.app_list_states.card_status_selector,
     );
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_card_priority_selector(rect: &mut Frame, app: &mut App) {
+pub fn render_card_priority_selector(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
     let mut card_name = String::new();
     let mut board_name = String::new();
     let boards = if app.filtered_boards.is_empty() {
@@ -4696,83 +4990,55 @@ pub fn render_card_priority_selector(rect: &mut Frame, app: &mut App) {
                     "Changing Priority of \"{}\" in \"{}\"",
                     card_name, board_name
                 ))
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(app.current_theme.list_select_style)
+        .highlight_style(list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, false);
     rect.render_stateful_widget(
         priorities,
         popup_area,
         &mut app.state.app_list_states.card_priority_selector,
     );
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
-pub fn render_popup<T: ToString>(
-    rect: &mut Frame,
-    app: &mut App,
-    focus: Focus,
-    list_items: &[T],
-    list_state: &mut ListState,
-    title: &str,
-    popup_area: Rect,
-) {
-    let items = list_items
-        .iter()
-        .map(|s| ListItem::new(vec![Line::from(s.to_string())]))
-        .collect::<Vec<ListItem>>();
+pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    let submit_style = get_button_style(app, Focus::SubmitButton, None, popup_mode, false);
+    let tag_box_style = get_button_style(app, Focus::FilterByTagPopup, None, popup_mode, false);
+    let progress_bar_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.progress_bar_style,
+    );
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
 
-    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
-        app.state.mouse_focus = Some(focus);
-        app.state.set_focus(focus);
-        calculate_mouse_list_select_index(
-            app.state.current_mouse_coordinates.1,
-            &items,
-            popup_area,
-            list_state,
-        );
-    }
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .title(title)
-                .style(app.current_theme.general_style)
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded),
-        )
-        .highlight_style(app.current_theme.list_select_style)
-        .highlight_symbol(LIST_SELECTED_SYMBOL);
-
-    render_blank_styled_canvas(rect, app, popup_area, false);
-    rect.render_stateful_widget(list, popup_area, list_state);
-    if app.config.enable_mouse_support {
-        render_close_button(rect, app);
-    }
-}
-
-pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
     if let Some(all_available_tags) = &app.state.all_available_tags {
-        let submit_style = if app.state.focus == Focus::SubmitButton {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
-
-        let tag_box_style = if app.state.focus == Focus::FilterByTagPopup {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
-        let scrollbar_style = app.current_theme.progress_bar_style;
-
         let popup_area = centered_rect_with_percentage(80, 80, rect.size());
-
         let empty_vec = vec![];
         let selected_tags = if let Some(filter_tags) = &app.state.filter_tags {
             filter_tags
@@ -4798,12 +5064,12 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
                 if selected_tags.contains(&tag.0) {
                     ListItem::new(vec![Line::from(vec![Span::styled(
                         format!("(Selected) {} - {} occurrences", tag.0, tag.1),
-                        app.current_theme.list_select_style,
+                        list_select_style,
                     )])])
                 } else {
                     ListItem::new(vec![Line::from(vec![Span::styled(
                         format!("{} - {} occurrences", tag.0, tag.1),
-                        app.current_theme.general_style,
+                        general_style,
                     )])])
                 }
             })
@@ -4815,10 +5081,10 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
                     .title("Filter by Tag")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .style(app.current_theme.general_style)
+                    .style(general_style)
                     .border_style(tag_box_style),
             )
-            .highlight_style(app.current_theme.list_select_style)
+            .highlight_style(list_select_style)
             .highlight_symbol(LIST_SELECTED_SYMBOL);
 
         let up_key = app
@@ -4837,34 +5103,34 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .get_first_keybinding(KeyBindingEnum::Accept)
             .unwrap_or("".to_string());
         let cancel_key = app
-            .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+            .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
             .unwrap_or("".to_string());
 
         let help_spans = Line::from(vec![
-            Span::styled("Use ", app.current_theme.help_text_style),
-            Span::styled(up_key, app.current_theme.help_key_style),
-            Span::styled(" and ", app.current_theme.help_text_style),
-            Span::styled(down_key, app.current_theme.help_key_style),
+            Span::styled("Use ", help_text_style),
+            Span::styled(up_key, help_key_style),
+            Span::styled(" and ", help_text_style),
+            Span::styled(down_key, help_key_style),
             Span::styled(
                 " or scroll with the mouse to navigate. Press ",
-                app.current_theme.help_text_style,
+                help_text_style,
             ),
-            Span::styled(accept_key.clone(), app.current_theme.help_key_style),
+            Span::styled(accept_key.clone(), help_key_style),
             Span::styled(
                 " To select a Tag (multiple tags can be selected). Press ",
-                app.current_theme.help_text_style,
+                help_text_style,
             ),
-            Span::styled(accept_key, app.current_theme.help_key_style),
+            Span::styled(accept_key, help_key_style),
             Span::styled(
                 " on an already selected tag to deselect it. Press ",
-                app.current_theme.help_text_style,
+                help_text_style,
             ),
-            Span::styled(cancel_key, app.current_theme.help_key_style),
-            Span::styled(" to cancel, Press ", app.current_theme.help_text_style),
-            Span::styled(next_focus_key, app.current_theme.help_key_style),
-            Span::styled(" or ", app.current_theme.help_text_style),
-            Span::styled(prv_focus_key, app.current_theme.help_key_style),
-            Span::styled(" to change focus", app.current_theme.help_text_style),
+            Span::styled(cancel_key, help_key_style),
+            Span::styled(" to cancel, Press ", help_text_style),
+            Span::styled(next_focus_key, help_key_style),
+            Span::styled(" or ", help_text_style),
+            Span::styled(prv_focus_key, help_key_style),
+            Span::styled(" to change focus", help_text_style),
         ]);
 
         let help = Paragraph::new(help_spans)
@@ -4873,7 +5139,7 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
                 Block::default()
                     .title("Help")
                     .borders(Borders::ALL)
-                    .style(app.current_theme.general_style)
+                    .style(general_style)
                     .border_type(BorderType::Rounded),
             )
             .alignment(Alignment::Center)
@@ -4895,7 +5161,7 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
                     .title("Submit")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .style(app.current_theme.general_style)
+                    .style(general_style)
                     .border_style(submit_style),
             )
             .alignment(Alignment::Center);
@@ -4908,12 +5174,12 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             .unwrap_or(0);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(SCROLLBAR_BEGIN_SYMBOL)
-            .style(scrollbar_style)
+            .style(progress_bar_style)
             .end_symbol(SCROLLBAR_END_SYMBOL)
             .track_symbol(SCROLLBAR_TRACK_SYMBOL)
             .track_style(app.current_theme.inactive_text_style);
         let mut scrollbar_state = ScrollbarState::new(all_tags.len()).position(current_index);
-        let scrollbar_area = chunks[0].inner(&Margin {
+        let scrollbar_area = chunks[0].inner(Margin {
             vertical: 1,
             horizontal: 0,
         });
@@ -4927,7 +5193,7 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
             app.state.set_focus(Focus::SubmitButton);
         }
 
-        render_blank_styled_canvas(rect, app, popup_area, false);
+        render_blank_styled_canvas(rect, &app.current_theme, popup_area, false);
         rect.render_stateful_widget(
             tags,
             chunks[0],
@@ -4939,22 +5205,26 @@ pub fn render_filter_by_tag_popup(rect: &mut Frame, app: &mut App) {
     }
 
     if app.config.enable_mouse_support {
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     }
 }
 
 pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let current_ui_mode = &app.state.ui_mode.to_string();
-    let popup_mode = if let Some(popup_mode) = app.state.popup_mode {
-        format!("{:?}", popup_mode)
-    } else {
+    let popup_mode = if app.state.z_stack.is_empty() {
         "None".to_string()
+    } else {
+        app.state
+            .z_stack
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+            .join(",\n")
     };
     let ui_render_time = if !app.state.ui_render_time.is_empty() {
-        // let render_time =
-        //     app.state.ui_render_time.iter().sum::<u128>() / app.state.ui_render_time.len() as u128;
-        // minimum value of the array
-        let render_time = *app.state.ui_render_time.iter().min().unwrap();
+        // Average render time
+        let render_time =
+            app.state.ui_render_time.iter().sum::<u128>() / app.state.ui_render_time.len() as u128;
         if render_time > 1000 {
             format!("{}ms", render_time as f64 / 1000_f64)
         } else {
@@ -4966,24 +5236,42 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let current_board_id = app.state.current_board_id;
     let current_card_id = app.state.current_card_id;
 
-    let menu_area = top_left_rect(38, 10, rect.size());
+    let debug_panel_area = top_left_rect(38, 10, rect.size());
     let strings = [
         format!("App status: {:?}", app.state.app_status),
         format!("UI Mode: {}", current_ui_mode),
         format!("Focus: {:?}", app.state.focus),
         format!("CMousePos: {:?}", app.state.current_mouse_coordinates),
         format!("Popup Mode: {}", popup_mode),
-        format!("Render Time: {}", ui_render_time),
+        format!("Avg Render Time: {}", ui_render_time),
         format!("CB-ID: {:?}", current_board_id),
         format!("CC-ID: {:?}", current_card_id),
     ];
     let strings = strings
         .iter()
-        .map(|s| {
-            if s.len() > menu_area.width as usize - 2 {
-                Line::from(format!("{}{}", &s[..menu_area.width as usize - 5], "..."))
+        .flat_map(|s| {
+            if s.len() > debug_panel_area.width as usize - 2 {
+                // split on \n and get lines
+                let mut lines = vec![];
+                for line in s.split('\n') {
+                    let mut line = line.to_string();
+                    while line.len() > debug_panel_area.width as usize - 2 {
+                        lines.push(format!(
+                            "{}{}",
+                            &line[..debug_panel_area.width as usize - 5],
+                            "..."
+                        ));
+                        line = line[debug_panel_area.width as usize - 5..].to_string();
+                    }
+                    lines.push(line);
+                }
+                // Line::from(format!("{}{}", &s[..menu_area.width as usize - 5], "..."))
+                lines
+                    .iter()
+                    .map(|l| Line::from(l.to_string()))
+                    .collect::<Vec<Line>>()
             } else {
-                Line::from(s.to_string())
+                vec![Line::from(s.to_string())]
             }
         })
         .collect::<Vec<Line>>();
@@ -4996,8 +5284,18 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
             .border_style(app.current_theme.log_debug_style),
     );
 
-    render_blank_styled_canvas(rect, app, menu_area, false);
-    rect.render_widget(debug_panel, menu_area);
+    // get 5 lines at the bottom
+    let logs_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(5)].as_ref())
+        .split(rect.size());
+
+    render_blank_styled_canvas(rect, &app.current_theme, debug_panel_area, false);
+    rect.render_widget(debug_panel, debug_panel_area);
+
+    // added logs for debugging
+    render_blank_styled_canvas(rect, &app.current_theme, logs_chunks[1], false);
+    render_logs(app, false, logs_chunks[1], rect, false);
 }
 
 pub fn check_if_mouse_is_in_area(mouse_coordinates: &(u16, u16), rect_to_check: &Rect) -> bool {
@@ -5014,28 +5312,30 @@ pub fn check_if_mouse_is_in_area(mouse_coordinates: &(u16, u16), rect_to_check: 
     false
 }
 
-fn render_close_button(rect: &mut Frame, app: &mut App) {
+fn render_close_button(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let close_btn_area = Rect::new(rect.size().width - 3, 0, 3, 3);
-    let close_btn_style =
-        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &close_btn_area)
-            || app.state.focus == Focus::CloseButton
-        {
-            app.state.mouse_focus = Some(Focus::CloseButton);
-            app.state.set_focus(Focus::CloseButton);
-            let close_button_color = app.widgets.close_button_widget.color;
-            let fg_color = app
-                .current_theme
-                .error_text_style
-                .fg
-                .unwrap_or(Color::White);
-            Style::default().fg(fg_color).bg(Color::Rgb(
-                close_button_color.0,
-                close_button_color.1,
-                close_button_color.2,
-            ))
-        } else {
-            app.current_theme.general_style
-        };
+    // Exception to not using get_button_style as we have to manage other state
+    let close_btn_style = if !popup_mode
+        && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &close_btn_area)
+    {
+        app.state.mouse_focus = Some(Focus::CloseButton);
+        app.state.set_focus(Focus::CloseButton);
+        let close_button_color = app.widgets.close_button.color;
+        let fg_color = app
+            .current_theme
+            .error_text_style
+            .fg
+            .unwrap_or(Color::White);
+        Style::default().fg(fg_color).bg(Color::Rgb(
+            close_button_color.0,
+            close_button_color.1,
+            close_button_color.2,
+        ))
+    } else if popup_mode {
+        app.current_theme.inactive_text_style
+    } else {
+        app.current_theme.general_style
+    };
     let close_btn = Paragraph::new(vec![Line::from("X")])
         .block(
             Block::default()
@@ -5048,14 +5348,39 @@ fn render_close_button(rect: &mut Frame, app: &mut App) {
     rect.render_widget(close_btn, close_btn_area);
 }
 
-pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
+pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
+    let keyboard_focus_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.keyboard_focus_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
     let render_area = centered_rect_with_percentage(70, 70, rect.size());
     let clear_area = centered_rect_with_percentage(80, 80, rect.size());
     let clear_area_border = Block::default()
         .title("Change Theme")
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .borders(Borders::ALL)
-        .border_style(app.current_theme.keyboard_focus_style)
+        .border_style(keyboard_focus_style)
         .border_type(BorderType::Rounded);
 
     let chunks = Layout::default()
@@ -5095,11 +5420,11 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
     let themes = List::new(theme_list)
         .block(
             Block::default()
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded),
         )
-        .highlight_style(app.current_theme.list_select_style)
+        .highlight_style(list_select_style)
         .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     let up_key = app
@@ -5112,27 +5437,24 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
 
     let help_spans = Line::from(vec![
-        Span::styled("Use ", app.current_theme.help_text_style),
-        Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(down_key, app.current_theme.help_key_style),
+        Span::styled("Use ", help_text_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(down_key, help_key_style),
         Span::styled(
             " to navigate or use the mouse cursor. Press ",
-            app.current_theme.help_text_style,
+            help_text_style,
         ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
-        Span::styled(
-            " To select a Theme. Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(cancel_key, app.current_theme.help_key_style),
-        Span::styled(" to cancel", app.current_theme.help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled("<Mouse Left Click>", help_key_style),
+        Span::styled(" To select a Theme. Press ", help_text_style),
+        Span::styled(cancel_key, help_key_style),
+        Span::styled(" to cancel", help_text_style),
     ]);
 
     let change_theme_help = Paragraph::new(help_spans)
@@ -5141,13 +5463,13 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .title("Help")
                 .borders(Borders::ALL)
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
 
-    render_blank_styled_canvas(rect, app, clear_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, clear_area, false);
     rect.render_widget(clear_area_border, clear_area);
     rect.render_stateful_widget(
         themes,
@@ -5156,13 +5478,12 @@ pub fn render_change_theme_popup(rect: &mut Frame, app: &mut App) {
     );
     rect.render_widget(change_theme_help, chunks[1]);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
-pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
+pub fn render_create_theme(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     // TODO: add a help section
-    let popup_mode = app.state.popup_mode.is_some();
     let render_area = rect.size();
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -5194,8 +5515,9 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
     );
 
     let theme_being_edited = app.state.get_theme_being_edited();
-    let theme_table_rows = theme_being_edited.to_rows(app);
-    let list_highlight_style = if app.state.popup_mode.is_some() {
+    let theme_table_rows = theme_being_edited.to_rows(app, popup_mode);
+    // Exception to not using get_button_style as we have to manage other state
+    let list_highlight_style = if popup_mode {
         app.current_theme.inactive_text_style
     } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &main_chunks[0]) {
         app.state.mouse_focus = Some(Focus::ThemeEditor);
@@ -5220,13 +5542,7 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
     } else {
         app.current_theme.general_style
     };
-    let theme_block_style = if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
-    } else if app.state.focus == Focus::ThemeEditor {
-        app.current_theme.keyboard_focus_style
-    } else {
-        app.current_theme.general_style
-    };
+    let theme_block_style = get_button_style(app, Focus::ThemeEditor, None, popup_mode, false);
     let theme_title_list = Table::new(theme_table_rows.0, [Constraint::Fill(1)])
         .block(Block::default().style(theme_block_style))
         .highlight_style(list_highlight_style)
@@ -5257,7 +5573,7 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
         .border_type(BorderType::Rounded)
         .border_style(theme_block_style);
 
-    render_blank_styled_canvas(rect, app, render_area, app.state.popup_mode.is_some());
+    render_blank_styled_canvas(rect, &app.current_theme, render_area, popup_mode);
     rect.render_stateful_widget(
         theme_title_list,
         chunks[0],
@@ -5272,11 +5588,11 @@ pub fn render_create_theme(rect: &mut Frame, app: &mut App) {
     rect.render_widget(reset_button, button_chunks[1]);
     rect.render_widget(border_block, main_chunks[0]);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
-pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
+pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let popup_area = centered_rect_with_percentage(90, 80, rect.size());
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -5301,202 +5617,324 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
             .as_ref(),
         )
         .split(main_chunks[0]);
-    let fg_list_border_style =
-        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[0]) {
-            if app.state.app_list_states.edit_specific_style[0]
-                .selected()
-                .is_none()
+
+    fn set_foreground_color(app: &App, style: &mut Style) {
+        if let Some(fg_selected) = app.state.app_list_states.edit_specific_style[0].selected() {
+            if let Some(fg_color) = TextColorOptions::iter()
+                .nth(fg_selected)
+                .and_then(|color| color.to_color())
             {
-                app.state.app_list_states.edit_specific_style[0].select(Some(0));
+                if let Color::Rgb(_, _, _) = fg_color {
+                    let user_input = app
+                        .state
+                        .text_buffers
+                        .theme_editor_fg_hex
+                        .get_joined_lines();
+                    let parsed_hex = parse_hex_to_rgb(&user_input);
+                    if let Some((r, g, b)) = parsed_hex {
+                        style.fg = Some(Color::Rgb(r, g, b));
+                        return;
+                    }
+                }
+                style.fg = Some(fg_color);
             }
-            app.state.mouse_focus = Some(Focus::StyleEditorFG);
-            app.state.set_focus(Focus::StyleEditorFG);
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::StyleEditorFG {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
-    let bg_list_border_style =
-        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1]) {
-            if app.state.app_list_states.edit_specific_style[1]
-                .selected()
-                .is_none()
+        }
+    }
+
+    fn set_background_color(app: &mut App, style: &mut Style) {
+        if let Some(bg_selected) = app.state.app_list_states.edit_specific_style[1].selected() {
+            if let Some(bg_color) = TextColorOptions::iter()
+                .nth(bg_selected)
+                .and_then(|color| color.to_color())
             {
-                app.state.app_list_states.edit_specific_style[1].select(Some(0));
+                if let Color::Rgb(_, _, _) = bg_color {
+                    let user_input = app
+                        .state
+                        .text_buffers
+                        .theme_editor_bg_hex
+                        .get_joined_lines();
+                    let parsed_hex = parse_hex_to_rgb(&user_input);
+                    if let Some((r, g, b)) = parsed_hex {
+                        style.bg = Some(Color::Rgb(r, g, b));
+                        return;
+                    }
+                }
+                style.bg = Some(bg_color);
             }
-            app.state.mouse_focus = Some(Focus::StyleEditorBG);
-            app.state.set_focus(Focus::StyleEditorBG);
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::StyleEditorBG {
-            app.current_theme.keyboard_focus_style
-        } else {
-            app.current_theme.general_style
-        };
-    let modifiers_list_border_style =
-        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[2]) {
-            if app.state.app_list_states.edit_specific_style[2]
-                .selected()
-                .is_none()
+        }
+    }
+
+    fn set_text_modifier(app: &mut App, style: &mut Style) {
+        if let Some(modifier) = app.state.app_list_states.edit_specific_style[2].selected() {
+            if let Some(modifier) = TextModifierOptions::to_iter()
+                .nth(modifier)
+                .map(|opt| opt.to_modifier())
             {
-                app.state.app_list_states.edit_specific_style[2].select(Some(0));
+                Theme::add_modifier_to_style(style, modifier);
             }
-            app.state.mouse_focus = Some(Focus::StyleEditorModifier);
-            app.state.set_focus(Focus::StyleEditorModifier);
-            app.current_theme.mouse_focus_style
-        } else if app.state.focus == Focus::StyleEditorModifier {
-            app.current_theme.keyboard_focus_style
+        }
+    }
+
+    fn create_list_item_from_color<'a>(
+        color: Color,
+        style: Style,
+        app: &mut App,
+        popup_mode: bool,
+    ) -> ListItem<'a> {
+        let text_style =
+            check_for_popup_and_get_style(popup_mode, app.current_theme.inactive_text_style, style);
+        let general_style = check_for_popup_and_get_style(
+            popup_mode,
+            app.current_theme.inactive_text_style,
+            app.current_theme.general_style,
+        );
+        ListItem::new(vec![Line::from(vec![
+            Span::styled("Sample Text", text_style),
+            Span::styled(format!(" - {}", color), general_style),
+        ])])
+    }
+
+    fn handle_custom_hex_input<'a>(
+        hex_value: String,
+        mut style: Style,
+        app: &mut App,
+        popup_mode: bool,
+    ) -> Option<ListItem<'a>> {
+        if let Some((red_channel, green_channel, blue_channel)) = parse_hex_to_rgb(&hex_value) {
+            let color = Color::Rgb(red_channel, green_channel, blue_channel);
+            style.fg = Some(color);
+            Some(create_list_item_from_color(color, style, app, popup_mode))
         } else {
-            app.current_theme.general_style
-        };
-    let submit_button_style =
-        get_mouse_focusable_field_style(app, Focus::SubmitButton, &main_chunks[1], false, false);
-    let fg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
+            None
+        }
+    }
+
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    // Exception to not using get_button_style as we have to manage other state
+    let fg_list_border_style = if popup_mode {
+        app.current_theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[0]) {
+        if app.state.app_list_states.edit_specific_style[0]
+            .selected()
+            .is_none()
+        {
+            app.state.app_list_states.edit_specific_style[0].select(Some(0));
+        }
+        app.state.mouse_focus = Some(Focus::StyleEditorFG);
+        app.state.set_focus(Focus::StyleEditorFG);
+        app.current_theme.mouse_focus_style
+    } else if app.state.focus == Focus::StyleEditorFG {
+        app.current_theme.keyboard_focus_style
+    } else {
+        app.current_theme.general_style
+    };
+    // Exception to not using get_button_style as we have to manage other state
+    let bg_list_border_style = if popup_mode {
+        app.current_theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1]) {
+        if app.state.app_list_states.edit_specific_style[1]
+            .selected()
+            .is_none()
+        {
+            app.state.app_list_states.edit_specific_style[1].select(Some(0));
+        }
+        app.state.mouse_focus = Some(Focus::StyleEditorBG);
+        app.state.set_focus(Focus::StyleEditorBG);
+        app.current_theme.mouse_focus_style
+    } else if app.state.focus == Focus::StyleEditorBG {
+        app.current_theme.keyboard_focus_style
+    } else {
+        app.current_theme.general_style
+    };
+    // Exception to not using get_button_style as we have to manage other state
+    let modifiers_list_border_style = if popup_mode {
+        app.current_theme.inactive_text_style
+    } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[2]) {
+        if app.state.app_list_states.edit_specific_style[2]
+            .selected()
+            .is_none()
+        {
+            app.state.app_list_states.edit_specific_style[2].select(Some(0));
+        }
+        app.state.mouse_focus = Some(Focus::StyleEditorModifier);
+        app.state.set_focus(Focus::StyleEditorModifier);
+        app.current_theme.mouse_focus_style
+    } else if app.state.focus == Focus::StyleEditorModifier {
+        app.current_theme.keyboard_focus_style
+    } else {
+        app.current_theme.general_style
+    };
+    let submit_button_style = get_mouse_focusable_field_style(
+        app,
+        Focus::SubmitButton,
+        &main_chunks[1],
+        popup_mode,
+        false,
+    );
+    let fg_list_items: Vec<ListItem> = TextColorOptions::iter()
         .map(|color| {
             let mut fg_style = Style::default();
             let current_user_input = app
                 .state
                 .text_buffers
-                .theme_editor_fg_rgb
+                .theme_editor_fg_hex
                 .get_joined_lines();
-            let mut is_rgb = false;
-            if let TextColorOptions::RGB(_, _, _) = color {
-                is_rgb = true;
-            }
-            if !current_user_input.is_empty() && is_rgb {
-                let split_input = current_user_input
-                    .split(',')
-                    .map(|s| s.to_string().trim().to_string());
-                if split_input.clone().count() == 3 {
-                    let mut input_is_valid = true;
-                    for i in split_input.clone() {
-                        if i.parse::<u8>().is_err() {
-                            input_is_valid = false;
-                        }
-                    }
-                    if input_is_valid {
-                        let r = split_input.clone().next().unwrap().parse::<u8>().unwrap();
-                        let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
-                        let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
-                        fg_style.fg = Some(ratatui::style::Color::Rgb(r, g, b));
-                        return ListItem::new(vec![Line::from(vec![
-                            Span::styled("Sample Text", fg_style),
-                            Span::styled(
-                                format!(" - RGB({},{},{})", r, g, b),
-                                app.current_theme.general_style,
-                            ),
-                        ])]);
-                    }
+
+            set_background_color(app, &mut fg_style);
+            set_text_modifier(app, &mut fg_style);
+
+            if let TextColorOptions::HEX(_, _, _) = color {
+                if current_user_input.is_empty() {
+                    fg_style.fg = Some(Color::Rgb(0, 0, 0));
+                    return create_list_item_from_color(
+                        Color::Rgb(0, 0, 0),
+                        fg_style,
+                        app,
+                        popup_mode,
+                    );
+                } else if let Some(list_item) =
+                    handle_custom_hex_input(current_user_input, fg_style, app, popup_mode)
+                {
+                    return list_item;
                 }
             }
-            return if let Some(color) = color.to_color() {
+
+            if let Some(color) = color.to_color() {
                 fg_style.fg = Some(color);
-                ListItem::new(vec![Line::from(vec![
-                    Span::styled("Sample Text", fg_style),
-                    Span::styled(format!(" - {}", color), app.current_theme.general_style),
-                ])])
+                create_list_item_from_color(color, fg_style, app, popup_mode)
             } else {
-                ListItem::new(vec![Line::from(vec![
-                    Span::raw("Sample Text"),
-                    Span::styled(format!(" - {}", color), app.current_theme.general_style),
-                ])])
-            };
+                // Handle the case where color conversion fails or is not applicable
+                create_list_item_from_color(Color::Reset, fg_style, app, popup_mode)
+            }
         })
         .collect();
-    let fg_list = List::new(fg_list_items)
-        .block(
+
+    let bg_list_items: Vec<ListItem> = TextColorOptions::iter()
+        .map(|color| {
+            let mut bg_style = Style::default();
+            let current_user_input = app
+                .state
+                .text_buffers
+                .theme_editor_bg_hex
+                .get_joined_lines();
+
+            set_foreground_color(app, &mut bg_style);
+            set_text_modifier(app, &mut bg_style);
+
+            if let TextColorOptions::HEX(_, _, _) = color {
+                if current_user_input.is_empty() {
+                    bg_style.bg = Some(Color::Rgb(0, 0, 0));
+                    return create_list_item_from_color(
+                        Color::Rgb(0, 0, 0),
+                        bg_style,
+                        app,
+                        popup_mode,
+                    );
+                } else if let Some(list_item) =
+                    handle_custom_hex_input(current_user_input, bg_style, app, popup_mode)
+                {
+                    return list_item;
+                }
+            }
+
+            if let Some(color) = color.to_color() {
+                bg_style.bg = Some(color);
+                create_list_item_from_color(color, bg_style, app, popup_mode)
+            } else {
+                // Handle the case where color conversion fails or is not applicable
+                create_list_item_from_color(Color::Reset, bg_style, app, popup_mode)
+            }
+        })
+        .collect();
+
+    let modifier_list_items: Vec<ListItem> = TextModifierOptions::to_iter()
+        .map(|modifier| {
+            let mut modifier_style = Style::default();
+            set_foreground_color(app, &mut modifier_style);
+            set_background_color(app, &mut modifier_style);
+
+            Theme::add_modifier_to_style(&mut modifier_style, modifier.to_modifier());
+            ListItem::new(vec![Line::from(vec![
+                Span::styled("Sample Text", general_style),
+                Span::styled(format!(" - {}", modifier), general_style),
+            ])])
+        })
+        .collect();
+
+    let fg_list = if popup_mode {
+        List::new(fg_list_items).block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .title("Foreground")
                 .border_style(fg_list_border_style),
         )
-        .highlight_style(app.current_theme.list_select_style)
-        .highlight_symbol(LIST_SELECTED_SYMBOL);
-    let bg_list_items: Vec<ListItem> = TextColorOptions::to_iter()
-        .map(|color| {
-            let mut bg_style = Style::default();
-            let current_user_input = app
-                .state
-                .text_buffers
-                .theme_editor_bg_rgb
-                .get_joined_lines();
-            let mut is_rgb = false;
-            if let TextColorOptions::RGB(_, _, _) = color {
-                is_rgb = true;
-            }
-            if !current_user_input.is_empty() && is_rgb {
-                let split_input = current_user_input
-                    .split(',')
-                    .map(|s| s.to_string().trim().to_string());
-                if split_input.clone().count() == 3 {
-                    let mut input_is_valid = true;
-                    for i in split_input.clone() {
-                        if i.parse::<u8>().is_err() {
-                            input_is_valid = false;
-                        }
-                    }
-                    if input_is_valid {
-                        let r = split_input.clone().next().unwrap().parse::<u8>().unwrap();
-                        let g = split_input.clone().nth(1).unwrap().parse::<u8>().unwrap();
-                        let b = split_input.clone().nth(2).unwrap().parse::<u8>().unwrap();
-                        bg_style.bg = Some(ratatui::style::Color::Rgb(r, g, b));
-                        return ListItem::new(vec![Line::from(vec![
-                            Span::styled("Sample Text", bg_style),
-                            Span::styled(
-                                format!(" - RGB({},{},{})", r, g, b),
-                                app.current_theme.general_style,
-                            ),
-                        ])]);
-                    }
-                }
-            }
-            return if let Some(color) = color.to_color() {
-                bg_style.bg = Some(color);
-                ListItem::new(vec![Line::from(vec![
-                    Span::styled("Sample Text", bg_style),
-                    Span::styled(format!(" - {}", color), app.current_theme.general_style),
-                ])])
-            } else {
-                ListItem::new(vec![Line::from(vec![
-                    Span::raw("Sample Text"),
-                    Span::styled(format!(" - {}", color), app.current_theme.general_style),
-                ])])
-            };
-        })
-        .collect();
-    let bg_list = List::new(bg_list_items)
-        .block(
+    } else {
+        List::new(fg_list_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title("Foreground")
+                    .border_style(fg_list_border_style),
+            )
+            .highlight_symbol(LIST_SELECTED_SYMBOL)
+    };
+
+    let bg_list = if popup_mode {
+        List::new(bg_list_items).block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .title("Background")
                 .border_style(bg_list_border_style),
         )
-        .highlight_style(app.current_theme.list_select_style)
-        .highlight_symbol(LIST_SELECTED_SYMBOL);
-    let modifier_list_items: Vec<ListItem> = TextModifierOptions::to_iter()
-        .map(|modifier| {
-            let modifier_style = Style {
-                add_modifier: modifier.to_modifier(),
-                ..Style::default()
-            };
-            ListItem::new(vec![Line::from(vec![
-                Span::styled("Sample Text", modifier_style),
-                Span::styled(format!(" - {}", modifier), app.current_theme.general_style),
-            ])])
-        })
-        .collect();
-    let modifier_list = List::new(modifier_list_items)
-        .block(
+    } else {
+        List::new(bg_list_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title("Background")
+                    .border_style(bg_list_border_style),
+            )
+            .highlight_symbol(LIST_SELECTED_SYMBOL)
+    };
+
+    let modifier_list = if popup_mode {
+        List::new(modifier_list_items).block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .title("Modifier")
+                .title("Modifiers")
                 .border_style(modifiers_list_border_style),
         )
-        .highlight_style(app.current_theme.list_select_style)
-        .highlight_symbol(LIST_SELECTED_SYMBOL);
+    } else {
+        List::new(modifier_list_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title("Modifiers")
+                    .border_style(modifiers_list_border_style),
+            )
+            .highlight_symbol(LIST_SELECTED_SYMBOL)
+    };
+
     let theme_style_being_edited_index = app.state.app_table_states.theme_editor.selected();
     let theme_style_being_edited = if let Some(index) = theme_style_being_edited_index {
         let theme_style_being_edited = app.state.theme_being_edited.to_vec_str();
@@ -5513,7 +5951,7 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         .title(format!("Editing Style: {}", theme_style_being_edited))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(app.current_theme.general_style);
+        .border_style(general_style);
 
     let submit_button = Paragraph::new("Confirm Changes")
         .style(submit_button_style)
@@ -5542,29 +5980,20 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
         .unwrap_or("".to_string());
 
     let help_spans = vec![
-        Span::styled("Use ", app.current_theme.help_text_style),
-        Span::styled(up_key, app.current_theme.help_key_style),
-        Span::styled(" and ", app.current_theme.help_text_style),
-        Span::styled(down_key, app.current_theme.help_key_style),
-        Span::styled(
-            " or scroll with the mouse",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(
-            " to select a Color/Modifier, Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled("<Mouse Left Click>", app.current_theme.help_key_style),
-        Span::styled(
-            " to edit (for custom RBG), Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(prv_focus_key, app.current_theme.help_key_style),
-        Span::styled(" to change focus.", app.current_theme.help_text_style),
+        Span::styled("Use ", help_text_style),
+        Span::styled(up_key, help_key_style),
+        Span::styled(" and ", help_text_style),
+        Span::styled(down_key, help_key_style),
+        Span::styled(" or scroll with the mouse", help_text_style),
+        Span::styled(" to select a Color/Modifier, Press ", help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled("<Mouse Left Click>", help_key_style),
+        Span::styled(" to edit (for custom RBG), Press ", help_text_style),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
+        Span::styled(" to change focus.", help_text_style),
     ];
 
     let help_text = Paragraph::new(Line::from(help_spans))
@@ -5572,12 +6001,12 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(app.current_theme.help_text_style),
+                .border_style(help_text_style),
         )
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, false);
     rect.render_stateful_widget(
         fg_list,
         chunks[0],
@@ -5597,11 +6026,11 @@ pub fn render_edit_specific_style_popup(rect: &mut Frame, app: &mut App) {
     rect.render_widget(submit_button, main_chunks[2]);
     rect.render_widget(border_block, popup_area);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
-pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
+pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let popup_area = centered_rect_with_length(40, 10, rect.size());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -5613,6 +6042,11 @@ pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
         get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], false, false);
     let dont_save_theme_button_style =
         get_mouse_focusable_field_style(app, Focus::ExtraFocus, &chunks[1], false, false);
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
     let save_theme_button = Paragraph::new("Save Theme to File")
         .style(save_theme_button_style)
         .block(
@@ -5635,18 +6069,18 @@ pub fn render_save_theme_prompt(rect: &mut Frame, app: &mut App) {
         .title("Save Theme?")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(app.current_theme.general_style);
+        .border_style(general_style);
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, false);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
     rect.render_widget(border_block, popup_area);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
-pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App) {
+pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     let popup_area = centered_rect_with_length(30, 7, rect.size());
 
     let chunks = Layout::default()
@@ -5654,6 +6088,12 @@ pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())
         .margin(2)
         .split(popup_area);
+
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
 
     let save_card_button_style =
         get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], false, false);
@@ -5681,129 +6121,232 @@ pub fn render_confirm_discard_card_changes(rect: &mut Frame, app: &mut App) {
         .title("Save Changes to Card?")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(app.current_theme.general_style);
+        .border_style(general_style);
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, false);
     rect.render_widget(save_theme_button, chunks[0]);
     rect.render_widget(dont_save_theme_button, chunks[1]);
     rect.render_widget(border_block, popup_area);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 }
 
-pub fn render_custom_rgb_color_prompt(rect: &mut Frame, app: &mut App) {
-    let popup_area = centered_rect_with_length(60, 18, rect.size());
-    let prompt_text = "Enter a custom RGB color in the format: r,g,b (0-254)";
+pub fn render_custom_hex_color_prompt(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    let popup_area = centered_rect_with_length(72, 12, rect.size());
+    let prompt_text = "Enter a custom Hex color in the format: #RRGGBB (e.g. #FF0000)";
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(1),
-                Constraint::Fill(1),
-                Constraint::Length(3),
-                Constraint::Length(5),
-            ]
-            .as_ref(),
-        )
-        .margin(1)
-        .split(popup_area);
-    let border_block = Block::default()
-        .title("Custom RGB Color")
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(app.current_theme.general_style);
+    let chunks = if app.config.enable_mouse_support {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Length(1),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                ]
+                .as_ref(),
+            )
+            .margin(1)
+            .split(popup_area)
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(
+                [
+                    Constraint::Length(1),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                ]
+                .as_ref(),
+            )
+            .margin(1)
+            .split(popup_area)
+    };
 
-    let text_input_style =
-        get_mouse_focusable_field_style(app, Focus::TextInput, &chunks[1], false, true);
-    let submit_button_style =
-        get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[2], false, false);
+    let custom_hex_color_input = match app.state.z_stack.last() {
+        Some(PopupMode::CustomHexColorPromptFG) => app
+            .state
+            .text_buffers
+            .theme_editor_fg_hex
+            .get_joined_lines(),
+        Some(PopupMode::CustomHexColorPromptBG) => app
+            .state
+            .text_buffers
+            .theme_editor_bg_hex
+            .get_joined_lines(),
+        _ => {
+            debug!("Invalid PopupMode for custom Hex color prompt");
+            "".to_string()
+        }
+    };
+
+    let parsed_hex = parse_hex_to_rgb(&custom_hex_color_input);
+
+    let input_field_chunks = if parsed_hex.is_some() {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(100)].as_ref())
+            .split(chunks[1])
+    } else {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Fill(1), Constraint::Length(20)].as_ref())
+            .split(chunks[1])
+    };
+
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let error_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.error_text_style,
+    );
+    let text_input_style = get_mouse_focusable_field_style(
+        app,
+        Focus::TextInput,
+        &input_field_chunks[0],
+        popup_mode,
+        true,
+    );
+
     let prompt_text = Paragraph::new(prompt_text)
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .block(Block::default())
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
-    let text_input = Paragraph::new(
-        app.state
-            .text_buffers
-            .theme_editor_custom_rgb
-            .get_joined_lines(),
-    )
-    .style(app.current_theme.general_style)
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(text_input_style)
-            .border_type(BorderType::Rounded),
-    );
 
-    let input_mode_key = app
-        .get_first_keybinding(KeyBindingEnum::TakeUserInput)
-        .unwrap_or("".to_string());
-    let next_focus_key = app
-        .get_first_keybinding(KeyBindingEnum::NextFocus)
-        .unwrap_or("".to_string());
-    let prv_focus_key = app
-        .get_first_keybinding(KeyBindingEnum::PrvFocus)
-        .unwrap_or("".to_string());
+    let text_input = if let Some(hex) = parsed_hex {
+        let styled_text = Line::from(vec![Span::styled(
+            custom_hex_color_input,
+            general_style.fg(Color::Rgb(hex.0, hex.1, hex.2)),
+        )]);
+        Paragraph::new(styled_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(text_input_style)
+                .border_type(BorderType::Rounded),
+        )
+    } else {
+        Paragraph::new(custom_hex_color_input)
+            .style(general_style)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(text_input_style)
+                    .border_type(BorderType::Rounded),
+            )
+    };
+
     let accept_key = app
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
-    let stop_editing_key = app
-        .get_first_keybinding(KeyBindingEnum::StopUserInput)
-        .unwrap_or("".to_string());
 
     let help_spans = vec![
-        Span::styled("Press ", app.current_theme.help_text_style),
-        Span::styled(input_mode_key, app.current_theme.help_key_style),
-        Span::styled(
-            " to enter input mode. Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(stop_editing_key, app.current_theme.help_key_style),
-        Span::styled(" to stop editing. Use ", app.current_theme.help_text_style),
-        Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(prv_focus_key, app.current_theme.help_key_style),
-        Span::styled(
-            " to change focus. Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" to submit.", app.current_theme.help_text_style),
+        Span::styled("Press ", help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" to submit.", help_text_style),
     ];
+
+    let border_block = Block::default()
+        .title("Custom Hex Color")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(general_style);
+
     let help_text = Paragraph::new(Line::from(help_spans))
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(app.current_theme.general_style)
+                .border_style(general_style)
                 .border_type(BorderType::Rounded),
         )
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
 
-    let submit_button = Paragraph::new("Submit")
-        .style(app.current_theme.general_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(submit_button_style)
-                .border_type(BorderType::Rounded),
-        )
-        .alignment(Alignment::Center);
+    if app.state.app_status == AppStatus::UserInput {
+        match app.state.z_stack.last() {
+            Some(PopupMode::CustomHexColorPromptFG) => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.theme_editor_fg_hex,
+                    &app.config.show_line_numbers,
+                    &input_field_chunks[0],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            Some(PopupMode::CustomHexColorPromptBG) => {
+                let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
+                    &app.state.text_buffers.theme_editor_bg_hex,
+                    &app.config.show_line_numbers,
+                    &input_field_chunks[0],
+                );
+                rect.set_cursor(x_pos, y_pos);
+            }
+            _ => {}
+        }
+    }
 
-    render_blank_styled_canvas(rect, app, popup_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, popup_area, popup_mode);
+
+    if app.config.enable_mouse_support {
+        let submit_button_style = get_mouse_focusable_field_style(
+            app,
+            Focus::SubmitButton,
+            &chunks[2],
+            popup_mode,
+            false,
+        );
+        let submit_button = Paragraph::new("Submit")
+            .style(general_style)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(submit_button_style)
+                    .border_type(BorderType::Rounded),
+            )
+            .alignment(Alignment::Center);
+        rect.render_widget(submit_button, chunks[2]);
+        rect.render_widget(help_text, chunks[3]);
+        render_close_button(rect, app, popup_mode);
+    } else {
+        rect.render_widget(help_text, chunks[2]);
+    }
+
+    if parsed_hex.is_none() {
+        let invalid_text = Paragraph::new("Invalid Hex Color")
+            .style(error_text_style)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(error_text_style)
+                    .border_type(BorderType::Rounded),
+            )
+            .alignment(Alignment::Center);
+        rect.render_widget(invalid_text, input_field_chunks[1]);
+    }
+
     rect.render_widget(prompt_text, chunks[0]);
-    rect.render_widget(text_input, chunks[1]);
-    rect.render_widget(submit_button, chunks[2]);
-    rect.render_widget(help_text, chunks[3]);
+    rect.render_widget(text_input, input_field_chunks[0]);
     rect.render_widget(border_block, popup_area);
 }
 
 pub fn render_blank_styled_canvas(
     rect: &mut Frame,
-    app: &mut App,
+    current_theme: &Theme,
     render_area: Rect,
     popup_mode: bool,
 ) {
@@ -5816,12 +6359,18 @@ pub fn render_blank_styled_canvas(
         render_text.push(format!("{}\n", styled_text.join("")));
     }
     let styled_text = if popup_mode {
+        let mut style = current_theme.inactive_text_style;
+        style.add_modifier = Modifier::empty();
+        style.sub_modifier = Modifier::all();
         Paragraph::new(render_text.join(""))
-            .style(app.current_theme.inactive_text_style)
+            .style(style)
             .block(Block::default())
     } else {
+        let mut style = current_theme.general_style;
+        style.add_modifier = Modifier::empty();
+        style.sub_modifier = Modifier::all();
         Paragraph::new(render_text.join(""))
-            .style(app.current_theme.general_style)
+            .style(style)
             .block(Block::default())
     };
     rect.render_widget(styled_text, render_area);
@@ -5834,6 +6383,12 @@ pub fn render_blank_styled_canvas_with_margin(
     popup_mode: bool,
     margin: i16,
 ) {
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+
     let x = render_area.x as i16 + margin;
     let x = if x < 0 { 0 } else { x };
     let y = render_area.y as i16 + margin;
@@ -5853,20 +6408,10 @@ pub fn render_blank_styled_canvas_with_margin(
     for _ in 0..new_render_area.height {
         render_text.push(format!("{}\n", styled_text.join("")));
     }
-    let styled_text = if popup_mode {
-        Paragraph::new(render_text.join(""))
-            .style(app.current_theme.inactive_text_style)
-            .block(Block::default())
-    } else {
-        Paragraph::new(render_text.join(""))
-            .style(app.current_theme.general_style)
-            .block(Block::default())
-    };
+    let styled_text = Paragraph::new(render_text.join(""))
+        .style(general_style)
+        .block(Block::default());
     rect.render_widget(styled_text, new_render_area);
-}
-
-fn render_title(app: &mut App<'_>, render_area: &Rect, rect: &mut Frame<'_>) {
-    rect.render_widget(draw_title(app, *render_area), *render_area);
 }
 
 pub fn render_logs(
@@ -5879,16 +6424,20 @@ pub fn render_logs(
     let log_box_border_style = if enable_focus_highlight {
         get_mouse_focusable_field_style(app, Focus::Log, &render_area, popup_mode, false)
     } else {
-        app.current_theme.general_style
+        check_for_popup_and_get_style(
+            popup_mode,
+            app.current_theme.inactive_text_style,
+            app.current_theme.general_style,
+        )
     };
-    let date_format = app.config.date_format.to_parser_string();
+    let date_format = app.config.date_time_format.to_parser_string();
     let theme = &app.current_theme;
     let all_logs = get_logs();
-    let mut highlight_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.list_select_style
-    };
+    let mut highlight_style = check_for_popup_and_get_style(
+        popup_mode,
+        theme.inactive_text_style,
+        theme.list_select_style,
+    );
     let mut items = vec![];
     let date_length = date_format.len() + 5;
     let wrap_length = render_area.width as usize - date_length - 6; // Border + arrow + padding
@@ -5931,11 +6480,11 @@ pub fn render_logs(
         Row::new(cells).height(height as u16)
     });
 
-    let log_box_style = if popup_mode {
-        app.current_theme.inactive_text_style
-    } else {
-        app.current_theme.general_style
-    };
+    let log_box_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
 
     let log_list = Table::new(
         rows,
@@ -5962,8 +6511,8 @@ pub fn render_logs(
     );
 }
 
-pub fn render_login(rect: &mut Frame, app: &mut App) {
-    if app.state.popup_mode.is_none() {
+pub fn render_login(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    if !popup_mode {
         if app.state.focus == Focus::EmailIDField || app.state.focus == Focus::PasswordField {
             if app.state.app_status != AppStatus::UserInput {
                 app.state.app_status = AppStatus::UserInput;
@@ -6071,34 +6620,48 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         app,
         Focus::EmailIDField,
         &email_id_field_chunk,
-        app.state.popup_mode.is_some(),
+        popup_mode,
         true,
     );
     let password_field_style = get_mouse_focusable_field_style(
         app,
         Focus::PasswordField,
         &password_field_chunk,
-        app.state.popup_mode.is_some(),
+        popup_mode,
         true,
     );
     let show_password_style = get_mouse_focusable_field_style(
         app,
         Focus::ExtraFocus,
         &show_password_main_chunk,
-        app.state.popup_mode.is_some(),
+        popup_mode,
         true,
     );
     let submit_button_style = get_mouse_focusable_field_style(
         app,
         Focus::SubmitButton,
         &submit_button_chunks[1],
-        app.state.popup_mode.is_some(),
+        popup_mode,
         true,
     );
 
-    let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
 
-    let crab_paragraph = if app.state.popup_mode.is_some() {
+    let crab_paragraph = if popup_mode {
         draw_crab_pattern(
             chunks[0],
             app.current_theme.inactive_text_style,
@@ -6117,10 +6680,10 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     let info_border = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(separator_style);
+        .border_style(general_style);
 
     let info_paragraph = Paragraph::new("Log In")
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .block(Block::default())
         .alignment(Alignment::Center);
 
@@ -6135,20 +6698,17 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         .unwrap_or("".to_string());
 
     let help_spans = vec![
-        Span::styled("Press ", app.current_theme.help_text_style),
-        Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(prv_focus_key, app.current_theme.help_key_style),
-        Span::styled(
-            " to change focus. Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" to submit.", app.current_theme.help_text_style),
+        Span::styled("Press ", help_text_style),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
+        Span::styled(" to change focus. Press ", help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" to submit.", help_text_style),
     ];
 
     let help_paragraph = Paragraph::new(Line::from(help_spans))
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .block(Block::default())
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
@@ -6156,7 +6716,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     let separator = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(separator_style);
+        .border_style(general_style);
 
     let email_id_block = Block::default()
         .style(email_id_field_style)
@@ -6207,10 +6767,10 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
-    render_title(app, &main_chunks[0], rect);
+    rect.render_widget(draw_title(app, main_chunks[0], popup_mode), main_chunks[0]);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
-    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -1);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, popup_mode, -1);
     rect.render_widget(info_border, info_box);
     rect.render_widget(info_paragraph, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
@@ -6242,7 +6802,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     }
 
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 
     if app.state.user_login_data.auth_token.is_some() {
@@ -6253,7 +6813,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
         };
         let already_logged_in_indicator =
             Paragraph::new(format!("Already logged in! {}", email_id))
-                .style(app.current_theme.general_style)
+                .style(general_style)
                 .block(Block::default())
                 .alignment(Alignment::Center);
 
@@ -6283,8 +6843,7 @@ pub fn render_login(rect: &mut Frame, app: &mut App) {
     }
 }
 
-pub fn render_signup(rect: &mut Frame, app: &mut App) {
-    let popup_mode = app.state.popup_mode.is_some();
+pub fn render_signup(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     if !popup_mode {
         if app.state.focus == Focus::EmailIDField
             || app.state.focus == Focus::PasswordField
@@ -6399,31 +6958,36 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         false,
     );
 
-    let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
 
-    let crab_paragraph = if app.state.popup_mode.is_some() {
-        draw_crab_pattern(
-            chunks[0],
-            app.current_theme.inactive_text_style,
-            true,
-            app.config.disable_animations,
-        )
-    } else {
-        draw_crab_pattern(
-            chunks[0],
-            app.current_theme.general_style,
-            false,
-            app.config.disable_animations,
-        )
-    };
+    let crab_paragraph = draw_crab_pattern(
+        chunks[0],
+        app.current_theme.inactive_text_style,
+        popup_mode,
+        app.config.disable_animations,
+    );
 
     let info_border = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(separator_style);
+        .border_style(general_style);
 
     let info_paragraph = Paragraph::new("Sign Up")
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .block(Block::default())
         .alignment(Alignment::Center);
 
@@ -6438,20 +7002,17 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         .unwrap_or("".to_string());
 
     let help_spans = vec![
-        Span::styled("Press ", app.current_theme.help_text_style),
-        Span::styled(next_focus_key, app.current_theme.help_key_style),
-        Span::styled(" or ", app.current_theme.help_text_style),
-        Span::styled(prv_focus_key, app.current_theme.help_key_style),
-        Span::styled(
-            " to change focus. Press ",
-            app.current_theme.help_text_style,
-        ),
-        Span::styled(accept_key, app.current_theme.help_key_style),
-        Span::styled(" to submit.", app.current_theme.help_text_style),
+        Span::styled("Press ", help_text_style),
+        Span::styled(next_focus_key, help_key_style),
+        Span::styled(" or ", help_text_style),
+        Span::styled(prv_focus_key, help_key_style),
+        Span::styled(" to change focus. Press ", help_text_style),
+        Span::styled(accept_key, help_key_style),
+        Span::styled(" to submit.", help_text_style),
     ];
 
     let help_paragraph = Paragraph::new(Line::from(help_spans))
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .block(Block::default())
         .alignment(Alignment::Center)
         .wrap(ratatui::widgets::Wrap { trim: true });
@@ -6459,7 +7020,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     let separator = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(separator_style);
+        .border_style(general_style);
 
     let email_id_block = Block::default()
         .style(email_id_field_style)
@@ -6501,7 +7062,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         .set_block(confirm_password_block);
 
     let show_password_paragraph = Paragraph::new("Show Password")
-        .style(separator_style)
+        .style(general_style)
         .block(Block::default())
         .alignment(Alignment::Right);
 
@@ -6525,10 +7086,10 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
-    render_title(app, &main_chunks[0], rect);
+    rect.render_widget(draw_title(app, main_chunks[0], popup_mode), main_chunks[0]);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
-    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -1);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, popup_mode, -1);
     rect.render_widget(info_border, info_box);
     rect.render_widget(info_paragraph, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
@@ -6585,7 +7146,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
     rect.render_widget(submit_button, submit_button_chunks[1]);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 
     if app.state.app_status == AppStatus::UserInput {
@@ -6619,8 +7180,7 @@ pub fn render_signup(rect: &mut Frame, app: &mut App) {
     }
 }
 
-pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
-    let popup_mode = app.state.popup_mode.is_some();
+pub fn render_reset_password(rect: &mut Frame, app: &mut App, popup_mode: bool) {
     if !popup_mode {
         if app.state.focus == Focus::EmailIDField
             || app.state.focus == Focus::ResetPasswordLinkField
@@ -6759,7 +7319,11 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         app.current_theme.general_style
     };
 
-    let separator_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
+    let separator_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
 
     let reset_link_field_style = get_mouse_focusable_field_style(
         app,
@@ -6801,21 +7365,28 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         false,
     );
 
-    let crab_paragraph = if app.state.popup_mode.is_some() {
-        draw_crab_pattern(
-            chunks[0],
-            app.current_theme.inactive_text_style,
-            true,
-            app.config.disable_animations,
-        )
-    } else {
-        draw_crab_pattern(
-            chunks[0],
-            app.current_theme.general_style,
-            false,
-            app.config.disable_animations,
-        )
-    };
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+
+    let crab_paragraph = draw_crab_pattern(
+        chunks[0],
+        app.current_theme.inactive_text_style,
+        popup_mode,
+        app.config.disable_animations,
+    );
 
     let info_border = Block::default()
         .borders(Borders::ALL)
@@ -6823,7 +7394,7 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         .border_style(separator_style);
 
     let info_header = Paragraph::new("Reset Password")
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .block(Block::default())
         .alignment(Alignment::Center);
 
@@ -6840,38 +7411,35 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     let help_lines = vec![
         Line::from(Span::styled(
             "1) Enter your email and send reset link first.",
-            app.current_theme.help_text_style,
+            help_text_style,
         )),
         Line::from(Span::styled(
             "2) Copy the reset link from your email and then paste the reset link.",
-            app.current_theme.help_text_style,
+            help_text_style,
         )),
         Line::from(Span::styled(
             "3) Enter new password and confirm the new password.",
-            app.current_theme.help_text_style,
+            help_text_style,
         )),
         Line::from(""),
         Line::from(Span::styled(
             "### Check Spam folder if you don't see the email ###",
-            app.current_theme.help_text_style,
+            help_text_style,
         )),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Press ", app.current_theme.help_text_style),
-            Span::styled(next_focus_key, app.current_theme.help_key_style),
-            Span::styled(" or ", app.current_theme.help_text_style),
-            Span::styled(prv_focus_key, app.current_theme.help_key_style),
-            Span::styled(
-                " to change focus. Press ",
-                app.current_theme.help_text_style,
-            ),
-            Span::styled(accept_key, app.current_theme.help_key_style),
-            Span::styled(" to submit.", app.current_theme.help_text_style),
+            Span::styled("Press ", help_text_style),
+            Span::styled(next_focus_key, help_key_style),
+            Span::styled(" or ", help_text_style),
+            Span::styled(prv_focus_key, help_key_style),
+            Span::styled(" to change focus. Press ", help_text_style),
+            Span::styled(accept_key, help_key_style),
+            Span::styled(" to submit.", help_text_style),
         ]),
     ];
 
     let help_paragraph = Paragraph::new(help_lines)
-        .style(app.current_theme.general_style)
+        .style(general_style)
         .block(Block::default())
         .wrap(ratatui::widgets::Wrap { trim: true });
 
@@ -6989,10 +7557,10 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
         )
         .alignment(Alignment::Center);
 
-    render_title(app, &main_chunks[0], rect);
+    rect.render_widget(draw_title(app, main_chunks[0], popup_mode), main_chunks[0]);
     rect.render_widget(crab_paragraph, chunks[0]);
     rect.render_widget(Clear, info_box);
-    render_blank_styled_canvas_with_margin(rect, app, info_box, app.state.popup_mode.is_some(), -1);
+    render_blank_styled_canvas_with_margin(rect, app, info_box, popup_mode, -1);
     rect.render_widget(info_border, info_box);
     rect.render_widget(info_header, info_chunks[0]);
     rect.render_widget(help_paragraph, info_chunks[2]);
@@ -7052,7 +7620,7 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     rect.render_widget(show_password_checkbox_paragraph, show_password_chunks[1]);
     rect.render_widget(submit_button, submit_button_chunks[1]);
     if app.config.enable_mouse_support {
-        render_close_button(rect, app)
+        render_close_button(rect, app, popup_mode)
     }
 
     if app.state.app_status == AppStatus::UserInput {
@@ -7094,10 +7662,32 @@ pub fn render_reset_password(rect: &mut Frame, app: &mut App) {
     }
 }
 
-pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
-    let default_style = check_for_popup_and_get_style(app, app.current_theme.general_style);
-    let help_key_style = check_for_popup_and_get_style(app, app.current_theme.help_key_style);
-    let help_text_style = check_for_popup_and_get_style(app, app.current_theme.help_text_style);
+pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    let default_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
+    let help_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_text_style,
+    );
+    let error_text_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.error_text_style,
+    );
+    let list_select_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.list_select_style,
+    );
     let main_chunks = {
         Layout::default()
             .direction(Direction::Horizontal)
@@ -7145,7 +7735,7 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded),
                 )
-                .style(app.current_theme.error_text_style);
+                .style(error_text_style);
             rect.render_widget(no_saves_paragraph, chunks[1]);
         } else {
             let items: Vec<ListItem> = item_list
@@ -7159,12 +7749,11 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded),
                 )
-                .highlight_style(app.current_theme.list_select_style)
+                .highlight_style(list_select_style)
                 .highlight_symbol(LIST_SELECTED_SYMBOL)
                 .style(default_style);
 
-            if !(app.state.popup_mode.is_some()
-                && app.state.popup_mode.unwrap() == PopupMode::CommandPalette)
+            if !popup_mode
                 && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[1])
             {
                 app.state.mouse_focus = Some(Focus::LoadSave);
@@ -7190,7 +7779,7 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .style(app.current_theme.error_text_style);
+            .style(error_text_style);
         rect.render_widget(no_saves_paragraph, chunks[1]);
     }
 
@@ -7207,7 +7796,7 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
         .get_first_keybinding(KeyBindingEnum::Accept)
         .unwrap_or("".to_string());
     let cancel_key = app
-        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeorCancel)
+        .get_first_keybinding(KeyBindingEnum::GoToPreviousUIModeOrCancel)
         .unwrap_or("".to_string());
 
     let help_text = Line::from(vec![
@@ -7266,7 +7855,7 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
             .wrap(ratatui::widgets::Wrap { trim: true });
         rect.render_widget(preview_paragraph, preview_chunks[1]);
     } else {
-        render_body(rect, preview_chunks[1], app, true)
+        render_body(rect, preview_chunks[1], app, true, popup_mode)
     }
 
     let preview_title_paragraph = if let Some(file_name) = &app.state.preview_file_name {
@@ -7293,9 +7882,250 @@ pub fn render_load_cloud_save(rect: &mut Frame, app: &mut App) {
 
     if app.config.enable_mouse_support {
         rect.render_widget(preview_title_paragraph, title_bar_chunks[0]);
-        render_close_button(rect, app);
+        render_close_button(rect, app, popup_mode);
     } else {
         rect.render_widget(preview_title_paragraph, preview_chunks[0]);
+    }
+}
+
+pub fn render_date_time_widget(rect: &mut Frame, app: &mut App, popup_mode: bool) {
+    let anchor = app
+        .widgets
+        .date_time_picker
+        .viewport_corrected_anchor
+        .unwrap_or_default();
+    let (current_month, current_year) = app
+        .widgets
+        .date_time_picker
+        .get_styled_lines_of_dates(popup_mode, &app.current_theme);
+    let render_area = Rect {
+        x: anchor.0,
+        y: anchor.1,
+        width: app.widgets.date_time_picker.widget_width,
+        height: app.widgets.date_time_picker.widget_height,
+    };
+
+    app.widgets.date_time_picker.current_render_area = Some(render_area);
+
+    let title_length = (current_month.len() + 3 + current_year.len()) as u16; // 3 is for the " - "
+    let padding = (render_area
+        .width
+        .min(app.widgets.date_time_picker.date_target_width)
+        - 3
+        - 2)
+    .saturating_sub(title_length); // 3 is for the Time section expand button, 2 is for margin
+    let month_length = current_month.len() as u16 + (padding / 2);
+    let year_length = current_year.len() as u16 + (padding / 2);
+
+    let (date_picker_render_area, time_picker_render_area) =
+        if app.widgets.date_time_picker.widget_width
+            > app.widgets.date_time_picker.date_target_width
+        {
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(
+                    [
+                        Constraint::Length(app.widgets.date_time_picker.date_target_width),
+                        Constraint::Fill(1),
+                    ]
+                    .as_ref(),
+                )
+                .split(render_area);
+            // add margin to the time picker
+            let time_picker_render_area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Fill(1)].as_ref())
+                .margin(1)
+                .split(chunks[1]);
+            (chunks[0], Some(time_picker_render_area[1]))
+        } else {
+            (render_area, None)
+        };
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Fill(1),
+            ]
+            .as_ref(),
+        )
+        .margin(1)
+        .split(date_picker_render_area);
+    let header_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Length(month_length),
+                Constraint::Length(1),
+                Constraint::Length(year_length),
+                Constraint::Fill(1),
+                Constraint::Length(1),
+            ]
+            .as_ref(),
+        )
+        .split(chunks[0]);
+
+    let time_picker_toggle_style = get_button_style(
+        app,
+        Focus::DTPToggleTimePicker,
+        Some(&header_chunks[3]),
+        popup_mode,
+        false,
+    );
+    let month_style = get_button_style(
+        app,
+        Focus::DTPMonth,
+        Some(&header_chunks[0]),
+        popup_mode,
+        false,
+    );
+    let year_style = get_button_style(
+        app,
+        Focus::DTPYear,
+        Some(&header_chunks[2]),
+        popup_mode,
+        false,
+    );
+    let general_style = check_for_popup_and_get_style(
+        popup_mode,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+
+    let month_block = if app.state.focus == Focus::DTPMonth {
+        Block::default()
+            .borders(Borders::LEFT | Borders::RIGHT)
+            .border_type(BorderType::Rounded)
+            .border_style(month_style)
+    } else {
+        Block::default()
+    };
+
+    let year_block = if app.state.focus == Focus::DTPYear {
+        Block::default()
+            .borders(Borders::LEFT | Borders::RIGHT)
+            .border_type(BorderType::Rounded)
+            .border_style(year_style)
+    } else {
+        Block::default()
+    };
+
+    let border_block = if app.widgets.date_time_picker.time_picker_active {
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(general_style)
+            .title("Date Time Picker")
+    } else {
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(general_style)
+            .title("Date Picker")
+    };
+
+    let time_picker_toggle_button = if app.widgets.date_time_picker.time_picker_active {
+        "<"
+    } else {
+        ">"
+    };
+
+    let main_paragraph = Paragraph::new(app.widgets.date_time_picker.styled_date_lines.0.clone())
+        .block(Block::default())
+        .wrap(ratatui::widgets::Wrap { trim: true })
+        .alignment(Alignment::Center);
+    let month_paragraph = Paragraph::new(current_month)
+        .style(month_style)
+        .block(month_block)
+        .alignment(Alignment::Center);
+    let separator_paragraph = Paragraph::new("-")
+        .style(general_style)
+        .block(Block::default())
+        .alignment(Alignment::Center);
+    let year_paragraph = Paragraph::new(current_year)
+        .style(year_style)
+        .block(year_block)
+        .alignment(Alignment::Center);
+    let toggle_time_panel_paragraph = Paragraph::new(time_picker_toggle_button)
+        .style(time_picker_toggle_style)
+        .block(Block::default())
+        .alignment(Alignment::Right);
+
+    if !check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &render_area)
+        && (app.state.current_mouse_coordinates != MOUSE_OUT_OF_BOUNDS_COORDINATES)
+    {
+        app.state.focus = Focus::NoFocus;
+    }
+
+    if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[2]) {
+        app.state.focus = Focus::DTPCalender;
+        let maybe_date_to_select = if let Some((calculated_pos, _, _)) =
+            &app.widgets.date_time_picker.calculated_mouse_coords
+        {
+            calculated_pos.iter().find_map(|(rect, date)| {
+                if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, rect) {
+                    Some(*date)
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        };
+
+        if let Some(date_to_select) = maybe_date_to_select {
+            app.widgets
+                .date_time_picker
+                .select_date_in_current_month(date_to_select);
+        }
+    }
+
+    render_blank_styled_canvas(rect, &app.current_theme, render_area, popup_mode);
+    rect.render_widget(border_block, render_area);
+    rect.render_widget(month_paragraph, header_chunks[0]);
+    rect.render_widget(separator_paragraph, header_chunks[1]);
+    rect.render_widget(year_paragraph, header_chunks[2]);
+    rect.render_widget(toggle_time_panel_paragraph, header_chunks[3]);
+    rect.render_widget(main_paragraph, chunks[2]);
+
+    if app.widgets.date_time_picker.time_picker_active && time_picker_render_area.is_some() {
+        let render_area = time_picker_render_area.unwrap();
+        // only used for mouse detection
+        let time_picker_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Length(2),
+                    Constraint::Length(1),
+                    Constraint::Length(2),
+                    Constraint::Length(1),
+                    Constraint::Length(2),
+                ]
+                .as_ref(),
+            )
+            .margin(1)
+            .split(render_area);
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &time_picker_chunks[0]) {
+            app.state.focus = Focus::DTPHour;
+        }
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &time_picker_chunks[2]) {
+            app.state.focus = Focus::DTPMinute;
+        }
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &time_picker_chunks[4]) {
+            app.state.focus = Focus::DTPSecond;
+        }
+        let time_picker_lines = app.widgets.date_time_picker.get_styled_lines_of_time(
+            popup_mode,
+            &app.current_theme,
+            &app.state.focus,
+        );
+        let time_picker_paragraph = Paragraph::new(time_picker_lines)
+            .block(Block::default())
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        rect.render_widget(time_picker_paragraph, render_area);
     }
 }
 
@@ -7400,14 +8230,14 @@ fn get_mouse_focusable_field_style(
     focus: Focus,
     chunk: &Rect,
     popup_mode: bool,
-    user_input_mode: bool,
+    auto_user_input_mode: bool,
 ) -> Style {
     if popup_mode {
         app.current_theme.inactive_text_style
     } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, chunk) {
         if app.state.mouse_focus != Some(focus) {
             app.state.app_status = AppStatus::Initialized;
-        } else if user_input_mode {
+        } else if auto_user_input_mode {
             app.state.app_status = AppStatus::UserInput;
         } else {
             app.state.app_status = AppStatus::Initialized;
@@ -7423,33 +8253,59 @@ fn get_mouse_focusable_field_style(
 }
 
 /// Checks for popup mode to return inactive style if not returns the style passed
-fn check_for_popup_and_get_style(app: &App, style: Style) -> Style {
-    if app.state.popup_mode.is_some() {
-        app.current_theme.inactive_text_style
+fn check_for_popup_and_get_style(popup_mode: bool, inactive_style: Style, style: Style) -> Style {
+    if popup_mode {
+        inactive_style
     } else {
         style
     }
 }
 
-fn get_button_style_with_default_error_style(
+fn check_for_card_drag_and_get_style(
+    card_drag_mode: bool,
+    popup_mode: bool,
+    inactive_style: Style,
+    style: Style,
+) -> Style {
+    if card_drag_mode {
+        inactive_style
+    } else {
+        check_for_popup_and_get_style(popup_mode, inactive_style, style)
+    }
+}
+
+// TODO: maybe merge with get_mouse_focusable_field_style
+fn get_button_style(
     app: &mut App,
     focus: Focus,
-    chunk: &Rect,
+    chunk_for_mouse_check: Option<&Rect>,
     popup_mode: bool,
+    default_to_error_style: bool,
 ) -> Style {
     if popup_mode {
         app.current_theme.inactive_text_style
-    } else if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, chunk) {
-        app.state.mouse_focus = Some(focus);
-        app.state.set_focus(focus);
-        app.current_theme.mouse_focus_style
+    } else if let Some(chunk) = chunk_for_mouse_check {
+        if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, chunk) {
+            app.state.mouse_focus = Some(focus);
+            app.state.set_focus(focus);
+            app.current_theme.mouse_focus_style
+        } else if app.state.focus == focus {
+            app.current_theme.keyboard_focus_style
+        } else {
+            app.current_theme.general_style
+        }
     } else if app.state.focus == focus {
-        app.current_theme.error_text_style
+        if default_to_error_style {
+            app.current_theme.error_text_style
+        } else {
+            app.current_theme.keyboard_focus_style
+        }
     } else {
         app.current_theme.general_style
     }
 }
 
+// TODO: maybe merge with get_mouse_focusable_field_style
 fn get_mouse_focusable_field_style_with_vertical_list_selection<T>(
     app: &mut App<'_>,
     main_menu_items: &[T],
@@ -7539,7 +8395,8 @@ fn calculate_viewport_corrected_cursor_position(
     show_line_numbers: &bool,
     chunk: &Rect,
 ) -> (u16, u16) {
-    let (y_pos, x_pos) = text_box.cursor();
+    let (y_pos, _) = text_box.cursor();
+    let x_pos = text_box.get_non_ascii_aware_cursor_x_pos();
     let text_box_viewport = text_box.viewport.position();
     let adjusted_x_cursor: u16 = if x_pos as u16 > text_box_viewport.3 {
         x_pos as u16 - text_box_viewport.3
@@ -7549,7 +8406,7 @@ fn calculate_viewport_corrected_cursor_position(
     let x_pos = if *show_line_numbers && !text_box.single_line_mode {
         let mut line_number_padding = 3;
         let num_lines = text_box.get_num_lines();
-        let num_digits_in_max_line_number = num_digits(num_lines) as u16 - 1; // To account for adjustment in text function of textbox renderer
+        let num_digits_in_max_line_number = num_digits(num_lines) as u16;
         line_number_padding += num_digits_in_max_line_number;
         chunk.left() + 1 + adjusted_x_cursor - text_box_viewport.1 + line_number_padding
     } else {

@@ -4,13 +4,16 @@ use super::{
 };
 use crate::{
     app::{
-        app_helper::handle_go_to_previous_ui_mode, kanban::Boards, state::UiMode, App, AppConfig,
-        UserLoginData,
+        app_helper::handle_go_to_previous_ui_mode,
+        kanban::Boards,
+        state::{UiMode, UserLoginData},
+        App, AppConfig,
     },
     constants::{
-        CONFIG_DIR_NAME, CONFIG_FILE_NAME, ENCRYPTION_KEY_FILE_NAME, MAX_PASSWORD_LENGTH,
-        MIN_PASSWORD_LENGTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK, REFRESH_TOKEN_FILE_NAME,
-        REFRESH_TOKEN_SEPARATOR, SAVE_DIR_NAME, SUPABASE_ANON_KEY, SUPABASE_URL,
+        CONFIG_DIR_NAME, CONFIG_FILE_NAME, EMAIL_REGEX, ENCRYPTION_KEY_FILE_NAME,
+        MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, MIN_TIME_BETWEEN_SENDING_RESET_LINK,
+        REFRESH_TOKEN_FILE_NAME, REFRESH_TOKEN_SEPARATOR, SAVE_DIR_NAME, SUPABASE_ANON_KEY,
+        SUPABASE_URL,
     },
     io::data_handler::{get_default_save_directory, get_saved_themes, save_kanban_state_locally},
     ui::TextColorOptions,
@@ -509,6 +512,13 @@ impl IoAsyncHandler<'_> {
                 app.send_error_toast("Passwords do not match", None);
                 return Ok(());
             }
+            let email_regex =
+                regex::Regex::new(EMAIL_REGEX).expect("Invalid email regex in constants");
+            if !email_regex.is_match(&email_id) {
+                error!("Invalid email format");
+                app.send_error_toast("Invalid email format", None);
+                return Ok(());
+            }
 
             let password_status = check_for_safe_password(&password);
             match password_status {
@@ -558,17 +568,24 @@ impl IoAsyncHandler<'_> {
                 }
                 PasswordStatus::TooLong => {
                     error!(
-                        "Password must be atmost {} characters long",
+                        "Password must be at most {} characters long",
                         MAX_PASSWORD_LENGTH
                     );
                     app.send_error_toast(
                         &format!(
-                            "Password must be atmost {} characters long",
+                            "Password must be at most {} characters long",
                             MAX_PASSWORD_LENGTH
                         ),
                         None,
                     );
                 }
+            }
+
+            // check if encryption key is present
+            if get_user_encryption_key(app.state.encryption_key_from_arguments.clone()).is_ok() {
+                warn!("Encryption key already exists, please delete it first or move it if you are trying to create a second account");
+                app.send_warning_toast("Encryption key already exists, please delete it first or move it if you are trying to create a second account", Some(Duration::from_secs(10)));
+                return Ok(());
             }
 
             info!("Signing up, please wait...");
@@ -606,7 +623,10 @@ impl IoAsyncHandler<'_> {
                             }
                             info!("👍 Confirmation email sent");
                             let mut app = self.app.lock().await;
-                            app.send_info_toast("👍 Confirmation email sent", None);
+                            app.send_info_toast(
+                                "👍 Confirmation email sent",
+                                Some(Duration::from_secs(10)),
+                            );
                             let key = generate_new_encryption_key();
                             let save_result = save_user_encryption_key(&key);
                             if save_result.is_err() {
@@ -619,13 +639,15 @@ impl IoAsyncHandler<'_> {
                                 info!("👍 Encryption key saved at {}", save_path);
                                 app.send_info_toast(
                                     &format!("👍 Encryption key saved at {}", save_path),
-                                    None,
+                                    Some(Duration::from_secs(10)),
                                 );
                                 warn!("Please keep this key safe, you will need it to decrypt your data, you will not be able to recover your data without it");
                                 app.send_warning_toast(
                                     "Please keep this key safe, you will need it to decrypt your data, you will not be able to recover your data without it",
-                                    None,
+                                    Some(Duration::from_secs(10)),
                                 );
+                                let default_ui_mode = app.config.default_ui_mode;
+                                app.set_ui_mode(default_ui_mode);
                             }
                         }
                         None => {
@@ -789,12 +811,12 @@ impl IoAsyncHandler<'_> {
                 }
                 PasswordStatus::TooLong => {
                     error!(
-                        "Password must be atmost {} characters long",
+                        "Password must be at most {} characters long",
                         MAX_PASSWORD_LENGTH
                     );
                     app.send_error_toast(
                         &format!(
-                            "Password must be atmost {} characters long",
+                            "Password must be at most {} characters long",
                             MAX_PASSWORD_LENGTH
                         ),
                         None,
@@ -1145,7 +1167,7 @@ impl IoAsyncHandler<'_> {
         let save_date = NaiveDateTime::parse_from_str(save_timestamp, "%Y-%m-%dT%H:%M:%S");
         if save_date.is_ok() {
             let save_date = save_date.unwrap();
-            let save_date = save_date.format(app.config.date_format.to_parser_string());
+            let save_date = save_date.format(app.config.date_time_format.to_parser_string());
             app.state.preview_file_name =
                 Some(format!("Cloud_save_{} - {}", save.save_id, save_date));
         } else {
