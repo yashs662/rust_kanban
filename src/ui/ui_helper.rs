@@ -2611,6 +2611,22 @@ pub fn render_new_card_form(rect: &mut Frame, app: &mut App, popup_mode: bool) {
         )
         .split(rect.size());
 
+    let card_due_date = app.widgets.date_time_picker.get_date_time_as_string(app.config.date_time_format);
+
+    if app.state.z_stack.last() == Some(&PopupMode::DateTimePicker) {
+        if app.widgets.date_time_picker.anchor.is_none() {
+            app.widgets.date_time_picker.anchor = Some((
+                chunks[3].x + card_due_date.len() as u16 + 2,
+                chunks[3].y + 3,
+            )); // offsets to make sure date is visible
+            debug!(
+                "Setting anchor for date time picker to: {:?}",
+                app.widgets.date_time_picker.anchor
+            );
+        }
+        app.widgets.date_time_picker.current_viewport = Some(rect.size());
+    }
+
     let general_style = check_for_popup_and_get_style(
         popup_mode,
         app.current_theme.inactive_text_style,
@@ -7907,15 +7923,16 @@ pub fn render_date_time_widget(rect: &mut Frame, app: &mut App, popup_mode: bool
 
     app.widgets.date_time_picker.current_render_area = Some(render_area);
 
-    let title_length = (current_month.len() + 3 + current_year.len()) as u16; // 3 is for the " - "
+    let title_length = (current_month.len() + 3 + current_year.len() + 4) as u16; // 3 is for the " - ",
+    // additional 4 is to compensate for the borders that show when focus is on month or year
     let padding = (render_area
         .width
         .min(app.widgets.date_time_picker.date_target_width)
         - 3
         - 2)
     .saturating_sub(title_length); // 3 is for the Time section expand button, 2 is for margin
-    let month_length = current_month.len() as u16 + (padding / 2);
-    let year_length = current_year.len() as u16 + (padding / 2);
+    let month_length = current_month.len() as u16 + (padding / 2) + 2;
+    let year_length = current_year.len() as u16 + (padding / 2) + 2;
 
     let (date_picker_render_area, time_picker_render_area) =
         if app.widgets.date_time_picker.widget_width

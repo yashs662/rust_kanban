@@ -1516,7 +1516,9 @@ impl<'a> Widget for DateTimePickerWidget<'a> {
             }
             WidgetAnimState::Closed => {
                 app.state.z_stack.pop();
-                date_time_picker.reset();
+                if app.state.ui_mode != UiMode::NewCard {
+                    date_time_picker.reset();
+                }
             }
         }
 

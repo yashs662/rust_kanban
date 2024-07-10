@@ -1,3 +1,9 @@
+Changes in Version 0.10.1
+=========================
+### Fixes
+- Fixed a bug where date picker would not open on new card form when using the keyboard
+- Fixed a bug where date picker in new card For was not anchored properly
+
 Changes in Version 0.10.0
 =========================
 ### New Features

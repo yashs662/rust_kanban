@@ -4185,9 +4185,9 @@ fn handle_date_time_picker_action(app: &mut App, key: Option<Key>, action: Optio
                                 .format(app.config.date_time_format.to_parser_string())
                                 .to_string()
                         }
-                        app.widgets.date_time_picker.close_date_picker();
                         debug!("Changed due date to {}", card.due_date);
                     }
+                    app.widgets.date_time_picker.close_date_picker();
                 }
                 Focus::DTPToggleTimePicker => {
                     if app.widgets.date_time_picker.time_picker_active {
@@ -4304,6 +4304,7 @@ fn handle_new_card_action(app: &mut App) {
         } else {
             warn!("New card name is empty or already exists");
             app.send_warning_toast("New card name is empty or already exists", None);
+            return;
         }
 
         if let Some(previous_focus) = &app.state.prev_focus {
@@ -4311,6 +4312,8 @@ fn handle_new_card_action(app: &mut App) {
         }
         refresh_visible_boards_and_cards(app);
         reset_new_card_form(app);
+    } else if app.state.focus == Focus::CardDueDate {
+        app.set_popup_mode(PopupMode::DateTimePicker);
     } else if app.state.app_status == AppStatus::Initialized {
         app.state.app_status = AppStatus::UserInput;
     }
@@ -5528,6 +5531,7 @@ fn reset_new_board_form(app: &mut App) {
 fn reset_new_card_form(app: &mut App) {
     app.state.text_buffers.card_name.reset();
     app.state.text_buffers.card_description.reset();
+    app.widgets.date_time_picker.reset();
 }
 
 fn reset_login_form(app: &mut App) {
