@@ -148,7 +148,6 @@ impl From<event::KeyEvent> for Key {
                 kind: event::KeyEventKind::Press,
                 ..
             } => Key::Esc,
-
             event::KeyEvent {
                 code: event::KeyCode::Backspace,
                 kind: event::KeyEventKind::Press,
@@ -160,7 +159,6 @@ impl From<event::KeyEvent> for Key {
                     Key::Backspace
                 }
             }
-
             event::KeyEvent {
                 code: event::KeyCode::Up,
                 kind: event::KeyEventKind::Press,
@@ -176,7 +174,6 @@ impl From<event::KeyEvent> for Key {
                     Key::Up
                 }
             }
-
             event::KeyEvent {
                 code: event::KeyCode::Down,
                 kind: event::KeyEventKind::Press,
@@ -192,7 +189,6 @@ impl From<event::KeyEvent> for Key {
                     Key::Down
                 }
             }
-
             event::KeyEvent {
                 code: event::KeyCode::Left,
                 kind: event::KeyEventKind::Press,
@@ -208,7 +204,6 @@ impl From<event::KeyEvent> for Key {
                     Key::Left
                 }
             }
-
             event::KeyEvent {
                 code: event::KeyCode::Right,
                 kind: event::KeyEventKind::Press,
@@ -224,7 +219,6 @@ impl From<event::KeyEvent> for Key {
                     Key::Right
                 }
             }
-
             event::KeyEvent {
                 code: event::KeyCode::Delete,
                 kind: event::KeyEventKind::Press,
@@ -236,7 +230,6 @@ impl From<event::KeyEvent> for Key {
                     Key::Delete
                 }
             }
-
             event::KeyEvent {
                 code: event::KeyCode::Home,
                 kind: event::KeyEventKind::Press,

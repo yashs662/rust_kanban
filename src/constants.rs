@@ -1,4 +1,4 @@
-use crate::app::state::UiMode;
+use crate::ui::View;
 
 pub const APP_TITLE: &str = "Rust 🦀 Kanban";
 pub const CONFIG_DIR_NAME: &str = "rust_kanban";
@@ -8,7 +8,7 @@ pub const DEFAULT_CARD_TITLE_LENGTH: u16 = 20;
 pub const DEFAULT_CARD_WARNING_DUE_DATE_DAYS: u16 = 3;
 pub const DEFAULT_TICKRATE: u16 = 50;
 pub const DEFAULT_TOAST_DURATION: u64 = 2;
-pub const DEFAULT_UI_MODE: UiMode = UiMode::TitleBodyHelpLog;
+pub const DEFAULT_VIEW: View = View::TitleBodyHelpLog;
 pub const ENCRYPTION_KEY_FILE_NAME: &str = "kanban_encryption_key";
 pub const FIELD_NA: &str = "N/A";
 pub const FIELD_NOT_SET: &str = "Not Set";

@@ -1,355 +1,37 @@
 use crate::{
-    app::App,
-    constants::SAMPLE_TEXT,
-    ui::themes::{
-        cyberpunk_theme, default_theme, dracula_theme, light_theme, matrix_theme, metro_theme,
-        midnight_blue_theme, slate_theme,
+    app::{state::Focus, App},
+    ui::rendering::view::{BodyHelp, TitleBody, Zen},
+};
+use ratatui::{
+    style::{Color, Modifier},
+    Frame,
+};
+use rendering::{
+    popup::{
+        CardPrioritySelector, CardStatusSelector, ChangeDateFormat, ChangeTheme, ChangeView,
+        CommandPalette, ConfirmDiscardCardChanges, CustomHexColorPrompt, DateTimePicker,
+        EditGeneralConfig, EditSpecificKeybinding, EditThemeStyle, FilterByTag, SaveThemePrompt,
+        SelectDefaultView, ViewCard,
+    },
+    view::{
+        BodyHelpLog, BodyLog, ConfigMenu, CreateTheme, EditKeybindings, HelpMenu, LoadASave,
+        LoadCloudSave, LogView, Login, MainMenuView, NewBoardForm, NewCardForm, ResetPassword,
+        Signup, TitleBodyHelp, TitleBodyHelpLog, TitleBodyLog,
     },
 };
-use log::debug;
-use ratatui::{
-    style::{Color, Modifier, Style},
-    text::Span,
-    widgets::{Cell, Row},
-};
 use serde::{Deserialize, Serialize};
-use std::fmt::{self, Display};
-use strum::EnumIter;
+use std::fmt::{self, Formatter};
+use strum::{Display, EnumIter, EnumString};
 
+pub mod inbuilt_themes;
+pub mod rendering;
 pub mod text_box;
-pub mod themes;
+pub mod theme;
 pub mod ui_helper;
 pub mod ui_main;
 pub mod widgets;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct Theme {
-    pub card_due_default_style: Style,
-    pub card_due_overdue_style: Style,
-    pub card_due_warning_style: Style,
-    pub card_priority_high_style: Style,
-    pub card_priority_low_style: Style,
-    pub card_priority_medium_style: Style,
-    pub card_status_active_style: Style,
-    pub card_status_completed_style: Style,
-    pub card_status_stale_style: Style,
-    pub error_text_style: Style,
-    pub general_style: Style,
-    pub help_key_style: Style,
-    pub help_text_style: Style,
-    pub inactive_text_style: Style,
-    pub keyboard_focus_style: Style,
-    pub list_select_style: Style,
-    pub log_debug_style: Style,
-    pub log_error_style: Style,
-    pub log_info_style: Style,
-    pub log_trace_style: Style,
-    pub log_warn_style: Style,
-    pub mouse_focus_style: Style,
-    pub name: String,
-    pub progress_bar_style: Style,
-}
-
-impl Default for Theme {
-    fn default() -> Self {
-        default_theme()
-    }
-}
-
-impl Theme {
-    pub fn all_default_themes() -> Vec<Theme> {
-        vec![
-            cyberpunk_theme(),
-            default_theme(),
-            dracula_theme(),
-            light_theme(),
-            matrix_theme(),
-            metro_theme(),
-            midnight_blue_theme(),
-            slate_theme(),
-        ]
-    }
-
-    pub fn to_rows(&self, app: &App, popup_mode: bool) -> (Vec<Row>, Vec<Row>) {
-        let text_style = if popup_mode {
-            app.current_theme.inactive_text_style
-        } else {
-            app.current_theme.general_style
-        };
-        let theme_title_list = vec![
-            Span::styled("Name: ", text_style),
-            Span::styled("General Style: ", text_style),
-            Span::styled("List Select Style: ", text_style),
-            Span::styled("Card Due Default Style: ", text_style),
-            Span::styled("Card Due Warning Style: ", text_style),
-            Span::styled("Card Due Overdue Style: ", text_style),
-            Span::styled("Card Status Active Style: ", text_style),
-            Span::styled("Card Status Completed Style: ", text_style),
-            Span::styled("Card Status Stale Style: ", text_style),
-            Span::styled("Keyboard Focus Style: ", text_style),
-            Span::styled("Mouse Focus Style: ", text_style),
-            Span::styled("Help Key Style: ", text_style),
-            Span::styled("Help Text Style: ", text_style),
-            Span::styled("Log Error Style: ", text_style),
-            Span::styled("Log Debug Style: ", text_style),
-            Span::styled("Log Warn Style: ", text_style),
-            Span::styled("Log Trace Style: ", text_style),
-            Span::styled("Log Info Style: ", text_style),
-            Span::styled("Progress Bar Style: ", text_style),
-            Span::styled("Error Text Style: ", text_style),
-            Span::styled("Inactive Text Style: ", text_style),
-            Span::styled("Card Priority Low Style: ", text_style),
-            Span::styled("Card Priority Medium Style: ", text_style),
-            Span::styled("Card Priority High Style: ", text_style),
-        ];
-        let theme_style_list = if popup_mode {
-            let mut return_vec = vec![Span::styled(
-                &self.name,
-                app.current_theme.inactive_text_style,
-            )];
-            let sample_text = Span::styled(SAMPLE_TEXT, app.current_theme.inactive_text_style);
-            for _ in 0..theme_title_list.len() - 1 {
-                return_vec.push(sample_text.clone());
-            }
-            return_vec
-        } else {
-            vec![
-                Span::styled(&self.name, self.general_style),
-                Span::styled(SAMPLE_TEXT, self.general_style),
-                Span::styled(SAMPLE_TEXT, self.list_select_style),
-                Span::styled(SAMPLE_TEXT, self.card_due_default_style),
-                Span::styled(SAMPLE_TEXT, self.card_due_warning_style),
-                Span::styled(SAMPLE_TEXT, self.card_due_overdue_style),
-                Span::styled(SAMPLE_TEXT, self.card_status_active_style),
-                Span::styled(SAMPLE_TEXT, self.card_status_completed_style),
-                Span::styled(SAMPLE_TEXT, self.card_status_stale_style),
-                Span::styled(SAMPLE_TEXT, self.keyboard_focus_style),
-                Span::styled(SAMPLE_TEXT, self.mouse_focus_style),
-                Span::styled(SAMPLE_TEXT, self.help_key_style),
-                Span::styled(SAMPLE_TEXT, self.help_text_style),
-                Span::styled(SAMPLE_TEXT, self.log_error_style),
-                Span::styled(SAMPLE_TEXT, self.log_debug_style),
-                Span::styled(SAMPLE_TEXT, self.log_warn_style),
-                Span::styled(SAMPLE_TEXT, self.log_trace_style),
-                Span::styled(SAMPLE_TEXT, self.log_info_style),
-                Span::styled(SAMPLE_TEXT, self.progress_bar_style),
-                Span::styled(SAMPLE_TEXT, self.error_text_style),
-                Span::styled(SAMPLE_TEXT, self.inactive_text_style),
-                Span::styled(SAMPLE_TEXT, self.card_priority_low_style),
-                Span::styled(SAMPLE_TEXT, self.card_priority_medium_style),
-                Span::styled(SAMPLE_TEXT, self.card_priority_high_style),
-            ]
-        };
-        let rows_title = theme_title_list
-            .iter()
-            .map(|row| Row::new(vec![Cell::from(row.clone())]))
-            .collect::<Vec<Row>>();
-        let rows_elements = theme_style_list
-            .iter()
-            .map(|row| Row::new(vec![Cell::from(row.clone())]))
-            .collect::<Vec<Row>>();
-        (rows_title, rows_elements)
-    }
-
-    pub fn to_vec_str(&self) -> Vec<&str> {
-        vec![
-            "name",
-            "general_style",
-            "list_select_style",
-            "card_due_default_style",
-            "card_due_warning_style",
-            "card_due_overdue_style",
-            "card_status_active_style",
-            "card_status_completed_style",
-            "card_status_stale_style",
-            "keyboard_focus_style",
-            "mouse_focus_style",
-            "help_key_style",
-            "help_text_style",
-            "log_error_style",
-            "log_debug_style",
-            "log_warn_style",
-            "log_trace_style",
-            "log_info_style",
-            "progress_bar_style",
-            "error_text_style",
-            "inactive_text_style",
-            "card_priority_low_style",
-            "card_priority_medium_style",
-            "card_priority_high_style",
-        ]
-    }
-
-    pub fn update_style(
-        style: &mut Style,
-        fg_color: Option<Color>,
-        bg_color: Option<Color>,
-        modifier: Option<Modifier>,
-    ) {
-        if let Some(fg) = fg_color {
-            style.fg = Some(fg);
-        } else {
-            style.fg = None;
-        }
-
-        if let Some(bg) = bg_color {
-            style.bg = Some(bg);
-        } else {
-            style.bg = None;
-        }
-
-        if let Some(modifier) = modifier {
-            Self::add_modifier_to_style(style, modifier);
-        } else {
-            style.sub_modifier = Modifier::empty();
-            style.add_modifier = Modifier::empty();
-        }
-    }
-
-    pub fn add_modifier_to_style(style: &mut Style, modifier: Modifier) {
-        style.sub_modifier = style.sub_modifier.difference(modifier);
-        style.add_modifier = style.add_modifier.union(modifier);
-    }
-
-    pub fn edit_style(
-        &self,
-        style_being_edited: &str,
-        fg_color: Option<Color>,
-        bg_color: Option<Color>,
-        modifier: Option<Modifier>,
-    ) -> Self {
-        // TODO: For style_being_edited, maybe use strum?
-        let mut theme = self.clone();
-        match style_being_edited {
-            "name" => debug!("Cannot edit name"),
-            "general_style" => {
-                Theme::update_style(&mut theme.general_style, fg_color, bg_color, modifier);
-            }
-            "list_select_style" => {
-                Theme::update_style(&mut theme.list_select_style, fg_color, bg_color, modifier);
-            }
-            "card_due_default_style" => {
-                Theme::update_style(
-                    &mut theme.card_due_default_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "card_due_warning_style" => {
-                Theme::update_style(
-                    &mut theme.card_due_warning_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "card_due_overdue_style" => {
-                Theme::update_style(
-                    &mut theme.card_due_overdue_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "card_status_active_style" => {
-                Theme::update_style(
-                    &mut theme.card_status_active_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "card_status_completed_style" => {
-                Theme::update_style(
-                    &mut theme.card_status_completed_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "card_status_stale_style" => {
-                Theme::update_style(
-                    &mut theme.card_status_stale_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "keyboard_focus_style" => {
-                Theme::update_style(
-                    &mut theme.keyboard_focus_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "mouse_focus_style" => {
-                Theme::update_style(&mut theme.mouse_focus_style, fg_color, bg_color, modifier);
-            }
-            "help_key_style" => {
-                Theme::update_style(&mut theme.help_key_style, fg_color, bg_color, modifier);
-            }
-            "help_text_style" => {
-                Theme::update_style(&mut theme.help_text_style, fg_color, bg_color, modifier);
-            }
-            "log_error_style" => {
-                Theme::update_style(&mut theme.log_error_style, fg_color, bg_color, modifier);
-            }
-            "log_debug_style" => {
-                Theme::update_style(&mut theme.log_debug_style, fg_color, bg_color, modifier);
-            }
-            "log_warn_style" => {
-                Theme::update_style(&mut theme.log_warn_style, fg_color, bg_color, modifier);
-            }
-            "log_trace_style" => {
-                Theme::update_style(&mut theme.log_trace_style, fg_color, bg_color, modifier);
-            }
-            "log_info_style" => {
-                Theme::update_style(&mut theme.log_info_style, fg_color, bg_color, modifier);
-            }
-            "progress_bar_style" => {
-                Theme::update_style(&mut theme.progress_bar_style, fg_color, bg_color, modifier);
-            }
-            "error_text_style" => {
-                Theme::update_style(&mut theme.error_text_style, fg_color, bg_color, modifier);
-            }
-            "inactive_text_style" => {
-                Theme::update_style(&mut theme.inactive_text_style, fg_color, bg_color, modifier);
-            }
-            "card_priority_low_style" => {
-                Theme::update_style(
-                    &mut theme.card_priority_low_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "card_priority_medium_style" => {
-                Theme::update_style(
-                    &mut theme.card_priority_medium_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            "card_priority_high_style" => {
-                Theme::update_style(
-                    &mut theme.card_priority_high_style,
-                    fg_color,
-                    bg_color,
-                    modifier,
-                );
-            }
-            _ => {
-                debug!("Style not found: {}", style_being_edited);
-            }
-        }
-        theme
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, EnumIter)]
+#[derive(Debug, Clone, Serialize, Deserialize, EnumIter, Display, Copy)]
 pub enum TextColorOptions {
     Black,
     Blue,
@@ -365,35 +47,11 @@ pub enum TextColorOptions {
     LightYellow,
     Magenta,
     None,
+    #[strum(to_string = "HEX #{0:02x}{1:02x}{2:02x}")]
     HEX(u8, u8, u8),
     Red,
     White,
     Yellow,
-}
-
-impl Display for TextColorOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TextColorOptions::Black => write!(f, "Black"),
-            TextColorOptions::Blue => write!(f, "Blue"),
-            TextColorOptions::Cyan => write!(f, "Cyan"),
-            TextColorOptions::DarkGray => write!(f, "DarkGray"),
-            TextColorOptions::Gray => write!(f, "Gray"),
-            TextColorOptions::Green => write!(f, "Green"),
-            TextColorOptions::LightBlue => write!(f, "LightBlue"),
-            TextColorOptions::LightCyan => write!(f, "LightCyan"),
-            TextColorOptions::LightGreen => write!(f, "LightGreen"),
-            TextColorOptions::LightMagenta => write!(f, "LightMagenta"),
-            TextColorOptions::LightRed => write!(f, "LightRed"),
-            TextColorOptions::LightYellow => write!(f, "LightYellow"),
-            TextColorOptions::Magenta => write!(f, "Magenta"),
-            TextColorOptions::None => write!(f, "None"),
-            TextColorOptions::Red => write!(f, "Red"),
-            TextColorOptions::HEX(r, g, b) => write!(f, "#{:02X}{:02X}{:02X}", r, g, b),
-            TextColorOptions::White => write!(f, "White"),
-            TextColorOptions::Yellow => write!(f, "Yellow"),
-        }
-    }
 }
 
 impl From<Color> for TextColorOptions {
@@ -422,31 +80,32 @@ impl From<Color> for TextColorOptions {
     }
 }
 
-impl TextColorOptions {
-    pub fn to_color(&self) -> Option<Color> {
-        match self {
-            TextColorOptions::Black => Some(Color::Black),
-            TextColorOptions::Blue => Some(Color::Blue),
-            TextColorOptions::Cyan => Some(Color::Cyan),
-            TextColorOptions::DarkGray => Some(Color::DarkGray),
-            TextColorOptions::Gray => Some(Color::Gray),
-            TextColorOptions::Green => Some(Color::Green),
-            TextColorOptions::LightBlue => Some(Color::LightBlue),
-            TextColorOptions::LightCyan => Some(Color::LightCyan),
-            TextColorOptions::LightGreen => Some(Color::LightGreen),
-            TextColorOptions::LightMagenta => Some(Color::LightMagenta),
-            TextColorOptions::LightRed => Some(Color::LightRed),
-            TextColorOptions::LightYellow => Some(Color::LightYellow),
-            TextColorOptions::Magenta => Some(Color::Magenta),
-            TextColorOptions::None => None,
-            TextColorOptions::Red => Some(Color::Red),
-            TextColorOptions::HEX(r, g, b) => Some(Color::Rgb(*r, *g, *b)),
-            TextColorOptions::White => Some(Color::White),
-            TextColorOptions::Yellow => Some(Color::Yellow),
+impl From<TextColorOptions> for Color {
+    fn from(color: TextColorOptions) -> Self {
+        match color {
+            TextColorOptions::Black => Color::Black,
+            TextColorOptions::Blue => Color::Blue,
+            TextColorOptions::Cyan => Color::Cyan,
+            TextColorOptions::DarkGray => Color::DarkGray,
+            TextColorOptions::Gray => Color::Gray,
+            TextColorOptions::Green => Color::Green,
+            TextColorOptions::LightBlue => Color::LightBlue,
+            TextColorOptions::LightCyan => Color::LightCyan,
+            TextColorOptions::LightGreen => Color::LightGreen,
+            TextColorOptions::LightMagenta => Color::LightMagenta,
+            TextColorOptions::LightRed => Color::LightRed,
+            TextColorOptions::LightYellow => Color::LightYellow,
+            TextColorOptions::Magenta => Color::Magenta,
+            TextColorOptions::None => Color::Reset,
+            TextColorOptions::Red => Color::Red,
+            TextColorOptions::HEX(r, g, b) => Color::Rgb(r, g, b),
+            TextColorOptions::White => Color::White,
+            TextColorOptions::Yellow => Color::Yellow,
         }
     }
+}
 
-    // TODO: This is a hack to get around the fact that the Color struct doesn't have a way to get the RGB values, find a better way to do this
+impl TextColorOptions {
     pub fn to_rgb(&self) -> (u8, u8, u8) {
         match self {
             TextColorOptions::Black => (0, 0, 0),
@@ -471,7 +130,7 @@ impl TextColorOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Display, EnumIter)]
 pub enum TextModifierOptions {
     Bold,
     CrossedOut,
@@ -485,26 +144,9 @@ pub enum TextModifierOptions {
     Underlined,
 }
 
-impl Display for TextModifierOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TextModifierOptions::Bold => write!(f, "Bold"),
-            TextModifierOptions::CrossedOut => write!(f, "CrossedOut"),
-            TextModifierOptions::Dim => write!(f, "Dim"),
-            TextModifierOptions::Hidden => write!(f, "Hidden"),
-            TextModifierOptions::Italic => write!(f, "Italic"),
-            TextModifierOptions::None => write!(f, "None"),
-            TextModifierOptions::RapidBlink => write!(f, "RapidBlink"),
-            TextModifierOptions::Reversed => write!(f, "Reversed"),
-            TextModifierOptions::SlowBlink => write!(f, "SlowBlink"),
-            TextModifierOptions::Underlined => write!(f, "Underlined"),
-        }
-    }
-}
-
-impl TextModifierOptions {
-    pub fn to_modifier(&self) -> Modifier {
-        match self {
+impl From<TextModifierOptions> for Modifier {
+    fn from(modifier: TextModifierOptions) -> Self {
+        match modifier {
             TextModifierOptions::Bold => Modifier::BOLD,
             TextModifierOptions::CrossedOut => Modifier::CROSSED_OUT,
             TextModifierOptions::Dim => Modifier::DIM,
@@ -517,19 +159,406 @@ impl TextModifierOptions {
             TextModifierOptions::Underlined => Modifier::UNDERLINED,
         }
     }
-    pub fn to_iter() -> impl Iterator<Item = TextModifierOptions> {
+}
+
+pub trait Renderable {
+    fn render(rect: &mut Frame, app: &mut App, is_active: bool);
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy, Default, EnumString)]
+pub enum View {
+    BodyHelp,
+    BodyHelpLog,
+    BodyLog,
+    ConfigMenu,
+    CreateTheme,
+    EditKeybindings,
+    HelpMenu,
+    LoadCloudSave,
+    LoadLocalSave,
+    Login,
+    LogsOnly,
+    MainMenu,
+    NewBoard,
+    NewCard,
+    ResetPassword,
+    SignUp,
+    TitleBody,
+    TitleBodyHelp,
+    TitleBodyHelpLog,
+    TitleBodyLog,
+    #[default]
+    Zen,
+}
+
+impl View {
+    pub fn from_string(s: &str) -> Option<View> {
+        match s {
+            "Body and Help" => Some(View::BodyHelp),
+            "Body, Help and Log" => Some(View::BodyHelpLog),
+            "Body and Log" => Some(View::BodyLog),
+            "Config" => Some(View::ConfigMenu),
+            "Create Theme" => Some(View::CreateTheme),
+            "Edit Keybindings" => Some(View::EditKeybindings),
+            "Help Menu" => Some(View::HelpMenu),
+            "Load a Save (Cloud)" => Some(View::LoadCloudSave),
+            "Load a Save (Local)" => Some(View::LoadLocalSave),
+            "Login" => Some(View::Login),
+            "Logs Only" => Some(View::LogsOnly),
+            "Main Menu" => Some(View::MainMenu),
+            "New Board" => Some(View::NewBoard),
+            "New Card" => Some(View::NewCard),
+            "Reset Password" => Some(View::ResetPassword),
+            "Sign Up" => Some(View::SignUp),
+            "Title and Body" => Some(View::TitleBody),
+            "Title, Body and Help" => Some(View::TitleBodyHelp),
+            "Title, Body, Help and Log" => Some(View::TitleBodyHelpLog),
+            "Title, Body and Log" => Some(View::TitleBodyLog),
+            "Zen" => Some(View::Zen),
+            _ => None,
+        }
+    }
+
+    pub fn from_number(n: u8) -> View {
+        match n {
+            1 => View::Zen,
+            2 => View::TitleBody,
+            3 => View::BodyHelp,
+            4 => View::BodyLog,
+            5 => View::TitleBodyHelp,
+            6 => View::TitleBodyLog,
+            7 => View::BodyHelpLog,
+            8 => View::TitleBodyHelpLog,
+            9 => View::LogsOnly,
+            _ => {
+                log::error!("Invalid View: {}", n);
+                View::TitleBody
+            }
+        }
+    }
+
+    pub fn get_available_targets(&self) -> Vec<Focus> {
+        match self {
+            View::BodyHelp => vec![Focus::Body, Focus::Help],
+            View::BodyHelpLog => vec![Focus::Body, Focus::Help, Focus::Log],
+            View::BodyLog => vec![Focus::Body, Focus::Log],
+            View::ConfigMenu => vec![Focus::ConfigTable, Focus::SubmitButton, Focus::ExtraFocus],
+            View::CreateTheme => vec![Focus::ThemeEditor, Focus::SubmitButton, Focus::ExtraFocus],
+            View::EditKeybindings => vec![Focus::EditKeybindingsTable, Focus::SubmitButton],
+            View::HelpMenu => vec![Focus::Help, Focus::Log],
+            View::LoadCloudSave => vec![Focus::Body],
+            View::LoadLocalSave => vec![Focus::Body],
+            View::Login => vec![
+                Focus::Title,
+                Focus::EmailIDField,
+                Focus::PasswordField,
+                Focus::ExtraFocus,
+                Focus::SubmitButton,
+            ],
+            View::LogsOnly => vec![Focus::Log],
+            View::MainMenu => vec![Focus::MainMenu, Focus::Help, Focus::Log],
+            View::NewBoard => vec![
+                Focus::NewBoardName,
+                Focus::NewBoardDescription,
+                Focus::SubmitButton,
+            ],
+            View::NewCard => vec![
+                Focus::CardName,
+                Focus::CardDescription,
+                Focus::CardDueDate,
+                Focus::SubmitButton,
+            ],
+            View::ResetPassword => vec![
+                Focus::Title,
+                Focus::EmailIDField,
+                Focus::SendResetPasswordLinkButton,
+                Focus::ResetPasswordLinkField,
+                Focus::PasswordField,
+                Focus::ConfirmPasswordField,
+                Focus::ExtraFocus,
+                Focus::SubmitButton,
+            ],
+            View::SignUp => vec![
+                Focus::Title,
+                Focus::EmailIDField,
+                Focus::PasswordField,
+                Focus::ConfirmPasswordField,
+                Focus::ExtraFocus,
+                Focus::SubmitButton,
+            ],
+            View::TitleBody => vec![Focus::Title, Focus::Body],
+            View::TitleBodyHelp => vec![Focus::Title, Focus::Body, Focus::Help],
+            View::TitleBodyHelpLog => vec![Focus::Title, Focus::Body, Focus::Help, Focus::Log],
+            View::TitleBodyLog => vec![Focus::Title, Focus::Body, Focus::Log],
+            View::Zen => vec![Focus::Body],
+        }
+    }
+
+    pub fn all_views_as_string() -> Vec<String> {
+        View::views_with_kanban_board()
+            .iter()
+            .map(|x| x.to_string())
+            .collect()
+    }
+
+    pub fn views_with_kanban_board() -> Vec<View> {
         vec![
-            TextModifierOptions::Bold,
-            TextModifierOptions::CrossedOut,
-            TextModifierOptions::Dim,
-            TextModifierOptions::Hidden,
-            TextModifierOptions::Italic,
-            TextModifierOptions::None,
-            TextModifierOptions::RapidBlink,
-            TextModifierOptions::Reversed,
-            TextModifierOptions::SlowBlink,
-            TextModifierOptions::Underlined,
+            View::Zen,
+            View::TitleBody,
+            View::BodyHelp,
+            View::BodyLog,
+            View::TitleBodyHelp,
+            View::TitleBodyLog,
+            View::BodyHelpLog,
+            View::TitleBodyHelpLog,
         ]
-        .into_iter()
+    }
+
+    pub fn render(self, rect: &mut Frame, app: &mut App, is_active: bool) {
+        if is_active {
+            let current_focus = app.state.focus;
+            if !self.get_available_targets().contains(&current_focus)
+                && !self.get_available_targets().is_empty()
+            {
+                app.state.set_focus(self.get_available_targets()[0]);
+            }
+        }
+        match self {
+            View::Zen => {
+                Zen::render(rect, app, is_active);
+            }
+            View::TitleBody => {
+                TitleBody::render(rect, app, is_active);
+            }
+            View::BodyHelp => {
+                BodyHelp::render(rect, app, is_active);
+            }
+            View::BodyLog => {
+                BodyLog::render(rect, app, is_active);
+            }
+            View::TitleBodyHelp => {
+                TitleBodyHelp::render(rect, app, is_active);
+            }
+            View::TitleBodyLog => {
+                TitleBodyLog::render(rect, app, is_active);
+            }
+            View::BodyHelpLog => {
+                BodyHelpLog::render(rect, app, is_active);
+            }
+            View::TitleBodyHelpLog => {
+                TitleBodyHelpLog::render(rect, app, is_active);
+            }
+            View::ConfigMenu => {
+                ConfigMenu::render(rect, app, is_active);
+            }
+            View::EditKeybindings => {
+                EditKeybindings::render(rect, app, is_active);
+            }
+            View::MainMenu => {
+                MainMenuView::render(rect, app, is_active);
+            }
+            View::HelpMenu => {
+                HelpMenu::render(rect, app, is_active);
+            }
+            View::LogsOnly => {
+                LogView::render(rect, app, is_active);
+            }
+            View::NewBoard => {
+                NewBoardForm::render(rect, app, is_active);
+            }
+            View::NewCard => NewCardForm::render(rect, app, is_active),
+            View::LoadLocalSave => {
+                LoadASave::render(rect, app, is_active);
+            }
+            View::CreateTheme => CreateTheme::render(rect, app, is_active),
+            View::Login => Login::render(rect, app, is_active),
+            View::SignUp => Signup::render(rect, app, is_active),
+            View::ResetPassword => ResetPassword::render(rect, app, is_active),
+            View::LoadCloudSave => LoadCloudSave::render(rect, app, is_active),
+        }
+    }
+}
+
+impl fmt::Display for View {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            View::BodyHelp => write!(f, "Body and Help"),
+            View::BodyHelpLog => write!(f, "Body, Help and Log"),
+            View::BodyLog => write!(f, "Body and Log"),
+            View::ConfigMenu => write!(f, "Config"),
+            View::CreateTheme => write!(f, "Create Theme"),
+            View::EditKeybindings => write!(f, "Edit Keybindings"),
+            View::HelpMenu => write!(f, "Help Menu"),
+            View::LoadCloudSave => write!(f, "Load a Save (Cloud)"),
+            View::LoadLocalSave => write!(f, "Load a Save (Local)"),
+            View::Login => write!(f, "Login"),
+            View::LogsOnly => write!(f, "Logs Only"),
+            View::MainMenu => write!(f, "Main Menu"),
+            View::NewBoard => write!(f, "New Board"),
+            View::NewCard => write!(f, "New Card"),
+            View::ResetPassword => write!(f, "Reset Password"),
+            View::SignUp => write!(f, "Sign Up"),
+            View::TitleBody => write!(f, "Title and Body"),
+            View::TitleBodyHelp => write!(f, "Title, Body and Help"),
+            View::TitleBodyHelpLog => write!(f, "Title, Body, Help and Log"),
+            View::TitleBodyLog => write!(f, "Title, Body and Log"),
+            View::Zen => write!(f, "Zen"),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug, Copy)]
+pub enum PopUp {
+    ViewCard,
+    CommandPalette,
+    EditSpecificKeyBinding,
+    ChangeView,
+    CardStatusSelector,
+    EditGeneralConfig,
+    SelectDefaultView,
+    ChangeDateFormatPopup,
+    ChangeTheme,
+    EditThemeStyle,
+    SaveThemePrompt,
+    CustomHexColorPromptFG,
+    CustomHexColorPromptBG,
+    ConfirmDiscardCardChanges,
+    CardPrioritySelector,
+    FilterByTag,
+    DateTimePicker,
+}
+
+impl fmt::Display for PopUp {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            PopUp::ViewCard => write!(f, "Card View"),
+            PopUp::CommandPalette => write!(f, "Command Palette"),
+            PopUp::EditSpecificKeyBinding => write!(f, "Edit Specific Key Binding"),
+            PopUp::ChangeView => write!(f, "Change View"),
+            PopUp::CardStatusSelector => write!(f, "Change Card Status"),
+            PopUp::EditGeneralConfig => write!(f, "Edit General Config"),
+            PopUp::SelectDefaultView => write!(f, "Select Default View"),
+            PopUp::ChangeDateFormatPopup => write!(f, "Change Date Format"),
+            PopUp::ChangeTheme => write!(f, "Change Theme"),
+            PopUp::EditThemeStyle => write!(f, "Edit Theme Style"),
+            PopUp::SaveThemePrompt => write!(f, "Save Theme Prompt"),
+            PopUp::CustomHexColorPromptFG => write!(f, "Custom Hex Color Prompt FG"),
+            PopUp::CustomHexColorPromptBG => write!(f, "Custom Hex Color Prompt BG"),
+            PopUp::ConfirmDiscardCardChanges => write!(f, "Confirm Discard Card Changes"),
+            PopUp::CardPrioritySelector => write!(f, "Change Card Priority"),
+            PopUp::FilterByTag => write!(f, "Filter By Tag"),
+            PopUp::DateTimePicker => write!(f, "Date Time Picker"),
+        }
+    }
+}
+
+impl PopUp {
+    pub fn get_available_targets(&self) -> Vec<Focus> {
+        match self {
+            PopUp::ViewCard => vec![
+                Focus::CardName,
+                Focus::CardDescription,
+                Focus::CardDueDate,
+                Focus::CardPriority,
+                Focus::CardStatus,
+                Focus::CardTags,
+                Focus::CardComments,
+                Focus::SubmitButton,
+            ],
+            PopUp::CommandPalette => vec![
+                Focus::CommandPaletteCommand,
+                Focus::CommandPaletteCard,
+                Focus::CommandPaletteBoard,
+            ],
+            PopUp::EditSpecificKeyBinding => vec![],
+            PopUp::ChangeView => vec![],
+            PopUp::CardStatusSelector => vec![],
+            PopUp::EditGeneralConfig => vec![],
+            PopUp::SelectDefaultView => vec![],
+            PopUp::ChangeDateFormatPopup => vec![],
+            PopUp::ChangeTheme => vec![],
+            PopUp::EditThemeStyle => vec![
+                Focus::StyleEditorFG,
+                Focus::StyleEditorBG,
+                Focus::StyleEditorModifier,
+                Focus::SubmitButton,
+            ],
+            PopUp::SaveThemePrompt => vec![Focus::SubmitButton, Focus::ExtraFocus],
+            PopUp::CustomHexColorPromptFG => vec![Focus::TextInput, Focus::SubmitButton],
+            PopUp::CustomHexColorPromptBG => vec![Focus::TextInput, Focus::SubmitButton],
+            PopUp::ConfirmDiscardCardChanges => vec![Focus::SubmitButton, Focus::ExtraFocus],
+            PopUp::CardPrioritySelector => vec![],
+            PopUp::FilterByTag => vec![Focus::FilterByTagPopup, Focus::SubmitButton],
+            PopUp::DateTimePicker => vec![
+                Focus::DTPCalender,
+                Focus::DTPMonth,
+                Focus::DTPYear,
+                Focus::DTPToggleTimePicker,
+                Focus::DTPHour,
+                Focus::DTPMinute,
+                Focus::DTPSecond,
+            ],
+        }
+    }
+
+    pub fn render(self, rect: &mut Frame, app: &mut App, is_active: bool) {
+        if is_active {
+            let current_focus = app.state.focus;
+            if !self.get_available_targets().contains(&current_focus)
+                && !self.get_available_targets().is_empty()
+            {
+                app.state.set_focus(self.get_available_targets()[0]);
+            }
+        }
+        match self {
+            PopUp::ViewCard => {
+                ViewCard::render(rect, app, is_active);
+            }
+            PopUp::CardStatusSelector => {
+                CardStatusSelector::render(rect, app, is_active);
+            }
+            PopUp::ChangeView => {
+                ChangeView::render(rect, app, is_active);
+            }
+            PopUp::CommandPalette => {
+                CommandPalette::render(rect, app, is_active);
+            }
+            PopUp::EditGeneralConfig => {
+                EditGeneralConfig::render(rect, app, is_active);
+            }
+            PopUp::EditSpecificKeyBinding => {
+                EditSpecificKeybinding::render(rect, app, is_active);
+            }
+            PopUp::SelectDefaultView => {
+                SelectDefaultView::render(rect, app, is_active);
+            }
+            PopUp::ChangeTheme => {
+                ChangeTheme::render(rect, app, is_active);
+            }
+            PopUp::EditThemeStyle => {
+                EditThemeStyle::render(rect, app, is_active);
+            }
+            PopUp::SaveThemePrompt => {
+                SaveThemePrompt::render(rect, app, is_active);
+            }
+            PopUp::CustomHexColorPromptFG | PopUp::CustomHexColorPromptBG => {
+                CustomHexColorPrompt::render(rect, app, is_active);
+            }
+            PopUp::ConfirmDiscardCardChanges => {
+                ConfirmDiscardCardChanges::render(rect, app, is_active);
+            }
+            PopUp::CardPrioritySelector => {
+                CardPrioritySelector::render(rect, app, is_active);
+            }
+            PopUp::FilterByTag => {
+                FilterByTag::render(rect, app, is_active);
+            }
+            PopUp::ChangeDateFormatPopup => {
+                ChangeDateFormat::render(rect, app, is_active);
+            }
+            PopUp::DateTimePicker => {
+                DateTimePicker::render(rect, app, is_active);
+            }
+        }
     }
 }

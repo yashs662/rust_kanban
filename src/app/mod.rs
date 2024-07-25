@@ -1,19 +1,18 @@
-use self::{
-    actions::Action,
-    app_helper::{
-        handle_edit_keybinding_mode, handle_general_actions, handle_mouse_action,
-        handle_user_input_mode, prepare_config_for_new_app,
-    },
-    kanban::{Board, Boards, Card, CardPriority, CardStatus},
-    state::{AppStatus, Focus, KeyBindingEnum, KeyBindings, UiMode},
-};
 use crate::{
+    app::{
+        actions::Action,
+        app_helper::{
+            handle_edit_keybinding_mode, handle_general_actions, handle_mouse_action,
+            handle_user_input_mode, prepare_config_for_new_app,
+        },
+        kanban::{Board, Boards, Card, CardPriority, CardStatus},
+        state::{AppStatus, Focus, KeyBindingEnum, KeyBindings},
+    },
     constants::{
-        DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION,
-        DEFAULT_UI_MODE, FIELD_NA, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE,
-        MAX_NO_CARDS_PER_BOARD, MAX_TICKRATE, MAX_WARNING_DUE_DATE_DAYS, MIN_NO_BOARDS_PER_PAGE,
-        MIN_NO_CARDS_PER_BOARD, MIN_TICKRATE, MIN_WARNING_DUE_DATE_DAYS, NO_OF_BOARDS_PER_PAGE,
-        NO_OF_CARDS_PER_BOARD,
+        DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION, DEFAULT_VIEW,
+        FIELD_NA, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MAX_TICKRATE,
+        MAX_WARNING_DUE_DATE_DAYS, MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD, MIN_TICKRATE,
+        MIN_WARNING_DUE_DATE_DAYS, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
@@ -24,8 +23,13 @@ use crate::{
     },
     ui::{
         text_box::TextBox,
-        widgets::{CalenderType, ToastType, ToastWidget, Widgets},
-        TextColorOptions, TextModifierOptions, Theme,
+        theme::Theme,
+        widgets::{
+            date_time_picker::CalenderType,
+            toast::{ToastType, ToastWidget},
+            Widgets,
+        },
+        PopUp, TextColorOptions, TextModifierOptions, View,
     },
 };
 use linked_hash_map::LinkedHashMap;
@@ -33,7 +37,7 @@ use log::{debug, error, warn};
 use ratatui::widgets::TableState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use state::{AppState, PopupMode};
+use state::AppState;
 use std::{
     fmt::{self, Display, Formatter},
     path::PathBuf,
@@ -41,7 +45,7 @@ use std::{
     time::{Duration, Instant},
     vec,
 };
-use strum::IntoEnumIterator;
+use strum::{EnumString, IntoEnumIterator};
 use strum_macros::EnumIter;
 
 pub mod actions;
@@ -417,7 +421,7 @@ impl App<'_> {
     pub fn select_default_view_next(&mut self) {
         let i = match self.state.app_list_states.default_view.selected() {
             Some(i) => {
-                if i >= UiMode::view_modes_as_string().len() - 1 {
+                if i >= View::all_views_as_string().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -431,7 +435,7 @@ impl App<'_> {
         let i = match self.state.app_list_states.default_view.selected() {
             Some(i) => {
                 if i == 0 {
-                    UiMode::view_modes_as_string().len() - 1
+                    View::all_views_as_string().len() - 1
                 } else {
                     i - 1
                 }
@@ -728,7 +732,7 @@ impl App<'_> {
         self.current_theme = self.all_themes[i].clone();
     }
     pub fn select_create_theme_next(&mut self) {
-        // popup_mode doesn't matter here, as we only want the length of the rows
+        // popup doesn't matter here, as we only want the length of the rows
         let theme_rows_len = Theme::default().to_rows(self, true).1.len();
         let i = match self.state.app_table_states.theme_editor.selected() {
             Some(i) => {
@@ -743,7 +747,7 @@ impl App<'_> {
         self.state.app_table_states.theme_editor.select(Some(i));
     }
     pub fn select_create_theme_prv(&mut self) {
-        // popup_mode doesn't matter here, as we only want the length of the rows
+        // popup doesn't matter here, as we only want the length of the rows
         let theme_rows_len = Theme::default().to_rows(self, true).1.len();
         let i = match self.state.app_table_states.theme_editor.selected() {
             Some(i) => {
@@ -812,7 +816,7 @@ impl App<'_> {
     pub fn select_edit_style_modifier_next(&mut self) {
         let i = match self.state.app_list_states.edit_specific_style[2].selected() {
             Some(i) => {
-                if i >= TextModifierOptions::to_iter().count() - 1 {
+                if i >= TextModifierOptions::iter().count() - 1 {
                     0
                 } else {
                     i + 1
@@ -826,7 +830,7 @@ impl App<'_> {
         let i = match self.state.app_list_states.edit_specific_style[2].selected() {
             Some(i) => {
                 if i == 0 {
-                    TextModifierOptions::to_iter().count() - 1
+                    TextModifierOptions::iter().count() - 1
                 } else {
                     i - 1
                 }
@@ -1261,16 +1265,16 @@ impl App<'_> {
         };
         hot_log.state.select(Some(i));
     }
-    pub fn set_popup_mode(&mut self, popup_mode: PopupMode) {
-        if self.state.z_stack.contains(&popup_mode) {
+    pub fn set_popup(&mut self, popup: PopUp) {
+        if self.state.z_stack.contains(&popup) {
             debug!(
-                "Popup mode already set: {:?}, z_stack {:?}",
-                popup_mode, self.state.z_stack
+                "Popup already set: {:?}, z_stack {:?}",
+                popup, self.state.z_stack
             );
             return;
         }
-        self.state.z_stack.push(popup_mode);
-        let available_focus_targets = popup_mode.get_available_targets();
+        self.state.z_stack.push(popup);
+        let available_focus_targets = popup.get_available_targets();
         if !available_focus_targets.contains(&self.state.focus) {
             if available_focus_targets.is_empty() {
                 self.state.set_focus(Focus::NoFocus);
@@ -1282,8 +1286,8 @@ impl App<'_> {
                 self.state.set_focus(available_focus_targets[0]);
             }
         }
-        match popup_mode {
-            PopupMode::ViewCard => {
+        match popup {
+            PopUp::ViewCard => {
                 if self.state.current_board_id.is_none() || self.state.current_card_id.is_none() {
                     self.send_error_toast("No card selected", Some(Duration::from_secs(1)));
                     return;
@@ -1311,46 +1315,46 @@ impl App<'_> {
                     self.send_error_toast("No board selected", Some(Duration::from_secs(1)));
                 }
             }
-            PopupMode::CommandPalette => {
+            PopUp::CommandPalette => {
                 self.widgets.command_palette.reset(&mut self.state);
                 self.state.app_status = AppStatus::UserInput;
                 self.state.set_focus(Focus::CommandPaletteCommand);
             }
-            PopupMode::CardStatusSelector => {
+            PopUp::CardStatusSelector => {
                 self.state.set_focus(Focus::ChangeCardStatusPopup);
             }
-            PopupMode::CardPrioritySelector => {
+            PopUp::CardPrioritySelector => {
                 self.state.set_focus(Focus::ChangeCardPriorityPopup);
             }
-            PopupMode::EditGeneralConfig => {
+            PopUp::EditGeneralConfig => {
                 self.state.set_focus(Focus::EditGeneralConfigPopup);
             }
-            PopupMode::CustomHexColorPromptBG | PopupMode::CustomHexColorPromptFG => {
+            PopUp::CustomHexColorPromptBG | PopUp::CustomHexColorPromptFG => {
                 self.state.set_focus(Focus::TextInput);
                 self.state.app_status = AppStatus::UserInput;
             }
-            PopupMode::DateTimePicker => {
+            PopUp::DateTimePicker => {
                 self.widgets.date_time_picker.open_date_picker();
             }
             _ => {
-                debug!("No special logic for setting popup mode: {:?}", popup_mode);
+                debug!("No special logic for setting popup: {:?}", popup);
             }
         }
     }
 
     pub fn close_popup(&mut self) {
-        if let Some(popup_mode) = self.state.z_stack.pop() {
-            match popup_mode {
-                PopupMode::CustomHexColorPromptBG | PopupMode::CustomHexColorPromptFG => {
+        if let Some(popup) = self.state.z_stack.pop() {
+            match popup {
+                PopUp::CustomHexColorPromptBG | PopUp::CustomHexColorPromptFG => {
                     self.state.app_status = AppStatus::Initialized;
                 }
-                PopupMode::ViewCard => {
+                PopUp::ViewCard => {
                     self.state.app_status = AppStatus::Initialized;
                     if self.state.card_being_edited.is_some() {
-                        self.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                        self.set_popup(PopUp::ConfirmDiscardCardChanges);
                     }
                 }
-                PopupMode::ConfirmDiscardCardChanges => {
+                PopUp::ConfirmDiscardCardChanges => {
                     self.state.app_status = AppStatus::Initialized;
                     if let Some(card) = &self.state.card_being_edited {
                         warn!("Discarding changes to card '{}'", card.1.name);
@@ -1361,7 +1365,7 @@ impl App<'_> {
                         self.state.card_being_edited = None;
                     }
                 }
-                PopupMode::DateTimePicker => {
+                PopUp::DateTimePicker => {
                     self.widgets.date_time_picker.close_date_picker();
                 }
                 _ => {}
@@ -1369,18 +1373,18 @@ impl App<'_> {
         }
     }
 
-    pub fn set_ui_mode(&mut self, ui_mode: UiMode) {
-        if let Some(prv_ui_mode) = self.state.prev_ui_mode {
-            if prv_ui_mode == ui_mode {
-                self.state.prev_ui_mode = None;
+    pub fn set_view(&mut self, view: View) {
+        if let Some(prv_view) = self.state.prev_view {
+            if prv_view == view {
+                self.state.prev_view = None;
             } else {
-                self.state.prev_ui_mode = Some(self.state.ui_mode);
+                self.state.prev_view = Some(self.state.current_view);
             }
         } else {
-            self.state.prev_ui_mode = Some(self.state.ui_mode);
+            self.state.prev_view = Some(self.state.current_view);
         }
-        self.state.ui_mode = ui_mode;
-        let available_focus_targets = self.state.ui_mode.get_available_targets();
+        self.state.current_view = view;
+        let available_focus_targets = self.state.current_view.get_available_targets();
         if !available_focus_targets.contains(&self.state.focus) {
             if available_focus_targets.is_empty() {
                 self.state.set_focus(Focus::NoFocus);
@@ -1392,29 +1396,29 @@ impl App<'_> {
                 self.state.set_focus(available_focus_targets[0]);
             }
         }
-        match ui_mode {
-            UiMode::Login => {
+        match view {
+            View::Login => {
                 self.state.text_buffers.email_id.reset();
                 self.state.text_buffers.password.reset();
             }
-            UiMode::SignUp => {
+            View::SignUp => {
                 self.state.text_buffers.email_id.reset();
                 self.state.text_buffers.password.reset();
                 self.state.text_buffers.confirm_password.reset();
             }
-            UiMode::ResetPassword => {
+            View::ResetPassword => {
                 self.state.text_buffers.email_id.reset();
                 self.state.text_buffers.password.reset();
                 self.state.text_buffers.confirm_password.reset();
                 self.state.text_buffers.reset_password_link.reset();
             }
-            UiMode::CreateTheme => {
+            View::CreateTheme => {
                 self.state.text_buffers.general_config.reset();
                 self.state.app_table_states.theme_editor.select(Some(0));
             }
-            UiMode::ConfigMenu => self.state.app_table_states.config.select(Some(0)),
+            View::ConfigMenu => self.state.app_table_states.config.select(Some(0)),
             _ => {
-                debug!("No special logic for setting ui mode: {:?}", ui_mode);
+                debug!("No special logic for setting view: {:?}", view);
             }
         }
     }
@@ -1531,7 +1535,7 @@ impl MainMenu {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, EnumString)]
 pub enum DateTimeFormat {
     DayMonthYear,
     #[default]
@@ -1564,14 +1568,9 @@ impl DateTimeFormat {
         }
     }
     pub fn from_json_string(json_string: &str) -> Option<DateTimeFormat> {
-        match json_string {
-            "DayMonthYear" => Some(DateTimeFormat::DayMonthYear),
-            "DayMonthYearTime" => Some(DateTimeFormat::DayMonthYearTime),
-            "MonthDayYear" => Some(DateTimeFormat::MonthDayYear),
-            "MonthDayYearTime" => Some(DateTimeFormat::MonthDayYearTime),
-            "YearMonthDay" => Some(DateTimeFormat::YearMonthDay),
-            "YearMonthDayTime" => Some(DateTimeFormat::YearMonthDayTime),
-            _ => None,
+        match DateTimeFormat::from_str(json_string) {
+            Ok(date_time_format) => Some(date_time_format),
+            Err(_) => None,
         }
     }
     pub fn from_human_readable_string(human_readable_string: &str) -> Option<DateTimeFormat> {
@@ -1623,7 +1622,7 @@ pub struct AppConfig {
     pub auto_login: bool,
     pub date_time_format: DateTimeFormat,
     pub default_theme: String,
-    pub default_ui_mode: UiMode,
+    pub default_view: View,
     pub disable_animations: bool,
     pub disable_scroll_bar: bool,
     pub enable_mouse_support: bool,
@@ -1640,14 +1639,14 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        let default_view = DEFAULT_UI_MODE;
+        let default_view = DEFAULT_VIEW;
         let default_theme = Theme::default();
         Self {
             always_load_last_save: true,
             auto_login: true,
             date_time_format: DateTimeFormat::default(),
             default_theme: default_theme.name,
-            default_ui_mode: default_view,
+            default_view,
             disable_animations: false,
             disable_scroll_bar: false,
             enable_mouse_support: true,
@@ -1673,7 +1672,7 @@ impl AppConfig {
                     ConfigEnum::SaveDirectory => {
                         (self.save_directory.to_string_lossy().to_string(), 0)
                     }
-                    ConfigEnum::DefaultView => (self.default_ui_mode.to_string(), 1),
+                    ConfigEnum::DefaultView => (self.default_view.to_string(), 1),
                     ConfigEnum::AlwaysLoadLastSave => (self.always_load_last_save.to_string(), 2),
                     ConfigEnum::SaveOnExit => (self.save_on_exit.to_string(), 3),
                     ConfigEnum::DisableScrollBar => (self.disable_scroll_bar.to_string(), 4),
@@ -1709,7 +1708,7 @@ impl AppConfig {
             ConfigEnum::AutoLogin => self.auto_login.to_string(),
             ConfigEnum::DateFormat => self.date_time_format.to_string(),
             ConfigEnum::DefaultTheme => self.default_theme.clone(),
-            ConfigEnum::DefaultView => self.default_ui_mode.to_string(),
+            ConfigEnum::DefaultView => self.default_view.to_string(),
             ConfigEnum::DisableAnimations => self.disable_animations.to_string(),
             ConfigEnum::DisableScrollBar => self.disable_scroll_bar.to_string(),
             ConfigEnum::EnableMouseSupport => self.enable_mouse_support.to_string(),
@@ -1767,7 +1766,7 @@ impl AppConfig {
         }
     }
 
-    pub fn edit_keybinding(&mut self, key_index: usize, value: &[Key]) -> Result<(), String> {
+    pub fn edit_keybinding(&mut self, key_index: usize, value: &[Key]) -> Result<KeyBindingEnum, String> {
         let current_bindings = &self.keybindings;
 
         let mut key_list = vec![];
@@ -1779,9 +1778,12 @@ impl AppConfig {
             error!("Unable to edit keybinding");
             return Err("Unable to edit keybinding 😢 ".to_string());
         }
-        let (key, _) = &key_list[key_index];
 
-        if !current_bindings.iter().any(|(k, _)| &k == key) {
+        key_list.sort_by(|a, b| a.0.to_string().cmp(&b.0.to_string()));
+
+        let (key, _) = key_list[key_index];
+
+        if !current_bindings.iter().any(|(k, _)| k == key) {
             debug!("Invalid key: {}", key);
             error!("Unable to edit keybinding");
             return Err("Unable to edit keybinding 😢 ".to_string());
@@ -1789,7 +1791,7 @@ impl AppConfig {
 
         for new_value in value.iter() {
             for (k, v) in current_bindings.iter() {
-                if v.contains(new_value) && &k != key {
+                if v.contains(new_value) && k != key {
                     error!("Value {} is already assigned to {}", new_value, k);
                     return Err(format!("Value {} is already assigned to {}", new_value, k));
                 }
@@ -1833,8 +1835,8 @@ impl AppConfig {
             KeyBindingEnum::GoToMainMenu => {
                 self.keybindings.go_to_main_menu = value.to_vec();
             }
-            KeyBindingEnum::GoToPreviousUIModeOrCancel => {
-                self.keybindings.go_to_previous_ui_mode_or_cancel = value.to_vec();
+            KeyBindingEnum::GoToPreviousViewOrCancel => {
+                self.keybindings.go_to_previous_view_or_cancel = value.to_vec();
             }
             KeyBindingEnum::HideUiElement => {
                 self.keybindings.hide_ui_element = value.to_vec();
@@ -1900,7 +1902,7 @@ impl AppConfig {
                 self.keybindings.up = value.to_vec();
             }
         }
-        Ok(())
+        Ok(key)
     }
 
     fn get_bool_or_default(
@@ -2035,18 +2037,18 @@ impl AppConfig {
             }
         };
         let default_view = match serde_json_object["default_view"].as_str() {
-            Some(ui_mode) => {
-                let ui_mode = UiMode::from_str(ui_mode);
-                if let Ok(ui_mode) = ui_mode {
-                    ui_mode
+            Some(view) => {
+                let view = View::from_str(view);
+                if let Ok(view) = view {
+                    view
                 } else {
-                    error!("Invalid UiMode: {:?}, Resetting to default UiMode", ui_mode);
-                    default_config.default_ui_mode
+                    error!("Invalid View: {:?}, Resetting to default View", view);
+                    default_config.default_view
                 }
             }
             None => {
-                error!("Default View is not a string, Resetting to default UiMode");
-                default_config.default_ui_mode
+                error!("Default View is not a string, Resetting to default View");
+                default_config.default_view
             }
         };
         let keybindings = AppConfig::json_config_keybindings_checker(&serde_json_object);
@@ -2121,18 +2123,14 @@ impl AppConfig {
             }
         };
         let date_format = match serde_json_object["date_format"].as_str() {
-            Some(date_format) => match date_format {
-                "DayMonthYear" => DateTimeFormat::DayMonthYear,
-                "MonthDayYear" => DateTimeFormat::MonthDayYear,
-                "YearMonthDay" => DateTimeFormat::YearMonthDay,
-                "DayMonthYearTime" => DateTimeFormat::DayMonthYearTime,
-                "MonthDayYearTime" => DateTimeFormat::MonthDayYearTime,
-                "YearMonthDayTime" => DateTimeFormat::YearMonthDayTime,
-                _ => {
+            Some(date_format) => match DateTimeFormat::from_str(date_format) {
+                Ok(date_format) => date_format,
+                Err(date_format_parse_error) => {
                     error!(
                         "Invalid date format: {}, Resetting to default date format",
                         date_format
                     );
+                    debug!("Error: {}", date_format_parse_error);
                     default_config.date_time_format
                 }
             },
@@ -2143,14 +2141,14 @@ impl AppConfig {
         };
         let date_picker_calender_format =
             match serde_json_object["date_picker_calender_format"].as_str() {
-                Some(calender_format) => match calender_format {
-                    "SundayFirst" => CalenderType::SundayFirst,
-                    "MondayFirst" => CalenderType::MondayFirst,
-                    _ => {
+                Some(calender_format) => match CalenderType::from_str(calender_format) {
+                    Ok(calender_format) => calender_format,
+                    Err(calender_format_parse_error) => {
                         error!(
                             "Invalid calender format: {}, Resetting to default calender format",
                             calender_format
                         );
+                        debug!("Error: {}", calender_format_parse_error);
                         CalenderType::default()
                     }
                 },
@@ -2161,7 +2159,7 @@ impl AppConfig {
             };
         Ok(Self {
             save_directory,
-            default_ui_mode: default_view,
+            default_view,
             always_load_last_save,
             save_on_exit,
             disable_scroll_bar,
@@ -2286,11 +2284,11 @@ impl ConfigEnum {
                 }
             }
             ConfigEnum::DefaultView => {
-                let ui_mode = UiMode::from_string(value);
-                if ui_mode.is_some() {
+                let view = View::from_string(value);
+                if view.is_some() {
                     Ok(())
                 } else {
-                    Err(format!("Invalid UiMode: {}", value))
+                    Err(format!("Invalid View: {}", value))
                 }
             }
             ConfigEnum::AlwaysLoadLastSave
@@ -2377,7 +2375,7 @@ impl ConfigEnum {
                 config.save_directory = PathBuf::from(value);
             }
             ConfigEnum::DefaultView => {
-                config.default_ui_mode = UiMode::from_string(value).unwrap();
+                config.default_view = View::from_string(value).unwrap();
             }
             ConfigEnum::AlwaysLoadLastSave => {
                 config.always_load_last_save = value.parse::<bool>().unwrap();

@@ -1,11 +1,12 @@
-use crate::constants::{FIELD_NA, FIELD_NOT_SET};
+use crate::{
+    app::DateTimeFormat,
+    constants::{FIELD_NA, FIELD_NOT_SET},
+};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 use uuid::Uuid;
-
-use super::DateTimeFormat;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Board {

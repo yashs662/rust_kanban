@@ -1,4 +1,4 @@
-use super::{key::Key, mouse::Mouse, InputEvent};
+use crate::inputs::{key::Key, mouse::Mouse, InputEvent};
 use log::error;
 use portable_atomic::{AtomicBool, Ordering};
 use std::{sync::Arc, time::Duration};

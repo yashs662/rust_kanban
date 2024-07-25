@@ -1,4 +1,3 @@
-use super::io_handler::{get_config_dir, make_file_system_safe_name};
 use crate::{
     app::{
         kanban::{Board, Boards},
@@ -9,8 +8,8 @@ use crate::{
         THEME_DIR_NAME, THEME_FILE_NAME,
     },
     inputs::key::Key,
-    io::io_handler::prepare_config_dir,
-    ui::Theme,
+    io::io_handler::{get_config_dir, make_file_system_safe_name, prepare_config_dir},
+    ui::theme::Theme,
 };
 use log::{debug, error, info};
 use regex::Regex;

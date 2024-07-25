@@ -17,7 +17,7 @@ I am new to rust and wanted to learn the language in a project-oriented manner, 
 ## Contribution
 
 Feel free to make a pull request or make a new issue, I am open to suggestions âœŒï¸
-** I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
+> I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 
 ## TODO
 
@@ -28,7 +28,6 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 - [ ] While adding a new tag show a list of existing tags to choose from (like a context menu) (require multiple popups to be implemented)
 - [ ] Optimize logger to handle high volumes of logs (app becomes sluggish when there are a lot of logs)
 - [ ] Make configuration for integer values more user-friendly (e.g. when changing the number of columns in the kanban board)
-- [ ] Improve error handling by implementing best practices
 - [ ] Implement animations for UI elements
 - [ ] Implement a way to sync with other services like notion
 - [ ] Write Tests
@@ -109,11 +108,11 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 | 'r'                        | Reset UI to Default                       |
 | 'm'                        | Go to Main Menu                           |
 | 'Ctrl + p'                 | Toggle Command Palette                    |
-| 'Esc'                      | Go to Previous UI Mode                    |
+| 'Esc'                      | Go to Previous View                       |
 | 't'                        | Clear Toast Messages                      |
 | 'Mouse Left Click'         | Select UI Element                         |
 | 'Mouse Middle Click'       | Open Command Palette                      |
-| 'Mouse Right Click'        | Go to Previous UI Mode                    |
+| 'Mouse Right Click'        | Go to Previous View                       |
 | 'Mouse Scroll Up'          | Scroll Up Cards                           |
 | 'Mouse Scroll Down'        | Scroll Down Cards (for cards)             |
 | 'Ctrl + Mouse Scroll Up'   | Scroll to the right (for boards)          |

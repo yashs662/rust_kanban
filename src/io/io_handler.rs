@@ -1,13 +1,7 @@
-use super::{
-    data_handler::{get_available_local_save_files, get_local_kanban_state},
-    IoEvent,
-};
 use crate::{
     app::{
-        app_helper::handle_go_to_previous_ui_mode,
-        kanban::Boards,
-        state::{UiMode, UserLoginData},
-        App, AppConfig,
+        app_helper::handle_go_to_previous_view, kanban::Boards, state::UserLoginData, App,
+        AppConfig,
     },
     constants::{
         CONFIG_DIR_NAME, CONFIG_FILE_NAME, EMAIL_REGEX, ENCRYPTION_KEY_FILE_NAME,
@@ -15,8 +9,14 @@ use crate::{
         REFRESH_TOKEN_FILE_NAME, REFRESH_TOKEN_SEPARATOR, SAVE_DIR_NAME, SUPABASE_ANON_KEY,
         SUPABASE_URL,
     },
-    io::data_handler::{get_default_save_directory, get_saved_themes, save_kanban_state_locally},
-    ui::TextColorOptions,
+    io::{
+        data_handler::{
+            get_available_local_save_files, get_default_save_directory, get_local_kanban_state,
+            get_saved_themes, save_kanban_state_locally,
+        },
+        IoEvent,
+    },
+    ui::{TextColorOptions, View},
     util::{print_debug, print_error, print_info},
 };
 use aes_gcm::{
@@ -89,7 +89,7 @@ impl IoAsyncHandler<'_> {
     async fn do_initialize(&mut self) -> Result<()> {
         info!("🚀 Initialize the application");
         let mut app = self.app.lock().await;
-        let default_ui_mode = app.config.default_ui_mode;
+        let default_ui_view = app.config.default_view;
         let prepare_config_dir_status = prepare_config_dir();
         if prepare_config_dir_status.is_err() {
             error!("Cannot create config directory");
@@ -117,7 +117,7 @@ impl IoAsyncHandler<'_> {
         } else {
             app.state.term_background_color = (0, 0, 0)
         }
-        app.set_ui_mode(default_ui_mode);
+        app.set_view(default_ui_view);
         info!("👍 Application initialized");
         app.initialized();
         if app.config.save_directory == get_default_save_directory() {
@@ -195,7 +195,7 @@ impl IoAsyncHandler<'_> {
 
     async fn load_save_file_local(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
-        let default_ui_mode = app.config.default_ui_mode;
+        let default_view = app.config.default_view;
         let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let local_files = get_available_local_save_files(&app.config);
         let local_files = if let Some(local_files) = local_files {
@@ -226,7 +226,7 @@ impl IoAsyncHandler<'_> {
             }
         }
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
-        app.set_ui_mode(default_ui_mode);
+        app.set_view(default_view);
         Ok(())
     }
 
@@ -424,8 +424,8 @@ impl IoAsyncHandler<'_> {
             .await?;
         }
 
-        if app.state.ui_mode == UiMode::Login {
-            handle_go_to_previous_ui_mode(&mut app).await;
+        if app.state.current_view == View::Login {
+            handle_go_to_previous_view(&mut app).await;
         }
 
         info!("👍 Logged in");
@@ -646,8 +646,8 @@ impl IoAsyncHandler<'_> {
                                     "Please keep this key safe, you will need it to decrypt your data, you will not be able to recover your data without it",
                                     Some(Duration::from_secs(10)),
                                 );
-                                let default_ui_mode = app.config.default_ui_mode;
-                                app.set_ui_mode(default_ui_mode);
+                                let default_view = app.config.default_view;
+                                app.set_view(default_view);
                             }
                         }
                         None => {
@@ -880,8 +880,8 @@ impl IoAsyncHandler<'_> {
                 match status {
                     StatusCode::OK => {
                         info!("👍 Password reset successful");
-                        if app.state.ui_mode == UiMode::ResetPassword {
-                            handle_go_to_previous_ui_mode(&mut app).await;
+                        if app.state.current_view == View::ResetPassword {
+                            handle_go_to_previous_view(&mut app).await;
                         }
                         app.send_info_toast("👍 Password reset successful", None);
                     }
@@ -1179,7 +1179,7 @@ impl IoAsyncHandler<'_> {
 
     async fn load_save_file_cloud(&mut self) -> Result<()> {
         let mut app = self.app.lock().await;
-        let default_ui_mode = app.config.default_ui_mode;
+        let default_view = app.config.default_view;
         let save_file_index = app.state.app_list_states.load_save.selected().unwrap_or(0);
         let cloud_saves = app.state.cloud_data.clone();
         let local_files = if let Some(cloud_saves) = cloud_saves {
@@ -1227,7 +1227,7 @@ impl IoAsyncHandler<'_> {
             None,
         );
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
-        app.set_ui_mode(default_ui_mode);
+        app.set_view(default_view);
         Ok(())
     }
 
@@ -1364,7 +1364,7 @@ fn prepare_boards(app: &mut App) {
             Boards::default()
         }
     } else {
-        app.set_ui_mode(UiMode::LoadLocalSave);
+        app.set_view(View::LoadLocalSave);
         Boards::default()
     };
     app.boards.set_boards(boards);

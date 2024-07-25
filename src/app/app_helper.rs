@@ -1,14 +1,10 @@
-use super::{
-    actions::Action,
-    handle_exit,
-    kanban::{Board, Boards, Card, CardPriority, CardStatus, Cards},
-    state::{AppStatus, Focus, PopupMode, UiMode},
-    App, AppReturn, DateTimeFormat, MainMenuItem,
-};
 use crate::{
     app::{
-        state::{KeyBindings, PathCheckState},
-        ActionHistory, AppConfig, ConfigEnum,
+        actions::Action,
+        handle_exit,
+        kanban::{Board, Boards, Card, CardPriority, CardStatus, Cards},
+        state::{AppStatus, Focus, KeyBindings, PathCheckState},
+        ActionHistory, App, AppConfig, AppReturn, ConfigEnum, DateTimeFormat, MainMenuItem,
     },
     constants::{
         DEFAULT_TOAST_DURATION, FIELD_NOT_SET, IO_EVENT_WAIT_TIME, MOUSE_OUT_OF_BOUNDS_COORDINATES,
@@ -21,8 +17,12 @@ use crate::{
     },
     ui::{
         text_box::TextBox,
-        widgets::{CommandPaletteWidget, ToastType, ToastWidget},
-        TextColorOptions, TextModifierOptions, Theme,
+        theme::{Theme, ThemeEnum},
+        widgets::{
+            command_palette::CommandPaletteWidget,
+            toast::{ToastType, ToastWidget},
+        },
+        PopUp, TextColorOptions, TextModifierOptions, View,
     },
     util::{date_format_converter, date_format_finder, parse_hex_to_rgb},
 };
@@ -530,9 +530,9 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 );
             }
         }
-        if let Some(popup_mode) = app.state.z_stack.last() {
-            match popup_mode {
-                PopupMode::CommandPalette => {
+        if let Some(popup) = app.state.z_stack.last() {
+            match popup {
+                PopUp::CommandPalette => {
                     app.close_popup();
                     if app.widgets.command_palette.already_in_user_input_mode {
                         app.widgets.command_palette.already_in_user_input_mode = false;
@@ -542,29 +542,29 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                         return AppReturn::Continue;
                     }
                 }
-                PopupMode::ConfirmDiscardCardChanges => {
+                PopUp::ConfirmDiscardCardChanges => {
                     app.close_popup();
                 }
-                PopupMode::ViewCard => {
+                PopUp::ViewCard => {
                     if app.state.card_being_edited.is_some() {
-                        app.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                        app.set_popup(PopUp::ConfirmDiscardCardChanges);
                     }
                 }
-                PopupMode::CardPrioritySelector => {
+                PopUp::CardPrioritySelector => {
                     if app.state.card_being_edited.is_some() {
-                        app.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                        app.set_popup(PopUp::ConfirmDiscardCardChanges);
                     } else {
                         app.close_popup();
                     }
                 }
-                PopupMode::CardStatusSelector => {
+                PopUp::CardStatusSelector => {
                     if app.state.card_being_edited.is_some() {
-                        app.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                        app.set_popup(PopUp::ConfirmDiscardCardChanges);
                     } else {
                         app.close_popup();
                     }
                 }
-                PopupMode::CustomHexColorPromptBG | PopupMode::CustomHexColorPromptFG => {
+                PopUp::CustomHexColorPromptBG | PopUp::CustomHexColorPromptFG => {
                     app.close_popup();
                 }
                 _ => {}
@@ -576,9 +576,9 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
     } else if app.config.keybindings.toggle_command_palette.contains(&key) {
         app.widgets.command_palette.already_in_user_input_mode = true;
         app.widgets.command_palette.last_focus = Some(app.state.focus);
-        app.set_popup_mode(PopupMode::CommandPalette);
+        app.set_popup(PopUp::CommandPalette);
     } else if app.config.keybindings.stop_user_input.contains(&key)
-        && !(app.state.z_stack.last() == Some(&PopupMode::CommandPalette))
+        && !(app.state.z_stack.last() == Some(&PopUp::CommandPalette))
     {
         app.state.app_status = AppStatus::Initialized;
         app.state.path_check_state = PathCheckState::default();
@@ -591,7 +591,7 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
             app.close_popup();
             return AppReturn::Continue;
         }
-        if app.state.z_stack.last() == Some(&PopupMode::CommandPalette) {
+        if app.state.z_stack.last() == Some(&PopUp::CommandPalette) {
             let stop_input_mode_keys = &app.config.keybindings.stop_user_input;
             match key {
                 Key::Up => {
@@ -701,7 +701,7 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 } else if app.config.keybindings.prv_focus.contains(&key) {
                     handle_prv_focus(app);
                 } else if key == Key::Enter {
-                    app.set_popup_mode(PopupMode::CardPrioritySelector);
+                    app.set_popup(PopUp::CardPrioritySelector);
                 }
             }
             Focus::CardStatus => {
@@ -710,7 +710,7 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 } else if app.config.keybindings.prv_focus.contains(&key) {
                     handle_prv_focus(app);
                 } else if key == Key::Enter {
-                    app.set_popup_mode(PopupMode::CardStatusSelector);
+                    app.set_popup(PopUp::CardStatusSelector);
                 }
             }
             Focus::CardTags => {
@@ -970,7 +970,7 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 }
             }
             Focus::EditGeneralConfigPopup => {
-                if app.state.ui_mode == UiMode::CreateTheme {
+                if app.state.current_view == View::CreateTheme {
                     // Special handling for Create theme as only it uses the general config popup other than config changes
                     app.state.text_buffers.general_config.input(key);
                 } else {
@@ -1028,24 +1028,24 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
             Focus::SubmitButton => {
                 match key {
                     Key::Enter => {
-                        if app.state.z_stack.last() == Some(&PopupMode::ViewCard) {
+                        if app.state.z_stack.last() == Some(&PopUp::ViewCard) {
                             if app.state.card_being_edited.is_some() {
                                 return handle_edit_card_submit(app);
                             }
                             app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
                         } else {
-                            debug!("Dont know what to do with Submit button in user input mode for popup mode: {:?}", app.state.z_stack.last());
+                            debug!("Dont know what to do with Submit button in user input mode for popup: {:?}", app.state.z_stack.last());
                         }
-                        match app.state.ui_mode {
-                            UiMode::NewCard => {
+                        match app.state.current_view {
+                            View::NewCard => {
                                 handle_new_card_action(app);
                             }
-                            UiMode::NewBoard => {
+                            View::NewBoard => {
                                 handle_new_board_action(app);
                             }
                             _ => {
-                                debug!("Dont know what to do with Submit button in user input mode for ui mode: {:?}", app.state.ui_mode);
+                                debug!("Dont know what to do with Submit button in user input mode for view: {:?}", app.state.current_view);
                             }
                         }
                         app.state.app_status = AppStatus::Initialized;
@@ -1077,25 +1077,25 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 let accept_keys = &app.config.keybindings.accept;
                 if accept_keys.contains(&key) {
                     match app.state.z_stack.last() {
-                        Some(PopupMode::CustomHexColorPromptFG) => {
+                        Some(PopUp::CustomHexColorPromptFG) => {
                             return handle_custom_hex_color_prompt(app, true)
                         }
-                        Some(PopupMode::CustomHexColorPromptBG) => {
+                        Some(PopUp::CustomHexColorPromptBG) => {
                             return handle_custom_hex_color_prompt(app, false)
                         }
                         _ => {
                             debug!(
-                                "TextInput is not used in the current popup mode: {:?}",
+                                "TextInput is not used in the current popup: {:?}",
                                 app.state.z_stack.last()
                             );
                         }
                     }
                 } else {
                     match app.state.z_stack.last() {
-                        Some(PopupMode::CustomHexColorPromptFG) => {
+                        Some(PopUp::CustomHexColorPromptFG) => {
                             app.state.text_buffers.theme_editor_fg_hex.input(key);
                         }
-                        Some(PopupMode::CustomHexColorPromptBG) => {
+                        Some(PopUp::CustomHexColorPromptBG) => {
                             app.state.text_buffers.theme_editor_bg_hex.input(key);
                         }
                         _ => {
@@ -1117,7 +1117,7 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 handle_date_time_picker_action(app, Some(key), None);
             }
             Focus::NoFocus => {
-                if let Some(PopupMode::DateTimePicker) = app.state.z_stack.last() {
+                if let Some(PopUp::DateTimePicker) = app.state.z_stack.last() {
                     app.state.set_focus(Focus::DTPCalender);
                 }
             }
@@ -1138,9 +1138,13 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
 
 pub async fn handle_edit_keybinding_mode(app: &mut App<'_>, key: Key) -> AppReturn {
     // Handle escape key or other keys that should stop user input
-    if matches!(key, Key::Esc) || app.config.keybindings.stop_user_input.contains(&key) {
+    if matches!(key, Key::Esc) {
         app.state.app_status = AppStatus::Initialized;
         app.state.edited_keybinding = None; // Clear edited keybinding on exit
+        info!("Exiting user Keybinding input mode");
+        return AppReturn::Continue;
+    } else if app.config.keybindings.stop_user_input.contains(&key) {
+        app.state.app_status = AppStatus::Initialized;
         info!("Exiting user Keybinding input mode");
         return AppReturn::Continue;
     }
@@ -1174,17 +1178,17 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     }
                 }
                 app.widgets.toasts = vec![];
-                app.set_ui_mode(app.config.default_ui_mode);
+                app.set_view(app.config.default_view);
                 app.send_info_toast("UI reset, all toasts cleared", None);
                 app.close_popup();
                 refresh_visible_boards_and_cards(app);
                 AppReturn::Continue
             }
             Action::OpenConfigMenu => {
-                if matches!(app.state.ui_mode, UiMode::ConfigMenu) {
-                    handle_go_to_previous_ui_mode(app).await;
+                if matches!(app.state.current_view, View::ConfigMenu) {
+                    handle_go_to_previous_view(app).await;
                 } else {
-                    app.set_ui_mode(UiMode::ConfigMenu);
+                    app.set_view(View::ConfigMenu);
                 }
                 if !app.state.z_stack.is_empty() {
                     app.state.z_stack.clear();
@@ -1193,13 +1197,13 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::Up => {
                 reset_mouse(app);
-                if let Some(popup_mode) = app.state.z_stack.last() {
-                    match popup_mode {
-                        PopupMode::ChangeUIMode => app.select_default_view_prv(),
-                        PopupMode::CardStatusSelector => app.select_card_status_prv(),
-                        PopupMode::SelectDefaultView => app.select_default_view_prv(),
-                        PopupMode::ChangeTheme => app.select_change_theme_prv(),
-                        PopupMode::EditThemeStyle => {
+                if let Some(popup) = app.state.z_stack.last() {
+                    match popup {
+                        PopUp::ChangeView => app.select_default_view_prv(),
+                        PopUp::CardStatusSelector => app.select_card_status_prv(),
+                        PopUp::SelectDefaultView => app.select_default_view_prv(),
+                        PopUp::ChangeTheme => app.select_change_theme_prv(),
+                        PopUp::EditThemeStyle => {
                             if app.state.focus == Focus::StyleEditorFG {
                                 app.select_edit_style_fg_prv();
                             } else if app.state.focus == Focus::StyleEditorBG {
@@ -1208,25 +1212,25 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 app.select_edit_style_modifier_prv();
                             }
                         }
-                        PopupMode::ChangeDateFormatPopup => app.change_date_format_popup_prv(),
-                        PopupMode::FilterByTag => app.filter_by_tag_popup_prv(),
-                        PopupMode::ViewCard => {
+                        PopUp::ChangeDateFormatPopup => app.change_date_format_popup_prv(),
+                        PopUp::FilterByTag => app.filter_by_tag_popup_prv(),
+                        PopUp::ViewCard => {
                             if app.state.focus == Focus::CardDescription {
                                 app.state.text_buffers.card_description.scroll((-1, 0));
                             }
                         }
-                        PopupMode::CardPrioritySelector => {
+                        PopUp::CardPrioritySelector => {
                             app.select_card_priority_prv();
                         }
-                        PopupMode::DateTimePicker => {
+                        PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
                         }
                         _ => {}
                     }
                     return AppReturn::Continue;
                 }
-                match app.state.ui_mode {
-                    UiMode::ConfigMenu => {
+                match app.state.current_view {
+                    View::ConfigMenu => {
                         if app.state.focus == Focus::ConfigTable {
                             app.config_prv();
                         } else {
@@ -1237,7 +1241,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::MainMenu => {
+                    View::MainMenu => {
                         if app.state.focus == Focus::MainMenu {
                             app.main_menu_prv();
                         } else if app.state.focus == Focus::Help {
@@ -1252,18 +1256,18 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::LoadLocalSave => {
+                    View::LoadLocalSave => {
                         app.load_save_prv(false);
                         app.dispatch(IoEvent::LoadLocalPreview).await;
                     }
-                    UiMode::LoadCloudSave => {
+                    View::LoadCloudSave => {
                         app.load_save_prv(true);
                         app.dispatch(IoEvent::LoadCloudPreview).await;
                     }
-                    UiMode::EditKeybindings => {
+                    View::EditKeybindings => {
                         app.edit_keybindings_prv();
                     }
-                    UiMode::CreateTheme => {
+                    View::CreateTheme => {
                         if app.state.focus == Focus::ThemeEditor {
                             app.select_create_theme_prv();
                         } else if app.state.focus == Focus::SubmitButton {
@@ -1274,19 +1278,19 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::NewBoard => {
+                    View::NewBoard => {
                         if app.state.focus == Focus::NewBoardDescription {
                             app.state.text_buffers.board_description.scroll((-1, 0))
                         }
                     }
-                    UiMode::NewCard => {
+                    View::NewCard => {
                         if app.state.focus == Focus::CardDescription {
                             app.state.text_buffers.card_description.scroll((-1, 0))
                         }
                     }
                     _ => {
                         if app.state.focus == Focus::Body
-                            && UiMode::view_modes().contains(&app.state.ui_mode)
+                            && View::views_with_kanban_board().contains(&app.state.current_view)
                         {
                             go_up(app);
                         } else if app.state.focus == Focus::Help {
@@ -1300,14 +1304,13 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::Down => {
                 reset_mouse(app);
-                if let Some(popup_mode) = app.state.z_stack.last() {
-                    debug!("Popup mode: {:?}", popup_mode);
-                    match popup_mode {
-                        PopupMode::ChangeUIMode => app.select_default_view_next(),
-                        PopupMode::CardStatusSelector => app.select_card_status_next(),
-                        PopupMode::SelectDefaultView => app.select_default_view_next(),
-                        PopupMode::ChangeTheme => app.select_change_theme_next(),
-                        PopupMode::EditThemeStyle => {
+                if let Some(popup) = app.state.z_stack.last() {
+                    match popup {
+                        PopUp::ChangeView => app.select_default_view_next(),
+                        PopUp::CardStatusSelector => app.select_card_status_next(),
+                        PopUp::SelectDefaultView => app.select_default_view_next(),
+                        PopUp::ChangeTheme => app.select_change_theme_next(),
+                        PopUp::EditThemeStyle => {
                             if app.state.focus == Focus::StyleEditorFG {
                                 app.select_edit_style_fg_next();
                             } else if app.state.focus == Focus::StyleEditorBG {
@@ -1316,25 +1319,25 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 app.select_edit_style_modifier_next();
                             }
                         }
-                        PopupMode::ChangeDateFormatPopup => app.change_date_format_popup_next(),
-                        PopupMode::FilterByTag => app.filter_by_tag_popup_next(),
-                        PopupMode::ViewCard => {
+                        PopUp::ChangeDateFormatPopup => app.change_date_format_popup_next(),
+                        PopUp::FilterByTag => app.filter_by_tag_popup_next(),
+                        PopUp::ViewCard => {
                             if app.state.focus == Focus::CardDescription {
                                 app.state.text_buffers.card_description.scroll((1, 0))
                             }
                         }
-                        PopupMode::CardPrioritySelector => {
+                        PopUp::CardPrioritySelector => {
                             app.select_card_priority_next();
                         }
-                        PopupMode::DateTimePicker => {
+                        PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
                         }
                         _ => {}
                     }
                     return AppReturn::Continue;
                 }
-                match app.state.ui_mode {
-                    UiMode::ConfigMenu => {
+                match app.state.current_view {
+                    View::ConfigMenu => {
                         if app.state.focus == Focus::ConfigTable {
                             app.config_next();
                         } else {
@@ -1345,7 +1348,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::MainMenu => {
+                    View::MainMenu => {
                         if app.state.focus == Focus::MainMenu {
                             app.main_menu_next();
                         } else if app.state.focus == Focus::Help {
@@ -1360,18 +1363,18 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::LoadLocalSave => {
+                    View::LoadLocalSave => {
                         app.load_save_next(false);
                         app.dispatch(IoEvent::LoadLocalPreview).await;
                     }
-                    UiMode::LoadCloudSave => {
+                    View::LoadCloudSave => {
                         app.load_save_next(true);
                         app.dispatch(IoEvent::LoadCloudPreview).await;
                     }
-                    UiMode::EditKeybindings => {
+                    View::EditKeybindings => {
                         app.edit_keybindings_next();
                     }
-                    UiMode::CreateTheme => {
+                    View::CreateTheme => {
                         if app.state.focus == Focus::ThemeEditor {
                             app.select_create_theme_next();
                         } else if app.state.focus == Focus::SubmitButton {
@@ -1382,12 +1385,12 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 next_focus_key, prev_focus_key), None);
                         }
                     }
-                    UiMode::NewBoard => {
+                    View::NewBoard => {
                         if app.state.focus == Focus::NewBoardDescription {
                             app.state.text_buffers.board_description.scroll((1, 0))
                         }
                     }
-                    UiMode::NewCard => {
+                    View::NewCard => {
                         if app.state.focus == Focus::CardDescription {
                             app.state.text_buffers.card_description.scroll((1, 0))
                         }
@@ -1406,21 +1409,21 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::Right => {
                 reset_mouse(app);
-                if let Some(popup_mode) = app.state.z_stack.last() {
-                    match popup_mode {
-                        PopupMode::ConfirmDiscardCardChanges | PopupMode::SaveThemePrompt => {
+                if let Some(popup) = app.state.z_stack.last() {
+                    match popup {
+                        PopUp::ConfirmDiscardCardChanges | PopUp::SaveThemePrompt => {
                             app.state.set_focus(match app.state.focus {
                                 Focus::SubmitButton => Focus::ExtraFocus,
                                 _ => Focus::SubmitButton,
                             });
                         }
-                        PopupMode::DateTimePicker => {
+                        PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
                         }
                         _ => {}
                     }
                 } else if app.state.focus == Focus::Body
-                    && UiMode::view_modes().contains(&app.state.ui_mode)
+                    && View::views_with_kanban_board().contains(&app.state.current_view)
                 {
                     go_right(app);
                 }
@@ -1428,46 +1431,46 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::Left => {
                 reset_mouse(app);
-                if let Some(popup_mode) = app.state.z_stack.last() {
-                    match popup_mode {
-                        PopupMode::ConfirmDiscardCardChanges | PopupMode::SaveThemePrompt => {
+                if let Some(popup) = app.state.z_stack.last() {
+                    match popup {
+                        PopUp::ConfirmDiscardCardChanges | PopUp::SaveThemePrompt => {
                             app.state.set_focus(match app.state.focus {
                                 Focus::SubmitButton => Focus::ExtraFocus,
                                 _ => Focus::SubmitButton,
                             });
                         }
-                        PopupMode::DateTimePicker => {
+                        PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
                         }
                         _ => {}
                     }
                 } else if app.state.focus == Focus::Body
-                    && UiMode::view_modes().contains(&app.state.ui_mode)
+                    && View::views_with_kanban_board().contains(&app.state.current_view)
                 {
                     go_left(app);
                 }
                 AppReturn::Continue
             }
             Action::TakeUserInput => {
-                match app.state.ui_mode {
-                    UiMode::NewBoard | UiMode::NewCard => {
+                match app.state.current_view {
+                    View::NewBoard | View::NewCard => {
                         app.state.app_status = AppStatus::UserInput;
                         info!("Taking user input");
                     }
                     _ => {
-                        if let Some(popup_mode) = app.state.z_stack.last() {
-                            match popup_mode {
-                                PopupMode::EditGeneralConfig
-                                | PopupMode::CustomHexColorPromptFG
-                                | PopupMode::CustomHexColorPromptBG => {
+                        if let Some(popup) = app.state.z_stack.last() {
+                            match popup {
+                                PopUp::EditGeneralConfig
+                                | PopUp::CustomHexColorPromptFG
+                                | PopUp::CustomHexColorPromptBG => {
                                     app.state.app_status = AppStatus::UserInput;
                                     info!("Taking user input");
                                 }
-                                PopupMode::EditSpecificKeyBinding => {
+                                PopUp::EditSpecificKeyBinding => {
                                     app.state.app_status = AppStatus::KeyBindMode;
                                     info!("Taking user Keybinding input");
                                 }
-                                PopupMode::ViewCard => {
+                                PopUp::ViewCard => {
                                     handle_edit_new_card(app);
                                 }
                                 _ => {}
@@ -1484,48 +1487,48 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 }
                 AppReturn::Continue
             }
-            Action::GoToPreviousUIModeOrCancel => handle_go_to_previous_ui_mode(app).await,
+            Action::GoToPreviousViewOrCancel => handle_go_to_previous_view(app).await,
             Action::Accept => {
-                if let Some(popup_mode) = app.state.z_stack.last() {
-                    match popup_mode {
-                        PopupMode::ChangeUIMode => handle_change_ui_mode(app),
-                        PopupMode::CardStatusSelector => {
+                if let Some(popup) = app.state.z_stack.last() {
+                    match popup {
+                        PopUp::ChangeView => handle_change_view(app),
+                        PopUp::CardStatusSelector => {
                             return handle_change_card_status(app, None);
                         }
-                        PopupMode::EditGeneralConfig => {
-                            if app.state.ui_mode == UiMode::CreateTheme {
+                        PopUp::EditGeneralConfig => {
+                            if app.state.current_view == View::CreateTheme {
                                 handle_create_theme_action(app);
                             } else {
                                 handle_edit_general_config(app);
                             }
                         }
-                        PopupMode::EditSpecificKeyBinding => handle_edit_specific_keybinding(app),
-                        PopupMode::SelectDefaultView => handle_default_view_selection(app),
-                        PopupMode::ChangeDateFormatPopup => handle_change_date_format(app),
-                        PopupMode::ChangeTheme => {
+                        PopUp::EditSpecificKeyBinding => handle_edit_specific_keybinding(app),
+                        PopUp::SelectDefaultView => handle_default_view_selection(app),
+                        PopUp::ChangeDateFormatPopup => handle_change_date_format(app),
+                        PopUp::ChangeTheme => {
                             return handle_change_theme(app, app.state.default_theme_mode)
                         }
-                        PopupMode::EditThemeStyle => return handle_create_theme_action(app),
-                        PopupMode::SaveThemePrompt => handle_save_theme_prompt(app),
-                        PopupMode::CustomHexColorPromptFG => {
+                        PopUp::EditThemeStyle => return handle_create_theme_action(app),
+                        PopUp::SaveThemePrompt => handle_save_theme_prompt(app),
+                        PopUp::CustomHexColorPromptFG => {
                             return handle_custom_hex_color_prompt(app, true)
                         }
-                        PopupMode::CustomHexColorPromptBG => {
+                        PopUp::CustomHexColorPromptBG => {
                             return handle_custom_hex_color_prompt(app, false)
                         }
-                        PopupMode::ViewCard => match app.state.focus {
+                        PopUp::ViewCard => match app.state.focus {
                             Focus::CardPriority => {
                                 if app.state.card_being_edited.is_none() {
                                     handle_edit_new_card(app);
                                 }
-                                app.set_popup_mode(PopupMode::CardPrioritySelector);
+                                app.set_popup(PopUp::CardPrioritySelector);
                                 return AppReturn::Continue;
                             }
                             Focus::CardStatus => {
                                 if app.state.card_being_edited.is_none() {
                                     handle_edit_new_card(app);
                                 }
-                                app.set_popup_mode(PopupMode::CardStatusSelector);
+                                app.set_popup(PopUp::CardStatusSelector);
                                 return AppReturn::Continue;
                             }
                             Focus::CardName
@@ -1536,7 +1539,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 if app.state.card_being_edited.is_none() {
                                     handle_edit_new_card(app);
                                 }
-                                app.set_popup_mode(PopupMode::DateTimePicker);
+                                app.set_popup(PopUp::DateTimePicker);
                                 return AppReturn::Continue;
                             }
                             Focus::SubmitButton => {
@@ -1544,10 +1547,10 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             }
                             _ => {}
                         },
-                        PopupMode::CommandPalette => {
+                        PopUp::CommandPalette => {
                             unreachable!("Command palette should not be handled here");
                         }
-                        PopupMode::ConfirmDiscardCardChanges => match app.state.focus {
+                        PopUp::ConfirmDiscardCardChanges => match app.state.focus {
                             Focus::SubmitButton => {
                                 handle_edit_card_submit(app);
                                 app.close_popup();
@@ -1557,14 +1560,14 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                             }
                             _ => {}
                         },
-                        PopupMode::CardPrioritySelector => {
+                        PopUp::CardPrioritySelector => {
                             return handle_change_card_priority(app, None);
                         }
-                        PopupMode::FilterByTag => {
+                        PopUp::FilterByTag => {
                             handle_filter_by_tag(app);
                             return AppReturn::Continue;
                         }
-                        PopupMode::DateTimePicker => {
+                        PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
                             return AppReturn::Continue;
                         }
@@ -1572,75 +1575,75 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     app.close_popup();
                     return AppReturn::Continue;
                 }
-                match app.state.ui_mode {
-                    UiMode::ConfigMenu => handle_config_menu_action(app),
-                    UiMode::MainMenu => match app.state.focus {
+                match app.state.current_view {
+                    View::ConfigMenu => handle_config_menu_action(app),
+                    View::MainMenu => match app.state.focus {
                         Focus::MainMenu => handle_main_menu_action(app).await,
                         Focus::Help => {
-                            app.set_ui_mode(UiMode::HelpMenu);
+                            app.set_view(View::HelpMenu);
                             AppReturn::Continue
                         }
                         Focus::Log => {
-                            app.set_ui_mode(UiMode::LogsOnly);
+                            app.set_view(View::LogsOnly);
                             AppReturn::Continue
                         }
                         _ => AppReturn::Continue,
                     },
-                    UiMode::NewBoard => {
+                    View::NewBoard => {
                         handle_new_board_action(app);
                         AppReturn::Continue
                     }
-                    UiMode::NewCard => {
+                    View::NewCard => {
                         handle_new_card_action(app);
                         AppReturn::Continue
                     }
-                    UiMode::LoadLocalSave => {
+                    View::LoadLocalSave => {
                         app.dispatch(IoEvent::LoadSaveLocal).await;
                         AppReturn::Continue
                     }
-                    UiMode::EditKeybindings => {
+                    View::EditKeybindings => {
                         handle_edit_keybindings_action(app);
                         AppReturn::Continue
                     }
-                    UiMode::CreateTheme => {
+                    View::CreateTheme => {
                         handle_create_theme_action(app);
                         AppReturn::Continue
                     }
-                    UiMode::Login => {
+                    View::Login => {
                         handle_login_action(app).await;
                         AppReturn::Continue
                     }
-                    UiMode::SignUp => {
+                    View::SignUp => {
                         handle_signup_action(app).await;
                         AppReturn::Continue
                     }
-                    UiMode::ResetPassword => {
+                    View::ResetPassword => {
                         handle_reset_password_action(app).await;
                         AppReturn::Continue
                     }
-                    UiMode::LoadCloudSave => {
+                    View::LoadCloudSave => {
                         app.dispatch(IoEvent::LoadSaveCloud).await;
                         AppReturn::Continue
                     }
                     _ => {
                         match app.state.focus {
                             Focus::Help => {
-                                app.set_ui_mode(UiMode::HelpMenu);
+                                app.set_view(View::HelpMenu);
                             }
                             Focus::Log => {
-                                app.set_ui_mode(UiMode::LogsOnly);
+                                app.set_view(View::LogsOnly);
                             }
                             Focus::Title => {
-                                app.set_ui_mode(UiMode::MainMenu);
+                                app.set_view(View::MainMenu);
                             }
                             _ => {}
                         }
-                        if UiMode::view_modes().contains(&app.state.ui_mode)
+                        if View::views_with_kanban_board().contains(&app.state.current_view)
                             && app.state.focus == Focus::Body
                             && app.state.current_board_id.is_some()
                             && app.state.current_card_id.is_some()
                         {
-                            app.set_popup_mode(PopupMode::ViewCard);
+                            app.set_popup(PopUp::ViewCard);
                         }
                         AppReturn::Continue
                     }
@@ -1648,123 +1651,132 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Action::HideUiElement => {
                 let current_focus = app.state.focus;
-                let current_ui_mode = app.state.ui_mode;
-                if current_ui_mode == UiMode::Zen {
-                    app.set_ui_mode(UiMode::MainMenu);
-                    if app.state.app_list_states.main_menu.selected().is_none() {
-                        app.main_menu_next();
-                    }
-                } else if current_ui_mode == UiMode::TitleBody {
-                    if current_focus == Focus::Title {
-                        app.set_ui_mode(UiMode::Zen);
-                    } else {
-                        app.set_ui_mode(UiMode::MainMenu);
+                match app.state.current_view {
+                    View::Zen => {
+                        app.set_view(View::MainMenu);
                         if app.state.app_list_states.main_menu.selected().is_none() {
                             app.main_menu_next();
                         }
                     }
-                } else if current_ui_mode == UiMode::BodyHelp {
-                    if current_focus == Focus::Help {
-                        app.set_ui_mode(UiMode::Zen);
-                    } else {
-                        app.set_ui_mode(UiMode::MainMenu);
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next();
+                    View::TitleBody => {
+                        if current_focus == Focus::Title {
+                            app.set_view(View::Zen);
+                        } else {
+                            app.set_view(View::MainMenu);
+                            if app.state.app_list_states.main_menu.selected().is_none() {
+                                app.main_menu_next();
+                            }
                         }
                     }
-                } else if current_ui_mode == UiMode::BodyLog {
-                    if current_focus == Focus::Log {
-                        app.set_ui_mode(UiMode::Zen);
-                    } else {
-                        app.set_ui_mode(UiMode::MainMenu);
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next();
+                    View::BodyHelp => {
+                        if current_focus == Focus::Help {
+                            app.set_view(View::Zen);
+                        } else {
+                            app.set_view(View::MainMenu);
+                            if app.state.app_list_states.main_menu.selected().is_none() {
+                                app.main_menu_next();
+                            }
                         }
                     }
-                } else if current_ui_mode == UiMode::TitleBodyHelp {
-                    if current_focus == Focus::Title {
-                        app.set_ui_mode(UiMode::BodyHelp);
-                    } else if current_focus == Focus::Help {
-                        app.set_ui_mode(UiMode::TitleBody);
-                    } else {
-                        app.set_ui_mode(UiMode::MainMenu);
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next();
+                    View::BodyLog => {
+                        if current_focus == Focus::Log {
+                            app.set_view(View::Zen);
+                        } else {
+                            app.set_view(View::MainMenu);
+                            if app.state.app_list_states.main_menu.selected().is_none() {
+                                app.main_menu_next();
+                            }
                         }
                     }
-                } else if current_ui_mode == UiMode::TitleBodyLog {
-                    if current_focus == Focus::Title {
-                        app.set_ui_mode(UiMode::BodyLog);
-                    } else if current_focus == Focus::Log {
-                        app.set_ui_mode(UiMode::TitleBody);
-                    } else {
-                        app.set_ui_mode(UiMode::MainMenu);
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next();
+                    View::TitleBodyHelp => {
+                        if current_focus == Focus::Title {
+                            app.set_view(View::BodyHelp);
+                        } else if current_focus == Focus::Help {
+                            app.set_view(View::TitleBody);
+                        } else {
+                            app.set_view(View::MainMenu);
+                            if app.state.app_list_states.main_menu.selected().is_none() {
+                                app.main_menu_next();
+                            }
                         }
                     }
-                } else if current_ui_mode == UiMode::TitleBodyHelpLog {
-                    if current_focus == Focus::Title {
-                        app.set_ui_mode(UiMode::BodyHelpLog);
-                    } else if current_focus == Focus::Help {
-                        app.set_ui_mode(UiMode::TitleBodyLog);
-                    } else if current_focus == Focus::Log {
-                        app.set_ui_mode(UiMode::TitleBodyHelp);
-                    } else {
-                        app.set_ui_mode(UiMode::MainMenu);
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next();
+                    View::TitleBodyLog => {
+                        if current_focus == Focus::Title {
+                            app.set_view(View::BodyLog);
+                        } else if current_focus == Focus::Log {
+                            app.set_view(View::TitleBody);
+                        } else {
+                            app.set_view(View::MainMenu);
+                            if app.state.app_list_states.main_menu.selected().is_none() {
+                                app.main_menu_next();
+                            }
                         }
                     }
-                } else if current_ui_mode == UiMode::BodyHelpLog {
-                    if current_focus == Focus::Help {
-                        app.set_ui_mode(UiMode::BodyLog);
-                    } else if current_focus == Focus::Log {
-                        app.set_ui_mode(UiMode::BodyHelp);
-                    } else {
-                        app.set_ui_mode(UiMode::MainMenu);
-                        if app.state.app_list_states.main_menu.selected().is_none() {
-                            app.main_menu_next();
+                    View::TitleBodyHelpLog => {
+                        if current_focus == Focus::Title {
+                            app.set_view(View::BodyHelpLog);
+                        } else if current_focus == Focus::Help {
+                            app.set_view(View::TitleBodyLog);
+                        } else if current_focus == Focus::Log {
+                            app.set_view(View::TitleBodyHelp);
+                        } else {
+                            app.set_view(View::MainMenu);
+                            if app.state.app_list_states.main_menu.selected().is_none() {
+                                app.main_menu_next();
+                            }
                         }
                     }
-                }
+                    View::BodyHelpLog => {
+                        if current_focus == Focus::Help {
+                            app.set_view(View::BodyLog);
+                        } else if current_focus == Focus::Log {
+                            app.set_view(View::BodyHelp);
+                        } else {
+                            app.set_view(View::MainMenu);
+                            if app.state.app_list_states.main_menu.selected().is_none() {
+                                app.main_menu_next();
+                            }
+                        }
+                    }
+                    _ => {}
+                };
                 AppReturn::Continue
             }
             Action::SaveState => {
-                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                if View::views_with_kanban_board().contains(&app.state.current_view) {
                     app.dispatch(IoEvent::SaveLocalData).await;
                 }
                 AppReturn::Continue
             }
             Action::NewBoard => {
-                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                if View::views_with_kanban_board().contains(&app.state.current_view) {
                     reset_new_board_form(app);
-                    app.set_ui_mode(UiMode::NewBoard);
+                    app.set_view(View::NewBoard);
                     app.state.prev_focus = Some(app.state.focus);
                 }
                 AppReturn::Continue
             }
             Action::NewCard => {
-                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                if View::views_with_kanban_board().contains(&app.state.current_view) {
                     if app.state.current_board_id.is_none() {
                         warn!("No board available to add card to");
                         app.send_warning_toast("No board available to add card to", None);
                         return AppReturn::Continue;
                     }
                     reset_new_card_form(app);
-                    app.set_ui_mode(UiMode::NewCard);
+                    app.set_view(View::NewCard);
                     app.state.prev_focus = Some(app.state.focus);
                 }
                 AppReturn::Continue
             }
-            Action::Delete => match app.state.ui_mode {
-                UiMode::LoadLocalSave => {
+            Action::Delete => match app.state.current_view {
+                View::LoadLocalSave => {
                     app.dispatch(IoEvent::DeleteLocalSave).await;
                     tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
                     app.dispatch(IoEvent::LoadLocalPreview).await;
                     AppReturn::Continue
                 }
-                UiMode::LoadCloudSave => {
+                View::LoadCloudSave => {
                     app.dispatch(IoEvent::DeleteCloudSave).await;
                     tokio::time::sleep(Duration::from_millis(IO_EVENT_WAIT_TIME)).await;
                     app.dispatch(IoEvent::GetCloudData).await;
@@ -1773,7 +1785,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                     AppReturn::Continue
                 }
                 _ => {
-                    if !UiMode::view_modes().contains(&app.state.ui_mode) {
+                    if !View::views_with_kanban_board().contains(&app.state.current_view) {
                         return AppReturn::Continue;
                     }
                     match app.state.focus {
@@ -1875,7 +1887,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 }
             },
             Action::DeleteBoard => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode) {
+                if !View::views_with_kanban_board().contains(&app.state.current_view) {
                     return AppReturn::Continue;
                 }
                 match app.state.focus {
@@ -1915,7 +1927,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 }
             }
             Action::ChangeCardStatusToCompleted => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode)
+                if !View::views_with_kanban_board().contains(&app.state.current_view)
                     || app.state.focus != Focus::Body
                 {
                     return AppReturn::Continue;
@@ -1923,7 +1935,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 handle_change_card_status(app, Some(CardStatus::Complete))
             }
             Action::ChangeCardStatusToActive => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode)
+                if !View::views_with_kanban_board().contains(&app.state.current_view)
                     || app.state.focus != Focus::Body
                 {
                     return AppReturn::Continue;
@@ -1931,7 +1943,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 handle_change_card_status(app, Some(CardStatus::Active))
             }
             Action::ChangeCardStatusToStale => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode)
+                if !View::views_with_kanban_board().contains(&app.state.current_view)
                     || app.state.focus != Focus::Body
                 {
                     return AppReturn::Continue;
@@ -1939,7 +1951,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 handle_change_card_status(app, Some(CardStatus::Stale))
             }
             Action::ChangeCardPriorityToHigh => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode)
+                if !View::views_with_kanban_board().contains(&app.state.current_view)
                     || app.state.focus != Focus::Body
                 {
                     return AppReturn::Continue;
@@ -1947,7 +1959,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 handle_change_card_priority(app, Some(CardPriority::High))
             }
             Action::ChangeCardPriorityToMedium => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode)
+                if !View::views_with_kanban_board().contains(&app.state.current_view)
                     || app.state.focus != Focus::Body
                 {
                     return AppReturn::Continue;
@@ -1955,7 +1967,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 handle_change_card_priority(app, Some(CardPriority::Medium))
             }
             Action::ChangeCardPriorityToLow => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode)
+                if !View::views_with_kanban_board().contains(&app.state.current_view)
                     || app.state.focus != Focus::Body
                 {
                     return AppReturn::Continue;
@@ -1963,34 +1975,34 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 handle_change_card_priority(app, Some(CardPriority::Low))
             }
             Action::GoToMainMenu => {
-                match app.state.ui_mode {
-                    UiMode::NewBoard => {
+                match app.state.current_view {
+                    View::NewBoard => {
                         reset_new_board_form(app);
                     }
-                    UiMode::NewCard => {
+                    View::NewCard => {
                         reset_new_card_form(app);
                     }
-                    UiMode::Login => {
+                    View::Login => {
                         reset_login_form(app);
                     }
-                    UiMode::SignUp => {
+                    View::SignUp => {
                         reset_signup_form(app);
                     }
-                    UiMode::ResetPassword => {
+                    View::ResetPassword => {
                         reset_reset_password_form(app);
                     }
                     _ => {}
                 }
                 app.state.current_board_id = None;
                 app.state.current_card_id = None;
-                app.set_ui_mode(UiMode::MainMenu);
+                app.set_view(View::MainMenu);
                 if app.state.app_list_states.main_menu.selected().is_none() {
                     app.state.app_list_states.main_menu.select(Some(0));
                 }
                 AppReturn::Continue
             }
             Action::MoveCardUp => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode) {
+                if !View::views_with_kanban_board().contains(&app.state.current_view) {
                     return AppReturn::Continue;
                 }
                 if app.state.focus == Focus::Body {
@@ -2094,7 +2106,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::MoveCardDown => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode) {
+                if !View::views_with_kanban_board().contains(&app.state.current_view) {
                     return AppReturn::Continue;
                 }
                 if app.state.focus == Focus::Body {
@@ -2194,7 +2206,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::MoveCardRight => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode) {
+                if !View::views_with_kanban_board().contains(&app.state.current_view) {
                     return AppReturn::Continue;
                 }
                 if app.state.focus == Focus::Body {
@@ -2303,7 +2315,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::MoveCardLeft => {
-                if !UiMode::view_modes().contains(&app.state.ui_mode) {
+                if !View::views_with_kanban_board().contains(&app.state.current_view) {
                     return AppReturn::Continue;
                 }
                 if app.state.focus == Focus::Body {
@@ -2412,8 +2424,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::ToggleCommandPalette => {
-                if !app.state.z_stack.contains(&PopupMode::CommandPalette) {
-                    app.set_popup_mode(PopupMode::CommandPalette);
+                if !app.state.z_stack.contains(&PopUp::CommandPalette) {
+                    app.set_popup(PopUp::CommandPalette);
                 } else {
                     // move CommandPalette to the top of the z stack if it is not already at the top
                     // safely unwrap as we know that the command palette is in the z stack
@@ -2421,45 +2433,45 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         .state
                         .z_stack
                         .iter()
-                        .position(|popup_mode| *popup_mode == PopupMode::CommandPalette)
+                        .position(|popup| *popup == PopUp::CommandPalette)
                         .unwrap();
                     if command_palette_index != app.state.z_stack.len() - 1 {
                         app.state.z_stack.remove(command_palette_index);
-                        app.state.z_stack.push(PopupMode::CommandPalette);
+                        app.state.z_stack.push(PopUp::CommandPalette);
                     }
                     match app.state.z_stack.last().unwrap() {
-                        PopupMode::CommandPalette => {
+                        PopUp::CommandPalette => {
                             app.close_popup();
                             app.widgets.command_palette.reset(&mut app.state);
                             app.state.app_status = AppStatus::Initialized;
                         }
-                        PopupMode::ViewCard => {
+                        PopUp::ViewCard => {
                             if app.state.card_being_edited.is_some() {
-                                app.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                                app.set_popup(PopUp::ConfirmDiscardCardChanges);
                                 app.state.app_status = AppStatus::Initialized;
                             } else {
-                                app.set_popup_mode(PopupMode::CommandPalette);
+                                app.set_popup(PopUp::CommandPalette);
                             }
                         }
-                        PopupMode::ConfirmDiscardCardChanges => {
+                        PopUp::ConfirmDiscardCardChanges => {
                             app.close_popup();
-                            app.set_popup_mode(PopupMode::CommandPalette);
+                            app.set_popup(PopUp::CommandPalette);
                         }
                         _ => {
-                            app.set_popup_mode(PopupMode::CommandPalette);
+                            app.set_popup(PopUp::CommandPalette);
                         }
                     }
                 }
                 AppReturn::Continue
             }
             Action::Undo => {
-                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                if View::views_with_kanban_board().contains(&app.state.current_view) {
                     app.undo();
                 }
                 AppReturn::Continue
             }
             Action::Redo => {
-                if UiMode::view_modes().contains(&app.state.ui_mode) {
+                if View::views_with_kanban_board().contains(&app.state.current_view) {
                     app.redo();
                 }
                 AppReturn::Continue
@@ -2473,8 +2485,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
     } else {
         // Warn user that they are not in user input mode
         if app.state.card_being_edited.is_some()
-            || app.state.ui_mode == UiMode::NewCard
-            || app.state.ui_mode == UiMode::NewBoard
+            || app.state.current_view == View::NewCard
+            || app.state.current_view == View::NewBoard
         {
             let mut keys = String::new();
             for key in app.config.keybindings.take_user_input.iter() {
@@ -2516,8 +2528,8 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
         }
         Mouse::Drag(x, y) => {
             app.state.current_mouse_coordinates = (x, y);
-            let current_ui_mode = app.state.ui_mode;
-            let is_invalid_state = !UiMode::view_modes().contains(&current_ui_mode)
+            let is_invalid_state = !View::views_with_kanban_board()
+                .contains(&app.state.current_view)
                 || app.state.hovered_card.is_none()
                 || app.state.hovered_board.is_none();
             if is_invalid_state {
@@ -2560,7 +2572,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
     }
 
     if right_button_pressed {
-        return handle_go_to_previous_ui_mode(app).await;
+        return handle_go_to_previous_view(app).await;
     }
 
     if app.state.focus == Focus::Log {
@@ -2574,37 +2586,36 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
 
     if middle_button_pressed {
         if app.state.z_stack.is_empty() {
-            app.set_popup_mode(PopupMode::CommandPalette);
+            app.set_popup(PopUp::CommandPalette);
         } else {
             match app.state.z_stack.last().unwrap() {
-                PopupMode::CommandPalette => {
+                PopUp::CommandPalette => {
                     app.close_popup();
                     app.widgets.command_palette.reset(&mut app.state);
                     app.state.app_status = AppStatus::Initialized;
                 }
-                PopupMode::ViewCard => {
+                PopUp::ViewCard => {
                     if app.state.card_being_edited.is_some() {
-                        app.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                        app.set_popup(PopUp::ConfirmDiscardCardChanges);
                     } else {
-                        app.set_popup_mode(PopupMode::CommandPalette);
+                        app.set_popup(PopUp::CommandPalette);
                     }
                 }
-                PopupMode::ConfirmDiscardCardChanges => {
+                PopUp::ConfirmDiscardCardChanges => {
                     app.close_popup();
-                    app.set_popup_mode(PopupMode::CommandPalette);
+                    app.set_popup(PopUp::CommandPalette);
                 }
                 _ => {
-                    app.set_popup_mode(PopupMode::CommandPalette);
+                    app.set_popup(PopUp::CommandPalette);
                 }
             }
         }
         return AppReturn::Continue;
     }
 
-    if let (Some(popup_mode), Some(mouse_focus)) = (app.state.z_stack.last(), app.state.mouse_focus)
-    {
-        match popup_mode {
-            PopupMode::CommandPalette => {
+    if let (Some(popup), Some(mouse_focus)) = (app.state.z_stack.last(), app.state.mouse_focus) {
+        match popup {
+            PopUp::CommandPalette => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::CommandPaletteCommand => {
@@ -2653,7 +2664,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::SelectDefaultView => {
+            PopUp::SelectDefaultView => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::SelectDefaultView => {
@@ -2667,11 +2678,11 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::ChangeUIMode => {
+            PopUp::ChangeView => {
                 if left_button_pressed {
                     match mouse_focus {
-                        Focus::ChangeUiModePopup => {
-                            handle_change_ui_mode(app);
+                        Focus::ChangeViewPopup => {
+                            handle_change_view(app);
                             app.close_popup();
                         }
                         Focus::CloseButton => {
@@ -2681,7 +2692,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::CardStatusSelector => {
+            PopUp::CardStatusSelector => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::ChangeCardStatusPopup => {
@@ -2694,7 +2705,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::EditGeneralConfig => {
+            PopUp::EditGeneralConfig => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::EditGeneralConfigPopup => {
@@ -2705,7 +2716,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                             app.close_popup();
                         }
                         Focus::SubmitButton => {
-                            if app.state.ui_mode == UiMode::CreateTheme {
+                            if app.state.current_view == View::CreateTheme {
                                 handle_create_theme_action(app);
                             } else {
                                 handle_edit_general_config(app);
@@ -2717,7 +2728,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::EditSpecificKeyBinding => {
+            PopUp::EditSpecificKeyBinding => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::EditSpecificKeyBindingPopup => {
@@ -2736,7 +2747,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::ChangeDateFormatPopup => {
+            PopUp::ChangeDateFormatPopup => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::ChangeDateFormatPopup => {
@@ -2749,7 +2760,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::ChangeTheme => {
+            PopUp::ChangeTheme => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::ThemeSelector => {
@@ -2771,7 +2782,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::EditThemeStyle => {
+            PopUp::EditThemeStyle => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::CloseButton => {
@@ -2793,7 +2804,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     handle_theme_maker_scroll_down(app);
                 }
             }
-            PopupMode::SaveThemePrompt => {
+            PopUp::SaveThemePrompt => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::SubmitButton | Focus::ExtraFocus => {
@@ -2806,7 +2817,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::CustomHexColorPromptFG => {
+            PopUp::CustomHexColorPromptFG => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::SubmitButton => {
@@ -2822,7 +2833,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::CustomHexColorPromptBG => {
+            PopUp::CustomHexColorPromptBG => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::SubmitButton => {
@@ -2838,7 +2849,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::ViewCard => {
+            PopUp::ViewCard => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::CloseButton => {
@@ -2852,21 +2863,21 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                             if app.state.card_being_edited.is_none() {
                                 handle_edit_new_card(app);
                             }
-                            app.set_popup_mode(PopupMode::CardPrioritySelector);
+                            app.set_popup(PopUp::CardPrioritySelector);
                             return AppReturn::Continue;
                         }
                         Focus::CardStatus => {
                             if app.state.card_being_edited.is_none() {
                                 handle_edit_new_card(app);
                             }
-                            app.set_popup_mode(PopupMode::CardStatusSelector);
+                            app.set_popup(PopUp::CardStatusSelector);
                             return AppReturn::Continue;
                         }
                         Focus::CardDueDate => {
                             if app.state.card_being_edited.is_none() {
                                 handle_edit_new_card(app);
                             }
-                            app.set_popup_mode(PopupMode::DateTimePicker);
+                            app.set_popup(PopUp::DateTimePicker);
                             return AppReturn::Continue;
                         }
                         Focus::SubmitButton => return handle_edit_card_submit(app),
@@ -2878,13 +2889,13 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     app.state.text_buffers.card_description.scroll((-1, 0))
                 }
             }
-            PopupMode::CardPrioritySelector => {
+            PopUp::CardPrioritySelector => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::CloseButton => {
                             app.state.app_status = AppStatus::Initialized;
                             if app.state.card_being_edited.is_some() {
-                                app.set_popup_mode(PopupMode::ConfirmDiscardCardChanges);
+                                app.set_popup(PopUp::ConfirmDiscardCardChanges);
                             }
                         }
                         Focus::ChangeCardPriorityPopup => {
@@ -2894,7 +2905,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::ConfirmDiscardCardChanges => {
+            PopUp::ConfirmDiscardCardChanges => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::CloseButton | Focus::ExtraFocus => {
@@ -2909,7 +2920,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     }
                 }
             }
-            PopupMode::FilterByTag => {
+            PopUp::FilterByTag => {
                 if left_button_pressed {
                     match mouse_focus {
                         Focus::FilterByTagPopup => {
@@ -2947,7 +2958,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     app.filter_by_tag_popup_next()
                 }
             }
-            PopupMode::DateTimePicker => {
+            PopUp::DateTimePicker => {
                 if left_button_pressed {
                     handle_date_time_picker_action(app, None, Some(Action::Accept));
                 } else if mouse_scroll_up {
@@ -2972,22 +2983,22 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
             }
         }
     } else {
-        match app.state.ui_mode {
-            UiMode::Zen
-            | UiMode::TitleBody
-            | UiMode::BodyHelp
-            | UiMode::BodyLog
-            | UiMode::TitleBodyHelp
-            | UiMode::TitleBodyLog
-            | UiMode::TitleBodyHelpLog
-            | UiMode::BodyHelpLog
-            | UiMode::ConfigMenu
-            | UiMode::EditKeybindings
-            | UiMode::HelpMenu
-            | UiMode::NewBoard
-            | UiMode::NewCard => {
+        match app.state.current_view {
+            View::Zen
+            | View::TitleBody
+            | View::BodyHelp
+            | View::BodyLog
+            | View::TitleBodyHelp
+            | View::TitleBodyLog
+            | View::TitleBodyHelpLog
+            | View::BodyHelpLog
+            | View::ConfigMenu
+            | View::EditKeybindings
+            | View::HelpMenu
+            | View::NewBoard
+            | View::NewCard => {
                 if left_button_pressed {
-                    if let Some(value) = handle_left_click_for_ui_mode_mouse_action(app).await {
+                    if let Some(value) = handle_left_click_for_view(app).await {
                         return value;
                     }
                 } else if mouse_scroll_up
@@ -2995,7 +3006,7 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     || mouse_scroll_right
                     || mouse_scroll_left
                 {
-                    handle_scroll_for_ui_mode_mouse_action(
+                    handle_scroll_for_view(
                         app,
                         mouse_scroll_up,
                         mouse_scroll_down,
@@ -3004,32 +3015,32 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                     );
                 }
             }
-            UiMode::MainMenu | UiMode::LogsOnly | UiMode::LoadLocalSave | UiMode::CreateTheme => {
+            View::MainMenu | View::LogsOnly | View::LoadLocalSave | View::CreateTheme => {
                 if left_button_pressed {
-                    if let Some(value) = handle_left_click_for_ui_mode_mouse_action(app).await {
+                    if let Some(value) = handle_left_click_for_view(app).await {
                         return value;
                     }
                 }
             }
-            UiMode::Login => {
+            View::Login => {
                 if left_button_pressed {
                     handle_login_action(app).await
                 }
             }
-            UiMode::SignUp => {
+            View::SignUp => {
                 if left_button_pressed {
                     handle_signup_action(app).await
                 }
             }
-            UiMode::ResetPassword => {
+            View::ResetPassword => {
                 if left_button_pressed {
                     handle_reset_password_action(app).await
                 }
             }
-            UiMode::LoadCloudSave => {
+            View::LoadCloudSave => {
                 if left_button_pressed {
                     if app.state.mouse_focus == Some(Focus::CloseButton) {
-                        handle_go_to_previous_ui_mode(app).await;
+                        handle_go_to_previous_view(app).await;
                     } else if app.state.mouse_focus == Some(Focus::LoadSave)
                         && app.state.app_list_states.load_save.selected().is_some()
                         && app.state.cloud_data.is_some()
@@ -3044,14 +3055,14 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
     AppReturn::Continue
 }
 
-async fn handle_left_click_for_ui_mode_mouse_action(app: &mut App<'_>) -> Option<AppReturn> {
-    let prv_ui_mode = app.state.ui_mode;
+async fn handle_left_click_for_view(app: &mut App<'_>) -> Option<AppReturn> {
+    let prv_view = app.state.current_view;
     app.state.mouse_focus?;
     // TODO: investigate if we really need to have mouse focus separate from focus
     let mouse_focus = app.state.mouse_focus.unwrap();
     match mouse_focus {
         Focus::Title => {
-            app.set_ui_mode(UiMode::MainMenu);
+            app.set_view(View::MainMenu);
             if app.state.app_list_states.main_menu.selected().is_none() {
                 app.main_menu_next()
             }
@@ -3061,13 +3072,13 @@ async fn handle_left_click_for_ui_mode_mouse_action(app: &mut App<'_>) -> Option
                 app.send_error_toast("No card selected", None);
                 return Some(AppReturn::Continue);
             }
-            app.set_popup_mode(PopupMode::ViewCard);
+            app.set_popup(PopUp::ViewCard);
         }
         Focus::Help => {
-            app.set_ui_mode(UiMode::HelpMenu);
+            app.set_view(View::HelpMenu);
         }
         Focus::Log => {
-            app.set_ui_mode(UiMode::LogsOnly);
+            app.set_view(View::LogsOnly);
         }
         Focus::ConfigTable => {
             return Some(handle_config_menu_action(app));
@@ -3075,60 +3086,61 @@ async fn handle_left_click_for_ui_mode_mouse_action(app: &mut App<'_>) -> Option
         Focus::EditKeybindingsTable => {
             handle_edit_keybindings_action(app);
         }
-        Focus::CloseButton => match prv_ui_mode {
-            UiMode::Zen
-            | UiMode::TitleBody
-            | UiMode::BodyHelp
-            | UiMode::BodyLog
-            | UiMode::TitleBodyHelp
-            | UiMode::TitleBodyLog
-            | UiMode::BodyHelpLog
-            | UiMode::TitleBodyHelpLog
-            | UiMode::MainMenu => {
+        Focus::CloseButton => match prv_view {
+            View::Zen
+            | View::TitleBody
+            | View::BodyHelp
+            | View::BodyLog
+            | View::TitleBodyHelp
+            | View::TitleBodyLog
+            | View::BodyHelpLog
+            | View::TitleBodyHelpLog
+            | View::MainMenu => {
                 return Some(handle_exit(app).await);
             }
-            UiMode::NewBoard => {
+            View::NewBoard => {
                 reset_new_board_form(app);
-                handle_go_to_previous_ui_mode(app).await;
+                handle_go_to_previous_view(app).await;
             }
-            UiMode::NewCard => {
+            View::NewCard => {
                 reset_new_card_form(app);
-                handle_go_to_previous_ui_mode(app).await;
+                handle_go_to_previous_view(app).await;
             }
-            UiMode::CreateTheme => {
+            View::CreateTheme => {
                 app.state.theme_being_edited = Theme::default();
+                handle_go_to_previous_view(app).await;
             }
             _ => {
-                handle_go_to_previous_ui_mode(app).await;
+                handle_go_to_previous_view(app).await;
             }
         },
         Focus::SubmitButton => {
             app.state.set_focus(Focus::SubmitButton);
-            match prv_ui_mode {
-                UiMode::EditKeybindings => {
+            match prv_view {
+                View::EditKeybindings => {
                     handle_edit_keybindings_action(app);
                 }
-                UiMode::NewBoard => {
+                View::NewBoard => {
                     handle_new_board_action(app);
                     app.state.app_status = AppStatus::Initialized;
                 }
-                UiMode::NewCard => {
+                View::NewCard => {
                     handle_new_card_action(app);
                     app.state.app_status = AppStatus::Initialized;
                 }
-                UiMode::ConfigMenu => {
+                View::ConfigMenu => {
                     return Some(handle_config_menu_action(app));
                 }
-                UiMode::CreateTheme => {
+                View::CreateTheme => {
                     return Some(handle_create_theme_action(app));
                 }
                 _ => {}
             }
         }
         Focus::ExtraFocus => {
-            if prv_ui_mode == UiMode::ConfigMenu {
+            if prv_view == View::ConfigMenu {
                 return Some(handle_config_menu_action(app));
-            } else if prv_ui_mode == UiMode::CreateTheme {
+            } else if prv_view == View::CreateTheme {
                 return Some(handle_create_theme_action(app));
             }
         }
@@ -3146,7 +3158,7 @@ async fn handle_left_click_for_ui_mode_mouse_action(app: &mut App<'_>) -> Option
             if app.state.card_being_edited.is_none() {
                 handle_edit_new_card(app);
             }
-            app.set_popup_mode(PopupMode::DateTimePicker);
+            app.set_popup(PopUp::DateTimePicker);
         }
         Focus::LoadSave => {
             if app.state.app_list_states.load_save.selected().is_some() {
@@ -3161,7 +3173,7 @@ async fn handle_left_click_for_ui_mode_mouse_action(app: &mut App<'_>) -> Option
     None
 }
 
-fn handle_scroll_for_ui_mode_mouse_action(
+fn handle_scroll_for_view(
     app: &mut App<'_>,
     mouse_scroll_up: bool,
     mouse_scroll_down: bool,
@@ -3525,7 +3537,7 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
         let config_enum = config_enum.unwrap();
         match config_enum {
             ConfigEnum::Keybindings => {
-                app.set_ui_mode(UiMode::EditKeybindings);
+                app.set_view(View::EditKeybindings);
                 if app
                     .state
                     .app_table_states
@@ -3540,7 +3552,7 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
                 if app.state.app_list_states.default_view.selected().is_none() {
                     app.select_default_view_next();
                 }
-                app.set_popup_mode(PopupMode::SelectDefaultView);
+                app.set_popup(PopUp::SelectDefaultView);
             }
             ConfigEnum::AlwaysLoadLastSave
             | ConfigEnum::SaveOnExit
@@ -3557,10 +3569,10 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
             }
             ConfigEnum::DefaultTheme => {
                 app.state.default_theme_mode = true;
-                app.set_popup_mode(PopupMode::ChangeTheme);
+                app.set_popup(PopUp::ChangeTheme);
             }
             ConfigEnum::DateFormat => {
-                app.set_popup_mode(PopupMode::ChangeDateFormatPopup);
+                app.set_popup(PopUp::ChangeDateFormatPopup);
             }
             ConfigEnum::DatePickerCalenderFormat => {
                 AppConfig::edit_config(
@@ -3573,7 +3585,7 @@ fn handle_config_menu_action(app: &mut App) -> AppReturn {
                     .set_calender_type(app.config.date_picker_calender_format.clone());
             }
             _ => {
-                app.set_popup_mode(PopupMode::EditGeneralConfig);
+                app.set_popup(PopUp::EditGeneralConfig);
             }
         }
     } else {
@@ -3591,23 +3603,23 @@ async fn handle_main_menu_action(app: &mut App<'_>) -> AppReturn {
         match selected_item {
             MainMenuItem::Quit => return handle_exit(app).await,
             MainMenuItem::Config => {
-                app.set_ui_mode(UiMode::ConfigMenu);
+                app.set_view(View::ConfigMenu);
                 if app.state.app_table_states.config.selected().is_none() {
                     app.config_next();
                 }
             }
             MainMenuItem::View => {
-                app.set_ui_mode(app.config.default_ui_mode);
+                app.set_view(app.config.default_view);
             }
             MainMenuItem::Help => {
-                app.set_ui_mode(UiMode::HelpMenu);
+                app.set_view(View::HelpMenu);
             }
             MainMenuItem::LoadSaveLocal => {
-                app.set_ui_mode(UiMode::LoadLocalSave);
+                app.set_view(View::LoadLocalSave);
             }
             MainMenuItem::LoadSaveCloud => {
                 if app.main_menu.logged_in {
-                    app.set_ui_mode(UiMode::LoadCloudSave);
+                    app.set_view(View::LoadCloudSave);
                     reset_preview_boards(app);
                     app.dispatch(IoEvent::GetCloudData).await;
                 }
@@ -3618,17 +3630,17 @@ async fn handle_main_menu_action(app: &mut App<'_>) -> AppReturn {
 }
 
 fn handle_default_view_selection(app: &mut App) {
-    let all_ui_modes = UiMode::view_modes_as_string();
-    let current_selected_mode = app
+    let all_views = View::all_views_as_string();
+    let current_selected_view = app
         .state
         .app_list_states
         .default_view
         .selected()
         .unwrap_or(0);
-    if current_selected_mode < all_ui_modes.len() {
-        let selected_mode = &all_ui_modes[current_selected_mode];
-        app.config.default_ui_mode = UiMode::from_string(selected_mode).unwrap_or(UiMode::MainMenu);
-        AppConfig::edit_config(app, ConfigEnum::DefaultView, selected_mode);
+    if current_selected_view < all_views.len() {
+        let selected_view = &all_views[current_selected_view];
+        app.config.default_view = View::from_string(selected_view).unwrap_or(View::MainMenu);
+        AppConfig::edit_config(app, ConfigEnum::DefaultView, selected_view);
         app.state.app_list_states.default_view.select(Some(0));
         if app.state.app_table_states.config.selected().is_none() {
             app.config_next();
@@ -3638,8 +3650,8 @@ fn handle_default_view_selection(app: &mut App) {
         }
     } else {
         debug!(
-            "Selected mode {} is not in the list of all UI modes",
-            current_selected_mode
+            "Selected view {} is not in the list of all View",
+            current_selected_view
         );
     }
 }
@@ -3678,25 +3690,25 @@ fn handle_change_date_format(app: &mut App) {
     }
 }
 
-fn handle_change_ui_mode(app: &mut App) {
+fn handle_change_view(app: &mut App) {
     let current_index = app
         .state
         .app_list_states
         .default_view
         .selected()
         .unwrap_or(0);
-    let all_ui_modes = UiMode::view_modes_as_string()
+    let all_views = View::all_views_as_string()
         .iter()
-        .filter_map(|s| UiMode::from_string(s))
-        .collect::<Vec<UiMode>>();
+        .filter_map(|s| View::from_string(s))
+        .collect::<Vec<View>>();
 
-    let current_index = if current_index >= all_ui_modes.len() {
-        all_ui_modes.len() - 1
+    let current_index = if current_index >= all_views.len() {
+        all_views.len() - 1
     } else {
         current_index
     };
-    let selected_ui_mode = all_ui_modes[current_index];
-    app.set_ui_mode(selected_ui_mode);
+    let selected_view = all_views[current_index];
+    app.set_view(selected_view);
 }
 
 fn handle_edit_keybindings_action(app: &mut App) {
@@ -3708,7 +3720,7 @@ fn handle_edit_keybindings_action(app: &mut App) {
         .is_some()
         && app.state.focus != Focus::SubmitButton
     {
-        app.set_popup_mode(PopupMode::EditSpecificKeyBinding);
+        app.set_popup(PopUp::EditSpecificKeyBinding);
     } else if app.state.focus == Focus::SubmitButton {
         app.config.keybindings = KeyBindings::default();
         warn!("Reset keybindings to default");
@@ -3723,36 +3735,36 @@ fn handle_edit_keybindings_action(app: &mut App) {
     }
 }
 
-pub async fn handle_go_to_previous_ui_mode(app: &mut App<'_>) -> AppReturn {
-    if let Some(popup_mode) = app.state.z_stack.last() {
-        match popup_mode {
-            PopupMode::EditGeneralConfig => {
-                if app.state.ui_mode == UiMode::CreateTheme {
+pub async fn handle_go_to_previous_view(app: &mut App<'_>) -> AppReturn {
+    if let Some(popup) = app.state.z_stack.last() {
+        match popup {
+            PopUp::EditGeneralConfig => {
+                if app.state.current_view == View::CreateTheme {
                     app.close_popup();
                 } else {
-                    app.set_ui_mode(UiMode::ConfigMenu);
+                    app.set_view(View::ConfigMenu);
                     if app.state.app_table_states.config.selected().is_none() {
                         app.config_next()
                     }
                 }
                 app.state.text_buffers.general_config.reset();
             }
-            PopupMode::EditSpecificKeyBinding => {
-                app.set_ui_mode(UiMode::EditKeybindings);
+            PopUp::EditSpecificKeyBinding => {
+                app.set_view(View::EditKeybindings);
                 app.state.app_table_states.edit_keybindings.select(Some(0));
             }
-            PopupMode::ViewCard => {
+            PopUp::ViewCard => {
                 app.close_popup();
             }
-            PopupMode::ConfirmDiscardCardChanges => {
+            PopUp::ConfirmDiscardCardChanges => {
                 app.close_popup();
             }
-            PopupMode::FilterByTag => {
+            PopUp::FilterByTag => {
                 app.state.filter_tags = None;
                 app.state.all_available_tags = None;
                 app.state.app_list_states.filter_by_tag_list.select(None);
             }
-            PopupMode::ChangeTheme => {
+            PopUp::ChangeTheme => {
                 let config_theme = {
                     let all_themes = Theme::all_default_themes();
                     let default_theme = app.config.default_theme.clone();
@@ -3770,56 +3782,56 @@ pub async fn handle_go_to_previous_ui_mode(app: &mut App<'_>) -> AppReturn {
         }
         return AppReturn::Continue;
     }
-    match app.state.ui_mode {
-        UiMode::MainMenu => handle_exit(app).await,
-        UiMode::EditKeybindings => {
-            app.set_ui_mode(UiMode::ConfigMenu);
+    match app.state.current_view {
+        View::MainMenu => handle_exit(app).await,
+        View::EditKeybindings => {
+            app.set_view(View::ConfigMenu);
             if app.state.app_table_states.config.selected().is_none() {
                 app.config_next()
             }
             AppReturn::Continue
         }
-        UiMode::LoadLocalSave => {
+        View::LoadLocalSave => {
             app.state.app_list_states.load_save = ListState::default();
-            go_to_previous_ui_mode_without_extras(app);
+            go_to_previous_view_without_extras(app);
             AppReturn::Continue
         }
-        UiMode::Login => {
+        View::Login => {
             reset_login_form(app);
-            go_to_previous_ui_mode_without_extras(app);
+            go_to_previous_view_without_extras(app);
             AppReturn::Continue
         }
-        UiMode::SignUp => {
+        View::SignUp => {
             reset_signup_form(app);
-            go_to_previous_ui_mode_without_extras(app);
+            go_to_previous_view_without_extras(app);
             AppReturn::Continue
         }
-        UiMode::ResetPassword => {
+        View::ResetPassword => {
             reset_reset_password_form(app);
-            go_to_previous_ui_mode_without_extras(app);
+            go_to_previous_view_without_extras(app);
             AppReturn::Continue
         }
-        UiMode::CreateTheme => {
+        View::CreateTheme => {
             app.state.theme_being_edited = Theme::default();
-            go_to_previous_ui_mode_without_extras(app);
+            go_to_previous_view_without_extras(app);
             AppReturn::Continue
         }
         _ => {
-            go_to_previous_ui_mode_without_extras(app);
+            go_to_previous_view_without_extras(app);
             AppReturn::Continue
         }
     }
 }
 
-fn go_to_previous_ui_mode_without_extras(app: &mut App) {
-    if app.state.prev_ui_mode == Some(app.state.ui_mode) {
-        app.set_ui_mode(UiMode::MainMenu);
+fn go_to_previous_view_without_extras(app: &mut App) {
+    if app.state.prev_view == Some(app.state.current_view) {
+        app.set_view(View::MainMenu);
         if app.state.app_list_states.main_menu.selected().is_none() {
             app.main_menu_next();
         }
     } else {
-        let prev_ui_mode = app.state.prev_ui_mode.unwrap_or(UiMode::MainMenu);
-        app.set_ui_mode(prev_ui_mode);
+        let prev_view = app.state.prev_view.unwrap_or(View::MainMenu);
+        app.set_view(prev_view);
         if app.state.app_list_states.main_menu.selected().is_none() {
             app.main_menu_next();
         }
@@ -4015,7 +4027,7 @@ fn handle_edit_general_config(app: &mut App) {
     AppConfig::edit_config(app, config_enum, &new_value);
     app.state.app_table_states.config.select(Some(0));
     app.state.text_buffers.general_config.reset();
-    app.set_ui_mode(UiMode::ConfigMenu);
+    app.set_view(View::ConfigMenu);
     refresh_visible_boards_and_cards(app);
 }
 
@@ -4028,32 +4040,28 @@ fn handle_edit_specific_keybinding(app: &mut App) {
             .selected()
             .unwrap();
         if selected < app.config.keybindings.iter().count() {
-            let result = app.config.edit_keybinding(selected, edited_keybinding);
-            if let Err(e) = result {
-                app.send_error_toast(&format!("Error editing Keybinding: {}", e), None);
-            } else {
-                let mut key_list = vec![];
-                for (k, v) in app.config.keybindings.iter() {
-                    key_list.push((k, v));
+            match app.config.edit_keybinding(selected, edited_keybinding) {
+                Err(e) => {
+                    app.send_error_toast(&format!("Error editing Keybinding: {}", e), None);
                 }
-                let (key, _) = &key_list[selected];
-                let key_string = key.to_string();
-                let value = edited_keybinding
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" ");
-                app.send_info_toast(
-                    &format!("Keybinding for {} updated to {}", key_string, value),
-                    None,
-                );
+                Ok(keybinding_enum) => {
+                    let value = edited_keybinding
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>()
+                        .join(" ");
+                    app.send_info_toast(
+                        &format!("Keybinding for {} updated to {}", keybinding_enum, value),
+                        None,
+                    );
+                }
             }
         } else {
             error!("Selected Keybinding with id {} not found", selected);
             app.send_error_toast("Selected Keybinding not found", None);
             app.state.app_table_states.edit_keybindings.select(None);
         }
-        app.set_ui_mode(UiMode::EditKeybindings);
+        app.set_view(View::EditKeybindings);
         if app
             .state
             .app_table_states
@@ -4070,7 +4078,7 @@ fn handle_edit_specific_keybinding(app: &mut App) {
             app.send_error_toast(&format!("Error writing config: {}", error_message), None);
         }
     } else {
-        app.set_ui_mode(UiMode::EditKeybindings);
+        app.set_view(View::EditKeybindings);
         if app
             .state
             .app_table_states
@@ -4102,21 +4110,21 @@ fn handle_new_board_action(app: &mut App) {
             app.action_history_manager
                 .new_action(ActionHistory::CreateBoard(new_board.clone()));
             app.state.current_board_id = Some(new_board.id);
-            app.set_ui_mode(
+            app.set_view(
                 *app.state
-                    .prev_ui_mode
+                    .prev_view
                     .as_ref()
-                    .unwrap_or(&app.config.default_ui_mode),
+                    .unwrap_or(&app.config.default_view),
             );
         } else {
             warn!("New board name is empty or already exists");
             app.send_warning_toast("New board name is empty or already exists", None);
         }
-        app.set_ui_mode(
+        app.set_view(
             *app.state
-                .prev_ui_mode
+                .prev_view
                 .as_ref()
-                .unwrap_or(&app.config.default_ui_mode),
+                .unwrap_or(&app.config.default_view),
         );
         if let Some(previous_focus) = &app.state.prev_focus {
             app.state.set_focus(*previous_focus);
@@ -4237,11 +4245,11 @@ fn handle_new_card_action(app: &mut App) {
         } else {
             debug!("Current board not found");
             app.send_error_toast("Something went wrong", None);
-            app.set_ui_mode(
+            app.set_view(
                 *app.state
-                    .prev_ui_mode
+                    .prev_view
                     .as_ref()
-                    .unwrap_or(&app.config.default_ui_mode),
+                    .unwrap_or(&app.config.default_view),
             );
             return;
         }
@@ -4287,19 +4295,19 @@ fn handle_new_card_action(app: &mut App) {
             } else {
                 debug!("Current board not found");
                 app.send_error_toast("Something went wrong", None);
-                app.set_ui_mode(
+                app.set_view(
                     *app.state
-                        .prev_ui_mode
+                        .prev_view
                         .as_ref()
-                        .unwrap_or(&app.config.default_ui_mode),
+                        .unwrap_or(&app.config.default_view),
                 );
                 return;
             }
-            app.set_ui_mode(
+            app.set_view(
                 *app.state
-                    .prev_ui_mode
+                    .prev_view
                     .as_ref()
-                    .unwrap_or(&app.config.default_ui_mode),
+                    .unwrap_or(&app.config.default_view),
             );
         } else {
             warn!("New card name is empty or already exists");
@@ -4313,7 +4321,7 @@ fn handle_new_card_action(app: &mut App) {
         refresh_visible_boards_and_cards(app);
         reset_new_card_form(app);
     } else if app.state.focus == Focus::CardDueDate {
-        app.set_popup_mode(PopupMode::DateTimePicker);
+        app.set_popup(PopUp::DateTimePicker);
     } else if app.state.app_status == AppStatus::Initialized {
         app.state.app_status = AppStatus::UserInput;
     }
@@ -4605,9 +4613,9 @@ fn handle_change_theme(app: &mut App, default_theme_mode: bool) -> AppReturn {
 }
 
 fn handle_create_theme_action(app: &mut App) -> AppReturn {
-    if let Some(popup_mode) = app.state.z_stack.last() {
-        match popup_mode {
-            PopupMode::EditGeneralConfig => {
+    if let Some(popup) = app.state.z_stack.last() {
+        match popup {
+            PopUp::EditGeneralConfig => {
                 if app.state.text_buffers.general_config.is_empty() {
                     app.send_error_toast("Theme name cannot be empty", None);
                     app.close_popup();
@@ -4630,13 +4638,13 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                 }
                 app.close_popup();
             }
-            PopupMode::EditThemeStyle => {
+            PopUp::EditThemeStyle => {
                 match app.state.focus {
                     Focus::SubmitButton => {
                         let all_color_options =
                             TextColorOptions::iter().collect::<Vec<TextColorOptions>>();
                         let all_modifier_options =
-                            TextModifierOptions::to_iter().collect::<Vec<TextModifierOptions>>();
+                            TextModifierOptions::iter().collect::<Vec<TextModifierOptions>>();
                         for list_state in app.state.app_list_states.edit_specific_style.iter_mut() {
                             if list_state.selected().is_none() {
                                 list_state.select(Some(0));
@@ -4649,23 +4657,22 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                         let selected_modifier_index =
                             app.state.app_list_states.edit_specific_style[2].selected();
 
-                        let theme_style_bring_edited_index =
+                        let theme_style_being_edited_index =
                             app.state.app_table_states.theme_editor.selected();
-                        if theme_style_bring_edited_index.is_none() {
+                        if theme_style_being_edited_index.is_none() {
                             debug!("No theme style being edited index found");
                             app.send_error_toast("Something went wrong", None);
                             app.close_popup();
                             return AppReturn::Continue;
                         }
-                        let theme_style_bring_edited_index =
-                            theme_style_bring_edited_index.unwrap();
-                        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-                            [theme_style_bring_edited_index];
+                        let theme_style_being_edited_index =
+                            theme_style_being_edited_index.unwrap();
 
-                        let mut fg_color = all_color_options[selected_fg_index.unwrap()].clone();
-                        let mut bg_color = all_color_options[selected_bg_index.unwrap()].clone();
-                        let modifier =
-                            all_modifier_options[selected_modifier_index.unwrap()].to_modifier();
+                        let mut fg_color = all_color_options[selected_fg_index.unwrap()];
+                        let mut bg_color = all_color_options[selected_bg_index.unwrap()];
+                        let modifier = ratatui::style::Modifier::from(
+                            all_modifier_options[selected_modifier_index.unwrap()].clone(),
+                        );
 
                         if let TextColorOptions::HEX(_, _, _) = fg_color {
                             // TODO: FIX this not using comma separated rgb values, using hex now
@@ -4748,13 +4755,22 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                                 }
                             }
                         }
-                        let parsed_fg_color = fg_color.to_color().unwrap_or(Color::Reset);
-                        let parsed_bg_color = bg_color.to_color().unwrap_or(Color::Reset);
-
-                        app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                            theme_style_being_edited,
-                            Some(parsed_fg_color),
-                            Some(parsed_bg_color),
+                        let theme_enum = ThemeEnum::iter().nth(theme_style_being_edited_index);
+                        if theme_enum.is_none() {
+                            debug!(
+                                "No theme enum found for index {}",
+                                theme_style_being_edited_index
+                            );
+                            app.send_error_toast("Something went wrong", None);
+                            app.close_popup();
+                            return AppReturn::Continue;
+                        }
+                        Theme::update_style(
+                            app.state
+                                .theme_being_edited
+                                .get_mut_style(theme_enum.unwrap()),
+                            Some(Color::from(fg_color)),
+                            Some(Color::from(bg_color)),
                             Some(modifier),
                         );
                         app.close_popup();
@@ -4771,7 +4787,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                             TextColorOptions::iter().collect::<Vec<TextColorOptions>>();
                         let selected_color = &all_color_options[selected_index];
                         if let TextColorOptions::HEX(_, _, _) = selected_color {
-                            app.set_popup_mode(PopupMode::CustomHexColorPromptFG);
+                            app.set_popup(PopUp::CustomHexColorPromptFG);
                             app.state.set_focus(Focus::TextInput);
                             return AppReturn::Continue;
                         }
@@ -4787,7 +4803,7 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                             TextColorOptions::iter().collect::<Vec<TextColorOptions>>();
                         let selected_color = &all_color_options[selected_index];
                         if let TextColorOptions::HEX(_, _, _) = selected_color {
-                            app.set_popup_mode(PopupMode::CustomHexColorPromptBG);
+                            app.set_popup(PopUp::CustomHexColorPromptBG);
                             app.state.set_focus(Focus::TextInput);
                             return AppReturn::Continue;
                         }
@@ -4807,16 +4823,16 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
             app.send_error_toast("Theme name cannot be the same as \"Default Theme\"", None);
             return AppReturn::Continue;
         }
-        app.set_popup_mode(PopupMode::SaveThemePrompt);
+        app.set_popup(PopUp::SaveThemePrompt);
     } else if app.state.focus == Focus::ThemeEditor
         && app.state.app_table_states.theme_editor.selected().is_some()
     {
         let selected_item_index = app.state.app_table_states.theme_editor.selected().unwrap();
         if selected_item_index == 0 {
             app.state.app_table_states.config.select(None);
-            app.set_popup_mode(PopupMode::EditGeneralConfig);
+            app.set_popup(PopUp::EditGeneralConfig);
         } else {
-            app.set_popup_mode(PopupMode::EditThemeStyle);
+            app.set_popup(PopUp::EditThemeStyle);
         }
     } else if app.state.focus == Focus::ExtraFocus {
         app.state.theme_being_edited = Theme::default();
@@ -4831,10 +4847,10 @@ fn handle_next_focus(app: &mut App) {
     if app.config.enable_mouse_support {
         reset_mouse(app)
     }
-    let available_targets = if let Some(popup_mode) = app.state.z_stack.last() {
-        popup_mode.get_available_targets()
+    let available_targets = if let Some(popup) = app.state.z_stack.last() {
+        popup.get_available_targets()
     } else {
-        app.state.ui_mode.get_available_targets()
+        app.state.current_view.get_available_targets()
     };
     if !available_targets.contains(&app.state.focus) {
         if available_targets.is_empty() {
@@ -4848,12 +4864,12 @@ fn handle_next_focus(app: &mut App) {
 
     // Special Handling
     if app.state.card_being_edited.is_none()
-        && app.state.z_stack.last() == Some(&PopupMode::ViewCard)
+        && app.state.z_stack.last() == Some(&PopUp::ViewCard)
         && next_focus == Focus::SubmitButton
     {
         next_focus = Focus::CardName;
     }
-    if app.state.z_stack.last() == Some(&PopupMode::DateTimePicker)
+    if app.state.z_stack.last() == Some(&PopUp::DateTimePicker)
         && !app.widgets.date_time_picker.time_picker_active
     {
         match next_focus {
@@ -4867,7 +4883,7 @@ fn handle_next_focus(app: &mut App) {
     if next_focus != Focus::NoFocus {
         app.state.set_focus(next_focus);
     }
-    if app.state.z_stack.last() == Some(&PopupMode::CommandPalette) {
+    if app.state.z_stack.last() == Some(&PopUp::CommandPalette) {
         CommandPaletteWidget::reset_list_states(&mut app.state)
     }
 }
@@ -4876,10 +4892,10 @@ fn handle_prv_focus(app: &mut App) {
     if app.config.enable_mouse_support {
         reset_mouse(app)
     }
-    let available_targets = if let Some(popup_mode) = app.state.z_stack.last() {
-        PopupMode::get_available_targets(popup_mode)
+    let available_targets = if let Some(popup) = app.state.z_stack.last() {
+        PopUp::get_available_targets(popup)
     } else {
-        UiMode::get_available_targets(&app.state.ui_mode)
+        View::get_available_targets(&app.state.current_view)
     };
     if !available_targets.contains(&app.state.focus) {
         if available_targets.is_empty() {
@@ -4894,12 +4910,12 @@ fn handle_prv_focus(app: &mut App) {
 
     // Special Handling
     if app.state.card_being_edited.is_none()
-        && app.state.z_stack.last() == Some(&PopupMode::ViewCard)
+        && app.state.z_stack.last() == Some(&PopUp::ViewCard)
         && prv_focus == Focus::SubmitButton
     {
         prv_focus = Focus::CardComments;
     }
-    if app.state.z_stack.last() == Some(&PopupMode::DateTimePicker)
+    if app.state.z_stack.last() == Some(&PopUp::DateTimePicker)
         && !app.widgets.date_time_picker.time_picker_active
     {
         match prv_focus {
@@ -4913,7 +4929,7 @@ fn handle_prv_focus(app: &mut App) {
     if prv_focus != Focus::NoFocus {
         app.state.set_focus(prv_focus);
     }
-    if app.state.z_stack.last() == Some(&PopupMode::CommandPalette) {
+    if app.state.z_stack.last() == Some(&PopUp::CommandPalette) {
         CommandPaletteWidget::reset_list_states(&mut app.state)
     }
 }
@@ -4933,8 +4949,8 @@ fn handle_save_theme_prompt(app: &mut App) {
         app.send_warning_toast("Theme not saved to file, it will be lost on exit, You can still use it in the current session",
         Some(Duration::from_secs(5)));
     }
-    let default_ui_mode = app.config.default_ui_mode;
-    app.set_ui_mode(default_ui_mode);
+    let default_view = app.config.default_view;
+    app.set_view(default_view);
     app.all_themes.push(app.state.theme_being_edited.clone());
     app.state.theme_being_edited = Theme::default();
     app.state.text_buffers.theme_editor_fg_hex.reset();
@@ -4982,30 +4998,32 @@ fn handle_custom_hex_color_prompt(app: &mut App, fg: bool) -> AppReturn {
         app.send_error_toast("Something went wrong", None);
         return AppReturn::Continue;
     }
-    let theme_style_bring_edited_index = app.state.app_table_states.theme_editor.selected();
-    if theme_style_bring_edited_index.is_none() {
+    let theme_style_being_edited_index = app.state.app_table_states.theme_editor.selected();
+    if theme_style_being_edited_index.is_none() {
         debug!("No theme style being edited index found");
         app.send_error_toast("Something went wrong", None);
         return AppReturn::Continue;
     }
-    let theme_style_bring_edited_index = theme_style_bring_edited_index.unwrap();
-    if theme_style_bring_edited_index >= app.state.theme_being_edited.to_vec_str().len() {
+    let theme_style_being_edited_index = theme_style_being_edited_index.unwrap();
+    let all_theme_enums = ThemeEnum::iter().collect::<Vec<ThemeEnum>>();
+    if theme_style_being_edited_index >= all_theme_enums.len() {
         debug!("Theme style being edited index is out of bounds");
         app.send_error_toast("Something went wrong", None);
         return AppReturn::Continue;
     }
-    let theme_style_being_edited =
-        app.state.theme_being_edited.to_vec_str()[theme_style_bring_edited_index];
+    let theme_enum = ThemeEnum::iter()
+        .nth(theme_style_being_edited_index)
+        .unwrap();
     if fg {
-        app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-            theme_style_being_edited,
+        Theme::update_style(
+            app.state.theme_being_edited.get_mut_style(theme_enum),
             Some(color),
             None,
             None,
         );
     } else {
-        app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-            theme_style_being_edited,
+        Theme::update_style(
+            app.state.theme_being_edited.get_mut_style(theme_enum),
             None,
             Some(color),
             None,
@@ -5016,161 +5034,69 @@ fn handle_custom_hex_color_prompt(app: &mut App, fg: bool) -> AppReturn {
 }
 
 fn handle_theme_maker_scroll_up(app: &mut App) {
-    if app.state.focus == Focus::StyleEditorFG {
-        let current_index = app.state.app_list_states.edit_specific_style[0].selected();
-        let total_length = TextColorOptions::iter().count();
-        if current_index.is_none() {
-            app.state.app_list_states.edit_specific_style[0].select(Some(0));
-        }
-        let current_index = app.state.app_list_states.edit_specific_style[0]
-            .selected()
-            .unwrap();
-        let selector_index = if current_index > 0 {
-            current_index - 1
-        } else {
-            total_length - 1
-        };
-        app.state.app_list_states.edit_specific_style[0].select(Some(selector_index));
-        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if let Some(fg_color) = TextColorOptions::iter().nth(selector_index) {
-            app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                theme_style_being_edited,
-                fg_color.to_color(),
-                None,
-                None,
-            );
-        }
+    let style_index = if app.state.focus == Focus::StyleEditorFG {
+        0
     } else if app.state.focus == Focus::StyleEditorBG {
-        let current_index = app.state.app_list_states.edit_specific_style[1].selected();
-        let total_length = TextColorOptions::iter().count();
-        if current_index.is_none() {
-            app.state.app_list_states.edit_specific_style[1].select(Some(0));
-        }
-        let current_index = app.state.app_list_states.edit_specific_style[1]
-            .selected()
-            .unwrap();
-        let selector_index = if current_index > 0 {
-            current_index - 1
-        } else {
-            total_length - 1
-        };
-        app.state.app_list_states.edit_specific_style[1].select(Some(selector_index));
-        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if let Some(bg_color) = TextColorOptions::iter().nth(selector_index) {
-            app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                theme_style_being_edited,
-                None,
-                bg_color.to_color(),
-                None,
-            );
-        }
+        1
     } else if app.state.focus == Focus::StyleEditorModifier {
-        let current_index = app.state.app_list_states.edit_specific_style[2].selected();
-        let total_length = TextModifierOptions::to_iter().count();
-        if current_index.is_none() {
-            app.state.app_list_states.edit_specific_style[2].select(Some(0));
-        }
-        let current_index = app.state.app_list_states.edit_specific_style[2]
-            .selected()
-            .unwrap();
-        let selector_index = if current_index > 0 {
-            current_index - 1
-        } else {
-            total_length - 1
-        };
-        app.state.app_list_states.edit_specific_style[2].select(Some(selector_index));
-        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if let Some(modifier) = TextModifierOptions::to_iter().nth(selector_index) {
-            app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                theme_style_being_edited,
-                None,
-                None,
-                Some(modifier.to_modifier()),
-            );
-        }
+        2
+    } else {
+        debug!("Invalid focus found for theme maker scroll up");
+        return;
+    };
+    if app.state.app_list_states.edit_specific_style[style_index]
+        .selected()
+        .is_none()
+    {
+        app.state.app_list_states.edit_specific_style[style_index].select_first();
     }
+    let current_selected_index = app.state.app_list_states.edit_specific_style[style_index]
+        .selected()
+        .unwrap();
+    let total_length = if app.state.focus == Focus::StyleEditorModifier {
+        TextModifierOptions::iter().count()
+    } else {
+        TextColorOptions::iter().count()
+    };
+    let next_selection = if current_selected_index > 0 {
+        current_selected_index - 1
+    } else {
+        total_length - 1
+    };
+    app.state.app_list_states.edit_specific_style[style_index].select(Some(next_selection));
 }
 
 fn handle_theme_maker_scroll_down(app: &mut App) {
-    if app.state.focus == Focus::StyleEditorFG {
-        let current_index = app.state.app_list_states.edit_specific_style[0].selected();
-        let total_length = TextColorOptions::iter().count();
-        if current_index.is_none() {
-            app.state.app_list_states.edit_specific_style[0].select(Some(0));
-        }
-        let current_index = app.state.app_list_states.edit_specific_style[0]
-            .selected()
-            .unwrap();
-        let selector_index = if current_index < total_length - 1 {
-            current_index + 1
-        } else {
-            0
-        };
-        app.state.app_list_states.edit_specific_style[0].select(Some(selector_index));
-        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if let Some(fg_color) = TextColorOptions::iter().nth(selector_index) {
-            app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                theme_style_being_edited,
-                fg_color.to_color(),
-                None,
-                None,
-            );
-        }
+    let style_index = if app.state.focus == Focus::StyleEditorFG {
+        0
     } else if app.state.focus == Focus::StyleEditorBG {
-        let current_index = app.state.app_list_states.edit_specific_style[1].selected();
-        let total_length = TextColorOptions::iter().count();
-        if current_index.is_none() {
-            app.state.app_list_states.edit_specific_style[1].select(Some(0));
-        }
-        let current_index = app.state.app_list_states.edit_specific_style[1]
-            .selected()
-            .unwrap();
-        let selector_index = if current_index < total_length - 1 {
-            current_index + 1
-        } else {
-            0
-        };
-        app.state.app_list_states.edit_specific_style[1].select(Some(selector_index));
-        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if let Some(bg_color) = TextColorOptions::iter().nth(selector_index) {
-            app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                theme_style_being_edited,
-                None,
-                bg_color.to_color(),
-                None,
-            );
-        }
+        1
     } else if app.state.focus == Focus::StyleEditorModifier {
-        let current_index = app.state.app_list_states.edit_specific_style[2].selected();
-        let total_length = TextModifierOptions::to_iter().count();
-        if current_index.is_none() {
-            app.state.app_list_states.edit_specific_style[2].select(Some(0));
-        }
-        let current_index = app.state.app_list_states.edit_specific_style[2]
-            .selected()
-            .unwrap();
-        let selector_index = if current_index < total_length - 1 {
-            current_index + 1
-        } else {
-            0
-        };
-        app.state.app_list_states.edit_specific_style[2].select(Some(selector_index));
-        let theme_style_being_edited = app.state.theme_being_edited.to_vec_str()
-            [app.state.app_table_states.theme_editor.selected().unwrap()];
-        if let Some(modifier) = TextModifierOptions::to_iter().nth(selector_index) {
-            app.state.theme_being_edited = app.state.theme_being_edited.edit_style(
-                theme_style_being_edited,
-                None,
-                None,
-                Some(modifier.to_modifier()),
-            );
-        }
+        2
+    } else {
+        debug!("Invalid focus found for theme maker scroll down");
+        return;
+    };
+    if app.state.app_list_states.edit_specific_style[style_index]
+        .selected()
+        .is_none()
+    {
+        app.state.app_list_states.edit_specific_style[style_index].select_first();
     }
+    let current_selected_index = app.state.app_list_states.edit_specific_style[style_index]
+        .selected()
+        .unwrap();
+    let total_length = if app.state.focus == Focus::StyleEditorModifier {
+        TextModifierOptions::iter().count()
+    } else {
+        TextColorOptions::iter().count()
+    };
+    let next_selection = if current_selected_index < total_length - 1 {
+        current_selected_index + 1
+    } else {
+        0
+    };
+    app.state.app_list_states.edit_specific_style[style_index].select(Some(next_selection));
 }
 
 fn handle_edit_new_card(app: &mut App) -> AppReturn {
@@ -5448,7 +5374,7 @@ fn handle_command_palette_card_selection(app: &mut App) {
     let card_id = all_card_details[card_details_index].1;
     app.state.current_board_id = Some(app.boards.find_board_with_card_id(card_id).unwrap().1.id);
     app.state.current_card_id = Some(card_id);
-    app.set_popup_mode(PopupMode::ViewCard);
+    app.set_popup(PopUp::ViewCard);
 }
 
 fn handle_command_palette_board_selection(app: &mut App) {
@@ -5560,7 +5486,7 @@ async fn handle_login_action(app: &mut App<'_>) {
         Focus::CloseButton => {
             app.state.theme_being_edited = Theme::default();
             reset_login_form(app);
-            handle_go_to_previous_ui_mode(app).await;
+            handle_go_to_previous_view(app).await;
             if app.state.app_status == AppStatus::UserInput {
                 app.state.app_status = AppStatus::Initialized;
                 info!("Exiting user input mode");
@@ -5569,6 +5495,7 @@ async fn handle_login_action(app: &mut App<'_>) {
         Focus::SubmitButton => {
             handle_login_submit_action(app).await;
             if app.state.app_status == AppStatus::UserInput {
+                // TODO: Create a function to set this
                 app.state.app_status = AppStatus::Initialized;
                 info!("Exiting user input mode");
             }
@@ -5577,7 +5504,7 @@ async fn handle_login_action(app: &mut App<'_>) {
             app.state.show_password = !app.state.show_password;
         }
         Focus::Title => {
-            app.set_ui_mode(UiMode::MainMenu);
+            app.set_view(View::MainMenu);
             reset_login_form(app);
             if app.state.app_status == AppStatus::UserInput {
                 app.state.app_status = AppStatus::Initialized;
@@ -5598,7 +5525,7 @@ async fn handle_signup_action(app: &mut App<'_>) {
     match app.state.focus {
         Focus::CloseButton => {
             reset_signup_form(app);
-            handle_go_to_previous_ui_mode(app).await;
+            handle_go_to_previous_view(app).await;
             if app.state.app_status == AppStatus::UserInput {
                 app.state.app_status = AppStatus::Initialized;
                 info!("Exiting user input mode");
@@ -5615,7 +5542,7 @@ async fn handle_signup_action(app: &mut App<'_>) {
             app.state.show_password = !app.state.show_password;
         }
         Focus::Title => {
-            app.set_ui_mode(UiMode::MainMenu);
+            app.set_view(View::MainMenu);
             reset_signup_form(app);
             if app.state.app_status == AppStatus::UserInput {
                 app.state.app_status = AppStatus::Initialized;
@@ -5636,14 +5563,14 @@ async fn handle_reset_password_action(app: &mut App<'_>) {
     match app.state.focus {
         Focus::CloseButton => {
             reset_reset_password_form(app);
-            handle_go_to_previous_ui_mode(app).await;
+            handle_go_to_previous_view(app).await;
             if app.state.app_status == AppStatus::UserInput {
                 app.state.app_status = AppStatus::Initialized;
                 info!("Exiting user input mode");
             }
         }
         Focus::Title => {
-            app.set_ui_mode(UiMode::MainMenu);
+            app.set_view(View::MainMenu);
             reset_reset_password_form(app);
             if app.state.app_status == AppStatus::UserInput {
                 app.state.app_status = AppStatus::Initialized;

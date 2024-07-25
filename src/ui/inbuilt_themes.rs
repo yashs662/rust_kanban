@@ -1,4 +1,4 @@
-use super::Theme;
+use crate::ui::theme::Theme;
 use ratatui::style::{Color, Modifier, Style};
 
 pub fn default_theme() -> Theme {
