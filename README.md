@@ -17,6 +17,7 @@ I am new to rust and wanted to learn the language in a project-oriented manner, 
 ## Contribution
 
 Feel free to make a pull request or make a new issue, I am open to suggestions ✌️
+
 > I currently do not own a Mac so I am unable to test the app on Mac, if you can test it on Mac, please let me know if there are any issues.
 
 ## TODO
@@ -70,6 +71,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions �
 
 - [ ] Cursor for Card Tags and Comments is incorrect when tag is longer than available space
 - [ ] Text Selection is working but not visually selecting text
+- [ ] Time picker wheel mouse highlight/focus is off by one for the minute and second wheels
 
 ## PSA (i.e. Public service announcement)
 
