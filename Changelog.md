@@ -14,6 +14,7 @@ Changes in Version 0.10.3
 
 - View card popup now respects configured date time format for card created, modified and completed fields
 - You can now switch between hour minute and seconds with the left and right Actions in addition to the switch focus keybinding
+- Updated Deps
 
 Changes in Version 0.10.2
 =========================
