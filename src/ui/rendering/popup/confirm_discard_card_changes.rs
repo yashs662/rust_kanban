@@ -35,9 +35,9 @@ impl Renderable for ConfirmDiscardCardChanges {
         );
 
         let save_card_button_style =
-            get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], false, false);
+            get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], is_active, false);
         let dont_save_card_button_style =
-            get_mouse_focusable_field_style(app, Focus::ExtraFocus, &chunks[1], false, false);
+            get_mouse_focusable_field_style(app, Focus::ExtraFocus, &chunks[1], is_active, false);
         let save_theme_button = Paragraph::new("Yes")
             .style(save_card_button_style)
             .block(

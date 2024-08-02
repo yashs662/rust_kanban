@@ -191,7 +191,6 @@ impl Renderable for EditGeneralConfig {
                                 // only retain the ones that are directories
                                 let dir = dir.flatten();
                                 for entry in dir {
-                                    let entry = entry;
                                     let path = entry.path();
                                     if path.to_str().unwrap().starts_with(
                                         &(std::path::MAIN_SEPARATOR.to_string() + to_check),
@@ -221,7 +220,6 @@ impl Renderable for EditGeneralConfig {
                                 // only retain the ones that are directories
                                 let dir = dir.flatten();
                                 for entry in dir {
-                                    let entry = entry;
                                     let path = entry.path();
                                     if path
                                         .to_str()

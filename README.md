@@ -71,7 +71,6 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 - [ ] Cursor for Card Tags and Comments is incorrect when tag is longer than available space
 - [ ] Text Selection is working but not visually selecting text
-- [ ] Time picker wheel mouse highlight/focus is off by one for the minute and second wheels
 
 ## PSA (i.e. Public service announcement)
 

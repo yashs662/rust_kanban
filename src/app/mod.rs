@@ -1608,6 +1608,22 @@ impl DateTimeFormat {
             DateTimeFormat::YearMonthDay,
         ]
     }
+    pub fn add_time_to_date_format(date_format: DateTimeFormat) -> DateTimeFormat {
+        match date_format {
+            DateTimeFormat::DayMonthYear => DateTimeFormat::DayMonthYearTime,
+            DateTimeFormat::MonthDayYear => DateTimeFormat::MonthDayYearTime,
+            DateTimeFormat::YearMonthDay => DateTimeFormat::YearMonthDayTime,
+            _ => date_format,
+        }
+    }
+    pub fn remove_time_from_date_format(date_format: DateTimeFormat) -> DateTimeFormat {
+        match date_format {
+            DateTimeFormat::DayMonthYearTime => DateTimeFormat::DayMonthYear,
+            DateTimeFormat::MonthDayYearTime => DateTimeFormat::MonthDayYear,
+            DateTimeFormat::YearMonthDayTime => DateTimeFormat::YearMonthDay,
+            _ => date_format,
+        }
+    }
 }
 
 impl Display for DateTimeFormat {

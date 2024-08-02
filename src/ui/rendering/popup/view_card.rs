@@ -122,13 +122,14 @@ impl Renderable for ViewCard {
             && card.due_date != FIELD_NOT_SET
         {
             if let Ok(current_format) = date_format_finder(card.due_date.trim()) {
-                app.widgets.date_time_picker.selected_date_time = Some(
-                    NaiveDateTime::parse_from_str(
+                app.widgets.date_time_picker.selected_date_time =
+                    match NaiveDateTime::parse_from_str(
                         card.due_date.trim(),
                         current_format.to_parser_string(),
-                    )
-                    .unwrap(),
-                );
+                    ) {
+                        Ok(date_time) => Some(date_time),
+                        Err(_) => None,
+                    };
             }
         }
         let board_name = board.name.clone();
@@ -184,7 +185,21 @@ impl Renderable for ViewCard {
                 {
                     Span::styled(format!("Created: {}", parsed_date), general_style)
                 } else {
-                    Span::styled(format!("Created: {}", card.date_created), general_style)
+                    match NaiveDateTime::parse_from_str(
+                        &card.date_created,
+                        app.config.date_time_format.to_parser_string(),
+                    ) {
+                        Ok(parsed_date) => Span::styled(
+                            format!(
+                                "Created: {}",
+                                parsed_date.format(app.config.date_time_format.to_parser_string())
+                            ),
+                            general_style,
+                        ),
+                        Err(_) => {
+                            Span::styled(format!("Created: {}", card.date_created), general_style)
+                        }
+                    }
                 }
             } else {
                 Span::styled(format!("Created: {}", card.date_created), general_style)
@@ -198,7 +213,21 @@ impl Renderable for ViewCard {
                     Span::styled(format!("Modified: {}", card.date_modified), general_style)
                 }
             } else {
-                Span::styled(format!("Modified: {}", card.date_modified), general_style)
+                match NaiveDateTime::parse_from_str(
+                    &card.date_modified,
+                    app.config.date_time_format.to_parser_string(),
+                ) {
+                    Ok(parsed_date) => Span::styled(
+                        format!(
+                            "Modified: {}",
+                            parsed_date.format(app.config.date_time_format.to_parser_string())
+                        ),
+                        general_style,
+                    ),
+                    Err(_) => {
+                        Span::styled(format!("Modified: {}", card.date_modified), general_style)
+                    }
+                }
             };
             let card_date_completed = if date_format_finder(&card.date_completed).is_ok() {
                 if let Ok(parsed_date) =
@@ -209,7 +238,21 @@ impl Renderable for ViewCard {
                     Span::styled(format!("Completed: {}", card.date_completed), general_style)
                 }
             } else {
-                Span::styled(format!("Completed: {}", card.date_completed), general_style)
+                match NaiveDateTime::parse_from_str(
+                    &card.date_completed,
+                    app.config.date_time_format.to_parser_string(),
+                ) {
+                    Ok(parsed_date) => Span::styled(
+                        format!(
+                            "Completed: {}",
+                            parsed_date.format(app.config.date_time_format.to_parser_string())
+                        ),
+                        general_style,
+                    ),
+                    Err(_) => {
+                        Span::styled(format!("Completed: {}", card.date_completed), general_style)
+                    }
+                }
             };
             let card_priority = format!("Priority: {}", card.priority);
             let card_status = format!("Status: {}", card.card_status);

@@ -26,7 +26,7 @@ impl Renderable for DateTimePicker {
         let (current_month, current_year) = app
             .widgets
             .date_time_picker
-            .get_styled_lines_of_dates(is_active, &app.current_theme);
+            .calculate_styled_lines_of_dates(is_active, &app.current_theme);
         let render_area = Rect {
             x: anchor.0,
             y: anchor.1,
@@ -224,15 +224,13 @@ impl Renderable for DateTimePicker {
 
         if app.widgets.date_time_picker.time_picker_active && time_picker_render_area.is_some() {
             let render_area = time_picker_render_area.unwrap();
-            // only used for mouse detection
+            // only used for mouse detection, it looks like it would be incorrect but it is not
             let time_picker_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints(
                     [
                         Constraint::Length(2),
-                        Constraint::Length(1),
-                        Constraint::Length(2),
-                        Constraint::Length(1),
+                        Constraint::Length(3),
                         Constraint::Length(2),
                     ]
                     .as_ref(),
@@ -247,13 +245,13 @@ impl Renderable for DateTimePicker {
             }
             if check_if_mouse_is_in_area(
                 &app.state.current_mouse_coordinates,
-                &time_picker_chunks[2],
+                &time_picker_chunks[1],
             ) {
                 app.state.focus = Focus::DTPMinute;
             }
             if check_if_mouse_is_in_area(
                 &app.state.current_mouse_coordinates,
-                &time_picker_chunks[4],
+                &time_picker_chunks[2],
             ) {
                 app.state.focus = Focus::DTPSecond;
             }

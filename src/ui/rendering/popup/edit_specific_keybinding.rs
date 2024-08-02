@@ -110,7 +110,7 @@ impl Renderable for EditSpecificKeybinding {
         key_list.sort_by(|a, b| a.0.to_string().cmp(&b.0.to_string()));
 
         let paragraph_title = current_bindings
-            .keybinding_enum_to_action(key_list[key_id].0.clone())
+            .keybinding_enum_to_action(key_list[key_id].0)
             .to_string();
         let value = key_list[key_id].1;
         let mut key_value = String::new();

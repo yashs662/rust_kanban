@@ -258,15 +258,17 @@ impl Card {
             comments
         };
 
+        let corrected_date_time_format = DateTimeFormat::add_time_to_date_format(date_time_format);
+
         Self {
             id: get_id(),
             name: name.to_string(),
             description: description.to_string(),
             date_created: chrono::Local::now()
-                .format(date_time_format.to_parser_string())
+                .format(corrected_date_time_format.to_parser_string())
                 .to_string(),
             date_modified: chrono::Local::now()
-                .format(date_time_format.to_parser_string())
+                .format(corrected_date_time_format.to_parser_string())
                 .to_string(),
             due_date: due_date.to_string(),
             date_completed: FIELD_NA.to_string(),

@@ -270,9 +270,8 @@ impl<'a> DateTimePickerWidget<'a> {
         self.adjust_selected_date_with_years(1);
     }
 
-    /// Returns the styled lines of the dates in the current month,
-    /// the adjusted height of the widget and the selected month and year
-    pub fn get_styled_lines_of_dates(
+    /// Calculates and caches styled line and returns selected month and year
+    pub fn calculate_styled_lines_of_dates(
         &mut self,
         is_active: bool,
         current_theme: &Theme,
@@ -754,7 +753,6 @@ impl<'a> Widget for DateTimePickerWidget<'a> {
             if let (Some(anchor), Some(viewport)) =
                 (date_time_picker.anchor, date_time_picker.current_viewport)
             {
-                debug!("Adjusting the anchor for the date time picker");
                 let mut viewport_corrected_anchor = anchor;
                 if anchor.1 + date_time_picker.date_target_height > viewport.height {
                     viewport_corrected_anchor.1 =

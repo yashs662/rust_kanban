@@ -1,3 +1,20 @@
+Changes in Version 0.10.3
+=========================
+
+### Fixes
+
+- Fixed Incorrect styling for Debug logs, save theme prompt, and discard card changes prompt
+- Fixed Time picker wheel mouse highlight/focus being off by one for the minute and second wheels
+- Fixed crash when selecting a date with the date time picker popup while editing a card
+- Fixed not being able to open the date time picker when in user input mode
+- Fixed time not being recorded when configured date time format does not include time when creating a new card (causes and issue if format is later changed to show time as well)
+- Clippy Fixes
+
+### Updates
+
+- View card popup now respects configured date time format for card created, modified and completed fields
+- You can now switch between hour minute and seconds with the left and right Actions in addition to the switch focus keybinding
+
 Changes in Version 0.10.2
 =========================
 

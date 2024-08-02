@@ -318,10 +318,10 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
         .constraints([Constraint::Min(1), Constraint::Length(5)].as_ref())
         .split(rect.size());
 
-    render_blank_styled_canvas(rect, &app.current_theme, debug_panel_area, false);
+    render_blank_styled_canvas(rect, &app.current_theme, debug_panel_area, true);
     rect.render_widget(debug_panel, debug_panel_area);
 
     // added logs for debugging
-    render_blank_styled_canvas(rect, &app.current_theme, logs_chunks[1], false);
-    render_logs(app, false, logs_chunks[1], rect, false);
+    render_blank_styled_canvas(rect, &app.current_theme, logs_chunks[1], true);
+    render_logs(app, false, logs_chunks[1], rect, true);
 }

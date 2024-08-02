@@ -695,6 +695,14 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
             Focus::CardDescription => {
                 app.state.text_buffers.card_description.input(key);
             }
+            Focus::CardDueDate => {
+                if app.state.card_being_edited.is_none()
+                    && app.state.z_stack.last() == Some(&PopUp::ViewCard)
+                {
+                    handle_edit_new_card(app);
+                }
+                app.set_popup(PopUp::DateTimePicker);
+            }
             Focus::CardPriority => {
                 if app.config.keybindings.next_focus.contains(&key) {
                     handle_next_focus(app);
@@ -4166,12 +4174,16 @@ fn handle_date_time_picker_action(app: &mut App, key: Option<Key>, action: Optio
                 Focus::DTPCalender => app.widgets.date_time_picker.move_left(),
                 Focus::DTPMonth => app.widgets.date_time_picker.month_prv(),
                 Focus::DTPYear => app.widgets.date_time_picker.year_prv(),
+                Focus::DTPMinute => app.state.set_focus(Focus::DTPHour),
+                Focus::DTPSecond => app.state.set_focus(Focus::DTPMinute),
                 _ => {}
             },
             Action::Right => match app.state.focus {
                 Focus::DTPCalender => app.widgets.date_time_picker.move_right(),
                 Focus::DTPMonth => app.widgets.date_time_picker.month_next(),
                 Focus::DTPYear => app.widgets.date_time_picker.year_next(),
+                Focus::DTPHour => app.state.set_focus(Focus::DTPMinute),
+                Focus::DTPMinute => app.state.set_focus(Focus::DTPSecond),
                 _ => {}
             },
             Action::Accept => match app.state.focus {
@@ -4227,10 +4239,13 @@ fn handle_new_card_action(app: &mut App) {
         let new_card_name = new_card_name.trim();
         let new_card_description = app.state.text_buffers.card_description.get_joined_lines();
         let new_card_description = new_card_description.trim();
+        
+        let corrected_date_time_format = DateTimeFormat::add_time_to_date_format(app.config.date_time_format);
+        
         let new_card_due_date = app
             .widgets
             .date_time_picker
-            .get_date_time_as_string(app.config.date_time_format);
+            .get_date_time_as_string(corrected_date_time_format);
         let new_card_due_date = new_card_due_date.trim();
         let mut same_name_exists = false;
         let current_board_id = app.state.current_board_id.unwrap_or((0, 0));
@@ -4253,67 +4268,45 @@ fn handle_new_card_action(app: &mut App) {
             );
             return;
         }
-        let parsed_due_date =
-            date_format_converter(new_card_due_date.trim(), app.config.date_time_format);
-        if parsed_due_date.is_err() {
-            let all_date_formats = DateTimeFormat::get_all_date_formats()
-                .iter()
-                .map(|x| x.to_human_readable_string())
-                .collect::<Vec<&str>>()
-                .join(", ");
-            app.send_warning_toast(
-                &format!(
-                    "Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
-                    &new_card_due_date, all_date_formats
-                ),
-                Some(Duration::from_secs(10)),
-            );
-            warn!("Invalid date format '{}'. Please use any of the following {}. Date has been reset and other changes have been saved.",
-            &new_card_due_date, all_date_formats);
+
+        if new_card_name.is_empty() || same_name_exists {
+            warn!("New card name is empty or already exists");
+            app.send_warning_toast("New card name is empty or already exists", None);
+            return;
         }
-        let parsed_date = if let Ok(parsed_due_date) = parsed_due_date {
-            parsed_due_date
+
+        let new_card = Card::new(
+            new_card_name,
+            new_card_description,
+            new_card_due_date,
+            CardPriority::Low,
+            vec![],
+            vec![],
+            app.config.date_time_format,
+        );
+        let current_board = app.boards.get_mut_board_with_id(current_board_id);
+        if let Some(current_board) = current_board {
+            current_board.cards.add_card(new_card.clone());
+            app.state.current_card_id = Some(new_card.id);
+            app.action_history_manager
+                .new_action(ActionHistory::CreateCard(new_card, current_board.id));
         } else {
-            FIELD_NOT_SET.to_string()
-        };
-        if !new_card_name.is_empty() && !same_name_exists {
-            let new_card = Card::new(
-                new_card_name,
-                new_card_description,
-                &parsed_date,
-                CardPriority::Low,
-                vec![],
-                vec![],
-                app.config.date_time_format,
-            );
-            let current_board = app.boards.get_mut_board_with_id(current_board_id);
-            if let Some(current_board) = current_board {
-                current_board.cards.add_card(new_card.clone());
-                app.state.current_card_id = Some(new_card.id);
-                app.action_history_manager
-                    .new_action(ActionHistory::CreateCard(new_card, current_board.id));
-            } else {
-                debug!("Current board not found");
-                app.send_error_toast("Something went wrong", None);
-                app.set_view(
-                    *app.state
-                        .prev_view
-                        .as_ref()
-                        .unwrap_or(&app.config.default_view),
-                );
-                return;
-            }
+            debug!("Current board not found");
+            app.send_error_toast("Something went wrong", None);
             app.set_view(
                 *app.state
                     .prev_view
                     .as_ref()
                     .unwrap_or(&app.config.default_view),
             );
-        } else {
-            warn!("New card name is empty or already exists");
-            app.send_warning_toast("New card name is empty or already exists", None);
             return;
         }
+        app.set_view(
+            *app.state
+                .prev_view
+                .as_ref()
+                .unwrap_or(&app.config.default_view),
+        );
 
         if let Some(previous_focus) = &app.state.prev_focus {
             app.state.set_focus(*previous_focus);
@@ -5154,13 +5147,13 @@ fn handle_edit_new_card(app: &mut App) -> AppReturn {
     });
     if card.due_date != FIELD_NOT_SET && !card.due_date.is_empty() {
         if let Ok(current_format) = date_format_finder(card.due_date.trim()) {
-            app.widgets.date_time_picker.selected_date_time = Some(
-                NaiveDateTime::parse_from_str(
-                    card.due_date.trim(),
-                    current_format.to_parser_string(),
-                )
-                .unwrap(),
-            );
+            app.widgets.date_time_picker.selected_date_time = match NaiveDateTime::parse_from_str(
+                card.due_date.trim(),
+                current_format.to_parser_string(),
+            ) {
+                Ok(date_time) => Some(date_time),
+                Err(_) => None,
+            };
         }
     }
     info!("Editing Card '{}'", card.name);

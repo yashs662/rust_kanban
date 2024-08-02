@@ -286,7 +286,7 @@ impl Renderable for EditThemeStyle {
 
         let modifier_list_items: Vec<ListItem> = TextModifierOptions::iter()
             .map(|modifier| {
-                let mut modifier_style = Style::default();
+                let mut modifier_style = general_style;
                 set_foreground_color(app, &mut modifier_style);
                 set_background_color(app, &mut modifier_style);
 
@@ -295,7 +295,7 @@ impl Renderable for EditThemeStyle {
                     ratatui::style::Modifier::from(modifier.clone()),
                 );
                 ListItem::new(vec![Line::from(vec![
-                    Span::styled("Sample Text", general_style),
+                    Span::styled("Sample Text", modifier_style),
                     Span::styled(format!(" - {}", modifier), general_style),
                 ])])
             })

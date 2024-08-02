@@ -28,9 +28,9 @@ impl Renderable for SaveThemePrompt {
             .split(popup_area);
 
         let save_theme_button_style =
-            get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], false, false);
+            get_mouse_focusable_field_style(app, Focus::SubmitButton, &chunks[0], is_active, false);
         let dont_save_theme_button_style =
-            get_mouse_focusable_field_style(app, Focus::ExtraFocus, &chunks[1], false, false);
+            get_mouse_focusable_field_style(app, Focus::ExtraFocus, &chunks[1], is_active, false);
         let general_style = check_if_active_and_get_style(
             is_active,
             app.current_theme.inactive_text_style,
