@@ -1,6 +1,6 @@
 [package]
 name = "rust-kanban"
-version = "0.10.3"
+version = "0.10.4"
 authors = ["Yash Sharma <yashs662@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -11,7 +11,7 @@ categories = ["command-line-utilities", "text-editors"]
 
 [dependencies]
 log = "0.4.22"
-ratatui = { version = "0.27.0", features = ["serde"] }
+ratatui = { version = "0.28.0", features = ["serde"] }
 crossterm = "0.28.1"
 tokio = { version = "1.39.2", features = ["full"] }
 chrono = "0.4.38"
@@ -35,3 +35,13 @@ strum = "0.26.3"
 strum_macros = "0.26.4"
 portable-atomic = "1.7.0"
 unicode-width = "0.1.13"
+
+[dev-dependencies]
+backtrace = "0.3.73"
+
+[profile.dev]
+opt-level = 1
+
+# Used for profiling
+# [profile.release]
+# debug = 1

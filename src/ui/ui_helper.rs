@@ -2,21 +2,20 @@ use crate::{
     app::App,
     constants::{
         MAX_TOASTS_TO_DISPLAY, MIN_TERM_HEIGHT, MIN_TERM_WIDTH, SCREEN_TO_TOAST_WIDTH_RATIO,
-        SPINNER_FRAMES,
     },
     ui::{
         rendering::{
             common::{draw_title, render_blank_styled_canvas, render_logs},
             utils::top_left_rect,
         },
-        widgets::toast::{ToastType, ToastWidget},
+        widgets::toast::Toast,
     },
 };
 use log::debug;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
@@ -36,7 +35,8 @@ pub fn draw_size_error(rect: &mut Frame, size: &Rect, msg: String, app: &mut App
 
     let body = Paragraph::new(error_text_spans)
         .block(Block::default().borders(Borders::ALL).borders(Borders::ALL))
-        .alignment(Alignment::Center);
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
 
     rect.render_widget(draw_title(app, *size, false), chunks[0]);
     rect.render_widget(body, chunks[1]);
@@ -91,62 +91,13 @@ pub fn check_size(rect: &Rect) -> Result<(), String> {
 }
 
 pub fn render_toast(rect: &mut Frame, app: &mut App) {
-    let all_toasts = app.widgets.toasts.clone();
-    let mut loading_toasts = all_toasts
+    let all_toasts = app.widgets.toast_widget.toasts.clone();
+    let toasts = all_toasts
         .iter()
-        .filter(|x| x.toast_type == ToastType::Loading)
-        .collect::<Vec<&ToastWidget>>();
-    let app_toasts = app.widgets.toasts.clone();
-    let toasts = if !loading_toasts.is_empty() {
-        let sorted_loading_toasts = if loading_toasts.len() > MAX_TOASTS_TO_DISPLAY - 1 {
-            loading_toasts.sort_by(|a, b| a.start_time.cmp(&b.start_time));
-            loading_toasts
-                .iter()
-                .copied()
-                .take(MAX_TOASTS_TO_DISPLAY - 1)
-                .rev()
-                .collect::<Vec<&ToastWidget>>()
-        } else {
-            loading_toasts
-        };
-        let mut toasts = sorted_loading_toasts;
-        let mut regular_toasts = all_toasts
-            .iter()
-            .filter(|x| x.toast_type != ToastType::Loading)
-            .collect::<Vec<&ToastWidget>>();
-        regular_toasts.sort_by(|a, b| a.start_time.cmp(&b.start_time));
-        while toasts.len() < MAX_TOASTS_TO_DISPLAY {
-            if let Some(toast) = regular_toasts.pop() {
-                toasts.push(toast);
-            } else {
-                break;
-            }
-        }
-        if toasts.len() < MAX_TOASTS_TO_DISPLAY {
-            let mut loading_toasts = all_toasts
-                .iter()
-                .filter(|x| x.toast_type == ToastType::Loading)
-                .collect::<Vec<&ToastWidget>>();
-            loading_toasts.sort_by(|a, b| a.start_time.cmp(&b.start_time));
-            while toasts.len() < MAX_TOASTS_TO_DISPLAY {
-                if let Some(toast) = loading_toasts.pop() {
-                    if !toasts.contains(&toast) {
-                        toasts.push(toast);
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-        toasts
-    } else {
-        app_toasts
-            .iter()
-            .rev()
-            .take(MAX_TOASTS_TO_DISPLAY)
-            .rev()
-            .collect::<Vec<&ToastWidget>>()
-    };
+        .rev()
+        .take(MAX_TOASTS_TO_DISPLAY)
+        .rev()
+        .collect::<Vec<&Toast>>();
 
     if toasts.is_empty() {
         return;
@@ -161,21 +112,11 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
                 toast.toast_color.1,
                 toast.toast_color.2,
             ));
-        let mut toast_title = toast.title.to_owned();
-        toast_title = match toast.toast_type {
-            ToastType::Loading => {
-                let spinner_frames = &SPINNER_FRAMES;
-                let frame =
-                    (toast.start_time.elapsed().as_millis() / 100) % spinner_frames.len() as u128;
-                let frame = frame as usize;
-                format!("{} {}", spinner_frames[frame], toast_title)
-            }
-            _ => toast_title,
-        };
-        let x_offset = rect.size().width - (rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO);
+        let toast_title = toast.title.to_owned();
+        let x_offset = rect.area().width - (rect.area().width / SCREEN_TO_TOAST_WIDTH_RATIO);
         let lines = textwrap::wrap(
             &toast.message,
-            ((rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO) - 2) as usize,
+            ((rect.area().width / SCREEN_TO_TOAST_WIDTH_RATIO).saturating_sub(2)) as usize,
         )
         .iter()
         .map(|x| Line::from(x.to_string()))
@@ -191,7 +132,7 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
             .alignment(Alignment::Left)
             .wrap(ratatui::widgets::Wrap { trim: true })
             .style(toast_style);
-        if toast_height + total_height_rendered > rect.size().height {
+        if toast_height + total_height_rendered > rect.area().height {
             debug!("Toast height is greater than the height of the screen");
             break;
         }
@@ -200,7 +141,7 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
             Rect::new(
                 x_offset,
                 total_height_rendered,
-                rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO,
+                rect.area().width / SCREEN_TO_TOAST_WIDTH_RATIO,
                 toast_height,
             ),
         );
@@ -209,19 +150,19 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
             Rect::new(
                 x_offset,
                 total_height_rendered,
-                rect.size().width / SCREEN_TO_TOAST_WIDTH_RATIO,
+                rect.area().width / SCREEN_TO_TOAST_WIDTH_RATIO,
                 toast_height,
             ),
         );
         total_height_rendered += toast_height;
-        if total_height_rendered >= rect.size().height {
+        if total_height_rendered >= rect.area().height {
             debug!("Toast height is greater than the height of the screen");
             break;
         }
     }
 
     let text_offset = 15;
-    let toast_count = app.widgets.toasts.len();
+    let toast_count = app.widgets.toast_widget.toasts.len();
     let toast_count_text = format!(" {} Message(s)", toast_count);
     let toast_count_paragraph = Paragraph::new(toast_count_text)
         .alignment(Alignment::Right)
@@ -231,7 +172,7 @@ pub fn render_toast(rect: &mut Frame, app: &mut App) {
                 .border_type(BorderType::Rounded),
         )
         .style(app.current_theme.general_style);
-    let message_area = Rect::new(rect.size().width - text_offset, 0, text_offset, 1);
+    let message_area = Rect::new(rect.area().width - text_offset, 0, text_offset, 1);
 
     render_blank_styled_canvas(rect, &app.current_theme, message_area, false);
     rect.render_widget(toast_count_paragraph, message_area);
@@ -264,7 +205,7 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let current_board_id = app.state.current_board_id;
     let current_card_id = app.state.current_card_id;
 
-    let debug_panel_area = top_left_rect(38, 10, rect.size());
+    let debug_panel_area = top_left_rect(38, 10, rect.area());
     let strings = [
         format!("App status: {:?}", app.state.app_status),
         format!("View: {}", current_view),
@@ -316,7 +257,7 @@ pub fn render_debug_panel(rect: &mut Frame, app: &mut App) {
     let logs_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(5)].as_ref())
-        .split(rect.size());
+        .split(rect.area());
 
     render_blank_styled_canvas(rect, &app.current_theme, debug_panel_area, true);
     rect.render_widget(debug_panel, debug_panel_area);

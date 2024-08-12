@@ -11,7 +11,6 @@ use crate::{
 };
 use log::{debug, error, info};
 use std::{
-    collections::HashMap,
     fmt::{self, Display},
     vec,
 };
@@ -213,7 +212,7 @@ impl CommandPaletteWidget {
                         app.close_popup();
                     }
                     CommandPaletteActions::FilterByTag => {
-                        let tags = Self::calculate_tags(app);
+                        let tags = app.calculate_tags();
                         if tags.is_empty() {
                             app.send_warning_toast("No tags found to filter with", None);
                         } else {
@@ -303,37 +302,6 @@ impl CommandPaletteWidget {
             app.state.app_status = AppStatus::Initialized;
         }
         AppReturn::Continue
-    }
-
-    pub fn calculate_tags(app: &App) -> Vec<(String, u32)> {
-        let mut tags: Vec<String> = vec![];
-        for board in app.boards.get_boards() {
-            for card in board.cards.get_all_cards() {
-                for tag in &card.tags {
-                    if tag.is_empty() {
-                        continue;
-                    }
-                    tags.push(tag.clone());
-                }
-            }
-        }
-        tags = tags.iter().map(|tag| tag.to_lowercase()).collect();
-        let count_hash: HashMap<String, u32> = tags.iter().fold(HashMap::new(), |mut acc, tag| {
-            *acc.entry(tag.clone()).or_insert(0) += 1;
-            acc
-        });
-        let mut tags: Vec<(String, u32)> = count_hash
-            .iter()
-            .map(|(tag, count)| (tag.clone(), *count))
-            .collect();
-        tags.sort_by(|a, b| {
-            if a.1 == b.1 {
-                a.0.cmp(&b.0)
-            } else {
-                b.1.cmp(&a.1)
-            }
-        });
-        tags
     }
 }
 

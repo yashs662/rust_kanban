@@ -41,7 +41,7 @@ impl Renderable for ConfigMenu {
                 ]
                 .as_ref(),
             )
-            .split(rect.size());
+            .split(rect.area());
 
         let reset_btn_chunks = Layout::default()
             .direction(Direction::Horizontal)

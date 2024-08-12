@@ -14,6 +14,7 @@ use crate::{
                 check_if_active_and_get_style, check_if_mouse_is_in_area, get_button_style,
             },
         },
+        widgets::SelfViewportCorrection,
         PopUp, Renderable,
     },
     util::{date_format_converter, date_format_finder},
@@ -28,7 +29,7 @@ use ratatui::{
 
 impl Renderable for ViewCard {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let popup_area = centered_rect_with_percentage(90, 90, rect.size());
+        let popup_area = centered_rect_with_percentage(90, 90, rect.area());
         // This is done early as board and card are not guaranteed to be selected
         render_blank_styled_canvas(rect, &app.current_theme, popup_area, is_active);
         let error_style = check_if_active_and_get_style(
@@ -637,17 +638,13 @@ impl Renderable for ViewCard {
         };
 
         if app.state.z_stack.last() == Some(&PopUp::DateTimePicker) {
-            if app.widgets.date_time_picker.anchor.is_none() {
-                app.widgets.date_time_picker.anchor = Some((
+            if app.widgets.date_time_picker.get_anchor().is_none() {
+                app.widgets.date_time_picker.set_anchor(Some((
                     card_chunks[2].x + card_due_date_width as u16 + 2,
                     card_chunks[2].y + 3,
-                )); // offsets to make sure date is visible
-                log::debug!(
-                    "Setting anchor for date time picker to: {:?}",
-                    app.widgets.date_time_picker.anchor
-                );
+                ))); // offsets to make sure date is visible
             }
-            app.widgets.date_time_picker.current_viewport = Some(rect.size());
+            app.widgets.date_time_picker.current_viewport = Some(rect.area());
         }
 
         if is_active
@@ -771,7 +768,7 @@ impl Renderable for ViewCard {
                         &app.config.show_line_numbers,
                         &card_chunks[0],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::CardDescription => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -779,7 +776,7 @@ impl Renderable for ViewCard {
                         &app.config.show_line_numbers,
                         &card_chunks[1],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::CardTags => {
                     if app
@@ -821,21 +818,27 @@ impl Renderable for ViewCard {
                             length_before_selected_tag = 0;
                         }
                         let digits_in_counter = (counter + 1).to_string().len();
-                        let text_box_cursor = app
-                            .state
-                            .text_buffers
-                            .card_tags
-                            .get(selected_index)
-                            .unwrap()
-                            .cursor();
-                        let x_pos = card_chunks[3].left()
-                            + length_before_selected_tag as u16
-                            + text_box_cursor.1 as u16
-                            + tag_offset
-                            + digits_in_counter as u16;
-                        let y_pos = card_chunks[3].top() + y_index as u16 + 1;
-                        // TODO: Card tags and comments cursor is incorrect as the view does not change when the comment or tag is longer than the screen
-                        rect.set_cursor(x_pos, y_pos);
+                        if let Some(text_box) = app.state.text_buffers.card_tags.get(selected_index)
+                        {
+                            let text_box_cursor = text_box.cursor();
+                            let x_pos = card_chunks[3].left()
+                                + length_before_selected_tag as u16
+                                + text_box_cursor.1 as u16
+                                + tag_offset
+                                + digits_in_counter as u16;
+                            let y_pos = card_chunks[3].top() + y_index as u16 + 1;
+
+                            if app.state.focus == Focus::CardTags {
+                                app.widgets.tag_picker.set_anchor(Some((
+                                    x_pos - (text_box_cursor.1 as u16)
+                                        + (text_box.get_joined_lines().len() as u16),
+                                    y_pos,
+                                )));
+                            }
+
+                            // TODO: Card tags and comments cursor is incorrect as the view does not change when the comment or tag is longer than the screen
+                            rect.set_cursor_position((x_pos, y_pos));
+                        }
                     }
                 }
                 Focus::CardComments => {
@@ -878,20 +881,18 @@ impl Renderable for ViewCard {
                             length_before_selected_comment = 0;
                         }
                         let digits_in_counter = (counter + 1).to_string().len();
-                        let text_box_cursor = app
-                            .state
-                            .text_buffers
-                            .card_comments
-                            .get(selected_index)
-                            .unwrap()
-                            .cursor();
-                        let x_pos = card_chunks[4].left()
-                            + length_before_selected_comment as u16
-                            + text_box_cursor.1 as u16
-                            + comment_offset
-                            + digits_in_counter as u16;
-                        let y_pos = card_chunks[4].top() + y_index as u16 + 1;
-                        rect.set_cursor(x_pos, y_pos);
+                        if let Some(text_box) =
+                            app.state.text_buffers.card_comments.get(selected_index)
+                        {
+                            let text_box_cursor = text_box.cursor();
+                            let x_pos = card_chunks[4].left()
+                                + length_before_selected_comment as u16
+                                + text_box_cursor.1 as u16
+                                + comment_offset
+                                + digits_in_counter as u16;
+                            let y_pos = card_chunks[4].top() + y_index as u16 + 1;
+                            rect.set_cursor_position((x_pos, y_pos));
+                        }
                     }
                 }
                 _ => {}

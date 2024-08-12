@@ -24,7 +24,7 @@ use ratatui::{
 
 impl Renderable for EditSpecificKeybinding {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let area = centered_rect_with_percentage(70, 70, rect.size());
+        let area = centered_rect_with_percentage(70, 70, rect.area());
 
         let chunks = if app.config.enable_mouse_support {
             Layout::default()
@@ -178,7 +178,7 @@ impl Renderable for EditSpecificKeybinding {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+        let clear_area = centered_rect_with_percentage(80, 80, rect.area());
         let clear_area_border = Block::default()
             .title("Edit Keybindings")
             .borders(Borders::ALL)

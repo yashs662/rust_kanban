@@ -2,7 +2,6 @@ use crate::{
     app::DateTimeFormat,
     constants::{FIELD_NA, FIELD_NOT_SET},
 };
-use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
@@ -61,25 +60,19 @@ impl Board {
             Some(description) => description,
             None => return Err("board description is invalid for board".to_string()),
         };
-        debug!("value: {:#?}", value["cards"]);
+        // Mainly for backwards compatibility, recent versions use value["cards"]["cards"] due to Cards being a struct
         let cards = match value["cards"].as_array() {
             Some(cards) => cards
                 .iter()
                 .map(Card::from_json)
                 .collect::<Result<Cards, String>>()?,
-            None => {
-                // TODO: Find why this is happening, temp fix - try if it is a object with the key cards
-                match value["cards"]["cards"].as_array() {
-                    Some(cards) => {
-                        debug!("Cards was an object with key cards when trying to load save");
-                        cards
-                            .iter()
-                            .map(Card::from_json)
-                            .collect::<Result<Cards, String>>()?
-                    }
-                    None => return Err("board cards is invalid for board".to_string()),
-                }
-            }
+            None => match value["cards"]["cards"].as_array() {
+                Some(cards) => cards
+                    .iter()
+                    .map(Card::from_json)
+                    .collect::<Result<Cards, String>>()?,
+                None => return Err("board cards is invalid for board".to_string()),
+            },
         };
 
         Ok(Self {

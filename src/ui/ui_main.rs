@@ -9,14 +9,14 @@ pub fn draw(rect: &mut Frame, app: &mut App) {
     let is_active = app.state.z_stack.is_empty();
 
     // Background
-    common::render_blank_styled_canvas(rect, &app.current_theme, rect.size(), is_active);
+    common::render_blank_styled_canvas(rect, &app.current_theme, rect.area(), is_active);
 
     // Check if the terminal size is too small or the app is still initializing
-    if let Err(msg) = ui_helper::check_size(&rect.size()) {
-        ui_helper::draw_size_error(rect, &rect.size(), msg, app);
+    if let Err(msg) = ui_helper::check_size(&rect.area()) {
+        ui_helper::draw_size_error(rect, &rect.area(), msg, app);
         return;
     } else if *app.status() == AppStatus::Init {
-        ui_helper::draw_loading_screen(rect, &rect.size(), app);
+        ui_helper::draw_loading_screen(rect, &rect.area(), app);
         return;
     }
 
@@ -27,6 +27,24 @@ pub fn draw(rect: &mut Frame, app: &mut App) {
     let z_stack_len = app.state.z_stack.len();
     for index in 0..z_stack_len {
         let is_last = index == z_stack_len - 1;
+        if z_stack_len > 1 {
+            let is_second_last = index == z_stack_len - 2;
+            if is_second_last
+                && !app
+                    .state
+                    .z_stack
+                    .last()
+                    .unwrap()
+                    .requires_previous_element_disabled()
+            {
+                app.state
+                    .z_stack
+                    .get_mut(index)
+                    .unwrap()
+                    .render(rect, app, true);
+                continue;
+            }
+        }
         if let Some(popup) = app.state.z_stack.get_mut(index) {
             popup.render(rect, app, is_last);
         }

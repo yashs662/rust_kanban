@@ -1,5 +1,4 @@
 use crate::ui::View;
-
 pub const APP_TITLE: &str = "Rust 🦀 Kanban";
 pub const CONFIG_DIR_NAME: &str = "rust_kanban";
 pub const CONFIG_FILE_NAME: &str = "config.json";
@@ -12,6 +11,7 @@ pub const DEFAULT_VIEW: View = View::TitleBodyHelpLog;
 pub const ENCRYPTION_KEY_FILE_NAME: &str = "kanban_encryption_key";
 pub const FIELD_NA: &str = "N/A";
 pub const FIELD_NOT_SET: &str = "Not Set";
+// TODO: Use textbox masking instead and deprecate this constant
 pub const HIDDEN_PASSWORD_SYMBOL: char = '*';
 pub const IO_EVENT_WAIT_TIME: u64 = 5; // ms
 pub const LIST_SELECTED_SYMBOL: &str = ">> ";
@@ -27,8 +27,8 @@ pub const MIN_TERM_WIDTH: u16 = 110;
 pub const MIN_TICKRATE: u16 = 10;
 pub const MIN_WARNING_DUE_DATE_DAYS: u16 = 1;
 pub const MOUSE_OUT_OF_BOUNDS_COORDINATES: (u16, u16) = (9999, 9999);
-pub const NO_OF_BOARDS_PER_PAGE: u16 = 3;
-pub const NO_OF_CARDS_PER_BOARD: u16 = 2;
+pub const DEFAULT_NO_OF_BOARDS_PER_PAGE: u16 = 3;
+pub const DEFAULT_NO_OF_CARDS_PER_BOARD: u16 = 2;
 pub const PATTERN_CHANGE_INTERVAL: u64 = 1000; // ms
 pub const RANDOM_SEARCH_TERM: &str = "iibnigivirneiivure";
 pub const REFRESH_TOKEN_FILE_NAME: &str = "kanban_token";
@@ -38,9 +38,6 @@ pub const SAVE_DIR_NAME: &str = "kanban_saves";
 pub const SAVE_FILE_NAME: &str = "kanban";
 pub const SAVE_FILE_REGEX: &str = r"^kanban_\d{2}-\d{2}-\d{4}_v\d+.json";
 pub const SCREEN_TO_TOAST_WIDTH_RATIO: u16 = 3; // 1/3rd of the screen width
-pub const SPINNER_FRAMES: [&str; 7] = [
-    "[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]",
-];
 pub const SCROLLBAR_BEGIN_SYMBOL: Option<&str> = Some("▲");
 pub const SCROLLBAR_END_SYMBOL: Option<&str> = Some("▼");
 pub const SCROLLBAR_TRACK_SYMBOL: Option<&str> = Some("|");
@@ -52,6 +49,8 @@ pub const MIN_DATE_PICKER_WIDTH: u16 = 24;
 pub const MIN_DATE_PICKER_HEIGHT: u16 = 2;
 pub const TIME_PICKER_WIDTH: u16 = 12;
 pub const DATE_TIME_PICKER_ANIM_DURATION: u64 = 100; // ms
+pub const TAG_SELECTOR_HEIGHT: u16 = 10;
+pub const TAG_SELECTOR_WIDTH: u16 = 30;
 
 // Cloud Stuff
 pub const MAX_PASSWORD_LENGTH: usize = 32;

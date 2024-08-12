@@ -1,3 +1,29 @@
+Changes in Version 0.10.4
+=========================
+
+### Fixes
+
+- Fixed text selection not being visible.
+- Fixed the close button being transparent (modifiers below the button were affecting its appearance).
+- Fixed a crash when going up in debug mode (`cargo run`).
+- Fixed size error text not wrapping in smaller terminal sizes.
+- Fixed `cargo run` not showing debug messages.
+- Fixed an invalid date format warning when editing and saving a card with no due date set.
+- Fixed tags being converted to lowercase when viewed in the filter by tag view.
+
+### Updates
+
+- The label for the progress bar on boards has been changed from a percentage to a number for better clarity.
+- Added a highlight to the new board key text when no cards are present in a board for better visibility.
+- Rendering the background is now over 6x faster, resulting in reducing the total render time by a few milliseconds.
+- Removed the loading toast type as it was not being used.
+- Updated Ratatui.
+- Added a due date title in the new card form for better visibility.
+
+### New Features
+
+- Added a tag picker to quickly add tags that you have used in other cards.
+
 Changes in Version 0.10.3
 =========================
 

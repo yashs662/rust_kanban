@@ -29,7 +29,7 @@ impl Renderable for TitleBodyHelp {
                 ]
                 .as_ref(),
             )
-            .split(rect.size());
+            .split(rect.area());
 
         let help_chunks = Layout::default()
             .direction(Direction::Horizontal)

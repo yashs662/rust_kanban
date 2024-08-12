@@ -20,7 +20,7 @@ impl Renderable for BodyHelp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         let help_chunks = Layout::default()
             .direction(Direction::Horizontal)

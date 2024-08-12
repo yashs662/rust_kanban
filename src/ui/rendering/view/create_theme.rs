@@ -20,7 +20,7 @@ use ratatui::{
 impl Renderable for CreateTheme {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
         // TODO: add a help section
-        let render_area = rect.size();
+        let render_area = rect.area();
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1), Constraint::Length(3)].as_ref())

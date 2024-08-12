@@ -20,7 +20,7 @@ use ratatui::{
 
 impl Renderable for ConfirmDiscardCardChanges {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let popup_area = centered_rect_with_length(30, 7, rect.size());
+        let popup_area = centered_rect_with_length(30, 7, rect.area());
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)

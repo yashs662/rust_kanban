@@ -37,7 +37,7 @@ impl Renderable for EditKeybindings {
                 ]
                 .as_ref(),
             )
-            .split(rect.size());
+            .split(rect.area());
 
         let default_style = check_if_active_and_get_style(
             is_active,

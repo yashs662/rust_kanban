@@ -20,7 +20,7 @@ use crate::{
         theme::{Theme, ThemeEnum},
         widgets::{
             command_palette::CommandPaletteWidget,
-            toast::{ToastType, ToastWidget},
+            toast::{Toast, ToastType},
         },
         PopUp, TextColorOptions, TextModifierOptions, View,
     },
@@ -266,6 +266,10 @@ pub fn go_up(app: &mut App) {
                 .cards
                 .get_card_index(current_card_id)
             {
+                if current_card_index_in_all_cards == 0 {
+                    app.send_error_toast("Cannot go up: Already at the first card", None);
+                    return;
+                }
                 if let Some(board) = boards.get_board_with_id(current_board_id) {
                     if let Some(previous_card) = board
                         .cards
@@ -436,9 +440,7 @@ pub fn go_down(app: &mut App) {
     }
 }
 
-pub fn prepare_config_for_new_app(
-    theme: Theme,
-) -> (AppConfig, Vec<&'static str>, Vec<ToastWidget>) {
+pub fn prepare_config_for_new_app(theme: Theme) -> (AppConfig, Vec<&'static str>, Vec<Toast>) {
     let mut toasts = vec![];
     let mut errors = vec![];
     match get_config(false) {
@@ -447,13 +449,13 @@ pub fn prepare_config_for_new_app(
             if config_error_msg.contains("Overlapped keybindings found") {
                 error!("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
                 errors.push("KeyBindings overlap detected. Please check your config file and fix the keybindings. Using default keybindings for now.");
-                toasts.push(ToastWidget::new(
+                toasts.push(Toast::new(
                     config_error_msg,
                     Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                     ToastType::Error,
                     theme.clone(),
                 ));
-                toasts.push(ToastWidget::new("Please check your config file and fix the keybindings. Using default keybindings for now.".to_owned(),
+                toasts.push(Toast::new("Please check your config file and fix the keybindings. Using default keybindings for now.".to_owned(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION), ToastType::Warning, theme.clone()));
                 match get_config(true) {
                     Ok(mut new_config) => {
@@ -463,13 +465,13 @@ pub fn prepare_config_for_new_app(
                     Err(new_config_error) => {
                         error!("Unable to fix keybindings. Please check your config file. Using default config for now.");
                         errors.push("Unable to fix keybindings. Please check your config file. Using default config for now.");
-                        toasts.push(ToastWidget::new(
+                        toasts.push(Toast::new(
                             new_config_error,
                             Duration::from_secs(DEFAULT_TOAST_DURATION) * 3,
                             ToastType::Error,
                             theme.clone(),
                         ));
-                        toasts.push(ToastWidget::new(
+                        toasts.push(Toast::new(
                             "Using default config for now.".to_owned(),
                             Duration::from_secs(DEFAULT_TOAST_DURATION),
                             ToastType::Warning,
@@ -479,13 +481,13 @@ pub fn prepare_config_for_new_app(
                     }
                 }
             } else {
-                toasts.push(ToastWidget::new(
+                toasts.push(Toast::new(
                     config_error_msg,
                     Duration::from_secs(DEFAULT_TOAST_DURATION),
                     ToastType::Error,
                     theme.clone(),
                 ));
-                toasts.push(ToastWidget::new(
+                toasts.push(Toast::new(
                     "Using default config for now.".to_owned(),
                     Duration::from_secs(DEFAULT_TOAST_DURATION),
                     ToastType::Info,
@@ -530,7 +532,7 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                 );
             }
         }
-        if let Some(popup) = app.state.z_stack.last() {
+        if let Some(popup) = app.state.z_stack.checked_control_last() {
             match popup {
                 PopUp::CommandPalette => {
                     app.close_popup();
@@ -594,6 +596,7 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
         if app.state.z_stack.last() == Some(&PopUp::CommandPalette) {
             let stop_input_mode_keys = &app.config.keybindings.stop_user_input;
             match key {
+                // TODO: See if action should be used here instead of key
                 Key::Up => {
                     match app.state.focus {
                         Focus::CommandPaletteCommand => {
@@ -723,40 +726,90 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
             }
             Focus::CardTags => {
                 if let Some((_, current_card)) = &mut app.state.card_being_edited {
-                    let current_selected = app
-                        .state
-                        .app_list_states
-                        .card_view_tag_list
-                        .selected()
-                        .unwrap_or(0);
                     match key {
                         Key::ShiftRight => {
-                            if !current_card.tags.is_empty() {
-                                let max = current_card.tags.len();
-                                if current_selected < max - 1 {
-                                    app.state
-                                        .app_list_states
-                                        .card_view_tag_list
-                                        .select(Some(current_selected + 1));
+                            if let Some(current_selected) =
+                                app.state.app_list_states.card_view_tag_list.selected()
+                            {
+                                if !current_card.tags.is_empty() {
+                                    let max = current_card.tags.len();
+                                    if current_selected < max - 1 {
+                                        app.state
+                                            .app_list_states
+                                            .card_view_tag_list
+                                            .select(Some(current_selected + 1));
+                                    } else if current_selected != max - 1 {
+                                        app.state.app_list_states.card_view_tag_list.select(None);
+                                    }
                                 }
+                            } else if !current_card.tags.is_empty() {
+                                app.state.app_list_states.card_view_tag_list.select(Some(0));
                             }
                         }
                         Key::ShiftLeft => {
-                            if !current_card.tags.is_empty() {
-                                app.state
-                                    .app_list_states
-                                    .card_view_tag_list
-                                    .select(Some(current_selected.saturating_sub(1)));
+                            if let Some(current_selected) =
+                                app.state.app_list_states.card_view_tag_list.selected()
+                            {
+                                if !current_card.tags.is_empty() {
+                                    let max = current_card.tags.len();
+                                    if current_selected > 0 {
+                                        app.state
+                                            .app_list_states
+                                            .card_view_tag_list
+                                            .select(Some(current_selected - 1));
+                                    } else if current_selected != 0 {
+                                        app.state
+                                            .app_list_states
+                                            .card_view_tag_list
+                                            .select(Some(max - 1));
+                                    }
+                                }
+                            } else if !current_card.tags.is_empty() {
+                                app.state.app_list_states.card_view_tag_list.select(Some(0));
                             }
                         }
                         Key::Enter => {
+                            if let Some(selected_index) =
+                                app.state.app_list_states.tag_picker.selected()
+                            {
+                                if let Some(tag) =
+                                    app.widgets.tag_picker.available_tags.get(selected_index)
+                                {
+                                    if !current_card.tags.contains(tag) {
+                                        if let Some(insert_index) =
+                                            app.state.app_list_states.card_view_tag_list.selected()
+                                        {
+                                            if let Some(text_box) = app
+                                                .state
+                                                .text_buffers
+                                                .card_tags
+                                                .get_mut(insert_index)
+                                            {
+                                                text_box.reset();
+                                                text_box.insert_str(tag);
+                                                current_card.tags[insert_index] = tag.to_owned();
+                                            }
+                                        } else {
+                                            current_card.tags.push(tag.to_owned());
+                                            app.state.app_list_states.card_view_tag_list.select(
+                                                Some(current_card.tags.len().saturating_sub(1)),
+                                            );
+                                        }
+                                        app.state
+                                            .text_buffers
+                                            .prepare_tags_and_comments_for_card(current_card);
+                                        return AppReturn::Continue;
+                                    }
+                                }
+                            }
                             if let Some(insert_index) =
                                 app.state.app_list_states.card_view_tag_list.selected()
                             {
-                                current_card.tags.insert(insert_index + 1, "".to_owned());
-                                app.state
-                                    .text_buffers
-                                    .prepare_tags_and_comments_for_card(current_card);
+                                if insert_index < current_card.tags.len() {
+                                    current_card.tags.insert(insert_index + 1, "".to_owned());
+                                } else {
+                                    current_card.tags.push("".to_owned());
+                                }
                                 app.state
                                     .app_list_states
                                     .card_view_tag_list
@@ -764,13 +817,13 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                             } else {
                                 current_card.tags.push("".to_owned());
                                 app.state
-                                    .text_buffers
-                                    .prepare_tags_and_comments_for_card(current_card);
-                                app.state
                                     .app_list_states
                                     .card_view_tag_list
                                     .select(Some(current_card.tags.len().saturating_sub(1)));
                             }
+                            app.state
+                                .text_buffers
+                                .prepare_tags_and_comments_for_card(current_card);
                         }
                         Key::Delete => {
                             if current_card.tags.is_empty() {
@@ -787,6 +840,59 @@ pub async fn handle_user_input_mode(app: &mut App<'_>, key: Key) -> AppReturn {
                                         .app_list_states
                                         .card_view_tag_list
                                         .select(Some(delete_index - 1));
+                                }
+                            }
+                        }
+                        Key::Up => {
+                            if !app.widgets.tag_picker.available_tags.is_empty() {
+                                if let Some(selected_index) =
+                                    app.state.app_list_states.tag_picker.selected()
+                                {
+                                    if selected_index == 0 {
+                                        app.state.app_list_states.tag_picker.select(Some(
+                                            app.widgets
+                                                .tag_picker
+                                                .available_tags
+                                                .len()
+                                                .saturating_sub(1),
+                                        ));
+                                    } else if selected_index
+                                        > app.widgets.tag_picker.available_tags.len()
+                                    {
+                                        app.state.app_list_states.tag_picker.select(Some(0));
+                                    } else {
+                                        app.state
+                                            .app_list_states
+                                            .tag_picker
+                                            .select(Some(selected_index - 1));
+                                    }
+                                } else {
+                                    app.state.app_list_states.tag_picker.select(Some(0));
+                                }
+                            }
+                        }
+                        Key::Down => {
+                            if !app.widgets.tag_picker.available_tags.is_empty() {
+                                if let Some(selected_index) =
+                                    app.state.app_list_states.tag_picker.selected()
+                                {
+                                    if selected_index
+                                        >= app
+                                            .widgets
+                                            .tag_picker
+                                            .available_tags
+                                            .len()
+                                            .saturating_sub(1)
+                                    {
+                                        app.state.app_list_states.tag_picker.select(Some(0));
+                                    } else {
+                                        app.state
+                                            .app_list_states
+                                            .tag_picker
+                                            .select(Some(selected_index + 1));
+                                    }
+                                } else {
+                                    app.state.app_list_states.tag_picker.select(Some(0));
                                 }
                             }
                         }
@@ -1185,7 +1291,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         app.current_theme = theme.clone();
                     }
                 }
-                app.widgets.toasts = vec![];
+                app.widgets.toast_widget.toasts = vec![];
                 app.set_view(app.config.default_view);
                 app.send_info_toast("UI reset, all toasts cleared", None);
                 app.close_popup();
@@ -1220,6 +1326,9 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 app.select_edit_style_modifier_prv();
                             }
                         }
+                        PopUp::SaveThemePrompt => {
+                            toggle_focus_between_submit_and_extra(app);
+                        }
                         PopUp::ChangeDateFormatPopup => app.change_date_format_popup_prv(),
                         PopUp::FilterByTag => app.filter_by_tag_popup_prv(),
                         PopUp::ViewCard => {
@@ -1232,6 +1341,9 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         }
                         PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
+                        }
+                        PopUp::TagPicker => {
+                            app.tag_picker_prv();
                         }
                         _ => {}
                     }
@@ -1334,11 +1446,17 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                 app.state.text_buffers.card_description.scroll((1, 0))
                             }
                         }
+                        PopUp::SaveThemePrompt => {
+                            toggle_focus_between_submit_and_extra(app);
+                        }
                         PopUp::CardPrioritySelector => {
                             app.select_card_priority_next();
                         }
                         PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
+                        }
+                        PopUp::TagPicker => {
+                            app.tag_picker_next();
                         }
                         _ => {}
                     }
@@ -1419,11 +1537,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 reset_mouse(app);
                 if let Some(popup) = app.state.z_stack.last() {
                     match popup {
-                        PopUp::ConfirmDiscardCardChanges | PopUp::SaveThemePrompt => {
-                            app.state.set_focus(match app.state.focus {
-                                Focus::SubmitButton => Focus::ExtraFocus,
-                                _ => Focus::SubmitButton,
-                            });
+                        PopUp::ConfirmDiscardCardChanges => {
+                            toggle_focus_between_submit_and_extra(app);
                         }
                         PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
@@ -1441,11 +1556,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 reset_mouse(app);
                 if let Some(popup) = app.state.z_stack.last() {
                     match popup {
-                        PopUp::ConfirmDiscardCardChanges | PopUp::SaveThemePrompt => {
-                            app.state.set_focus(match app.state.focus {
-                                Focus::SubmitButton => Focus::ExtraFocus,
-                                _ => Focus::SubmitButton,
-                            });
+                        PopUp::ConfirmDiscardCardChanges => {
+                            toggle_focus_between_submit_and_extra(app);
                         }
                         PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
@@ -1524,37 +1636,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         PopUp::CustomHexColorPromptBG => {
                             return handle_custom_hex_color_prompt(app, false)
                         }
-                        PopUp::ViewCard => match app.state.focus {
-                            Focus::CardPriority => {
-                                if app.state.card_being_edited.is_none() {
-                                    handle_edit_new_card(app);
-                                }
-                                app.set_popup(PopUp::CardPrioritySelector);
-                                return AppReturn::Continue;
-                            }
-                            Focus::CardStatus => {
-                                if app.state.card_being_edited.is_none() {
-                                    handle_edit_new_card(app);
-                                }
-                                app.set_popup(PopUp::CardStatusSelector);
-                                return AppReturn::Continue;
-                            }
-                            Focus::CardName
-                            | Focus::CardDescription
-                            | Focus::CardTags
-                            | Focus::CardComments => return handle_edit_new_card(app),
-                            Focus::CardDueDate => {
-                                if app.state.card_being_edited.is_none() {
-                                    handle_edit_new_card(app);
-                                }
-                                app.set_popup(PopUp::DateTimePicker);
-                                return AppReturn::Continue;
-                            }
-                            Focus::SubmitButton => {
-                                return handle_edit_card_submit(app);
-                            }
-                            _ => {}
-                        },
+                        PopUp::ViewCard => return handle_general_actions_view_card(app),
                         PopUp::CommandPalette => {
                             unreachable!("Command palette should not be handled here");
                         }
@@ -1577,6 +1659,10 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         }
                         PopUp::DateTimePicker => {
                             handle_date_time_picker_action(app, None, Some(action));
+                            return AppReturn::Continue;
+                        }
+                        PopUp::TagPicker => {
+                            // This is never reached as tag picker does not handle its own actions
                             return AppReturn::Continue;
                         }
                     }
@@ -2045,7 +2131,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                     app.send_error_toast(
                                 "Cannot move card up, it is already at the top of the board",
                                 None,
-                            );
+                                    );
                                     error!("Cannot move card up, it is already at the top of the board");
                                     return AppReturn::Continue;
                                 }
@@ -2055,8 +2141,8 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                                     .position(|card_id| *card_id == current_card_id);
                                 if current_card_index_in_visible.is_none() {
                                     debug!(
-                                "Cannot move card up without a current card index in visible cards"
-                            );
+                                        "Cannot move card up without a current card index in visible cards"
+                                    );
                                     return AppReturn::Continue;
                                 }
                                 let current_card_index_in_visible =
@@ -2445,7 +2531,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                         .unwrap();
                     if command_palette_index != app.state.z_stack.len() - 1 {
                         app.state.z_stack.remove(command_palette_index);
-                        app.state.z_stack.push(PopUp::CommandPalette);
+                        app.set_popup(PopUp::CommandPalette);
                     }
                     match app.state.z_stack.last().unwrap() {
                         PopUp::CommandPalette => {
@@ -2485,7 +2571,7 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
                 AppReturn::Continue
             }
             Action::ClearAllToasts => {
-                app.widgets.toasts.clear();
+                app.widgets.toast_widget.toasts.clear();
                 info!("Cleared toast messages");
                 AppReturn::Continue
             }
@@ -2519,6 +2605,13 @@ pub async fn handle_general_actions(app: &mut App<'_>, key: Key) -> AppReturn {
         );
         AppReturn::Continue
     }
+}
+
+fn toggle_focus_between_submit_and_extra(app: &mut App) {
+    app.state.set_focus(match app.state.focus {
+        Focus::SubmitButton => Focus::ExtraFocus,
+        _ => Focus::SubmitButton,
+    });
 }
 
 pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppReturn {
@@ -2863,10 +2956,22 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                         Focus::CloseButton => {
                             app.close_popup();
                         }
-                        Focus::CardName
-                        | Focus::CardDescription
-                        | Focus::CardTags
-                        | Focus::CardComments => return handle_edit_new_card(app),
+                        Focus::CardName | Focus::CardDescription | Focus::CardComments => {
+                            return handle_edit_new_card(app)
+                        }
+                        Focus::CardTags => {
+                            if app.state.card_being_edited.is_none() {
+                                handle_edit_new_card(app);
+                            }
+                            if left_button_pressed {
+                                handle_tag_picker_action(app);
+                            } else if mouse_scroll_up {
+                                app.tag_picker_prv();
+                            } else if mouse_scroll_down {
+                                app.tag_picker_next();
+                            }
+                            return AppReturn::Continue;
+                        }
                         Focus::CardPriority => {
                             if app.state.card_being_edited.is_none() {
                                 handle_edit_new_card(app);
@@ -2988,6 +3093,9 @@ pub async fn handle_mouse_action(app: &mut App<'_>, mouse_action: Mouse) -> AppR
                         _ => {}
                     }
                 }
+            }
+            PopUp::TagPicker => {
+                // This is never reached as tag picker does not handle its own actions
             }
         }
     } else {
@@ -4148,6 +4256,53 @@ fn handle_new_board_action(app: &mut App) {
     }
 }
 
+fn handle_general_actions_view_card(app: &mut App) -> AppReturn {
+    match app.state.focus {
+        Focus::CardPriority => {
+            if app.state.card_being_edited.is_none() {
+                handle_edit_new_card(app);
+            }
+            app.set_popup(PopUp::CardPrioritySelector);
+            AppReturn::Continue
+        }
+        Focus::CardStatus => {
+            if app.state.card_being_edited.is_none() {
+                handle_edit_new_card(app);
+            }
+            app.set_popup(PopUp::CardStatusSelector);
+            AppReturn::Continue
+        }
+        Focus::CardName | Focus::CardDescription | Focus::CardTags | Focus::CardComments => {
+            handle_edit_new_card(app)
+        }
+        Focus::CardDueDate => {
+            if app.state.card_being_edited.is_none() {
+                handle_edit_new_card(app);
+            }
+            app.set_popup(PopUp::DateTimePicker);
+            AppReturn::Continue
+        }
+        Focus::SubmitButton => handle_edit_card_submit(app),
+        _ => AppReturn::Continue,
+    }
+}
+
+fn handle_tag_picker_action(app: &mut App) {
+    if let (Some((_, card_being_edited)), Some(card_tag_selected), Some(selected_tag_index)) = (
+        &mut app.state.card_being_edited,
+        app.state.app_list_states.card_view_tag_list.selected(),
+        app.state.app_list_states.tag_picker.selected(),
+    ) {
+        if card_tag_selected < card_being_edited.tags.len()
+            && selected_tag_index < app.widgets.tag_picker.available_tags.len()
+        {
+            let selected_tag = app.widgets.tag_picker.available_tags[selected_tag_index].clone();
+            card_being_edited.tags[card_tag_selected] = selected_tag;
+        }
+        app.close_popup();
+    }
+}
+
 fn handle_date_time_picker_action(app: &mut App, key: Option<Key>, action: Option<Action>) {
     let action = key.map_or_else(|| action, |key| app.config.keybindings.key_to_action(&key));
     if let Some(action) = action {
@@ -4239,9 +4394,10 @@ fn handle_new_card_action(app: &mut App) {
         let new_card_name = new_card_name.trim();
         let new_card_description = app.state.text_buffers.card_description.get_joined_lines();
         let new_card_description = new_card_description.trim();
-        
-        let corrected_date_time_format = DateTimeFormat::add_time_to_date_format(app.config.date_time_format);
-        
+
+        let corrected_date_time_format =
+            DateTimeFormat::add_time_to_date_format(app.config.date_time_format);
+
         let new_card_due_date = app
             .widgets
             .date_time_picker
@@ -4661,93 +4817,45 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                         let theme_style_being_edited_index =
                             theme_style_being_edited_index.unwrap();
 
-                        let mut fg_color = all_color_options[selected_fg_index.unwrap()];
-                        let mut bg_color = all_color_options[selected_bg_index.unwrap()];
+                        let fg_color = if let TextColorOptions::HEX(_, _, _) =
+                            all_color_options[selected_fg_index.unwrap()]
+                        {
+                            let fg_hex_value = app
+                                .state
+                                .text_buffers
+                                .theme_editor_fg_hex
+                                .get_joined_lines();
+
+                            if let Some((r, g, b)) = parse_hex_to_rgb(&fg_hex_value) {
+                                Color::Rgb(r, g, b)
+                            } else {
+                                app.send_error_toast("Invalid hex value", None);
+                                return AppReturn::Continue;
+                            }
+                        } else {
+                            Color::from(all_color_options[selected_fg_index.unwrap()])
+                        };
+                        let bg_color = if let TextColorOptions::HEX(_, _, _) =
+                            all_color_options[selected_bg_index.unwrap()]
+                        {
+                            let bg_hex_value = app
+                                .state
+                                .text_buffers
+                                .theme_editor_bg_hex
+                                .get_joined_lines();
+
+                            if let Some((r, g, b)) = parse_hex_to_rgb(&bg_hex_value) {
+                                Color::Rgb(r, g, b)
+                            } else {
+                                app.send_error_toast("Invalid hex value", None);
+                                return AppReturn::Continue;
+                            }
+                        } else {
+                            Color::from(all_color_options[selected_bg_index.unwrap()])
+                        };
                         let modifier = ratatui::style::Modifier::from(
                             all_modifier_options[selected_modifier_index.unwrap()].clone(),
                         );
-
-                        if let TextColorOptions::HEX(_, _, _) = fg_color {
-                            // TODO: FIX this not using comma separated rgb values, using hex now
-                            if !app.state.text_buffers.theme_editor_fg_hex.is_empty() {
-                                let input = app
-                                    .state
-                                    .text_buffers
-                                    .theme_editor_fg_hex
-                                    .get_joined_lines();
-                                let split_input =
-                                    input.split(',').map(|s| s.to_string().trim().to_string());
-                                if split_input.clone().count() == 3 {
-                                    let mut input_is_valid = true;
-                                    for i in split_input.clone() {
-                                        if i.parse::<u8>().is_err() {
-                                            input_is_valid = false;
-                                        }
-                                    }
-                                    if input_is_valid {
-                                        let r = split_input
-                                            .clone()
-                                            .next()
-                                            .unwrap()
-                                            .parse::<u8>()
-                                            .unwrap();
-                                        let g = split_input
-                                            .clone()
-                                            .nth(1)
-                                            .unwrap()
-                                            .parse::<u8>()
-                                            .unwrap();
-                                        let b = split_input
-                                            .clone()
-                                            .nth(2)
-                                            .unwrap()
-                                            .parse::<u8>()
-                                            .unwrap();
-                                        fg_color = TextColorOptions::HEX(r, g, b);
-                                    }
-                                }
-                            }
-                        }
-                        if let TextColorOptions::HEX(_, _, _) = bg_color {
-                            if !app.state.text_buffers.theme_editor_bg_hex.is_empty() {
-                                let input = app
-                                    .state
-                                    .text_buffers
-                                    .theme_editor_bg_hex
-                                    .get_joined_lines();
-                                let split_input =
-                                    input.split(',').map(|s| s.to_string().trim().to_string());
-                                if split_input.clone().count() == 3 {
-                                    let mut input_is_valid = true;
-                                    for i in split_input.clone() {
-                                        if i.parse::<u8>().is_err() {
-                                            input_is_valid = false;
-                                        }
-                                    }
-                                    if input_is_valid {
-                                        let r = split_input
-                                            .clone()
-                                            .next()
-                                            .unwrap()
-                                            .parse::<u8>()
-                                            .unwrap();
-                                        let g = split_input
-                                            .clone()
-                                            .nth(1)
-                                            .unwrap()
-                                            .parse::<u8>()
-                                            .unwrap();
-                                        let b = split_input
-                                            .clone()
-                                            .nth(2)
-                                            .unwrap()
-                                            .parse::<u8>()
-                                            .unwrap();
-                                        bg_color = TextColorOptions::HEX(r, g, b);
-                                    }
-                                }
-                            }
-                        }
                         let theme_enum = ThemeEnum::iter().nth(theme_style_being_edited_index);
                         if theme_enum.is_none() {
                             debug!(
@@ -4758,14 +4866,18 @@ fn handle_create_theme_action(app: &mut App) -> AppReturn {
                             app.close_popup();
                             return AppReturn::Continue;
                         }
+                        let theme_enum = theme_enum.unwrap();
                         Theme::update_style(
-                            app.state
-                                .theme_being_edited
-                                .get_mut_style(theme_enum.unwrap()),
-                            Some(Color::from(fg_color)),
-                            Some(Color::from(bg_color)),
+                            app.state.theme_being_edited.get_mut_style(theme_enum),
+                            Some(fg_color),
+                            Some(bg_color),
                             Some(modifier),
                         );
+                        app.state.app_list_states.edit_specific_style[0].select(None);
+                        app.state.app_list_states.edit_specific_style[1].select(None);
+                        app.state.app_list_states.edit_specific_style[2].select(None);
+                        app.state.text_buffers.theme_editor_fg_hex.reset();
+                        app.state.text_buffers.theme_editor_bg_hex.reset();
                         app.close_popup();
                         app.state.set_focus(Focus::ThemeEditor);
                     }
@@ -4840,7 +4952,7 @@ fn handle_next_focus(app: &mut App) {
     if app.config.enable_mouse_support {
         reset_mouse(app)
     }
-    let available_targets = if let Some(popup) = app.state.z_stack.last() {
+    let available_targets = if let Some(popup) = app.state.z_stack.checked_control_last() {
         popup.get_available_targets()
     } else {
         app.state.current_view.get_available_targets()
@@ -4854,7 +4966,6 @@ fn handle_next_focus(app: &mut App) {
         return;
     }
     let mut next_focus = app.state.focus.next(&available_targets);
-
     // Special Handling
     if app.state.card_being_edited.is_none()
         && app.state.z_stack.last() == Some(&PopUp::ViewCard)
@@ -4885,7 +4996,7 @@ fn handle_prv_focus(app: &mut App) {
     if app.config.enable_mouse_support {
         reset_mouse(app)
     }
-    let available_targets = if let Some(popup) = app.state.z_stack.last() {
+    let available_targets = if let Some(popup) = app.state.z_stack.checked_control_last() {
         PopUp::get_available_targets(popup)
     } else {
         View::get_available_targets(&app.state.current_view)
@@ -4971,57 +5082,11 @@ fn handle_custom_hex_color_prompt(app: &mut App, fg: bool) -> AppReturn {
     };
 
     // validate hex value
-    let color = if let Some((r, g, b)) = parse_hex_to_rgb(hex_value) {
-        Color::Rgb(r, g, b)
-    } else {
+    if parse_hex_to_rgb(hex_value).is_none() {
         app.send_error_toast("Invalid hex value", None);
         return AppReturn::Continue;
     };
 
-    let all_color_options = TextColorOptions::iter().collect::<Vec<TextColorOptions>>();
-    let selected_index = app.state.app_list_states.edit_specific_style[0].selected();
-    if selected_index.is_none() {
-        debug!("No selected index found");
-        app.send_error_toast("Something went wrong", None);
-        return AppReturn::Continue;
-    }
-    let selected_index = selected_index.unwrap();
-    if selected_index >= all_color_options.len() {
-        debug!("Selected index is out of bounds");
-        app.send_error_toast("Something went wrong", None);
-        return AppReturn::Continue;
-    }
-    let theme_style_being_edited_index = app.state.app_table_states.theme_editor.selected();
-    if theme_style_being_edited_index.is_none() {
-        debug!("No theme style being edited index found");
-        app.send_error_toast("Something went wrong", None);
-        return AppReturn::Continue;
-    }
-    let theme_style_being_edited_index = theme_style_being_edited_index.unwrap();
-    let all_theme_enums = ThemeEnum::iter().collect::<Vec<ThemeEnum>>();
-    if theme_style_being_edited_index >= all_theme_enums.len() {
-        debug!("Theme style being edited index is out of bounds");
-        app.send_error_toast("Something went wrong", None);
-        return AppReturn::Continue;
-    }
-    let theme_enum = ThemeEnum::iter()
-        .nth(theme_style_being_edited_index)
-        .unwrap();
-    if fg {
-        Theme::update_style(
-            app.state.theme_being_edited.get_mut_style(theme_enum),
-            Some(color),
-            None,
-            None,
-        );
-    } else {
-        Theme::update_style(
-            app.state.theme_being_edited.get_mut_style(theme_enum),
-            None,
-            Some(color),
-            None,
-        );
-    }
     app.close_popup();
     AppReturn::Continue
 }
@@ -5201,8 +5266,10 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
             }
         }
         Err(_) => {
-            send_warning_toast = true;
-            warning_due_date = card_due_date;
+            if card_due_date.trim() != FIELD_NOT_SET {
+                send_warning_toast = true;
+                warning_due_date = card_due_date;
+            }
             FIELD_NOT_SET.to_string()
         }
     };
@@ -5245,7 +5312,7 @@ fn handle_edit_card_submit(app: &mut App) -> AppReturn {
     app.send_info_toast(&format!("Changes to Card '{}' saved", card_name), None);
     app.state.set_focus(Focus::CardName);
     app.state.app_status = AppStatus::Initialized;
-    let calculated_tags = CommandPaletteWidget::calculate_tags(app);
+    let calculated_tags = app.calculate_tags();
     if calculated_tags.is_empty() {
         app.state.all_available_tags = None;
     } else {
@@ -5480,18 +5547,11 @@ async fn handle_login_action(app: &mut App<'_>) {
             app.state.theme_being_edited = Theme::default();
             reset_login_form(app);
             handle_go_to_previous_view(app).await;
-            if app.state.app_status == AppStatus::UserInput {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::SubmitButton => {
             handle_login_submit_action(app).await;
-            if app.state.app_status == AppStatus::UserInput {
-                // TODO: Create a function to set this
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::ExtraFocus => {
             app.state.show_password = !app.state.show_password;
@@ -5499,19 +5559,20 @@ async fn handle_login_action(app: &mut App<'_>) {
         Focus::Title => {
             app.set_view(View::MainMenu);
             reset_login_form(app);
-            if app.state.app_status == AppStatus::UserInput {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::EmailIDField | Focus::PasswordField => {
-            if app.state.app_status != AppStatus::UserInput {
-                app.state.app_status = AppStatus::UserInput;
-                info!("Taking user input");
-            }
+            enter_user_input_mode(app);
         }
         _ => {}
     };
+}
+
+fn exit_user_input_mode(app: &mut App) {
+    if app.state.app_status == AppStatus::UserInput {
+        app.state.app_status = AppStatus::Initialized;
+        info!("Exiting user input mode");
+    }
 }
 
 async fn handle_signup_action(app: &mut App<'_>) {
@@ -5519,17 +5580,11 @@ async fn handle_signup_action(app: &mut App<'_>) {
         Focus::CloseButton => {
             reset_signup_form(app);
             handle_go_to_previous_view(app).await;
-            if app.state.app_status == AppStatus::UserInput {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::SubmitButton => {
             handle_signup_submit_action(app).await;
-            if app.state.app_status == AppStatus::UserInput {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::ExtraFocus => {
             app.state.show_password = !app.state.show_password;
@@ -5537,18 +5592,19 @@ async fn handle_signup_action(app: &mut App<'_>) {
         Focus::Title => {
             app.set_view(View::MainMenu);
             reset_signup_form(app);
-            if app.state.app_status == AppStatus::UserInput {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::EmailIDField | Focus::PasswordField | Focus::ConfirmPasswordField => {
-            if app.state.app_status != AppStatus::UserInput {
-                app.state.app_status = AppStatus::UserInput;
-                info!("Taking user input");
-            }
+            enter_user_input_mode(app);
         }
         _ => {}
+    }
+}
+
+fn enter_user_input_mode(app: &mut App) {
+    if app.state.app_status != AppStatus::UserInput {
+        app.state.app_status = AppStatus::UserInput;
+        info!("Taking user input");
     }
 }
 
@@ -5557,27 +5613,18 @@ async fn handle_reset_password_action(app: &mut App<'_>) {
         Focus::CloseButton => {
             reset_reset_password_form(app);
             handle_go_to_previous_view(app).await;
-            if app.state.app_status == AppStatus::UserInput {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::Title => {
             app.set_view(View::MainMenu);
             reset_reset_password_form(app);
-            if app.state.app_status == AppStatus::UserInput {
-                app.state.app_status = AppStatus::Initialized;
-                info!("Exiting user input mode");
-            }
+            exit_user_input_mode(app);
         }
         Focus::EmailIDField
         | Focus::ResetPasswordLinkField
         | Focus::PasswordField
         | Focus::ConfirmPasswordField => {
-            if app.state.app_status != AppStatus::UserInput {
-                app.state.app_status = AppStatus::UserInput;
-                info!("Taking user input");
-            }
+            enter_user_input_mode(app);
         }
         Focus::ExtraFocus => {
             app.state.show_password = !app.state.show_password;

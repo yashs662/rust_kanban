@@ -172,21 +172,14 @@ impl Theme {
     ) {
         if let Some(fg) = fg_color {
             style.fg = Some(fg);
-        } else {
-            style.fg = None;
         }
 
         if let Some(bg) = bg_color {
             style.bg = Some(bg);
-        } else {
-            style.bg = None;
         }
 
         if let Some(modifier) = modifier {
             Self::add_modifier_to_style(style, modifier);
-        } else {
-            style.sub_modifier = Modifier::empty();
-            style.add_modifier = Modifier::empty();
         }
     }
 

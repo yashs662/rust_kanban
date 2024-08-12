@@ -18,7 +18,7 @@ impl Renderable for TitleBody {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         rect.render_widget(draw_title(app, chunks[0], is_active), chunks[0]);
         render_body(rect, chunks[1], app, false, is_active);

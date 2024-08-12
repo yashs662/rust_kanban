@@ -33,7 +33,7 @@ impl Renderable for MainMenuView {
                 ]
                 .as_ref(),
             )
-            .split(rect.size());
+            .split(rect.area());
 
         let help_chunks = Layout::default()
             .direction(Direction::Horizontal)

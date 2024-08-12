@@ -30,7 +30,7 @@ use strum::IntoEnumIterator;
 
 impl Renderable for EditThemeStyle {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let popup_area = centered_rect_with_percentage(90, 80, rect.size());
+        let popup_area = centered_rect_with_percentage(90, 80, rect.area());
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
@@ -287,8 +287,10 @@ impl Renderable for EditThemeStyle {
         let modifier_list_items: Vec<ListItem> = TextModifierOptions::iter()
             .map(|modifier| {
                 let mut modifier_style = general_style;
-                set_foreground_color(app, &mut modifier_style);
-                set_background_color(app, &mut modifier_style);
+                if is_active {
+                    set_foreground_color(app, &mut modifier_style);
+                    set_background_color(app, &mut modifier_style);
+                }
 
                 Theme::add_modifier_to_style(
                     &mut modifier_style,

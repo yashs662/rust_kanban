@@ -41,7 +41,7 @@ impl Renderable for Login {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -335,7 +335,7 @@ impl Renderable for Login {
                         &app.config.show_line_numbers,
                         &email_id_field_chunk,
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::PasswordField => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -343,7 +343,7 @@ impl Renderable for Login {
                         &app.config.show_line_numbers,
                         &password_field_chunk,
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 _ => {}
             }

@@ -26,7 +26,7 @@ impl Renderable for ChangeView {
             .map(|s| ListItem::new(vec![Line::from(s.as_str().to_string())]))
             .collect::<Vec<ListItem>>();
 
-        let popup_area = centered_rect_with_length(40, 10, rect.size());
+        let popup_area = centered_rect_with_length(40, 10, rect.area());
 
         let general_style = check_if_active_and_get_style(
             is_active,

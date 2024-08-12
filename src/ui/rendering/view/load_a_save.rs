@@ -30,7 +30,7 @@ impl Renderable for LoadASave {
             Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Length(35), Constraint::Fill(1)].as_ref())
-                .split(rect.size())
+                .split(rect.area())
         };
         let chunks = Layout::default()
             .direction(Direction::Vertical)

@@ -36,7 +36,7 @@ impl Renderable for NewBoardForm {
                 ]
                 .as_ref(),
             )
-            .split(rect.size());
+            .split(rect.area());
 
         let general_style = check_if_active_and_get_style(
             is_active,
@@ -171,7 +171,7 @@ impl Renderable for NewBoardForm {
                         &app.config.show_line_numbers,
                         &chunks[1],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::NewBoardDescription => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -179,7 +179,7 @@ impl Renderable for NewBoardForm {
                         &app.config.show_line_numbers,
                         &chunks[2],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 _ => {}
             }

@@ -44,7 +44,7 @@ impl Renderable for Signup {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -342,7 +342,7 @@ impl Renderable for Signup {
                         &app.config.show_line_numbers,
                         &form_chunks[1],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::PasswordField => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -350,7 +350,7 @@ impl Renderable for Signup {
                         &app.config.show_line_numbers,
                         &form_chunks[2],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::ConfirmPasswordField => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -358,7 +358,7 @@ impl Renderable for Signup {
                         &app.config.show_line_numbers,
                         &form_chunks[3],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 _ => {}
             }

@@ -77,7 +77,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App<'_>>>) -> Result<()> {
 
     execute!(stdout(), crossterm::event::DisableMouseCapture)?;
     terminal.clear()?;
-    terminal.set_cursor(0, 0)?;
+    terminal.set_cursor_position((0, 0))?;
     terminal.show_cursor()?;
     crossterm::terminal::disable_raw_mode()?;
 

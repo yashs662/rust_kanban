@@ -27,7 +27,7 @@ use ratatui::{
 
 impl Renderable for CustomHexColorPrompt {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let popup_area = centered_rect_with_length(72, 12, rect.size());
+        let popup_area = centered_rect_with_length(72, 12, rect.area());
         let prompt_text = "Enter a custom Hex color in the format: #RRGGBB (e.g. #FF0000)";
 
         let chunks = if app.config.enable_mouse_support {
@@ -180,7 +180,7 @@ impl Renderable for CustomHexColorPrompt {
                         &app.config.show_line_numbers,
                         &input_field_chunks[0],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Some(PopUp::CustomHexColorPromptBG) => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -188,7 +188,7 @@ impl Renderable for CustomHexColorPrompt {
                         &app.config.show_line_numbers,
                         &input_field_chunks[0],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 _ => {}
             }

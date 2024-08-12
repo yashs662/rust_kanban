@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
     }));
 
     logger::init_logger(LevelFilter::Debug).unwrap();
-    if args.debug_mode {
+    if cfg!(debug_assertions) || args.debug_mode {
         logger::set_default_level(LevelFilter::Debug);
     } else {
         logger::set_default_level(LevelFilter::Info);
@@ -117,3 +117,5 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+// TODO: Update screenshots in README.md

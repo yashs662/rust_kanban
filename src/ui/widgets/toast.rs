@@ -6,8 +6,13 @@ use crate::{
 };
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Default)]
 pub struct ToastWidget {
+    pub toasts: Vec<Toast>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Toast {
     pub duration: Duration,
     pub message: String,
     pub start_time: Instant,
@@ -16,7 +21,7 @@ pub struct ToastWidget {
     pub toast_type: ToastType,
 }
 
-impl ToastWidget {
+impl Toast {
     pub fn new(message: String, duration: Duration, toast_type: ToastType, theme: Theme) -> Self {
         Self {
             duration,
@@ -55,7 +60,7 @@ impl Widget for ToastWidget {
             app.state.term_background_color
         };
         let disable_animations = app.config.disable_animations;
-        let toasts = &mut app.widgets.toasts;
+        let toasts = &mut app.widgets.toast_widget.toasts;
         for i in (0..toasts.len()).rev() {
             if toasts[i].start_time.elapsed() > toasts[i].duration {
                 toasts.remove(i);
@@ -96,7 +101,6 @@ impl Widget for ToastWidget {
 pub enum ToastType {
     Error,
     Info,
-    Loading,
     Warning,
 }
 
@@ -105,7 +109,6 @@ impl ToastType {
         match self {
             Self::Error => "Error".to_string(),
             Self::Info => "Info".to_string(),
-            Self::Loading => "Loading".to_string(),
             Self::Warning => "Warning".to_string(),
         }
     }
@@ -131,13 +134,6 @@ impl ToastType {
                     .log_info_style
                     .fg
                     .unwrap_or(ratatui::style::Color::LightCyan),
-            )
-            .to_rgb(),
-            Self::Loading => TextColorOptions::from(
-                theme
-                    .log_debug_style
-                    .fg
-                    .unwrap_or(ratatui::style::Color::LightGreen),
             )
             .to_rgb(),
         }

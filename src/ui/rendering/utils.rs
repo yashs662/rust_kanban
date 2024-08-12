@@ -228,7 +228,7 @@ pub fn get_scrollable_widget_row_bounds(
             height = height.saturating_sub(1);
         }
     }
-    (start, end - 1)
+    (start, end.saturating_sub(1))
 }
 
 pub fn calculate_viewport_corrected_cursor_position(
@@ -249,9 +249,12 @@ pub fn calculate_viewport_corrected_cursor_position(
         let num_lines = text_box.get_num_lines();
         let num_digits_in_max_line_number = num_digits(num_lines) as u16;
         line_number_padding += num_digits_in_max_line_number;
-        chunk.left() + 1 + adjusted_x_cursor - text_box_viewport.1 + line_number_padding
+        chunk.left()
+            + 1
+            + adjusted_x_cursor.saturating_sub(text_box_viewport.1)
+            + line_number_padding
     } else {
-        chunk.left() + 1 + adjusted_x_cursor - text_box_viewport.1
+        chunk.left() + 1 + adjusted_x_cursor.saturating_sub(text_box_viewport.1)
     };
     let adjusted_y_cursor = if y_pos as u16 > text_box_viewport.2 {
         y_pos as u16 - text_box_viewport.2

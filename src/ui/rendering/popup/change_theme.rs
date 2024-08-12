@@ -50,8 +50,8 @@ impl Renderable for ChangeTheme {
             app.current_theme.inactive_text_style,
             app.current_theme.help_text_style,
         );
-        let render_area = centered_rect_with_percentage(70, 70, rect.size());
-        let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+        let render_area = centered_rect_with_percentage(70, 70, rect.area());
+        let clear_area = centered_rect_with_percentage(80, 80, rect.area());
         let clear_area_border = Block::default()
             .title("Change Theme")
             .style(general_style)

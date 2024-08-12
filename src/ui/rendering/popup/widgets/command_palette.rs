@@ -9,7 +9,7 @@ use crate::{
     ui::{
         rendering::{
             common::{render_blank_styled_canvas, render_close_button},
-            popup::CommandPalette,
+            popup::widgets::CommandPalette,
             utils::{
                 calculate_viewport_corrected_cursor_position, check_if_active_and_get_style,
                 check_if_mouse_is_in_area, get_scrollable_widget_row_bounds,
@@ -105,7 +105,7 @@ impl Renderable for CommandPalette {
                 ]
                 .as_ref(),
             )
-            .split(rect.size());
+            .split(rect.area());
 
         fn get_command_palette_style(app: &App, focus: Focus) -> (Style, Style, Style) {
             if app.state.focus == focus {
@@ -245,9 +245,9 @@ impl Renderable for CommandPalette {
         };
 
         let max_height = if app.state.user_login_data.auth_token.is_some() {
-            (rect.size().height - 14) as usize
+            (rect.area().height - 14) as usize
         } else {
-            (rect.size().height - 12) as usize
+            (rect.area().height - 12) as usize
         };
         let min_height = 2;
         let command_search_results_length = command_search_results.len() + 2;
@@ -388,7 +388,7 @@ impl Renderable for CommandPalette {
             &app.config.show_line_numbers,
             &search_box_chunk,
         );
-        rect.set_cursor(x_pos, y_pos);
+        rect.set_cursor_position((x_pos, y_pos));
 
         let search_box_block = Block::default()
             .title("Command Palette")

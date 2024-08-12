@@ -10,7 +10,7 @@ use helper_structs::{
 };
 use ratatui::{
     layout::Alignment,
-    style::Style,
+    style::{Modifier, Style},
     text::Line,
     widgets::{Block, Widget},
 };
@@ -70,7 +70,7 @@ impl<'a> TextBox<'a> {
             placeholder_style: Style::default(),
             mask: None,
             selection_start: None,
-            select_style: Style::default(),
+            select_style: Style::default().add_modifier(Modifier::REVERSED),
         }
     }
 
@@ -852,7 +852,7 @@ impl<'a> TextBox<'a> {
         &'b self,
         line: &'b str,
         row: usize,
-        lnum_len: u8,
+        line_num_len: u8,
     ) -> Line<'b> {
         let mut hl = TextLineFormatter::new(
             line,
@@ -863,7 +863,7 @@ impl<'a> TextBox<'a> {
         );
 
         if let Some(style) = self.line_number_style {
-            hl.line_number(row, lnum_len, style);
+            hl.line_number(row, line_num_len, style);
         }
 
         if row == self.cursor.0 {
@@ -954,6 +954,8 @@ impl<'a> TextBox<'a> {
                 self.cancel_selection();
             }
             self.cursor = cursor;
+        } else {
+            log::debug!("Cursor move failed: {:?}", m);
         }
     }
 

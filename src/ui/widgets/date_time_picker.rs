@@ -1,12 +1,11 @@
 use crate::{
     app::{state::Focus, App, DateTimeFormat},
     constants::{
-        DATE_TIME_PICKER_ANIM_DURATION, MIN_DATE_PICKER_HEIGHT, MIN_DATE_PICKER_WIDTH,
-        TIME_PICKER_WIDTH,
+        DATE_TIME_PICKER_ANIM_DURATION, FIELD_NOT_SET, MIN_DATE_PICKER_HEIGHT, MIN_DATE_PICKER_WIDTH, TIME_PICKER_WIDTH
     },
     ui::{
         theme::Theme,
-        widgets::{Widget, WidgetAnimState},
+        widgets::{SelfViewportCorrection, Widget, WidgetAnimState},
         PopUp, View,
     },
 };
@@ -33,6 +32,7 @@ type CalculatedMouseCoordsCache = Option<(Vec<(Rect, u8)>, chrono::NaiveDateTime
 pub struct DateTimePickerWidget<'a> {
     pub time_picker_active: bool,
     pub anchor: Option<(u16, u16)>,
+    last_anchor: Option<(u16, u16)>,
     pub viewport_corrected_anchor: Option<(u16, u16)>,
     date_picker_anim_state: WidgetAnimState,
     time_picker_anim_state: WidgetAnimState,
@@ -48,6 +48,7 @@ pub struct DateTimePickerWidget<'a> {
     pub styled_time_lines: (Vec<Line<'a>>, Option<chrono::NaiveDateTime>),
     pub calculated_mouse_coords: CalculatedMouseCoordsCache,
     pub current_viewport: Option<Rect>,
+    pub last_corrected_viewport: Option<Rect>,
     pub current_render_area: Option<Rect>,
 }
 
@@ -56,6 +57,7 @@ impl<'a> DateTimePickerWidget<'a> {
         Self {
             time_picker_active: false,
             anchor: None,
+            last_anchor: None,
             viewport_corrected_anchor: None,
             date_picker_anim_state: WidgetAnimState::Closed,
             time_picker_anim_state: WidgetAnimState::Closed,
@@ -71,6 +73,7 @@ impl<'a> DateTimePickerWidget<'a> {
             styled_time_lines: (vec![], None),
             calculated_mouse_coords: None,
             current_viewport: None,
+            last_corrected_viewport: None,
             current_render_area: None,
         }
     }
@@ -614,7 +617,7 @@ impl<'a> DateTimePickerWidget<'a> {
                 .format(date_time_format.to_parser_string())
                 .to_string()
         } else {
-            "No Date Selected".to_string()
+            FIELD_NOT_SET.to_string()
         }
     }
 
@@ -749,22 +752,10 @@ impl<'a> Widget for DateTimePickerWidget<'a> {
             }
         }
 
-        if date_time_picker.anchor != date_time_picker.viewport_corrected_anchor {
-            if let (Some(anchor), Some(viewport)) =
-                (date_time_picker.anchor, date_time_picker.current_viewport)
-            {
-                let mut viewport_corrected_anchor = anchor;
-                if anchor.1 + date_time_picker.date_target_height > viewport.height {
-                    viewport_corrected_anchor.1 =
-                        viewport.height - date_time_picker.date_target_height;
-                }
-                if anchor.0 + date_time_picker.date_target_width > viewport.width {
-                    viewport_corrected_anchor.0 =
-                        viewport.width - date_time_picker.date_target_width;
-                }
-                date_time_picker.viewport_corrected_anchor = Some(viewport_corrected_anchor);
-            }
-        }
+        date_time_picker.self_correct(
+            date_time_picker.date_target_height,
+            date_time_picker.date_target_width,
+        );
 
         let mut re_calculate = false;
         if let Some((_, calc_date, calc_render_area)) = &date_time_picker.calculated_mouse_coords {
@@ -787,5 +778,39 @@ impl<'a> Widget for DateTimePickerWidget<'a> {
         if re_calculate {
             date_time_picker.calculate_mouse_coords_for_dates();
         }
+    }
+}
+
+impl<'a> SelfViewportCorrection for DateTimePickerWidget<'a> {
+    fn get_anchor(&self) -> Option<(u16, u16)> {
+        self.anchor
+    }
+    fn get_last_anchor(&self) -> Option<(u16, u16)> {
+        self.last_anchor
+    }
+    fn get_viewport_corrected_anchor(&self) -> Option<(u16, u16)> {
+        self.viewport_corrected_anchor
+    }
+    fn get_current_viewport(&self) -> Option<Rect> {
+        self.current_viewport
+    }
+    fn get_last_corrected_viewport(&self) -> Option<Rect> {
+        self.last_corrected_viewport
+    }
+    fn set_anchor(&mut self, anchor: Option<(u16, u16)>) {
+        self.set_last_anchor(self.anchor);
+        self.anchor = anchor;        
+    }
+    fn set_last_anchor(&mut self, anchor: Option<(u16, u16)>) {
+        self.last_anchor = anchor;
+    }
+    fn set_viewport_corrected_anchor(&mut self, anchor: Option<(u16, u16)>) {
+        self.viewport_corrected_anchor = anchor;
+    }
+    fn set_current_viewport(&mut self, viewport: Option<Rect>) {
+        self.current_viewport = viewport;
+    }
+    fn set_last_corrected_viewport(&mut self, viewport: Option<Rect>) {
+        self.last_corrected_viewport = viewport;
     }
 }

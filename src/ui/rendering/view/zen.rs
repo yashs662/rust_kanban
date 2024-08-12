@@ -19,7 +19,7 @@ impl Renderable for Zen {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         render_body(rect, chunks[0], app, false, is_active);
         if app.config.enable_mouse_support {

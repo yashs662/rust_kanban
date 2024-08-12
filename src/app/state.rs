@@ -1,6 +1,6 @@
 use crate::{
     app::{actions::Action, kanban::Card},
-    constants::{DEFAULT_VIEW, MOUSE_OUT_OF_BOUNDS_COORDINATES, NO_OF_CARDS_PER_BOARD},
+    constants::{DEFAULT_VIEW, MOUSE_OUT_OF_BOUNDS_COORDINATES},
     inputs::{key::Key, mouse::Mouse},
     io::io_handler::CloudData,
     ui::{text_box::TextBox, theme::Theme, PopUp, View},
@@ -10,7 +10,12 @@ use linked_hash_map::LinkedHashMap;
 use log::debug;
 use ratatui::widgets::{ListState, TableState};
 use serde::{Deserialize, Serialize};
-use std::{str::FromStr, time::Instant, vec};
+use std::{
+    ops::{Deref, DerefMut},
+    str::FromStr,
+    time::Instant,
+    vec,
+};
 use strum::{Display, EnumString, IntoEnumIterator};
 use strum_macros::EnumIter;
 
@@ -39,8 +44,7 @@ pub struct AppState<'a> {
     pub last_reset_password_link_sent_time: Option<Instant>,
     pub mouse_focus: Option<Focus>,
     pub mouse_list_index: Option<u16>,
-    pub no_of_cards_to_show: u16,
-    pub z_stack: Vec<PopUp>,
+    pub z_stack: ZStack,
     pub prev_focus: Option<Focus>,
     pub prev_view: Option<View>,
     pub preview_file_name: Option<String>,
@@ -54,6 +58,7 @@ pub struct AppState<'a> {
     pub path_check_state: PathCheckState,
     pub text_buffers: TextBuffers<'a>,
     pub show_password: bool,
+    pub last_cursor_set_pos: (u16, u16),
 }
 
 impl AppState<'_> {
@@ -94,8 +99,7 @@ impl Default for AppState<'_> {
             last_reset_password_link_sent_time: None,
             mouse_focus: None,
             mouse_list_index: None,
-            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
-            z_stack: Vec::new(),
+            z_stack: ZStack::default(),
             prev_focus: None,
             prev_view: None,
             preview_file_name: None,
@@ -114,7 +118,51 @@ impl Default for AppState<'_> {
             path_check_state: PathCheckState::default(),
             text_buffers: TextBuffers::default(),
             show_password: false,
+            last_cursor_set_pos: MOUSE_OUT_OF_BOUNDS_COORDINATES,
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ZStack(Vec<PopUp>);
+
+impl ZStack {
+    pub fn checked_disabled_last(&self) -> Option<&PopUp> {
+        if let Some(popup) = self.0.last() {
+            if self.0.len() > 1 && popup.requires_previous_element_disabled() {
+                self.0.get(self.0.len() - 2)
+            } else {
+                Some(popup)
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn checked_control_last(&self) -> Option<&PopUp> {
+        if let Some(popup) = self.0.last() {
+            if self.0.len() > 1 && popup.requires_previous_element_control() {
+                self.0.get(self.0.len() - 2)
+            } else {
+                Some(popup)
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl Deref for ZStack {
+    type Target = Vec<PopUp>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ZStack {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -125,6 +173,7 @@ pub struct AppListStates {
     pub card_view_comment_list: ListState,
     pub card_view_list: ListState,
     pub card_view_tag_list: ListState,
+    pub tag_picker: ListState,
     pub command_palette_board_search: ListState,
     pub command_palette_card_search: ListState,
     pub command_palette_command_search: ListState,
@@ -370,8 +419,7 @@ impl AppStatus {
 
 impl Focus {
     pub fn next(&self, available_tabs: &[Focus]) -> Self {
-        if available_tabs.contains(self) {
-            let index = available_tabs.iter().position(|x| x == self).unwrap();
+        if let Some(index) = available_tabs.iter().position(|x| x == self) {
             if index == available_tabs.len() - 1 {
                 available_tabs[0]
             } else {
@@ -382,8 +430,7 @@ impl Focus {
         }
     }
     pub fn prev(&self, available_tabs: &[Focus]) -> Self {
-        if available_tabs.contains(self) {
-            let index = available_tabs.iter().position(|x| x == self).unwrap();
+        if let Some(index) = available_tabs.iter().position(|x| x == self) {
             if index == 0 {
                 available_tabs[available_tabs.len() - 1]
             } else {

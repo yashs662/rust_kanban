@@ -24,9 +24,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 - [ ] Create a vs code extension, for adding quick notes and tasks, with / commands for specific boards cards or types etc (think more about this in future)
 - [ ] Create a parallel web ui for the app that can be hosted from the app itself with a startup flag (e.g. --web-ui --port 8080)
-- [ ] Implement selection in text input mode for editing text (e.g. select text with the mouse and delete it)
 - [ ] Add ability to move boards (e.g. move a board to the left or right)
-- [ ] While adding a new tag show a list of existing tags to choose from (like a context menu) (require multiple popups to be implemented)
 - [ ] Optimize logger to handle high volumes of logs (app becomes sluggish when there are a lot of logs)
 - [ ] Make configuration for integer values more user-friendly (e.g. when changing the number of columns in the kanban board)
 - [ ] Implement animations for UI elements
@@ -38,6 +36,8 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## Completed Features
 
+- [X] While adding a new tag show a list of existing tags to choose from (like a context menu)
+- [X] Implement selection in text input mode for editing text
 - [X] Add a date picker for the date field
 - [X] Unify all text input fields and improve the way they are handled (currently there are multiple ways to handle text input)
 - [X] Drag and Drop cards with the mouse
@@ -70,13 +70,12 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 ## Known Issues
 
 - [ ] Cursor for Card Tags and Comments is incorrect when tag is longer than available space
-- [ ] Text Selection is working but not visually selecting text
 
 ## PSA (i.e. Public service announcement)
 
-<li>Cloud saves are now encrypted. Please keep your generated key safe. It is usually located in "config/rust_kanban/kanban_encryption_key" after signing up. If you lose your key, you will not be able to access your data (I Cannot see your data nor edit it/decrypt it). If you have lost your key, you will have to delete your data after logging in and generate a new key using the -g flag.</li>
-<li>If you are not feeling safe to store your key on disk you can also provide the generated key with the --encryption-key flag when starting the app. This will allow you to store your key in a password manager or a file that is not on disk. by copying the generated key from the key location and deleting it thereafter</li>
-<li>linux example : rust-kanban --encryption-key $(cat ~/.config/rust_kanban/kanban_encryption_key)</li>
+- Cloud saves are now encrypted. Please keep your generated key safe. It is usually located in "config/rust_kanban/kanban_encryption_key" after signing up. If you lose your key, you will not be able to access your data (I Cannot see your data nor edit it/decrypt it). If you have lost your key, you will have to delete your data and generate a new key using the -g flag.
+- You can also provide an alternate key with the --encryption-key flag when starting the app. This will allow you to store your key in a password manager or a file that is not on disk.
+- linux example : rust-kanban --encryption-key $(cat ~/.config/rust_kanban/kanban_encryption_key)
 
 ## How to use
 

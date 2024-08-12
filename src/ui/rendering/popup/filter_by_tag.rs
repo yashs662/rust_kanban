@@ -59,7 +59,7 @@ impl Renderable for FilterByTag {
         );
 
         if let Some(all_available_tags) = &app.state.all_available_tags {
-            let popup_area = centered_rect_with_percentage(80, 80, rect.size());
+            let popup_area = centered_rect_with_percentage(80, 80, rect.area());
             let empty_vec = vec![];
             let selected_tags = if let Some(filter_tags) = &app.state.filter_tags {
                 filter_tags

@@ -20,7 +20,7 @@ use ratatui::{
 
 impl Renderable for SaveThemePrompt {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let popup_area = centered_rect_with_length(40, 10, rect.size());
+        let popup_area = centered_rect_with_length(40, 10, rect.area());
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1), Constraint::Fill(1)].as_ref())

@@ -55,8 +55,8 @@ impl Renderable for CardPrioritySelector {
             .map(|p| ListItem::new(vec![Line::from(p.to_string())]))
             .collect::<Vec<ListItem>>();
         let percent_height =
-            (((all_priorities.len() + 3) as f32 / rect.size().height as f32) * 100.0) as u16;
-        let popup_area = centered_rect_with_percentage(50, percent_height, rect.size());
+            (((all_priorities.len() + 3) as f32 / rect.area().height as f32) * 100.0) as u16;
+        let popup_area = centered_rect_with_percentage(50, percent_height, rect.area());
         if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &popup_area) {
             app.state.mouse_focus = Some(Focus::ChangeCardPriorityPopup);
             app.state.set_focus(Focus::ChangeCardPriorityPopup);

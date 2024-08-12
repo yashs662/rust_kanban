@@ -54,7 +54,7 @@ impl Renderable for LoadCloudSave {
             Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-                .split(rect.size())
+                .split(rect.area())
         };
         let chunks = Layout::default()
             .direction(Direction::Vertical)

@@ -9,10 +9,11 @@ use crate::{
         state::{AppStatus, Focus, KeyBindingEnum, KeyBindings},
     },
     constants::{
-        DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION, DEFAULT_VIEW,
+        DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_NO_OF_BOARDS_PER_PAGE,
+        DEFAULT_NO_OF_CARDS_PER_BOARD, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION, DEFAULT_VIEW,
         FIELD_NA, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MAX_TICKRATE,
         MAX_WARNING_DUE_DATE_DAYS, MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD, MIN_TICKRATE,
-        MIN_WARNING_DUE_DATE_DAYS, NO_OF_BOARDS_PER_PAGE, NO_OF_CARDS_PER_BOARD,
+        MIN_WARNING_DUE_DATE_DAYS,
     },
     inputs::{key::Key, mouse::Mouse},
     io::{
@@ -26,7 +27,7 @@ use crate::{
         theme::Theme,
         widgets::{
             date_time_picker::CalenderType,
-            toast::{ToastType, ToastWidget},
+            toast::{Toast, ToastType},
             Widgets,
         },
         PopUp, TextColorOptions, TextModifierOptions, View,
@@ -39,6 +40,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use state::AppState;
 use std::{
+    collections::HashMap,
     fmt::{self, Display, Formatter},
     path::PathBuf,
     str::FromStr,
@@ -136,7 +138,7 @@ impl App<'_> {
             debug_mode,
             config.date_picker_calender_format.clone(),
         );
-        widgets.toasts = toasts;
+        widgets.toast_widget.toasts = toasts;
         let mut app = Self {
             io_tx,
             actions,
@@ -596,14 +598,14 @@ impl App<'_> {
     }
     pub fn send_info_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
-            self.widgets.toasts.push(ToastWidget::new(
+            self.widgets.toast_widget.toasts.push(Toast::new(
                 message.to_string(),
                 duration,
                 ToastType::Info,
                 self.current_theme.clone(),
             ));
         } else {
-            self.widgets.toasts.push(ToastWidget::new(
+            self.widgets.toast_widget.toasts.push(Toast::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Info,
@@ -613,14 +615,14 @@ impl App<'_> {
     }
     pub fn send_error_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
-            self.widgets.toasts.push(ToastWidget::new(
+            self.widgets.toast_widget.toasts.push(Toast::new(
                 message.to_string(),
                 duration,
                 ToastType::Error,
                 self.current_theme.clone(),
             ));
         } else {
-            self.widgets.toasts.push(ToastWidget::new(
+            self.widgets.toast_widget.toasts.push(Toast::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Error,
@@ -630,34 +632,17 @@ impl App<'_> {
     }
     pub fn send_warning_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
-            self.widgets.toasts.push(ToastWidget::new(
+            self.widgets.toast_widget.toasts.push(Toast::new(
                 message.to_string(),
                 duration,
                 ToastType::Warning,
                 self.current_theme.clone(),
             ));
         } else {
-            self.widgets.toasts.push(ToastWidget::new(
+            self.widgets.toast_widget.toasts.push(Toast::new(
                 message.to_string(),
                 Duration::from_secs(DEFAULT_TOAST_DURATION),
                 ToastType::Warning,
-                self.current_theme.clone(),
-            ));
-        }
-    }
-    pub fn send_loading_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
-        if let Some(duration) = custom_duration {
-            self.widgets.toasts.push(ToastWidget::new(
-                message.to_string(),
-                duration,
-                ToastType::Loading,
-                self.current_theme.clone(),
-            ));
-        } else {
-            self.widgets.toasts.push(ToastWidget::new(
-                message.to_string(),
-                Duration::from_secs(DEFAULT_TOAST_DURATION),
-                ToastType::Loading,
                 self.current_theme.clone(),
             ));
         }
@@ -693,15 +678,6 @@ impl App<'_> {
             .app_list_states
             .card_status_selector
             .select(Some(i));
-    }
-    pub fn increase_loading_toast_time(&mut self, msg: &str, increase_by: Duration) {
-        let toast = self.widgets.toasts.iter_mut().find(|x| x.message == msg);
-        if toast.is_none() {
-            debug!("No toast found with message: {}", msg);
-            return;
-        }
-        let toast = toast.unwrap();
-        toast.duration += increase_by;
     }
     pub fn select_change_theme_next(&mut self) {
         let i = match self.state.app_list_states.theme_selector.selected() {
@@ -1265,6 +1241,38 @@ impl App<'_> {
         };
         hot_log.state.select(Some(i));
     }
+    pub fn tag_picker_next(&mut self) {
+        let all_tags_len = self.widgets.tag_picker.available_tags.len();
+        if all_tags_len > 0 {
+            let i = match self.state.app_list_states.tag_picker.selected() {
+                Some(i) => {
+                    if i >= all_tags_len - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 0,
+            };
+            self.state.app_list_states.tag_picker.select(Some(i));
+        }
+    }
+    pub fn tag_picker_prv(&mut self) {
+        let all_tags_len = self.widgets.tag_picker.available_tags.len();
+        if all_tags_len > 0 {
+            let i = match self.state.app_list_states.tag_picker.selected() {
+                Some(i) => {
+                    if i == 0 {
+                        all_tags_len - 1
+                    } else {
+                        i - 1
+                    }
+                }
+                None => 0,
+            };
+            self.state.app_list_states.tag_picker.select(Some(i));
+        }
+    }
     pub fn set_popup(&mut self, popup: PopUp) {
         if self.state.z_stack.contains(&popup) {
             debug!(
@@ -1437,6 +1445,43 @@ impl App<'_> {
             .prv_focus
             .first()
             .unwrap_or(&Key::BackTab)
+    }
+
+    pub fn calculate_tags(&self) -> Vec<(String, u32)> {
+        let mut tags: Vec<(String, String)> = vec![];
+        for board in self.boards.get_boards() {
+            for card in board.cards.get_all_cards() {
+                for tag in &card.tags {
+                    if tag.is_empty() {
+                        continue;
+                    }
+                    tags.push((tag.clone(), tag.to_lowercase()));
+                }
+            }
+        }
+
+        let count_hash: HashMap<String, (String, u32)> =
+            tags.iter()
+                .fold(HashMap::new(), |mut acc, (original, lower)| {
+                    let entry = acc.entry(lower.clone()).or_insert((original.clone(), 0));
+                    entry.1 += 1;
+                    acc
+                });
+
+        let mut tags: Vec<(String, u32)> = count_hash
+            .iter()
+            .map(|(_, (original, count))| (original.clone(), *count))
+            .collect();
+
+        tags.sort_by(|a, b| {
+            if a.1 == b.1 {
+                a.0.to_lowercase().cmp(&b.0.to_lowercase())
+            } else {
+                b.1.cmp(&a.1)
+            }
+        });
+
+        tags
     }
 }
 
@@ -1667,8 +1712,8 @@ impl Default for AppConfig {
             disable_scroll_bar: false,
             enable_mouse_support: true,
             keybindings: KeyBindings::default(),
-            no_of_boards_to_show: NO_OF_BOARDS_PER_PAGE,
-            no_of_cards_to_show: NO_OF_CARDS_PER_BOARD,
+            no_of_boards_to_show: DEFAULT_NO_OF_BOARDS_PER_PAGE,
+            no_of_cards_to_show: DEFAULT_NO_OF_CARDS_PER_BOARD,
             date_picker_calender_format: CalenderType::default(),
             save_directory: get_default_save_directory(),
             save_on_exit: true,
@@ -1782,7 +1827,11 @@ impl AppConfig {
         }
     }
 
-    pub fn edit_keybinding(&mut self, key_index: usize, value: &[Key]) -> Result<KeyBindingEnum, String> {
+    pub fn edit_keybinding(
+        &mut self,
+        key_index: usize,
+        value: &[Key],
+    ) -> Result<KeyBindingEnum, String> {
         let current_bindings = &self.keybindings;
 
         let mut key_list = vec![];
@@ -2025,7 +2074,6 @@ impl AppConfig {
     }
 
     pub fn from_json_string(json_string: &str) -> Result<Self, String> {
-        // TODO: try to reduce the usage of strings, use strum maybe?
         let root = serde_json::from_str(json_string);
         if root.is_err() {
             error!("Unable to recover old config. Resetting to default config");
@@ -2034,25 +2082,26 @@ impl AppConfig {
         }
         let serde_json_object: Value = root.unwrap();
         let default_config = AppConfig::default();
-        let save_directory = match serde_json_object["save_directory"].as_str() {
-            Some(path) => {
-                let path = PathBuf::from(path);
-                if path.exists() {
-                    path
-                } else {
-                    error!(
-                        "Invalid path: {}, Resetting to default save directory",
-                        path.to_str().unwrap()
-                    );
+        let save_directory =
+            match serde_json_object[ConfigEnum::SaveDirectory.to_json_key()].as_str() {
+                Some(path) => {
+                    let path = PathBuf::from(path);
+                    if path.exists() {
+                        path
+                    } else {
+                        error!(
+                            "Invalid path: {}, Resetting to default save directory",
+                            path.to_str().unwrap()
+                        );
+                        default_config.save_directory
+                    }
+                }
+                None => {
+                    error!("Save Directory is not a string, Resetting to default save directory");
                     default_config.save_directory
                 }
-            }
-            None => {
-                error!("Save Directory is not a string, Resetting to default save directory");
-                default_config.save_directory
-            }
-        };
-        let default_view = match serde_json_object["default_view"].as_str() {
+            };
+        let default_view = match serde_json_object[ConfigEnum::DefaultView.to_json_key()].as_str() {
             Some(view) => {
                 let view = View::from_str(view);
                 if let Ok(view) = view {
@@ -2131,14 +2180,15 @@ impl AppConfig {
             Some(MIN_NO_BOARDS_PER_PAGE),
             Some(MAX_NO_BOARDS_PER_PAGE),
         );
-        let default_theme = match serde_json_object["default_theme"].as_str() {
+        let default_theme = match serde_json_object[ConfigEnum::DefaultTheme.to_json_key()].as_str()
+        {
             Some(default_theme) => default_theme.to_string(),
             None => {
                 error!("Default Theme is not a string, Resetting to default theme");
                 default_config.default_theme
             }
         };
-        let date_format = match serde_json_object["date_format"].as_str() {
+        let date_format = match serde_json_object[ConfigEnum::DateFormat.to_json_key()].as_str() {
             Some(date_format) => match DateTimeFormat::from_str(date_format) {
                 Ok(date_format) => date_format,
                 Err(date_format_parse_error) => {
@@ -2156,7 +2206,7 @@ impl AppConfig {
             }
         };
         let date_picker_calender_format =
-            match serde_json_object["date_picker_calender_format"].as_str() {
+            match serde_json_object[ConfigEnum::DatePickerCalenderFormat.to_json_key()].as_str() {
                 Some(calender_format) => match CalenderType::from_str(calender_format) {
                     Ok(calender_format) => calender_format,
                     Err(calender_format_parse_error) => {

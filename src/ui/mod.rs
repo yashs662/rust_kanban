@@ -8,10 +8,10 @@ use ratatui::{
 };
 use rendering::{
     popup::{
+        widgets::{CommandPalette, DateTimePicker, TagPicker},
         CardPrioritySelector, CardStatusSelector, ChangeDateFormat, ChangeTheme, ChangeView,
-        CommandPalette, ConfirmDiscardCardChanges, CustomHexColorPrompt, DateTimePicker,
-        EditGeneralConfig, EditSpecificKeybinding, EditThemeStyle, FilterByTag, SaveThemePrompt,
-        SelectDefaultView, ViewCard,
+        ConfirmDiscardCardChanges, CustomHexColorPrompt, EditGeneralConfig, EditSpecificKeybinding,
+        EditThemeStyle, FilterByTag, SaveThemePrompt, SelectDefaultView, ViewCard,
     },
     view::{
         BodyHelpLog, BodyLog, ConfigMenu, CreateTheme, EditKeybindings, HelpMenu, LoadASave,
@@ -315,7 +315,13 @@ impl View {
     }
 
     pub fn render(self, rect: &mut Frame, app: &mut App, is_active: bool) {
-        if is_active {
+        let skip_setting_focus = if let Some(popup) = app.state.z_stack.last() {
+            !popup.requires_previous_element_disabled()
+                && !popup.requires_previous_element_control()
+        } else {
+            false
+        };
+        if is_active && !skip_setting_focus {
             let current_focus = app.state.focus;
             if !self.get_available_targets().contains(&current_focus)
                 && !self.get_available_targets().is_empty()
@@ -426,6 +432,7 @@ pub enum PopUp {
     CardPrioritySelector,
     FilterByTag,
     DateTimePicker,
+    TagPicker,
 }
 
 impl fmt::Display for PopUp {
@@ -448,6 +455,7 @@ impl fmt::Display for PopUp {
             PopUp::CardPrioritySelector => write!(f, "Change Card Priority"),
             PopUp::FilterByTag => write!(f, "Filter By Tag"),
             PopUp::DateTimePicker => write!(f, "Date Time Picker"),
+            PopUp::TagPicker => write!(f, "Tag Picker"),
         }
     }
 }
@@ -498,11 +506,29 @@ impl PopUp {
                 Focus::DTPMinute,
                 Focus::DTPSecond,
             ],
+            PopUp::TagPicker => vec![Focus::CardTags],
         }
     }
 
+    pub fn requires_previous_element_disabled(self) -> bool {
+        !(matches!(self, PopUp::TagPicker) || matches!(self, PopUp::DateTimePicker))
+    }
+
+    pub fn requires_previous_element_control(self) -> bool {
+        matches!(self, PopUp::TagPicker)
+    }
+
     pub fn render(self, rect: &mut Frame, app: &mut App, is_active: bool) {
-        if is_active {
+        let skip_setting_focus = if let Some(popup) = app.state.z_stack.last() {
+            if popup.requires_previous_element_disabled() {
+                false
+            } else {
+                !popup.requires_previous_element_control()
+            }
+        } else {
+            true
+        };
+        if is_active && !skip_setting_focus {
             let current_focus = app.state.focus;
             if !self.get_available_targets().contains(&current_focus)
                 && !self.get_available_targets().is_empty()
@@ -558,6 +584,9 @@ impl PopUp {
             }
             PopUp::DateTimePicker => {
                 DateTimePicker::render(rect, app, is_active);
+            }
+            PopUp::TagPicker => {
+                TagPicker::render(rect, app, is_active);
             }
         }
     }

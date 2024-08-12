@@ -20,7 +20,7 @@ impl Renderable for HelpMenu {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1), Constraint::Length(4)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         let help_chunks = Layout::default()
             .direction(Direction::Horizontal)

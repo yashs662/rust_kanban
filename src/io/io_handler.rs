@@ -1118,7 +1118,7 @@ impl IoAsyncHandler<'_> {
         if decrypt_result.is_err() {
             error!("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file");
             debug!("Error loading save file: {:?}", decrypt_result.err());
-            app.send_error_toast("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", None);
+            app.send_error_toast("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", Some(Duration::from_secs(5)));
             return Ok(());
         }
         app.preview_boards_and_cards = Some(decrypt_result.unwrap());
@@ -1216,7 +1216,7 @@ impl IoAsyncHandler<'_> {
         if decrypt_result.is_err() {
             error!("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file");
             debug!("Error loading save file: {:?}", decrypt_result.err());
-            app.send_error_toast("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", None);
+            app.send_error_toast("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", Some(Duration::from_secs(5)));
             return Ok(());
         }
         let decrypt_result = decrypt_result.unwrap();

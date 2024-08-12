@@ -47,7 +47,7 @@ impl Renderable for ResetPassword {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Fill(1)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -480,7 +480,7 @@ impl Renderable for ResetPassword {
                         &app.config.show_line_numbers,
                         &email_id_chunk,
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::ResetPasswordLinkField => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -488,7 +488,7 @@ impl Renderable for ResetPassword {
                         &app.config.show_line_numbers,
                         &reset_link_chunk,
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::PasswordField => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -496,7 +496,7 @@ impl Renderable for ResetPassword {
                         &app.config.show_line_numbers,
                         &new_password_chunk,
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::ConfirmPasswordField => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -504,7 +504,7 @@ impl Renderable for ResetPassword {
                         &app.config.show_line_numbers,
                         &confirm_new_password_chunk,
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 _ => {}
             }

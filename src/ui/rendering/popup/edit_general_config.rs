@@ -26,7 +26,7 @@ use std::str::FromStr;
 
 impl Renderable for EditGeneralConfig {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let area = centered_rect_with_percentage(70, 70, rect.size());
+        let area = centered_rect_with_percentage(70, 70, rect.area());
 
         let chunks = if app.config.enable_mouse_support {
             Layout::default()
@@ -293,7 +293,7 @@ impl Renderable for EditGeneralConfig {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+        let clear_area = centered_rect_with_percentage(80, 80, rect.area());
         let clear_area_border = Block::default()
             .title("Config Editor")
             .style(general_style)
@@ -337,7 +337,7 @@ impl Renderable for EditGeneralConfig {
                 &app.config.show_line_numbers,
                 &chunks[1],
             );
-            rect.set_cursor(x_pos, y_pos);
+            rect.set_cursor_position((x_pos, y_pos));
         }
     }
 }

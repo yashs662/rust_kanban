@@ -37,7 +37,7 @@ impl Renderable for NewCardForm {
                 ]
                 .as_ref(),
             )
-            .split(rect.size());
+            .split(rect.area());
 
         let card_due_date = app
             .widgets
@@ -50,12 +50,8 @@ impl Renderable for NewCardForm {
                     chunks[3].x + card_due_date.len() as u16 + 2,
                     chunks[3].y + 3,
                 )); // offsets to make sure date is visible
-                log::debug!(
-                    "Setting anchor for date time picker to: {:?}",
-                    app.widgets.date_time_picker.anchor
-                );
             }
-            app.widgets.date_time_picker.current_viewport = Some(rect.size());
+            app.widgets.date_time_picker.current_viewport = Some(rect.area());
         }
 
         let general_style = check_if_active_and_get_style(
@@ -131,6 +127,7 @@ impl Renderable for NewCardForm {
             .get_date_time_as_string(app.config.date_time_format);
         let card_due_date_paragraph = Paragraph::new(card_due_date).block(
             Block::default()
+                .title("Due Date")
                 .borders(Borders::ALL)
                 .style(due_date_style)
                 .border_type(BorderType::Rounded),
@@ -201,7 +198,7 @@ impl Renderable for NewCardForm {
                         &app.config.show_line_numbers,
                         &chunks[1],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 Focus::CardDescription => {
                     let (x_pos, y_pos) = calculate_viewport_corrected_cursor_position(
@@ -209,7 +206,7 @@ impl Renderable for NewCardForm {
                         &app.config.show_line_numbers,
                         &chunks[2],
                     );
-                    rect.set_cursor(x_pos, y_pos);
+                    rect.set_cursor_position((x_pos, y_pos));
                 }
                 _ => {}
             }

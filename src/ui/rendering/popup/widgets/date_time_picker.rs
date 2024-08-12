@@ -4,9 +4,10 @@ use crate::{
     ui::{
         rendering::{
             common::render_blank_styled_canvas,
-            popup::DateTimePicker,
+            popup::widgets::DateTimePicker,
             utils::{check_if_active_and_get_style, check_if_mouse_is_in_area, get_button_style},
         },
+        widgets::SelfViewportCorrection,
         Renderable,
     },
 };
@@ -34,7 +35,9 @@ impl Renderable for DateTimePicker {
             height: app.widgets.date_time_picker.widget_height,
         };
 
-        app.widgets.date_time_picker.current_render_area = Some(render_area);
+        app.widgets
+            .date_time_picker
+            .set_current_viewport(Some(rect.area()));
 
         // 3 is for the " - ", additional 4 is to compensate for the borders that show when focus is on month or year
         let title_length = (current_month.len() + 3 + current_year.len() + 4) as u16;
@@ -188,11 +191,11 @@ impl Renderable for DateTimePicker {
         if !check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &render_area)
             && (app.state.current_mouse_coordinates != MOUSE_OUT_OF_BOUNDS_COORDINATES)
         {
-            app.state.focus = Focus::NoFocus;
+            app.state.set_focus(Focus::NoFocus);
         }
 
         if check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &chunks[2]) {
-            app.state.focus = Focus::DTPCalender;
+            app.state.set_focus(Focus::DTPCalender);
             let maybe_date_to_select = if let Some((calculated_pos, _, _)) =
                 &app.widgets.date_time_picker.calculated_mouse_coords
             {
@@ -241,19 +244,19 @@ impl Renderable for DateTimePicker {
                 &app.state.current_mouse_coordinates,
                 &time_picker_chunks[0],
             ) {
-                app.state.focus = Focus::DTPHour;
+                app.state.set_focus(Focus::DTPHour);
             }
             if check_if_mouse_is_in_area(
                 &app.state.current_mouse_coordinates,
                 &time_picker_chunks[1],
             ) {
-                app.state.focus = Focus::DTPMinute;
+                app.state.set_focus(Focus::DTPMinute);
             }
             if check_if_mouse_is_in_area(
                 &app.state.current_mouse_coordinates,
                 &time_picker_chunks[2],
             ) {
-                app.state.focus = Focus::DTPSecond;
+                app.state.set_focus(Focus::DTPSecond);
             }
             let time_picker_lines = app.widgets.date_time_picker.get_styled_lines_of_time(
                 is_active,

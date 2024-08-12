@@ -25,7 +25,7 @@ use ratatui::{
 
 impl Renderable for SelectDefaultView {
     fn render(rect: &mut Frame, app: &mut App, is_active: bool) {
-        let render_area = centered_rect_with_percentage(70, 70, rect.size());
+        let render_area = centered_rect_with_percentage(70, 70, rect.area());
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -127,7 +127,7 @@ impl Renderable for SelectDefaultView {
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        let clear_area = centered_rect_with_percentage(80, 80, rect.size());
+        let clear_area = centered_rect_with_percentage(80, 80, rect.area());
         let clear_area_border = Block::default()
             .title("Default View Picker")
             .style(general_style)

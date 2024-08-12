@@ -72,6 +72,18 @@ pub fn render_body(
         app.current_theme.inactive_text_style,
         app.current_theme.error_text_style,
     );
+    let general_style = check_for_card_drag_and_get_style(
+        app.state.card_drag_mode,
+        is_active,
+        app.current_theme.inactive_text_style,
+        app.current_theme.general_style,
+    );
+    let help_key_style = check_for_card_drag_and_get_style(
+        app.state.card_drag_mode,
+        is_active,
+        app.current_theme.inactive_text_style,
+        app.current_theme.help_key_style,
+    );
     let current_board_id = &app.state.current_board_id.unwrap_or((0, 0));
 
     let new_board_key = app
@@ -266,21 +278,29 @@ pub fn render_body(
             .split(card_area_chunks[0]);
         if board_cards.is_empty() {
             let available_width = card_chunks[0].width - 2;
-            let empty_card_text = if preview_mode {
-                "No cards found".to_string()
+            let empty_card_line = if preview_mode {
+                Line::from(Span::styled("No cards found", general_style))
             } else {
-                "No cards found, press ".to_string() + &new_card_key + " to add a new card"
+                Line::from(vec![
+                    Span::styled("No cards found, press ", general_style),
+                    Span::styled(&new_card_key, help_key_style),
+                    Span::styled(" to add a new card", general_style),
+                ])
             };
-            let mut usable_length = empty_card_text.len() as u16;
+            let empty_card_line_length = empty_card_line
+                .spans
+                .iter()
+                .fold(0, |acc, span| acc + span.content.chars().count());
+            let mut usable_length = empty_card_line_length as u16;
             let mut usable_height = 1.0;
-            if empty_card_text.len() > available_width.into() {
+            if empty_card_line_length > available_width.into() {
                 usable_length = available_width;
-                usable_height = empty_card_text.len() as f32 / available_width as f32;
+                usable_height = empty_card_line_length as f32 / available_width as f32;
                 usable_height = usable_height.ceil();
             }
             let message_centered_rect =
                 centered_rect_with_length(usable_length, usable_height as u16, card_chunks[0]);
-            let empty_card_paragraph = Paragraph::new(empty_card_text)
+            let empty_card_paragraph = Paragraph::new(empty_card_line)
                 .alignment(Alignment::Center)
                 .block(Block::default())
                 .style(board_style)
@@ -378,11 +398,11 @@ pub fn render_body(
                 temp_percent as u16
             }
         };
-        // TODO: Consider using a Scrollbar from ratatui
         let line_gauge = Gauge::default()
             .block(Block::default())
             .gauge_style(scrollbar_style)
-            .percent(percentage);
+            .percent(percentage)
+            .label(format!("{} / {}", current_board_index, boards.len()));
         rect.render_widget(line_gauge, chunks[1]);
     }
 }
@@ -467,7 +487,7 @@ pub fn render_card_being_dragged(
 }
 
 pub fn render_close_button(rect: &mut Frame, app: &mut App, is_active: bool) {
-    let close_btn_area = Rect::new(rect.size().width - 3, 0, 3, 3);
+    let close_btn_area = Rect::new(rect.area().width - 3, 0, 3, 3);
     // Exception to not using get_button_style as we have to manage other state
     let close_btn_style = if is_active
         && check_if_mouse_is_in_area(&app.state.current_mouse_coordinates, &close_btn_area)
@@ -499,6 +519,7 @@ pub fn render_close_button(rect: &mut Frame, app: &mut App, is_active: bool) {
         )
         .alignment(Alignment::Right);
 
+    render_blank_styled_canvas(rect, &app.current_theme, close_btn_area, is_active);
     rect.render_widget(close_btn, close_btn_area);
 }
 
@@ -508,26 +529,31 @@ pub fn render_blank_styled_canvas(
     render_area: Rect,
     is_active: bool,
 ) {
-    let mut styled_text = vec![];
+    // Preallocate the vectors
+    let mut styled_text = String::with_capacity((render_area.width + 1) as usize);
     for _ in 0..render_area.width + 1 {
-        styled_text.push(" ".to_string());
+        styled_text.push(' ');
     }
-    let mut render_text = vec![];
+    styled_text.push('\n');
+
+    let mut render_text =
+        String::with_capacity((render_area.height * (render_area.width + 1)) as usize);
     for _ in 0..render_area.height {
-        render_text.push(format!("{}\n", styled_text.join("")));
+        render_text.push_str(&styled_text);
     }
+
     let styled_text = if is_active {
         let mut style = current_theme.general_style;
         style.add_modifier = Modifier::empty();
         style.sub_modifier = Modifier::all();
-        Paragraph::new(render_text.join(""))
+        Paragraph::new(render_text)
             .style(style)
             .block(Block::default())
     } else {
         let mut style = current_theme.inactive_text_style;
         style.add_modifier = Modifier::empty();
         style.sub_modifier = Modifier::all();
-        Paragraph::new(render_text.join(""))
+        Paragraph::new(render_text)
             .style(style)
             .block(Block::default())
     };
@@ -920,6 +946,7 @@ pub fn draw_help<'a>(
     (border_block, left_table, right_table)
 }
 
+// TODO: Make this a widget instead
 pub fn draw_crab_pattern(
     render_area: Rect,
     style: Style,

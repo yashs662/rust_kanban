@@ -18,7 +18,7 @@ impl Renderable for LogView {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         render_logs(app, true, chunks[0], rect, is_active);
         if app.config.enable_mouse_support {

@@ -18,7 +18,7 @@ impl Renderable for BodyLog {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1), Constraint::Length(5)].as_ref())
-            .split(rect.size());
+            .split(rect.area());
 
         render_body(rect, chunks[0], app, false, is_active);
         render_logs(app, true, chunks[1], rect, is_active);
