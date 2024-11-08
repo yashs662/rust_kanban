@@ -81,7 +81,7 @@ impl Renderable for CreateTheme {
         let theme_block_style = get_button_style(app, Focus::ThemeEditor, None, is_active, false);
         let theme_title_list = Table::new(theme_table_rows.0, [Constraint::Fill(1)])
             .block(Block::default().style(theme_block_style))
-            .highlight_style(list_highlight_style)
+            .row_highlight_style(list_highlight_style)
             .highlight_symbol(LIST_SELECTED_SYMBOL);
         let theme_element_list = Table::new(theme_table_rows.1, [Constraint::Fill(1)])
             .block(Block::default().style(theme_block_style));

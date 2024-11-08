@@ -174,7 +174,7 @@ impl Renderable for EditKeybindings {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             )
-            .highlight_style(current_element_style)
+            .row_highlight_style(current_element_style)
             .highlight_symbol(">> ");
 
         let edit_keybinding_help = Paragraph::new(edit_keybinding_help_spans)

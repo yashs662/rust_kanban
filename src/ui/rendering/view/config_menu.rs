@@ -203,7 +203,7 @@ fn draw_config_table_selector(
             .border_style(default_style)
             .border_type(BorderType::Rounded),
     )
-    .highlight_style(highlight_style)
+    .row_highlight_style(highlight_style)
     .highlight_symbol(">> ")
 }
 

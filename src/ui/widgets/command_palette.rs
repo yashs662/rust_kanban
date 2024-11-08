@@ -284,6 +284,91 @@ impl CommandPaletteWidget {
                             return AppReturn::Continue;
                         }
                     }
+                    CommandPaletteActions::MoveBoardLeft => {
+                        if let Some(current_board_id) = app.state.current_board_id {
+                            let current_board_index = app.boards.get_board_index(current_board_id);
+                            if current_board_index.is_none() {
+                                app.send_error_toast("No board selected", None);
+                                return AppReturn::Continue;
+                            }
+                            let current_board_index = current_board_index.unwrap();
+                            let board_name = app
+                                .boards
+                                .get_board_with_id(current_board_id)
+                                .unwrap()
+                                .name
+                                .clone();
+                            if current_board_index == 0 {
+                                app.send_error_toast(
+                                    format!("'{}' is already the first board", board_name).as_str(),
+                                    None,
+                                );
+                                return AppReturn::Continue;
+                            }
+                            let swap_result = app
+                                .boards
+                                .swap(current_board_index, current_board_index - 1);
+
+                            if swap_result.is_err() {
+                                app.send_error_toast(
+                                    format!("Could not move '{}' to the left", board_name).as_str(),
+                                    None,
+                                );
+                            }
+
+                            app.close_popup();
+                            app.send_info_toast(
+                                format!("'{}' moved to the left", board_name).as_str(),
+                                None,
+                            );
+                            refresh_visible_boards_and_cards(app);
+                        } else {
+                            app.send_error_toast("No board selected", None);
+                        }
+                    }
+                    CommandPaletteActions::MoveBoardRight => {
+                        if let Some(current_board_id) = app.state.current_board_id {
+                            let current_board_index = app.boards.get_board_index(current_board_id);
+                            if current_board_index.is_none() {
+                                app.send_error_toast("No board selected", None);
+                                return AppReturn::Continue;
+                            }
+                            let current_board_index = current_board_index.unwrap();
+                            let board_name = app
+                                .boards
+                                .get_board_with_id(current_board_id)
+                                .unwrap()
+                                .name
+                                .clone();
+                            if current_board_index == app.boards.get_boards().len() - 1 {
+                                app.send_error_toast(
+                                    format!("'{}' is already the last board", board_name).as_str(),
+                                    None,
+                                );
+                                return AppReturn::Continue;
+                            }
+                            let swap_result = app
+                                .boards
+                                .swap(current_board_index, current_board_index + 1);
+
+                            if swap_result.is_err() {
+                                app.send_error_toast(
+                                    format!("Could not move '{}' to the right", board_name)
+                                        .as_str(),
+                                    None,
+                                );
+                            }
+
+                            app.close_popup();
+                            app.send_info_toast(
+                                format!("'{}' moved to the right", board_name).as_str(),
+                                None,
+                            );
+                            refresh_visible_boards_and_cards(app);
+                        } else {
+                            app.send_error_toast("No board selected", None);
+                        }
+                    }
                 }
                 app.widgets.command_palette.reset(&mut app.state);
             } else {
@@ -479,6 +564,8 @@ pub enum CommandPaletteActions {
     SaveKanbanState,
     SignUp,
     SyncLocalData,
+    MoveBoardLeft,
+    MoveBoardRight,
 }
 
 impl Display for CommandPaletteActions {
@@ -509,6 +596,8 @@ impl Display for CommandPaletteActions {
             Self::SaveKanbanState => write!(f, "Save Kanban State"),
             Self::SignUp => write!(f, "Sign Up"),
             Self::SyncLocalData => write!(f, "Sync Local Data"),
+            Self::MoveBoardLeft => write!(f, "Move Current Board Left"),
+            Self::MoveBoardRight => write!(f, "Move Current Board Right"),
         }
     }
 }

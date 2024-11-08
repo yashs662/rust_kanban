@@ -95,6 +95,21 @@ impl Default for Board {
     }
 }
 
+#[derive(Debug)]
+pub enum BoardSwapError {
+    IndexOutOfBounds,
+}
+
+impl fmt::Display for BoardSwapError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BoardSwapError::IndexOutOfBounds => write!(f, "Index out of bounds"),
+        }
+    }
+}
+
+impl std::error::Error for BoardSwapError {}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Boards {
     boards: Vec<Board>,
@@ -148,6 +163,13 @@ impl Boards {
             .iter()
             .enumerate()
             .find(|(_, b)| b.cards.get_card_with_id(card_id).is_some())
+    }
+    pub fn swap(&mut self, index_1: usize, index_2: usize) -> Result<(), BoardSwapError> {
+        if index_1 >= self.boards.len() || index_2 >= self.boards.len() {
+            return Err(BoardSwapError::IndexOutOfBounds);
+        }
+        self.boards.swap(index_1, index_2);
+        Ok(())
     }
 }
 

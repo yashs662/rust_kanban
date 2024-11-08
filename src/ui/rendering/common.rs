@@ -647,7 +647,7 @@ pub fn render_logs(
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded),
     )
-    .highlight_style(highlight_style)
+    .row_highlight_style(highlight_style)
     .highlight_symbol(LIST_SELECTED_SYMBOL);
 
     rect.render_stateful_widget(
@@ -923,7 +923,7 @@ pub fn draw_help<'a>(
         [Constraint::Percentage(70), Constraint::Percentage(30)],
     )
     .block(Block::default().style(help_text_style))
-    .highlight_style(current_element_style)
+    .row_highlight_style(current_element_style)
     .highlight_symbol(">> ")
     .style(border_style);
 
@@ -932,7 +932,7 @@ pub fn draw_help<'a>(
         [Constraint::Percentage(70), Constraint::Percentage(30)],
     )
     .block(Block::default().style(help_text_style))
-    .highlight_style(current_element_style)
+    .row_highlight_style(current_element_style)
     .highlight_symbol(">> ")
     .style(border_style);
 

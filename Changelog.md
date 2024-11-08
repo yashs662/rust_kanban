@@ -1,3 +1,19 @@
+Changes in Version 0.10.5
+=========================
+
+### Updates
+
+- Updated dependencies.
+- Added LTO to the release build.
+
+### Fixes
+
+- Clippy Fixes.
+
+### New Features
+
+- Added ability to move boards (e.g. move a board to the left or right) with the command palette.
+
 Changes in Version 0.10.4
 =========================
 

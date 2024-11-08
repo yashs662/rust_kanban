@@ -24,7 +24,6 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 - [ ] Create a vs code extension, for adding quick notes and tasks, with / commands for specific boards cards or types etc (think more about this in future)
 - [ ] Create a parallel web ui for the app that can be hosted from the app itself with a startup flag (e.g. --web-ui --port 8080)
-- [ ] Add ability to move boards (e.g. move a board to the left or right)
 - [ ] Optimize logger to handle high volumes of logs (app becomes sluggish when there are a lot of logs)
 - [ ] Make configuration for integer values more user-friendly (e.g. when changing the number of columns in the kanban board)
 - [ ] Implement animations for UI elements
@@ -36,6 +35,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## Completed Features
 
+- [X] Add ability to move boards (e.g. move a board to the left or right)
 - [X] While adding a new tag show a list of existing tags to choose from (like a context menu)
 - [X] Implement selection in text input mode for editing text
 - [X] Add a date picker for the date field
