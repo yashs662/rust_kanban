@@ -22,6 +22,7 @@ Feel free to make a pull request or make a new issue, I am open to suggestions â
 
 ## TODO
 
+- [ ] BYODB - Bring your own DB (As I am not able to keep the free supabase db online at all times, an option for multiple database backends that can be configured)
 - [ ] Create a vs code extension, for adding quick notes and tasks, with / commands for specific boards cards or types etc (think more about this in future)
 - [ ] Create a parallel web ui for the app that can be hosted from the app itself with a startup flag (e.g. --web-ui --port 8080)
 - [ ] Optimize logger to handle high volumes of logs (app becomes sluggish when there are a lot of logs)
