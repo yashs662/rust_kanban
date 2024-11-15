@@ -227,374 +227,8 @@ impl App<'_> {
     pub fn set_config_state(&mut self, config_state: TableState) {
         self.state.app_table_states.config = config_state;
     }
-    pub fn config_next(&mut self) {
-        let i = match self.state.app_table_states.config.selected() {
-            Some(i) => {
-                if i >= self.config.to_view_list().len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.config.select(Some(i));
-    }
-    pub fn config_prv(&mut self) {
-        let i = match self.state.app_table_states.config.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.config.to_view_list().len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.config.select(Some(i));
-    }
-    pub fn main_menu_next(&mut self) {
-        let i = match self.state.app_list_states.main_menu.selected() {
-            Some(i) => {
-                if i >= self.main_menu.all().len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.main_menu.select(Some(i));
-    }
-    pub fn main_menu_prv(&mut self) {
-        let i = match self.state.app_list_states.main_menu.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.main_menu.items.len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.main_menu.select(Some(i));
-    }
-    pub fn load_save_next(&mut self, cloud_mode: bool) {
-        let i = match self.state.app_list_states.load_save.selected() {
-            Some(i) => {
-                if cloud_mode {
-                    let cloud_save_files = self.state.cloud_data.clone();
-                    let cloud_save_files_len = if let Some(cloud_save_files_len) = cloud_save_files
-                    {
-                        cloud_save_files_len.len()
-                    } else {
-                        0
-                    };
-                    if cloud_save_files_len == 0 || i >= cloud_save_files_len - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                } else {
-                    let local_save_files = get_available_local_save_files(&self.config);
-                    let local_save_files_len = if let Some(local_save_files_len) = local_save_files
-                    {
-                        local_save_files_len.len()
-                    } else {
-                        0
-                    };
-                    if local_save_files_len == 0 || i >= local_save_files_len - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.load_save.select(Some(i));
-    }
-    pub fn load_save_prv(&mut self, cloud_mode: bool) {
-        let i = match self.state.app_list_states.load_save.selected() {
-            Some(i) => {
-                if cloud_mode {
-                    let cloud_save_files = self.state.cloud_data.clone();
-                    let cloud_save_files_len = if let Some(cloud_save_files_len) = cloud_save_files
-                    {
-                        cloud_save_files_len.len()
-                    } else {
-                        0
-                    };
-                    if i == 0 && cloud_save_files_len != 0 {
-                        cloud_save_files_len - 1
-                    } else if cloud_save_files_len == 0 {
-                        0
-                    } else {
-                        i - 1
-                    }
-                } else {
-                    let local_save_files = get_available_local_save_files(&self.config);
-                    let local_save_files_len = if let Some(local_save_files_len) = local_save_files
-                    {
-                        local_save_files_len.len()
-                    } else {
-                        0
-                    };
-                    if i == 0 && local_save_files_len != 0 {
-                        local_save_files_len - 1
-                    } else if local_save_files_len == 0 {
-                        0
-                    } else {
-                        i - 1
-                    }
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.load_save.select(Some(i));
-    }
-    pub fn config_state(&self) -> &TableState {
+    pub fn get_config_state(&self) -> &TableState {
         &self.state.app_table_states.config
-    }
-    pub fn edit_keybindings_next(&mut self) {
-        let keybinding_iterator = self.config.keybindings.iter();
-        let i = match self.state.app_table_states.edit_keybindings.selected() {
-            Some(i) => {
-                if i >= keybinding_iterator.count() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.edit_keybindings.select(Some(i));
-    }
-    pub fn edit_keybindings_prv(&mut self) {
-        let keybinding_iterator = self.config.keybindings.iter();
-        let i = match self.state.app_table_states.edit_keybindings.selected() {
-            Some(i) => {
-                if i == 0 {
-                    keybinding_iterator.count() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.edit_keybindings.select(Some(i));
-    }
-    pub fn help_next(&mut self) {
-        let all_keybindings: Vec<_> = self.config.keybindings.iter().collect();
-        let i = match self.state.app_table_states.help.selected() {
-            Some(i) => {
-                if !all_keybindings.is_empty() {
-                    if i >= (all_keybindings.len() / 2) - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.help.select(Some(i));
-    }
-    pub fn help_prv(&mut self) {
-        let all_keybindings: Vec<_> = self.config.keybindings.iter().collect();
-        let i = match self.state.app_table_states.help.selected() {
-            Some(i) => {
-                if !all_keybindings.is_empty() {
-                    if i == 0 {
-                        (all_keybindings.len() / 2) - 1
-                    } else {
-                        i - 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.help.select(Some(i));
-    }
-    pub fn select_default_view_next(&mut self) {
-        let i = match self.state.app_list_states.default_view.selected() {
-            Some(i) => {
-                if i >= View::all_views_as_string().len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.default_view.select(Some(i));
-    }
-    pub fn select_default_view_prv(&mut self) {
-        let i = match self.state.app_list_states.default_view.selected() {
-            Some(i) => {
-                if i == 0 {
-                    View::all_views_as_string().len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.default_view.select(Some(i));
-    }
-    pub fn command_palette_command_search_prv(&mut self) {
-        let i = match self
-            .state
-            .app_list_states
-            .command_palette_command_search
-            .selected()
-        {
-            Some(i) => {
-                if let Some(results) = &self.widgets.command_palette.command_search_results {
-                    if i == 0 {
-                        results.len() - 1
-                    } else {
-                        i - 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .command_palette_command_search
-            .select(Some(i));
-    }
-    pub fn command_palette_command_search_next(&mut self) {
-        let i = match self
-            .state
-            .app_list_states
-            .command_palette_command_search
-            .selected()
-        {
-            Some(i) => {
-                if let Some(results) = &self.widgets.command_palette.command_search_results {
-                    if i >= results.len() - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .command_palette_command_search
-            .select(Some(i));
-    }
-    pub fn command_palette_card_search_next(&mut self) {
-        let i = match self
-            .state
-            .app_list_states
-            .command_palette_card_search
-            .selected()
-        {
-            Some(i) => {
-                if let Some(results) = &self.widgets.command_palette.card_search_results {
-                    if i >= results.len() - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .command_palette_card_search
-            .select(Some(i));
-    }
-    pub fn command_palette_card_search_prv(&mut self) {
-        let i = match self
-            .state
-            .app_list_states
-            .command_palette_card_search
-            .selected()
-        {
-            Some(i) => {
-                if let Some(results) = &self.widgets.command_palette.card_search_results {
-                    if i == 0 {
-                        results.len() - 1
-                    } else {
-                        i - 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .command_palette_card_search
-            .select(Some(i));
-    }
-    pub fn command_palette_board_search_next(&mut self) {
-        let i = match self
-            .state
-            .app_list_states
-            .command_palette_board_search
-            .selected()
-        {
-            Some(i) => {
-                if let Some(results) = &self.widgets.command_palette.board_search_results {
-                    if i >= results.len() - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .command_palette_board_search
-            .select(Some(i));
-    }
-    pub fn command_palette_board_search_prv(&mut self) {
-        let i = match self
-            .state
-            .app_list_states
-            .command_palette_board_search
-            .selected()
-        {
-            Some(i) => {
-                if let Some(results) = &self.widgets.command_palette.board_search_results {
-                    if i == 0 {
-                        results.len() - 1
-                    } else {
-                        i - 1
-                    }
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .command_palette_board_search
-            .select(Some(i));
     }
     pub fn send_info_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
         if let Some(duration) = custom_duration {
@@ -646,284 +280,6 @@ impl App<'_> {
                 self.current_theme.clone(),
             ));
         }
-    }
-    pub fn select_card_status_prv(&mut self) {
-        let i = match self.state.app_list_states.card_status_selector.selected() {
-            Some(i) => {
-                if i == 0 {
-                    CardStatus::all().len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .card_status_selector
-            .select(Some(i));
-    }
-    pub fn select_card_status_next(&mut self) {
-        let i = match self.state.app_list_states.card_status_selector.selected() {
-            Some(i) => {
-                if i >= CardStatus::all().len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .card_status_selector
-            .select(Some(i));
-    }
-    pub fn select_change_theme_next(&mut self) {
-        let i = match self.state.app_list_states.theme_selector.selected() {
-            Some(i) => {
-                if i >= self.all_themes.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.theme_selector.select(Some(i));
-        self.current_theme = self.all_themes[i].clone();
-    }
-    pub fn select_change_theme_prv(&mut self) {
-        let i = match self.state.app_list_states.theme_selector.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.all_themes.len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.theme_selector.select(Some(i));
-        self.current_theme = self.all_themes[i].clone();
-    }
-    pub fn select_create_theme_next(&mut self) {
-        // popup doesn't matter here, as we only want the length of the rows
-        let theme_rows_len = Theme::default().to_rows(self, true).1.len();
-        let i = match self.state.app_table_states.theme_editor.selected() {
-            Some(i) => {
-                if i >= theme_rows_len - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.theme_editor.select(Some(i));
-    }
-    pub fn select_create_theme_prv(&mut self) {
-        // popup doesn't matter here, as we only want the length of the rows
-        let theme_rows_len = Theme::default().to_rows(self, true).1.len();
-        let i = match self.state.app_table_states.theme_editor.selected() {
-            Some(i) => {
-                if i == 0 {
-                    theme_rows_len - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_table_states.theme_editor.select(Some(i));
-    }
-    pub fn select_edit_style_fg_next(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style[0].selected() {
-            Some(i) => {
-                if i >= TextColorOptions::iter().count() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.edit_specific_style[0].select(Some(i));
-    }
-    pub fn select_edit_style_fg_prv(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style[0].selected() {
-            Some(i) => {
-                if i == 0 {
-                    TextColorOptions::iter().count() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.edit_specific_style[0].select(Some(i));
-    }
-    pub fn select_edit_style_bg_next(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style[1].selected() {
-            Some(i) => {
-                if i >= TextColorOptions::iter().count() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.edit_specific_style[1].select(Some(i));
-    }
-    pub fn select_edit_style_bg_prv(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style[1].selected() {
-            Some(i) => {
-                if i == 0 {
-                    TextColorOptions::iter().count() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.edit_specific_style[1].select(Some(i));
-    }
-    pub fn select_edit_style_modifier_next(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style[2].selected() {
-            Some(i) => {
-                if i >= TextModifierOptions::iter().count() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.edit_specific_style[2].select(Some(i));
-    }
-    pub fn select_edit_style_modifier_prv(&mut self) {
-        let i = match self.state.app_list_states.edit_specific_style[2].selected() {
-            Some(i) => {
-                if i == 0 {
-                    TextModifierOptions::iter().count() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.app_list_states.edit_specific_style[2].select(Some(i));
-    }
-    pub fn select_card_priority_next(&mut self) {
-        let i = match self.state.app_list_states.card_priority_selector.selected() {
-            Some(i) => {
-                if i >= CardPriority::all().len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .card_priority_selector
-            .select(Some(i));
-    }
-    pub fn select_card_priority_prv(&mut self) {
-        let i = match self.state.app_list_states.card_priority_selector.selected() {
-            Some(i) => {
-                if i == 0 {
-                    CardPriority::all().len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .card_priority_selector
-            .select(Some(i));
-    }
-    pub fn filter_by_tag_popup_next(&mut self) {
-        let all_tags_len = if let Some(available_tags) = &self.state.all_available_tags {
-            available_tags.len()
-        } else {
-            0
-        };
-        if all_tags_len > 0 {
-            let i = match self.state.app_list_states.filter_by_tag_list.selected() {
-                Some(i) => {
-                    if i >= all_tags_len - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                }
-                None => 0,
-            };
-            self.state
-                .app_list_states
-                .filter_by_tag_list
-                .select(Some(i));
-        }
-    }
-    pub fn filter_by_tag_popup_prv(&mut self) {
-        let all_tags_len = if let Some(available_tags) = &self.state.all_available_tags {
-            available_tags.len()
-        } else {
-            0
-        };
-        if all_tags_len > 0 {
-            let i = match self.state.app_list_states.filter_by_tag_list.selected() {
-                Some(i) => {
-                    if i == 0 {
-                        all_tags_len - 1
-                    } else {
-                        i - 1
-                    }
-                }
-                None => 0,
-            };
-            self.state
-                .app_list_states
-                .filter_by_tag_list
-                .select(Some(i));
-        }
-    }
-    pub fn change_date_format_popup_next(&mut self) {
-        let i = match self.state.app_list_states.date_format_selector.selected() {
-            Some(i) => {
-                if i >= DateTimeFormat::get_all_date_formats().len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .date_format_selector
-            .select(Some(i));
-    }
-    pub fn change_date_format_popup_prv(&mut self) {
-        let i = match self.state.app_list_states.date_format_selector.selected() {
-            Some(i) => {
-                if i == 0 {
-                    DateTimeFormat::get_all_date_formats().len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state
-            .app_list_states
-            .date_format_selector
-            .select(Some(i));
     }
     pub fn undo(&mut self) {
         if self.action_history_manager.history_index == 0 {
@@ -1211,67 +567,407 @@ impl App<'_> {
             }
         }
     }
-    pub fn log_next(&mut self) {
-        let total_logs = get_logs().len();
-        let mut hot_log = RUST_KANBAN_LOGGER.hot_log.lock();
-        let i = match hot_log.state.selected() {
+    fn select_next(current_index: Option<usize>, items_len: usize) -> usize {
+        match current_index {
             Some(i) => {
-                if i >= total_logs - 1 {
+                if i >= items_len - 1 {
                     0
                 } else {
                     i + 1
                 }
             }
             None => 0,
-        };
-        hot_log.state.select(Some(i));
+        }
     }
-    pub fn log_prv(&mut self) {
-        let total_logs = get_logs().len();
-        let mut hot_log = RUST_KANBAN_LOGGER.hot_log.lock();
-        let i = match hot_log.state.selected() {
+    fn select_previous(current_index: Option<usize>, items_len: usize) -> usize {
+        match current_index {
             Some(i) => {
                 if i == 0 {
-                    total_logs - 1
+                    items_len - 1
                 } else {
                     i - 1
                 }
             }
             None => 0,
+        }
+    }
+    pub fn config_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_table_states.config.selected(),
+            self.config.to_view_list().len(),
+        );
+        self.state.app_table_states.config.select(Some(i));
+    }
+    pub fn config_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_table_states.config.selected(),
+            self.config.to_view_list().len(),
+        );
+        self.state.app_table_states.config.select(Some(i));
+    }
+    pub fn main_menu_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.main_menu.selected(),
+            self.main_menu.all().len(),
+        );
+        self.state.app_list_states.main_menu.select(Some(i));
+    }
+    pub fn main_menu_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.main_menu.selected(),
+            self.main_menu.all().len(),
+        );
+        self.state.app_list_states.main_menu.select(Some(i));
+    }
+    pub fn load_save_next(&mut self, cloud_mode: bool) {
+        let items_len = if cloud_mode {
+            self.state.cloud_data.as_ref().map_or(0, |data| data.len())
+        } else {
+            get_available_local_save_files(&self.config).map_or(0, |files| files.len())
         };
+        let i = Self::select_next(self.state.app_list_states.load_save.selected(), items_len);
+        self.state.app_list_states.load_save.select(Some(i));
+    }
+    pub fn load_save_prv(&mut self, cloud_mode: bool) {
+        let items_len = if cloud_mode {
+            self.state.cloud_data.as_ref().map_or(0, |data| data.len())
+        } else {
+            get_available_local_save_files(&self.config).map_or(0, |files| files.len())
+        };
+        let i = Self::select_previous(self.state.app_list_states.load_save.selected(), items_len);
+        self.state.app_list_states.load_save.select(Some(i));
+    }
+    pub fn edit_keybindings_next(&mut self) {
+        let keybinding_count = self.config.keybindings.iter().count();
+        let i = Self::select_next(
+            self.state.app_table_states.edit_keybindings.selected(),
+            keybinding_count,
+        );
+        self.state.app_table_states.edit_keybindings.select(Some(i));
+    }
+    pub fn edit_keybindings_prv(&mut self) {
+        let keybinding_count = self.config.keybindings.iter().count();
+        let i = Self::select_previous(
+            self.state.app_table_states.edit_keybindings.selected(),
+            keybinding_count,
+        );
+        self.state.app_table_states.edit_keybindings.select(Some(i));
+    }
+    pub fn help_next(&mut self) {
+        let all_keybindings: Vec<_> = self.config.keybindings.iter().collect();
+        let i = Self::select_next(
+            self.state.app_table_states.help.selected(),
+            all_keybindings.len() / 2,
+        );
+        self.state.app_table_states.help.select(Some(i));
+    }
+    pub fn help_prv(&mut self) {
+        let all_keybindings: Vec<_> = self.config.keybindings.iter().collect();
+        let i = Self::select_previous(
+            self.state.app_table_states.help.selected(),
+            all_keybindings.len() / 2,
+        );
+        self.state.app_table_states.help.select(Some(i));
+    }
+    pub fn select_default_view_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.default_view.selected(),
+            View::all_views_as_string().len(),
+        );
+        self.state.app_list_states.default_view.select(Some(i));
+    }
+    pub fn select_default_view_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.default_view.selected(),
+            View::all_views_as_string().len(),
+        );
+        self.state.app_list_states.default_view.select(Some(i));
+    }
+    pub fn command_palette_command_search_prv(&mut self) {
+        if let Some(results) = &self.widgets.command_palette.command_search_results {
+            let i = Self::select_previous(
+                self.state
+                    .app_list_states
+                    .command_palette_command_search
+                    .selected(),
+                results.len(),
+            );
+            self.state
+                .app_list_states
+                .command_palette_command_search
+                .select(Some(i));
+        }
+    }
+    pub fn command_palette_command_search_next(&mut self) {
+        if let Some(results) = &self.widgets.command_palette.command_search_results {
+            let i = Self::select_next(
+                self.state
+                    .app_list_states
+                    .command_palette_command_search
+                    .selected(),
+                results.len(),
+            );
+            self.state
+                .app_list_states
+                .command_palette_command_search
+                .select(Some(i));
+        }
+    }
+    pub fn command_palette_card_search_next(&mut self) {
+        if let Some(results) = &self.widgets.command_palette.card_search_results {
+            let i = Self::select_next(
+                self.state
+                    .app_list_states
+                    .command_palette_card_search
+                    .selected(),
+                results.len(),
+            );
+            self.state
+                .app_list_states
+                .command_palette_card_search
+                .select(Some(i));
+        }
+    }
+    pub fn command_palette_card_search_prv(&mut self) {
+        if let Some(results) = &self.widgets.command_palette.card_search_results {
+            let i = Self::select_previous(
+                self.state
+                    .app_list_states
+                    .command_palette_card_search
+                    .selected(),
+                results.len(),
+            );
+            self.state
+                .app_list_states
+                .command_palette_card_search
+                .select(Some(i));
+        }
+    }
+    pub fn command_palette_board_search_next(&mut self) {
+        if let Some(results) = &self.widgets.command_palette.board_search_results {
+            let i = Self::select_next(
+                self.state
+                    .app_list_states
+                    .command_palette_board_search
+                    .selected(),
+                results.len(),
+            );
+            self.state
+                .app_list_states
+                .command_palette_board_search
+                .select(Some(i));
+        }
+    }
+    pub fn command_palette_board_search_prv(&mut self) {
+        if let Some(results) = &self.widgets.command_palette.board_search_results {
+            let i = Self::select_previous(
+                self.state
+                    .app_list_states
+                    .command_palette_board_search
+                    .selected(),
+                results.len(),
+            );
+            self.state
+                .app_list_states
+                .command_palette_board_search
+                .select(Some(i));
+        }
+    }
+    pub fn select_card_status_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.card_status_selector.selected(),
+            CardStatus::all().len(),
+        );
+        self.state
+            .app_list_states
+            .card_status_selector
+            .select(Some(i));
+    }
+    pub fn select_card_status_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.card_status_selector.selected(),
+            CardStatus::all().len(),
+        );
+        self.state
+            .app_list_states
+            .card_status_selector
+            .select(Some(i));
+    }
+    pub fn select_change_theme_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.theme_selector.selected(),
+            self.all_themes.len(),
+        );
+        self.state.app_list_states.theme_selector.select(Some(i));
+        self.current_theme = self.all_themes[i].clone();
+    }
+    pub fn select_change_theme_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.theme_selector.selected(),
+            self.all_themes.len(),
+        );
+        self.state.app_list_states.theme_selector.select(Some(i));
+        self.current_theme = self.all_themes[i].clone();
+    }
+    pub fn select_create_theme_next(&mut self) {
+        // popup doesn't matter here, as we only want the length of the rows
+        let theme_rows_len = Theme::default().to_rows(self, true).1.len();
+        let i = Self::select_next(
+            self.state.app_table_states.theme_editor.selected(),
+            theme_rows_len,
+        );
+        self.state.app_table_states.theme_editor.select(Some(i));
+    }
+    pub fn select_create_theme_prv(&mut self) {
+        // popup doesn't matter here, as we only want the length of the rows
+        let theme_rows_len = Theme::default().to_rows(self, true).1.len();
+        let i = Self::select_previous(
+            self.state.app_table_states.theme_editor.selected(),
+            theme_rows_len,
+        );
+        self.state.app_table_states.theme_editor.select(Some(i));
+    }
+    pub fn select_edit_style_fg_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.edit_specific_style[0].selected(),
+            TextColorOptions::iter().count(),
+        );
+        self.state.app_list_states.edit_specific_style[0].select(Some(i));
+    }
+    pub fn select_edit_style_fg_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.edit_specific_style[0].selected(),
+            TextColorOptions::iter().count(),
+        );
+        self.state.app_list_states.edit_specific_style[0].select(Some(i));
+    }
+    pub fn select_edit_style_bg_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.edit_specific_style[1].selected(),
+            TextColorOptions::iter().count(),
+        );
+        self.state.app_list_states.edit_specific_style[1].select(Some(i));
+    }
+    pub fn select_edit_style_bg_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.edit_specific_style[1].selected(),
+            TextColorOptions::iter().count(),
+        );
+        self.state.app_list_states.edit_specific_style[1].select(Some(i));
+    }
+    pub fn select_edit_style_modifier_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.edit_specific_style[2].selected(),
+            TextModifierOptions::iter().count(),
+        );
+        self.state.app_list_states.edit_specific_style[2].select(Some(i));
+    }
+    pub fn select_edit_style_modifier_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.edit_specific_style[2].selected(),
+            TextModifierOptions::iter().count(),
+        );
+        self.state.app_list_states.edit_specific_style[2].select(Some(i));
+    }
+    pub fn select_card_priority_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.card_priority_selector.selected(),
+            CardPriority::all().len(),
+        );
+        self.state
+            .app_list_states
+            .card_priority_selector
+            .select(Some(i));
+    }
+    pub fn select_card_priority_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.card_priority_selector.selected(),
+            CardPriority::all().len(),
+        );
+        self.state
+            .app_list_states
+            .card_priority_selector
+            .select(Some(i));
+    }
+    pub fn filter_by_tag_popup_next(&mut self) {
+        let all_tags_len = self
+            .state
+            .all_available_tags
+            .as_ref()
+            .map_or(0, |tags| tags.len());
+        if all_tags_len > 0 {
+            let i = Self::select_next(
+                self.state.app_list_states.filter_by_tag_list.selected(),
+                all_tags_len,
+            );
+            self.state
+                .app_list_states
+                .filter_by_tag_list
+                .select(Some(i));
+        }
+    }
+    pub fn filter_by_tag_popup_prv(&mut self) {
+        let all_tags_len = self
+            .state
+            .all_available_tags
+            .as_ref()
+            .map_or(0, |tags| tags.len());
+        if all_tags_len > 0 {
+            let i = Self::select_previous(
+                self.state.app_list_states.filter_by_tag_list.selected(),
+                all_tags_len,
+            );
+            self.state
+                .app_list_states
+                .filter_by_tag_list
+                .select(Some(i));
+        }
+    }
+    pub fn change_date_format_popup_next(&mut self) {
+        let i = Self::select_next(
+            self.state.app_list_states.date_format_selector.selected(),
+            DateTimeFormat::get_all_date_formats().len(),
+        );
+        self.state
+            .app_list_states
+            .date_format_selector
+            .select(Some(i));
+    }
+    pub fn change_date_format_popup_prv(&mut self) {
+        let i = Self::select_previous(
+            self.state.app_list_states.date_format_selector.selected(),
+            DateTimeFormat::get_all_date_formats().len(),
+        );
+        self.state
+            .app_list_states
+            .date_format_selector
+            .select(Some(i));
+    }
+    pub fn log_next(&mut self) {
+        let total_logs = get_logs().len();
+        let mut hot_log = RUST_KANBAN_LOGGER.hot_log.lock();
+        let i = Self::select_next(hot_log.state.selected(), total_logs);
+        hot_log.state.select(Some(i));
+    }
+    pub fn log_prv(&mut self) {
+        let total_logs = get_logs().len();
+        let mut hot_log = RUST_KANBAN_LOGGER.hot_log.lock();
+        let i = Self::select_previous(hot_log.state.selected(), total_logs);
         hot_log.state.select(Some(i));
     }
     pub fn tag_picker_next(&mut self) {
-        let all_tags_len = self.widgets.tag_picker.available_tags.len();
-        if all_tags_len > 0 {
-            let i = match self.state.app_list_states.tag_picker.selected() {
-                Some(i) => {
-                    if i >= all_tags_len - 1 {
-                        0
-                    } else {
-                        i + 1
-                    }
-                }
-                None => 0,
-            };
-            self.state.app_list_states.tag_picker.select(Some(i));
-        }
+        let i = Self::select_next(
+            self.state.app_list_states.tag_picker.selected(),
+            self.widgets.tag_picker.available_tags.len(),
+        );
+        self.state.app_list_states.tag_picker.select(Some(i));
     }
     pub fn tag_picker_prv(&mut self) {
-        let all_tags_len = self.widgets.tag_picker.available_tags.len();
-        if all_tags_len > 0 {
-            let i = match self.state.app_list_states.tag_picker.selected() {
-                Some(i) => {
-                    if i == 0 {
-                        all_tags_len - 1
-                    } else {
-                        i - 1
-                    }
-                }
-                None => 0,
-            };
-            self.state.app_list_states.tag_picker.select(Some(i));
-        }
+        let i = Self::select_previous(
+            self.state.app_list_states.tag_picker.selected(),
+            self.widgets.tag_picker.available_tags.len(),
+        );
+        self.state.app_list_states.tag_picker.select(Some(i));
     }
     pub fn set_popup(&mut self, popup: PopUp) {
         if self.state.z_stack.contains(&popup) {

@@ -21,6 +21,10 @@ pub struct TagPickerWidget {
 
 impl Widget for TagPickerWidget {
     fn update(app: &mut App) {
+        if !app.state.z_stack.contains(&PopUp::TagPicker) {
+            return;
+        }
+        
         app.widgets.tag_picker.self_correct(
             TAG_SELECTOR_HEIGHT.min((app.widgets.tag_picker.available_tags.len() + 2) as u16),
             TAG_SELECTOR_WIDTH,
