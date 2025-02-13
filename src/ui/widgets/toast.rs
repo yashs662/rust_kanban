@@ -22,13 +22,13 @@ pub struct Toast {
 }
 
 impl Toast {
-    pub fn new(message: String, duration: Duration, toast_type: ToastType, theme: Theme) -> Self {
+    pub fn new(message: String, duration: Duration, toast_type: ToastType) -> Self {
         Self {
             duration,
             message,
             start_time: Instant::now(),
             title: toast_type.as_string(),
-            toast_color: toast_type.as_color(theme),
+            toast_color: (0, 0, 0), // This will be updated in the next update cycle so it doesn't matter
             toast_type: toast_type.clone(),
         }
     }
@@ -38,14 +38,13 @@ impl Toast {
         message: String,
         duration: Duration,
         toast_type: ToastType,
-        theme: Theme,
     ) -> Self {
         Self {
             duration,
             message,
             start_time: Instant::now(),
             title,
-            toast_color: toast_type.as_color(theme),
+            toast_color: (0, 0, 0), // This will be updated in the next update cycle so it doesn't matter
             toast_type: toast_type.clone(),
         }
     }

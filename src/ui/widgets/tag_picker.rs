@@ -24,7 +24,7 @@ impl Widget for TagPickerWidget {
         if !app.state.z_stack.contains(&PopUp::TagPicker) {
             return;
         }
-        
+
         app.widgets.tag_picker.self_correct(
             TAG_SELECTOR_HEIGHT.min((app.widgets.tag_picker.available_tags.len() + 2) as u16),
             TAG_SELECTOR_WIDTH,
@@ -78,11 +78,11 @@ impl Widget for TagPickerWidget {
 
                     // remove any tags that are already in the card
                     filtered_tags.retain(|(_, tag_lower)| {
-                            !card
-                                .tags
-                                .iter()
-                                .any(|card_tag| card_tag.to_lowercase() == *tag_lower)
-                        });
+                        !card
+                            .tags
+                            .iter()
+                            .any(|card_tag| card_tag.to_lowercase() == *tag_lower)
+                    });
 
                     // Keep only the first 6 tags and retain the original case
                     app.widgets.tag_picker.available_tags = filtered_tags
@@ -91,7 +91,10 @@ impl Widget for TagPickerWidget {
                         .take(6)
                         .collect();
 
-                    log::debug!("Available tags: {:?}", app.widgets.tag_picker.available_tags);
+                    log::debug!(
+                        "Available tags: {:?}",
+                        app.widgets.tag_picker.available_tags
+                    );
 
                     if app.widgets.tag_picker.available_tags.is_empty() {
                         app.state.app_list_states.tag_picker.select(None);

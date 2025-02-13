@@ -206,7 +206,7 @@ impl<'a> TextBoxRenderer<'a> {
     }
 }
 
-impl<'a> Widget for TextBoxRenderer<'a> {
+impl Widget for TextBoxRenderer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let Rect { width, height, .. } = if let Some(b) = self.0.block() {
             b.inner(area)

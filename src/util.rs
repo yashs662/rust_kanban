@@ -1,7 +1,10 @@
 use crate::{
-    app::{App, AppReturn, DateTimeFormat},
-    constants::{ENCRYPTION_KEY_FILE_NAME, FIELD_NOT_SET},
-    inputs::{events::Events, InputEvent},
+    app::{
+        state::{AppState, KeyBindings},
+        App, AppReturn, DateTimeFormat, VisibleBoardsAndCards,
+    },
+    constants::{DEFAULT_TOAST_DURATION, ENCRYPTION_KEY_FILE_NAME, FIELD_NOT_SET},
+    inputs::{events::Events, key::Key, InputEvent},
     io::{
         data_handler::reset_config,
         io_handler::{
@@ -11,7 +14,10 @@ use crate::{
         },
         IoEvent,
     },
-    ui::ui_main,
+    ui::{
+        ui_main,
+        widgets::toast::{Toast, ToastType, ToastWidget},
+    },
 };
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use crossterm::{event::EnableMouseCapture, execute};
@@ -196,9 +202,9 @@ pub fn date_format_converter(
                 naive_date_time.day(),
             );
             if let Some(naive_date) = naive_date {
-                return Ok(naive_date
+                Ok(naive_date
                     .format(date_format.to_parser_string())
-                    .to_string());
+                    .to_string())
             } else {
                 Err("Invalid date format".to_string())
             }
@@ -432,4 +438,86 @@ pub fn replace_tabs(s: &str, tab_len: u8) -> Cow<'_, str> {
     } else {
         Cow::Owned(buf)
     }
+}
+
+pub fn send_info_toast(toast_widget: &mut ToastWidget, message: &str) {
+    toast_widget.toasts.push(Toast::new(
+        message.to_string(),
+        Duration::from_secs(DEFAULT_TOAST_DURATION),
+        ToastType::Info,
+    ));
+}
+
+pub fn send_info_toast_with_duration(
+    toast_widget: &mut ToastWidget,
+    message: &str,
+    duration: Duration,
+) {
+    toast_widget
+        .toasts
+        .push(Toast::new(message.to_string(), duration, ToastType::Info));
+}
+
+pub fn send_error_toast(toast_widget: &mut ToastWidget, message: &str) {
+    toast_widget.toasts.push(Toast::new(
+        message.to_string(),
+        Duration::from_secs(DEFAULT_TOAST_DURATION),
+        ToastType::Error,
+    ));
+}
+
+pub fn send_error_toast_with_duration(
+    toast_widget: &mut ToastWidget,
+    message: &str,
+    duration: Duration,
+) {
+    toast_widget
+        .toasts
+        .push(Toast::new(message.to_string(), duration, ToastType::Error));
+}
+
+pub fn send_warning_toast(toast_widget: &mut ToastWidget, message: &str) {
+    toast_widget.toasts.push(Toast::new(
+        message.to_string(),
+        Duration::from_secs(DEFAULT_TOAST_DURATION),
+        ToastType::Warning,
+    ));
+}
+
+pub fn send_warning_toast_with_duration(
+    toast_widget: &mut ToastWidget,
+    message: &str,
+    duration: Duration,
+) {
+    toast_widget.toasts.push(Toast::new(
+        message.to_string(),
+        duration,
+        ToastType::Warning,
+    ));
+}
+
+pub fn get_first_next_focus_keybinding(keybindings: &KeyBindings) -> &Key {
+    keybindings.next_focus.first().unwrap_or(&Key::Tab)
+}
+
+pub fn get_first_prv_focus_keybinding(keybindings: &KeyBindings) -> &Key {
+    keybindings.prv_focus.first().unwrap_or(&Key::BackTab)
+}
+
+/// Updates the current board and card if the board_id and card_id
+pub fn update_current_board_and_card(
+    app_state: &mut AppState,
+    board_id: Option<(u64, u64)>,
+    card_id: Option<(u64, u64)>,
+) {
+    app_state.current_board_id = board_id;
+    app_state.current_card_id = card_id;
+}
+
+/// Updates the current visible boards and cards
+pub fn update_current_visible_boards_and_cards(
+    app: &mut App,
+    new_visible_boards_and_cards: VisibleBoardsAndCards,
+) {
+    app.visible_boards_and_cards = new_visible_boards_and_cards;
 }

@@ -10,8 +10,8 @@ use crate::{
     },
     constants::{
         DEFAULT_CARD_WARNING_DUE_DATE_DAYS, DEFAULT_NO_OF_BOARDS_PER_PAGE,
-        DEFAULT_NO_OF_CARDS_PER_BOARD, DEFAULT_TICKRATE, DEFAULT_TOAST_DURATION, DEFAULT_VIEW,
-        FIELD_NA, IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MAX_TICKRATE,
+        DEFAULT_NO_OF_CARDS_PER_BOARD, DEFAULT_TICKRATE, DEFAULT_VIEW, FIELD_NA,
+        IO_EVENT_WAIT_TIME, MAX_NO_BOARDS_PER_PAGE, MAX_NO_CARDS_PER_BOARD, MAX_TICKRATE,
         MAX_WARNING_DUE_DATE_DAYS, MIN_NO_BOARDS_PER_PAGE, MIN_NO_CARDS_PER_BOARD, MIN_TICKRATE,
         MIN_WARNING_DUE_DATE_DAYS,
     },
@@ -25,13 +25,10 @@ use crate::{
     ui::{
         text_box::TextBox,
         theme::Theme,
-        widgets::{
-            date_time_picker::CalenderType,
-            toast::{Toast, ToastType},
-            Widgets,
-        },
+        widgets::{date_time_picker::CalenderType, Widgets},
         PopUp, TextColorOptions, TextModifierOptions, View,
     },
+    util::{send_error_toast, send_error_toast_with_duration, send_info_toast, send_warning_toast},
 };
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, warn};
@@ -99,6 +96,9 @@ impl ActionHistoryManager {
     }
 }
 
+/// Hashmap of board id to a vector of card id's
+pub type VisibleBoardsAndCards = LinkedHashMap<(u64, u64), Vec<(u64, u64)>>;
+
 pub struct App<'a> {
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
     actions: Vec<Action>,
@@ -109,7 +109,7 @@ pub struct App<'a> {
     pub filtered_boards: Boards,
     pub preview_boards_and_cards: Option<Boards>,
     pub config: AppConfig,
-    pub visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
+    pub visible_boards_and_cards: VisibleBoardsAndCards,
     pub last_io_event_time: Option<Instant>,
     pub all_themes: Vec<Theme>,
     pub current_theme: Theme,
@@ -127,7 +127,7 @@ impl App<'_> {
         let filtered_boards = Boards::default();
         let all_themes = Theme::all_default_themes();
         let mut theme = Theme::default();
-        let (config, config_errors, toasts) = prepare_config_for_new_app(theme.clone());
+        let (config, config_errors, toasts) = prepare_config_for_new_app();
         let default_theme = config.default_theme.clone();
         let theme_in_all = all_themes.iter().find(|t| t.name == default_theme);
         if let Some(theme_in_all) = theme_in_all {
@@ -159,7 +159,7 @@ impl App<'_> {
         };
         if !config_errors.is_empty() {
             for error in config_errors {
-                app.send_error_toast(error, None);
+                send_error_toast(&mut app.widgets.toast_widget, error);
             }
         }
         app
@@ -189,7 +189,10 @@ impl App<'_> {
             self.is_loading = false;
             debug!("Error from dispatch {}", e);
             error!("Error in handling request please, restart the app");
-            self.send_error_toast("Error in handling request please, restart the app", None);
+            send_error_toast(
+                &mut self.widgets.toast_widget,
+                "Error in handling request please, restart the app",
+            );
         };
     }
 
@@ -230,60 +233,9 @@ impl App<'_> {
     pub fn get_config_state(&self) -> &TableState {
         &self.state.app_table_states.config
     }
-    pub fn send_info_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
-        if let Some(duration) = custom_duration {
-            self.widgets.toast_widget.toasts.push(Toast::new(
-                message.to_string(),
-                duration,
-                ToastType::Info,
-                self.current_theme.clone(),
-            ));
-        } else {
-            self.widgets.toast_widget.toasts.push(Toast::new(
-                message.to_string(),
-                Duration::from_secs(DEFAULT_TOAST_DURATION),
-                ToastType::Info,
-                self.current_theme.clone(),
-            ));
-        }
-    }
-    pub fn send_error_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
-        if let Some(duration) = custom_duration {
-            self.widgets.toast_widget.toasts.push(Toast::new(
-                message.to_string(),
-                duration,
-                ToastType::Error,
-                self.current_theme.clone(),
-            ));
-        } else {
-            self.widgets.toast_widget.toasts.push(Toast::new(
-                message.to_string(),
-                Duration::from_secs(DEFAULT_TOAST_DURATION),
-                ToastType::Error,
-                self.current_theme.clone(),
-            ));
-        }
-    }
-    pub fn send_warning_toast(&mut self, message: &str, custom_duration: Option<Duration>) {
-        if let Some(duration) = custom_duration {
-            self.widgets.toast_widget.toasts.push(Toast::new(
-                message.to_string(),
-                duration,
-                ToastType::Warning,
-                self.current_theme.clone(),
-            ));
-        } else {
-            self.widgets.toast_widget.toasts.push(Toast::new(
-                message.to_string(),
-                Duration::from_secs(DEFAULT_TOAST_DURATION),
-                ToastType::Warning,
-                self.current_theme.clone(),
-            ));
-        }
-    }
     pub fn undo(&mut self) {
         if self.action_history_manager.history_index == 0 {
-            self.send_error_toast("No more actions to undo", None);
+            send_error_toast(&mut self.widgets.toast_widget, "No more actions to undo");
         } else {
             let history_index = self.action_history_manager.history_index - 1;
             let history = self.action_history_manager.history[history_index].clone();
@@ -293,9 +245,15 @@ impl App<'_> {
                         board.cards.add_card(card.clone());
                         self.action_history_manager.history_index -= 1;
                         refresh_visible_boards_and_cards(self);
-                        self.send_info_toast(&format!("Undo Delete Card '{}'", card.name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Undo Delete Card '{}'", card.name),
+                        );
                     } else {
-                        self.send_error_toast(&format!("Could not undo delete card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not undo delete card '{}' as the board with id '{:?}' was not found", card.name, board_id)
+                        );
                     }
                 }
                 ActionHistory::CreateCard(card, board_id) => {
@@ -303,9 +261,15 @@ impl App<'_> {
                         board.cards.remove_card_with_id(card.id);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index -= 1;
-                        self.send_info_toast(&format!("Undo Create Card '{}'", card.name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Undo Create Card '{}'", card.name),
+                        );
                     } else {
-                        self.send_error_toast(&format!("Could not undo create card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not undo create card '{}' as the board with id '{:?}' was not found", card.name, board_id)
+                        );
                     }
                 }
                 ActionHistory::MoveCardBetweenBoards(
@@ -325,12 +289,12 @@ impl App<'_> {
                     let moved_from_board = moved_from_board.unwrap();
                     if moved_from_index > moved_from_board.cards.len() {
                         debug!("bad index for undo move card, from board {:?}, to board {:?}, from index {}, to index {}", moved_from_board_id, moved_to_board_id, moved_from_index, moved_to_index);
-                        self.send_error_toast(
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
                             &format!(
                                 "Could not undo move card '{}' as the index's were invalid",
                                 card.name
                             ),
-                            None,
                         );
                     }
 
@@ -350,19 +314,22 @@ impl App<'_> {
 
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index -= 1;
-                    self.send_info_toast(&format!("Undo Move Card '{}'", card.name), None);
+                    send_info_toast(
+                        &mut self.widgets.toast_widget,
+                        &format!("Undo Move Card '{}'", card.name),
+                    );
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
                     if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
                         if moved_from_index >= board.cards.len()
                             || moved_to_index >= board.cards.len()
                         {
-                            self.send_error_toast(
+                            send_error_toast(
+                                &mut self.widgets.toast_widget,
                                 &format!(
                                     "Could not undo move card '{}' as the index's were invalid",
                                     FIELD_NA
                                 ),
-                                None,
                             );
                             return;
                         }
@@ -375,22 +342,34 @@ impl App<'_> {
                         board.cards.swap(moved_from_index, moved_to_index);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index -= 1;
-                        self.send_info_toast(&format!("Undo Move Card '{}'", card_name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Undo Move Card '{}'", card_name),
+                        );
                     } else {
-                        self.send_error_toast(&format!("Could not undo move card '{}' as the board with id '{:?}' was not found",FIELD_NA, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not undo move card '{}' as the board with id '{:?}' was not found",FIELD_NA, board_id)
+                        );
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
                     self.boards.add_board(board.clone());
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index -= 1;
-                    self.send_info_toast(&format!("Undo Delete Board '{}'", board.name), None);
+                    send_info_toast(
+                        &mut self.widgets.toast_widget,
+                        &format!("Undo Delete Board '{}'", board.name),
+                    );
                 }
                 ActionHistory::CreateBoard(board) => {
                     self.boards.remove_board_with_id(board.id);
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index -= 1;
-                    self.send_info_toast(&format!("Undo Create Board '{}'", board.name), None);
+                    send_info_toast(
+                        &mut self.widgets.toast_widget,
+                        &format!("Undo Create Board '{}'", board.name),
+                    );
                 }
                 ActionHistory::EditCard(old_card, _, board_id) => {
                     let mut card_name = String::new();
@@ -401,22 +380,28 @@ impl App<'_> {
                             card_name.clone_from(&card.name);
                             card_found = true;
                         } else {
-                            self.send_error_toast(
+                            send_error_toast(
+                                &mut self.widgets.toast_widget,
                                 &format!(
                                     "Could not undo edit card '{}' as the card was not found",
                                     old_card.name
                                 ),
-                                None,
                             );
                         }
                     } else {
-                        self.send_error_toast(&format!("Could not undo edit card '{}' as the board with id '{:?}' was not found", old_card.name, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not undo edit card '{}' as the board with id '{:?}' was not found", old_card.name, board_id)
+                        );
                     }
                     if card_found {
                         self.action_history_manager.history_index -= 1;
                     }
                     if !card_name.is_empty() {
-                        self.send_info_toast(&format!("Undo Edit Card '{}'", card_name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Undo Edit Card '{}'", card_name),
+                        );
                         refresh_visible_boards_and_cards(self);
                     }
                 }
@@ -426,7 +411,7 @@ impl App<'_> {
 
     pub fn redo(&mut self) {
         if self.action_history_manager.history_index == self.action_history_manager.history.len() {
-            self.send_error_toast("No more actions to redo", None);
+            send_error_toast(&mut self.widgets.toast_widget, "No more actions to redo");
         } else {
             let history_index = self.action_history_manager.history_index;
             let history = self.action_history_manager.history[history_index].clone();
@@ -436,9 +421,15 @@ impl App<'_> {
                         board.cards.remove_card_with_id(card.id);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index += 1;
-                        self.send_info_toast(&format!("Redo Delete Card '{}'", card.name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Redo Delete Card '{}'", card.name),
+                        );
                     } else {
-                        self.send_error_toast(&format!("Could not redo delete card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not redo delete card '{}' as the board with id '{:?}' was not found", card.name, board_id)
+                        );
                     }
                 }
                 ActionHistory::CreateCard(card, board_id) => {
@@ -446,9 +437,15 @@ impl App<'_> {
                         board.cards.add_card(card.clone());
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index += 1;
-                        self.send_info_toast(&format!("Redo Create Card '{}'", card.name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Redo Create Card '{}'", card.name),
+                        );
                     } else {
-                        self.send_error_toast(&format!("Could not redo create card '{}' as the board with id '{:?}' was not found", card.name, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not redo create card '{}' as the board with id '{:?}' was not found", card.name, board_id)
+                        );
                     }
                 }
                 ActionHistory::MoveCardBetweenBoards(
@@ -468,12 +465,12 @@ impl App<'_> {
                     let moved_to_board = moved_to_board.unwrap();
                     if moved_to_index > moved_to_board.cards.len() {
                         debug!("bad index for redo move card, from board {:?}, to board {:?}, from index {}, to index {}", moved_from_board_id, moved_to_board_id, moved_from_index, moved_to_index);
-                        self.send_error_toast(
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
                             &format!(
                                 "Could not redo move card '{}' as the index's were invalid",
                                 card.name
                             ),
-                            None,
                         );
                         return;
                     }
@@ -494,19 +491,22 @@ impl App<'_> {
 
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index += 1;
-                    self.send_info_toast(&format!("Redo Move Card '{}'", card.name), None);
+                    send_info_toast(
+                        &mut self.widgets.toast_widget,
+                        &format!("Redo Move Card '{}'", card.name),
+                    );
                 }
                 ActionHistory::MoveCardWithinBoard(board_id, moved_from_index, moved_to_index) => {
                     if let Some(board) = self.boards.get_mut_board_with_id(board_id) {
                         if moved_from_index >= board.cards.len()
                             || moved_to_index >= board.cards.len()
                         {
-                            self.send_error_toast(
+                            send_error_toast(
+                                &mut self.widgets.toast_widget,
                                 &format!(
                                     "Could not redo move card '{}' as the index's were invalid",
                                     FIELD_NA
                                 ),
-                                None,
                             );
                             return;
                         }
@@ -519,22 +519,34 @@ impl App<'_> {
                         board.cards.swap(moved_from_index, moved_to_index);
                         refresh_visible_boards_and_cards(self);
                         self.action_history_manager.history_index += 1;
-                        self.send_info_toast(&format!("Redo Move Card '{}'", card_name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Redo Move Card '{}'", card_name),
+                        );
                     } else {
-                        self.send_error_toast(&format!("Could not redo move card '{}' as the board with id '{:?}' was not found", FIELD_NA, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not redo move card '{}' as the board with id '{:?}' was not found", FIELD_NA, board_id)
+                        );
                     }
                 }
                 ActionHistory::DeleteBoard(board) => {
                     self.boards.remove_board_with_id(board.id);
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index += 1;
-                    self.send_info_toast(&format!("Redo Delete Board '{}'", board.name), None);
+                    send_info_toast(
+                        &mut self.widgets.toast_widget,
+                        &format!("Redo Delete Board '{}'", board.name),
+                    );
                 }
                 ActionHistory::CreateBoard(board) => {
                     self.boards.add_board(board.clone());
                     refresh_visible_boards_and_cards(self);
                     self.action_history_manager.history_index += 1;
-                    self.send_info_toast(&format!("Redo Create Board '{}'", board.name), None);
+                    send_info_toast(
+                        &mut self.widgets.toast_widget,
+                        &format!("Redo Create Board '{}'", board.name),
+                    );
                 }
                 ActionHistory::EditCard(_, new_card, board_id) => {
                     let mut card_name = String::new();
@@ -545,22 +557,28 @@ impl App<'_> {
                             card_name.clone_from(&card.name);
                             card_found = true;
                         } else {
-                            self.send_error_toast(
+                            send_error_toast(
+                                &mut self.widgets.toast_widget,
                                 &format!(
                                     "Could not redo edit card '{}' as the card was not found",
                                     new_card.name
                                 ),
-                                None,
                             );
                         }
                     } else {
-                        self.send_error_toast(&format!("Could not redo edit card '{}' as the board with id '{:?}' was not found", new_card.name, board_id), None);
+                        send_error_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Could not redo edit card '{}' as the board with id '{:?}' was not found", new_card.name, board_id)
+                        );
                     }
                     if card_found {
                         self.action_history_manager.history_index += 1;
                     }
                     if !card_name.is_empty() {
-                        self.send_info_toast(&format!("Redo Edit Card '{}'", card_name), None);
+                        send_info_toast(
+                            &mut self.widgets.toast_widget,
+                            &format!("Redo Edit Card '{}'", card_name),
+                        );
                         refresh_visible_boards_and_cards(self);
                     }
                 }
@@ -993,7 +1011,11 @@ impl App<'_> {
         match popup {
             PopUp::ViewCard => {
                 if self.state.current_board_id.is_none() || self.state.current_card_id.is_none() {
-                    self.send_error_toast("No card selected", Some(Duration::from_secs(1)));
+                    send_error_toast_with_duration(
+                        &mut self.widgets.toast_widget,
+                        "No card selected",
+                        Duration::from_secs(1),
+                    );
                     return;
                 }
                 if let Some(current_board) = self
@@ -1013,10 +1035,18 @@ impl App<'_> {
                                 false,
                             );
                     } else {
-                        self.send_error_toast("No card selected", Some(Duration::from_secs(1)));
+                        send_error_toast_with_duration(
+                            &mut self.widgets.toast_widget,
+                            "No card selected",
+                            Duration::from_secs(1),
+                        );
                     }
                 } else {
-                    self.send_error_toast("No board selected", Some(Duration::from_secs(1)));
+                    send_error_toast_with_duration(
+                        &mut self.widgets.toast_widget,
+                        "No board selected",
+                        Duration::from_secs(1),
+                    );
                 }
             }
             PopUp::CommandPalette => {
@@ -1062,9 +1092,9 @@ impl App<'_> {
                     self.state.app_status = AppStatus::Initialized;
                     if let Some(card) = &self.state.card_being_edited {
                         warn!("Discarding changes to card '{}'", card.1.name);
-                        self.send_warning_toast(
+                        send_warning_toast(
+                            &mut self.widgets.toast_widget,
                             &format!("Discarding changes to card '{}'", card.1.name),
-                            None,
                         );
                         self.state.card_being_edited = None;
                     }
@@ -1125,22 +1155,6 @@ impl App<'_> {
                 debug!("No special logic for setting view: {:?}", view);
             }
         }
-    }
-
-    pub fn get_first_next_focus_keybinding(&self) -> &Key {
-        self.config
-            .keybindings
-            .next_focus
-            .first()
-            .unwrap_or(&Key::Tab)
-    }
-
-    pub fn get_first_prv_focus_keybinding(&self) -> &Key {
-        self.config
-            .keybindings
-            .prv_focus
-            .first()
-            .unwrap_or(&Key::BackTab)
     }
 
     pub fn calculate_tags(&self) -> Vec<(String, u32)> {
@@ -1512,14 +1526,17 @@ impl AppConfig {
             let write_status = data_handler::write_config(&config_copy);
             if write_status.is_ok() {
                 app.config = config_copy;
-                app.send_info_toast("Config updated", None);
+                send_info_toast(&mut app.widgets.toast_widget, "Config updated");
             } else {
-                app.send_error_toast("Could not write to config file", None);
+                send_error_toast(
+                    &mut app.widgets.toast_widget,
+                    "Could not write to config file",
+                );
             }
         } else {
             let error_message = format!("Could not edit config: {}", result.unwrap_err());
             error!("{}", error_message);
-            app.send_error_toast(&error_message, None);
+            send_error_toast(&mut app.widgets.toast_widget, &error_message);
         }
     }
 

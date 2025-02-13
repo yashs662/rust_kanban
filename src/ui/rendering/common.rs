@@ -20,7 +20,7 @@ use crate::{
         },
         theme::Theme,
     },
-    util::{date_format_converter, date_format_finder},
+    util::{date_format_converter, date_format_finder, update_current_board_and_card},
 };
 use chrono::{Local, NaiveDate, NaiveDateTime};
 use log::Level;
@@ -98,7 +98,7 @@ pub fn render_body(
             || app
                 .preview_boards_and_cards
                 .as_ref()
-                .map_or(false, |v| v.is_empty())
+                .is_some_and(|v| v.is_empty())
         {
             let empty_paragraph = Paragraph::new("No boards found".to_string())
                 .alignment(Alignment::Center)
@@ -242,7 +242,13 @@ pub fn render_body(
             app.state.mouse_focus = Some(Focus::Body);
             app.state.set_focus(Focus::Body);
             if !current_board_set {
-                app.state.current_board_id = Some(*board_id);
+                let new_current_board_id = Some(*board_id);
+                let current_card_id = app.state.current_card_id;
+                update_current_board_and_card(
+                    &mut app.state,
+                    new_current_board_id,
+                    current_card_id,
+                );
                 current_board_set = true;
             }
             app.state.hovered_board = Some(*board_id);
@@ -350,7 +356,13 @@ pub fn render_body(
                 app.state.mouse_focus = Some(Focus::Body);
                 app.state.set_focus(Focus::Body);
                 if !current_card_set {
-                    app.state.current_card_id = Some(card.id);
+                    let new_current_card_id = Some(card.id);
+                    let current_board_id = app.state.current_board_id;
+                    update_current_board_and_card(
+                        &mut app.state,
+                        current_board_id,
+                        new_current_card_id,
+                    );
                     current_card_set = true;
                 }
                 if !app.state.card_drag_mode {

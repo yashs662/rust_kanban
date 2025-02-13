@@ -1,5 +1,5 @@
 use crate::{
-    app::{actions::Action, kanban::Card},
+    app::{actions::Action, kanban::Card, VisibleBoardsAndCards},
     constants::{DEFAULT_VIEW, MOUSE_OUT_OF_BOUNDS_COORDINATES},
     inputs::{key::Key, mouse::Mouse},
     io::io_handler::CloudData,
@@ -48,7 +48,7 @@ pub struct AppState<'a> {
     pub prev_focus: Option<Focus>,
     pub prev_view: Option<View>,
     pub preview_file_name: Option<String>,
-    pub preview_visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>>,
+    pub preview_visible_boards_and_cards: VisibleBoardsAndCards,
     pub previous_mouse_coordinates: (u16, u16),
     pub term_background_color: (u8, u8, u8),
     pub theme_being_edited: Theme,
@@ -213,7 +213,7 @@ pub struct TextBuffers<'a> {
     pub theme_editor_bg_hex: TextBox<'a>,
 }
 
-impl<'a> Default for TextBuffers<'a> {
+impl Default for TextBuffers<'_> {
     fn default() -> Self {
         TextBuffers {
             board_name: TextBox::new(vec!["".to_string()], true),
@@ -234,7 +234,7 @@ impl<'a> Default for TextBuffers<'a> {
     }
 }
 
-impl<'a> TextBuffers<'a> {
+impl TextBuffers<'_> {
     pub fn prepare_tags_and_comments_for_card(&mut self, card: &Card) {
         self.card_tags = card
             .tags

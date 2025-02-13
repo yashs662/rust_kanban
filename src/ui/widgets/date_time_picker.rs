@@ -1,7 +1,8 @@
 use crate::{
     app::{state::Focus, App, DateTimeFormat},
     constants::{
-        DATE_TIME_PICKER_ANIM_DURATION, FIELD_NOT_SET, MIN_DATE_PICKER_HEIGHT, MIN_DATE_PICKER_WIDTH, TIME_PICKER_WIDTH
+        DATE_TIME_PICKER_ANIM_DURATION, FIELD_NOT_SET, MIN_DATE_PICKER_HEIGHT,
+        MIN_DATE_PICKER_WIDTH, TIME_PICKER_WIDTH,
     },
     ui::{
         theme::Theme,
@@ -52,7 +53,7 @@ pub struct DateTimePickerWidget<'a> {
     pub current_render_area: Option<Rect>,
 }
 
-impl<'a> DateTimePickerWidget<'a> {
+impl DateTimePickerWidget<'_> {
     pub fn new(calender_type: CalenderType) -> Self {
         Self {
             time_picker_active: false,
@@ -144,10 +145,7 @@ impl<'a> DateTimePickerWidget<'a> {
         } else {
             (year, month + 1)
         };
-        let d = match NaiveDate::from_ymd_opt(y, m, 1) {
-            Some(d) => d,
-            None => return None,
-        };
+        let d = NaiveDate::from_ymd_opt(y, m, 1)?;
         d.pred_opt().map(|d| d.day())
     }
 
@@ -661,7 +659,7 @@ impl<'a> DateTimePickerWidget<'a> {
     }
 }
 
-impl<'a> Widget for DateTimePickerWidget<'a> {
+impl Widget for DateTimePickerWidget<'_> {
     fn update(app: &mut App) {
         if app.state.z_stack.last() != Some(&PopUp::DateTimePicker) {
             return;
@@ -781,7 +779,7 @@ impl<'a> Widget for DateTimePickerWidget<'a> {
     }
 }
 
-impl<'a> SelfViewportCorrection for DateTimePickerWidget<'a> {
+impl SelfViewportCorrection for DateTimePickerWidget<'_> {
     fn get_anchor(&self) -> Option<(u16, u16)> {
         self.anchor
     }
@@ -799,7 +797,7 @@ impl<'a> SelfViewportCorrection for DateTimePickerWidget<'a> {
     }
     fn set_anchor(&mut self, anchor: Option<(u16, u16)>) {
         self.set_last_anchor(self.anchor);
-        self.anchor = anchor;        
+        self.anchor = anchor;
     }
     fn set_last_anchor(&mut self, anchor: Option<(u16, u16)>) {
         self.last_anchor = anchor;

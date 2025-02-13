@@ -46,7 +46,8 @@ impl Renderable for TagPicker {
             x: anchor.0,
             y: anchor.1,
             width: TAG_SELECTOR_WIDTH,
-            height: TAG_SELECTOR_HEIGHT.min((app.widgets.tag_picker.available_tags.len() + 2) as u16),
+            height: TAG_SELECTOR_HEIGHT
+                .min((app.widgets.tag_picker.available_tags.len() + 2) as u16),
         };
         app.widgets
             .tag_picker

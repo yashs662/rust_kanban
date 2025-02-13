@@ -44,7 +44,7 @@ pub struct Widgets<'a> {
     pub tag_picker: TagPickerWidget,
 }
 
-impl<'a> Widgets<'a> {
+impl Widgets<'_> {
     pub fn new(theme: Theme, debug_mode: bool, calender_type: CalenderType) -> Self {
         Self {
             command_palette: CommandPaletteWidget::new(debug_mode),

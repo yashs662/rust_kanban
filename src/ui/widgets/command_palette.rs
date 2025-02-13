@@ -8,6 +8,7 @@ use crate::{
     constants::RANDOM_SEARCH_TERM,
     io::{io_handler::refresh_visible_boards_and_cards, IoEvent},
     ui::{widgets::Widget, PopUp, View},
+    util::{send_error_toast, send_info_toast, send_warning_toast},
 };
 use log::{debug, error, info};
 use std::{
@@ -109,13 +110,19 @@ impl CommandPaletteWidget {
                             app.set_view(View::NewBoard);
                         } else {
                             app.close_popup();
-                            app.send_error_toast("Cannot create a new board in this view", None);
+                            send_error_toast(
+                                &mut app.widgets.toast_widget,
+                                "Cannot create a new board in this view",
+                            );
                         }
                     }
                     CommandPaletteActions::NewCard => {
                         if View::views_with_kanban_board().contains(&app.state.current_view) {
                             if app.state.current_board_id.is_none() {
-                                app.send_error_toast("No board Selected / Available", None);
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
+                                    "No board Selected / Available",
+                                );
                                 app.close_popup();
                                 app.state.app_status = AppStatus::Initialized;
                                 return AppReturn::Continue;
@@ -124,7 +131,10 @@ impl CommandPaletteWidget {
                             app.set_view(View::NewCard);
                         } else {
                             app.close_popup();
-                            app.send_error_toast("Cannot create a new card in this view", None);
+                            send_error_toast(
+                                &mut app.widgets.toast_widget,
+                                "Cannot create a new card in this view",
+                            );
                         }
                     }
                     CommandPaletteActions::ResetUI => {
@@ -138,7 +148,10 @@ impl CommandPaletteWidget {
                     }
                     CommandPaletteActions::ChangeCurrentCardStatus => {
                         if !View::views_with_kanban_board().contains(&app.state.current_view) {
-                            app.send_error_toast("Cannot change card status in this view", None);
+                            send_error_toast(
+                                &mut app.widgets.toast_widget,
+                                "Cannot change card status in this view",
+                            );
                             return AppReturn::Continue;
                         }
                         if let Some(current_board_id) = app.state.current_board_id {
@@ -163,11 +176,17 @@ impl CommandPaletteWidget {
                                 }
                             }
                         }
-                        app.send_error_toast("Could not find current card", None);
+                        send_error_toast(
+                            &mut app.widgets.toast_widget,
+                            "Could not find current card",
+                        );
                     }
                     CommandPaletteActions::ChangeCurrentCardPriority => {
                         if !View::views_with_kanban_board().contains(&app.state.current_view) {
-                            app.send_error_toast("Cannot change card priority in this view", None);
+                            send_error_toast(
+                                &mut app.widgets.toast_widget,
+                                "Cannot change card priority in this view",
+                            );
                             return AppReturn::Continue;
                         }
                         if let Some(current_board_id) = app.state.current_board_id {
@@ -192,7 +211,10 @@ impl CommandPaletteWidget {
                                 }
                             }
                         }
-                        app.send_error_toast("Could not find current card", None);
+                        send_error_toast(
+                            &mut app.widgets.toast_widget,
+                            "Could not find current card",
+                        );
                     }
                     CommandPaletteActions::LoadASaveLocal => {
                         app.close_popup();
@@ -214,7 +236,10 @@ impl CommandPaletteWidget {
                     CommandPaletteActions::FilterByTag => {
                         let tags = app.calculate_tags();
                         if tags.is_empty() {
-                            app.send_warning_toast("No tags found to filter with", None);
+                            send_warning_toast(
+                                &mut app.widgets.toast_widget,
+                                "No tags found to filter with",
+                            );
                         } else {
                             app.close_popup();
                             app.set_popup(PopUp::FilterByTag);
@@ -223,10 +248,13 @@ impl CommandPaletteWidget {
                     }
                     CommandPaletteActions::ClearFilter => {
                         if app.filtered_boards.is_empty() {
-                            app.send_warning_toast("No filters to clear", None);
+                            send_warning_toast(
+                                &mut app.widgets.toast_widget,
+                                "No filters to clear",
+                            );
                             return AppReturn::Continue;
                         } else {
-                            app.send_info_toast("All Filters Cleared", None);
+                            send_info_toast(&mut app.widgets.toast_widget, "All Filters Cleared");
                         }
                         app.state.filter_tags = None;
                         app.state.all_available_tags = None;
@@ -246,7 +274,7 @@ impl CommandPaletteWidget {
                     }
                     CommandPaletteActions::Login => {
                         if app.state.user_login_data.auth_token.is_some() {
-                            app.send_error_toast("Already logged in", None);
+                            send_error_toast(&mut app.widgets.toast_widget, "Already logged in");
                             app.close_popup();
                             app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
@@ -278,7 +306,7 @@ impl CommandPaletteWidget {
                             app.close_popup();
                         } else {
                             error!("Not logged in");
-                            app.send_error_toast("Not logged in", None);
+                            send_error_toast(&mut app.widgets.toast_widget, "Not logged in");
                             app.close_popup();
                             app.state.app_status = AppStatus::Initialized;
                             return AppReturn::Continue;
@@ -288,7 +316,10 @@ impl CommandPaletteWidget {
                         if let Some(current_board_id) = app.state.current_board_id {
                             let current_board_index = app.boards.get_board_index(current_board_id);
                             if current_board_index.is_none() {
-                                app.send_error_toast("No board selected", None);
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
+                                    "No board selected",
+                                );
                                 return AppReturn::Continue;
                             }
                             let current_board_index = current_board_index.unwrap();
@@ -299,9 +330,9 @@ impl CommandPaletteWidget {
                                 .name
                                 .clone();
                             if current_board_index == 0 {
-                                app.send_error_toast(
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
                                     format!("'{}' is already the first board", board_name).as_str(),
-                                    None,
                                 );
                                 return AppReturn::Continue;
                             }
@@ -310,27 +341,30 @@ impl CommandPaletteWidget {
                                 .swap(current_board_index, current_board_index - 1);
 
                             if swap_result.is_err() {
-                                app.send_error_toast(
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
                                     format!("Could not move '{}' to the left", board_name).as_str(),
-                                    None,
                                 );
                             }
 
                             app.close_popup();
-                            app.send_info_toast(
+                            send_info_toast(
+                                &mut app.widgets.toast_widget,
                                 format!("'{}' moved to the left", board_name).as_str(),
-                                None,
                             );
                             refresh_visible_boards_and_cards(app);
                         } else {
-                            app.send_error_toast("No board selected", None);
+                            send_error_toast(&mut app.widgets.toast_widget, "No board selected");
                         }
                     }
                     CommandPaletteActions::MoveBoardRight => {
                         if let Some(current_board_id) = app.state.current_board_id {
                             let current_board_index = app.boards.get_board_index(current_board_id);
                             if current_board_index.is_none() {
-                                app.send_error_toast("No board selected", None);
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
+                                    "No board selected",
+                                );
                                 return AppReturn::Continue;
                             }
                             let current_board_index = current_board_index.unwrap();
@@ -341,9 +375,9 @@ impl CommandPaletteWidget {
                                 .name
                                 .clone();
                             if current_board_index == app.boards.get_boards().len() - 1 {
-                                app.send_error_toast(
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
                                     format!("'{}' is already the last board", board_name).as_str(),
-                                    None,
                                 );
                                 return AppReturn::Continue;
                             }
@@ -352,21 +386,21 @@ impl CommandPaletteWidget {
                                 .swap(current_board_index, current_board_index + 1);
 
                             if swap_result.is_err() {
-                                app.send_error_toast(
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
                                     format!("Could not move '{}' to the right", board_name)
                                         .as_str(),
-                                    None,
                                 );
                             }
 
                             app.close_popup();
-                            app.send_info_toast(
+                            send_info_toast(
+                                &mut app.widgets.toast_widget,
                                 format!("'{}' moved to the right", board_name).as_str(),
-                                None,
                             );
                             refresh_visible_boards_and_cards(app);
                         } else {
-                            app.send_error_toast("No board selected", None);
+                            send_error_toast(&mut app.widgets.toast_widget, "No board selected");
                         }
                     }
                 }

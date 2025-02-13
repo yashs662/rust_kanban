@@ -1,7 +1,7 @@
 use crate::{
     app::{
         app_helper::handle_go_to_previous_view, kanban::Boards, state::UserLoginData, App,
-        AppConfig,
+        AppConfig, VisibleBoardsAndCards,
     },
     constants::{
         CONFIG_DIR_NAME, CONFIG_FILE_NAME, EMAIL_REGEX, ENCRYPTION_KEY_FILE_NAME,
@@ -17,7 +17,12 @@ use crate::{
         IoEvent,
     },
     ui::{TextColorOptions, View},
-    util::{print_debug, print_error, print_info},
+    util::{
+        print_debug, print_error, print_info, send_error_toast, send_error_toast_with_duration,
+        send_info_toast, send_info_toast_with_duration, send_warning_toast,
+        send_warning_toast_with_duration, update_current_board_and_card,
+        update_current_visible_boards_and_cards,
+    },
 };
 use aes_gcm::{
     aead::{generic_array::GenericArray, Aead, OsRng},
@@ -80,7 +85,10 @@ impl IoAsyncHandler<'_> {
         let mut app = self.app.lock().await;
         if let Err(err) = result {
             error!("Oops, something wrong happened 😢: {:?}", err);
-            app.send_error_toast("Oops, something wrong happened 😢", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Oops, something wrong happened 😢",
+            );
         }
 
         app.loaded();
@@ -93,11 +101,17 @@ impl IoAsyncHandler<'_> {
         let prepare_config_dir_status = prepare_config_dir();
         if prepare_config_dir_status.is_err() {
             error!("Cannot create config directory");
-            app.send_error_toast("Cannot create config directory", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot create config directory",
+            );
         }
         if !prepare_save_dir() {
             error!("Cannot create save directory");
-            app.send_error_toast("Cannot create save directory", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot create save directory",
+            );
         }
         prepare_boards(&mut app);
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
@@ -121,22 +135,23 @@ impl IoAsyncHandler<'_> {
         info!("👍 Application initialized");
         app.initialized();
         if app.config.save_directory == get_default_save_directory() {
-            app.send_warning_toast(
+            send_warning_toast_with_duration(
+                &mut app.widgets.toast_widget,
                 "Save directory is set to a temporary directory,
             your operating system may delete it at any time. Please change it in the settings.",
-                Some(Duration::from_secs(10)),
+                Duration::from_secs(10),
             );
         }
-        app.send_info_toast("Application initialized", None);
+        send_info_toast(&mut app.widgets.toast_widget, "Application initialized");
         if app.config.auto_login {
-            app.send_info_toast("Attempting to auto login", None);
+            send_info_toast(&mut app.widgets.toast_widget, "Attempting to auto login");
             let user_login_data =
                 test_refresh_token_on_disk(app.state.encryption_key_from_arguments.clone()).await;
             if user_login_data.is_err() {
                 let refresh_token_file_path = get_config_dir();
                 if refresh_token_file_path.is_err() {
                     error!("Cannot get config directory");
-                    app.send_error_toast("Cannot get config directory", None);
+                    send_error_toast(&mut app.widgets.toast_widget, "Cannot get config directory");
                     return Ok(());
                 }
                 let mut refresh_token_file_path = refresh_token_file_path.unwrap();
@@ -144,26 +159,29 @@ impl IoAsyncHandler<'_> {
                 if refresh_token_file_path.exists() {
                     if let Err(err) = std::fs::remove_file(refresh_token_file_path) {
                         error!("Cannot delete refresh token file: {:?}", err);
-                        app.send_error_toast("Cannot delete refresh token file", None);
+                        send_error_toast(
+                            &mut app.widgets.toast_widget,
+                            "Cannot delete refresh token file",
+                        );
                         return Ok(());
                     } else {
                         warn!("Previous access token has expired or does not exist. Please login again");
-                        app.send_warning_toast("Previous access token has expired or does not exist. Please login again", None)
+                        send_warning_toast(&mut app.widgets.toast_widget,"Previous access token has expired or does not exist. Please login again")
                     }
                 } else {
                     warn!(
                         "Previous access token has expired or does not exist. Please login again"
                     );
-                    app.send_warning_toast(
+                    send_warning_toast(
+                        &mut app.widgets.toast_widget,
                         "Previous access token has expired or does not exist. Please login again",
-                        None,
                     )
                 }
             } else {
                 let user_login_data = user_login_data.unwrap();
                 app.state.user_login_data = user_login_data;
                 app.main_menu.logged_in = true;
-                app.send_info_toast("👍 Auto login successful", None);
+                send_info_toast(&mut app.widgets.toast_widget, "👍 Auto login successful");
             }
         }
         Ok(())
@@ -178,17 +196,17 @@ impl IoAsyncHandler<'_> {
             match status {
                 Ok(_) => {
                     info!("👍 Local data saved");
-                    app.send_info_toast("👍 Local data saved", None);
+                    send_info_toast(&mut app.widgets.toast_widget, "👍 Local data saved");
                 }
                 Err(err) => {
                     debug!("Cannot save local data: {:?}", err);
-                    app.send_error_toast("Cannot save local data", None);
+                    send_error_toast(&mut app.widgets.toast_widget, "Cannot save local data");
                 }
             }
             Ok(())
         } else {
             warn!("No changes to save");
-            app.send_warning_toast("No changes to save", None);
+            send_warning_toast(&mut app.widgets.toast_widget, "No changes to save");
             Ok(())
         }
     }
@@ -202,12 +220,18 @@ impl IoAsyncHandler<'_> {
             local_files
         } else {
             error!("Could not get local save files");
-            app.send_error_toast("Could not get local save files", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Could not get local save files",
+            );
             vec![]
         };
         if save_file_index >= local_files.len() {
             error!("Cannot load save file: No such file");
-            app.send_error_toast("Cannot load save file: No such file", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot load save file: No such file",
+            );
             return Ok(());
         }
         let save_file_name = local_files[save_file_index].clone();
@@ -218,11 +242,14 @@ impl IoAsyncHandler<'_> {
                 app.boards.set_boards(boards);
                 app.action_history_manager.reset();
                 info!("👍 Save file {:?} loaded", save_file_name);
-                app.send_info_toast(&format!("👍 Save file {:?} loaded", save_file_name), None);
+                send_info_toast(
+                    &mut app.widgets.toast_widget,
+                    &format!("👍 Save file {:?} loaded", save_file_name),
+                );
             }
             Err(err) => {
                 debug!("Cannot load save file: {:?}", err);
-                app.send_error_toast("Cannot load save file", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Cannot load save file");
             }
         }
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
@@ -237,18 +264,27 @@ impl IoAsyncHandler<'_> {
             file_list
         } else {
             error!("Cannot delete save file: no save files found");
-            app.send_error_toast("Cannot delete save file: no save files found", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot delete save file: no save files found",
+            );
             return Ok(());
         };
         if app.state.app_list_states.load_save.selected().is_none() {
             error!("Cannot delete save file: no save file selected");
-            app.send_error_toast("Cannot delete save file: no save file selected", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot delete save file: no save file selected",
+            );
             return Ok(());
         }
         let selected = app.state.app_list_states.load_save.selected().unwrap_or(0);
         if selected >= file_list.len() {
             debug!("Cannot delete save file: index out of range");
-            app.send_error_toast("Cannot delete save file: Something went wrong", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot delete save file: Something went wrong",
+            );
             return Ok(());
         }
         let file_name = file_list[selected].clone();
@@ -256,16 +292,22 @@ impl IoAsyncHandler<'_> {
         let path = app.config.save_directory.join(file_name);
         if !Path::new(&path).exists() {
             error!("Cannot delete save file: file not found");
-            app.send_error_toast("Cannot delete save file: file not found", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot delete save file: file not found",
+            );
             return Ok(());
         } else if let Err(err) = std::fs::remove_file(&path) {
             debug!("Cannot delete save file: {:?}", err);
-            app.send_error_toast("Cannot delete save file: Something went wrong", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot delete save file: Something went wrong",
+            );
             app.state.app_list_states.load_save = ListState::default();
             return Ok(());
         } else {
             info!("👍 Save file deleted");
-            app.send_info_toast("👍 Save file deleted", None);
+            send_info_toast(&mut app.widgets.toast_widget, "👍 Save file deleted");
         }
         let file_list = get_available_local_save_files(&app.config);
         let file_list = if let Some(file_list) = file_list {
@@ -314,12 +356,18 @@ impl IoAsyncHandler<'_> {
             local_files
         } else {
             error!("Could not get local save files");
-            app.send_error_toast("Could not get local save files", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Could not get local save files",
+            );
             vec![]
         };
         if save_file_index >= local_files.len() {
             error!("Cannot load preview: No such file");
-            app.send_error_toast("Cannot load preview: No such file", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot load preview: No such file",
+            );
             return Ok(());
         }
         let save_file_name = local_files[save_file_index].clone();
@@ -327,8 +375,7 @@ impl IoAsyncHandler<'_> {
         match board_data {
             Ok(boards) => {
                 app.preview_boards_and_cards = Some(boards);
-                let mut visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
-                    LinkedHashMap::new();
+                let mut visible_boards_and_cards: VisibleBoardsAndCards = LinkedHashMap::new();
                 for (counter, board) in app
                     .preview_boards_and_cards
                     .as_ref()
@@ -356,8 +403,7 @@ impl IoAsyncHandler<'_> {
                         }
                     }
 
-                    let mut visible_board: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
-                        LinkedHashMap::new();
+                    let mut visible_board: VisibleBoardsAndCards = LinkedHashMap::new();
                     visible_board.insert(board.id, visible_cards);
                     visible_boards_and_cards.extend(visible_board);
                 }
@@ -366,7 +412,7 @@ impl IoAsyncHandler<'_> {
             }
             Err(e) => {
                 error!("Error loading preview: {}", e);
-                app.send_error_toast("Error loading preview", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Error loading preview");
             }
         }
         Ok(())
@@ -377,19 +423,22 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_some() {
                 error!("Already logged in, Please logout first");
-                app.send_error_toast("Already logged in, Please logout first", None);
+                send_error_toast(
+                    &mut app.widgets.toast_widget,
+                    "Already logged in, Please logout first",
+                );
                 return Ok(());
             } else {
                 info!("Logging in, please wait...");
-                app.send_info_toast("Logging in, please wait...", None);
+                send_info_toast(&mut app.widgets.toast_widget, "Logging in, please wait...");
             }
             if email_id.is_empty() {
                 error!("Email cannot be empty");
-                app.send_error_toast("Email cannot be empty", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Email cannot be empty");
                 return Ok(());
             } else if password.is_empty() {
                 error!("Password cannot be empty");
-                app.send_error_toast("Password cannot be empty", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Password cannot be empty");
                 return Ok(());
             }
         }
@@ -400,10 +449,10 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if err == "Error logging in: \"Invalid login credentials\"" {
                 error!("Invalid login credentials");
-                app.send_error_toast("Invalid login credentials", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Invalid login credentials");
             } else {
                 error!("Error logging in");
-                app.send_error_toast("Error logging in", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Error logging in");
             }
             return Ok(());
         }
@@ -429,7 +478,7 @@ impl IoAsyncHandler<'_> {
         }
 
         info!("👍 Logged in");
-        app.send_info_toast("👍 Logged in", None);
+        send_info_toast(&mut app.widgets.toast_widget, "👍 Logged in");
 
         Ok(())
     }
@@ -439,11 +488,11 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_none() {
                 error!("Not logged in");
-                app.send_error_toast("Not logged in", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Not logged in");
                 return Ok(());
             } else {
                 info!("Logging out, please wait...");
-                app.send_info_toast("Logging out, please wait...", None);
+                send_info_toast(&mut app.widgets.toast_widget, "Logging out, please wait...");
             }
         }
         let client = reqwest::Client::new();
@@ -474,11 +523,11 @@ impl IoAsyncHandler<'_> {
             app.state.user_login_data = UserLoginData::default();
             app.main_menu.logged_in = false;
             info!("👍 Logged out");
-            app.send_info_toast("👍 Logged out", None);
+            send_info_toast(&mut app.widgets.toast_widget, "👍 Logged out");
         } else {
             error!("Error logging out");
             let mut app = self.app.lock().await;
-            app.send_error_toast("Error logging out", None);
+            send_error_toast(&mut app.widgets.toast_widget, "Error logging out");
         }
         delete_refresh_token_from_disk().await?;
         Ok(())
@@ -494,29 +543,32 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_some() {
                 error!("Already logged in, Please logout first");
-                app.send_error_toast("Already logged in, Please logout first", None);
+                send_error_toast(
+                    &mut app.widgets.toast_widget,
+                    "Already logged in, Please logout first",
+                );
                 return Ok(());
             }
             if email_id.is_empty() {
                 error!("Email cannot be empty");
-                app.send_error_toast("Email cannot be empty", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Email cannot be empty");
                 return Ok(());
             }
             if password.is_empty() || confirm_password.is_empty() {
                 error!("Password cannot be empty");
-                app.send_error_toast("Password cannot be empty", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Password cannot be empty");
                 return Ok(());
             }
             if password != confirm_password {
                 error!("Passwords do not match");
-                app.send_error_toast("Passwords do not match", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Passwords do not match");
                 return Ok(());
             }
             let email_regex =
                 regex::Regex::new(EMAIL_REGEX).expect("Invalid email regex in constants");
             if !email_regex.is_match(&email_id) {
                 error!("Invalid email format");
-                app.send_error_toast("Invalid email format", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Invalid email format");
                 return Ok(());
             }
 
@@ -525,30 +577,33 @@ impl IoAsyncHandler<'_> {
                 PasswordStatus::Strong => {}
                 PasswordStatus::MissingLowercase => {
                     error!("Password must contain at least one lowercase character");
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         "Password must contain at least one lowercase character",
-                        None,
                     );
                     return Ok(());
                 }
                 PasswordStatus::MissingUppercase => {
                     error!("Password must contain at least one uppercase character");
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         "Password must contain at least one uppercase character",
-                        None,
                     );
                     return Ok(());
                 }
                 PasswordStatus::MissingNumber => {
                     error!("Password must contain at least one number");
-                    app.send_error_toast("Password must contain at least one number", None);
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
+                        "Password must contain at least one number",
+                    );
                     return Ok(());
                 }
                 PasswordStatus::MissingSpecialChar => {
                     error!("Password must contain at least one special character");
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         "Password must contain at least one special character",
-                        None,
                     );
                     return Ok(());
                 }
@@ -557,12 +612,12 @@ impl IoAsyncHandler<'_> {
                         "Password must be at least {} characters long",
                         MIN_PASSWORD_LENGTH
                     );
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         &format!(
                             "Password must be at least {} characters long",
                             MIN_PASSWORD_LENGTH
                         ),
-                        None,
                     );
                     return Ok(());
                 }
@@ -571,12 +626,12 @@ impl IoAsyncHandler<'_> {
                         "Password must be at most {} characters long",
                         MAX_PASSWORD_LENGTH
                     );
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         &format!(
                             "Password must be at most {} characters long",
                             MAX_PASSWORD_LENGTH
                         ),
-                        None,
                     );
                 }
             }
@@ -584,12 +639,16 @@ impl IoAsyncHandler<'_> {
             // check if encryption key is present
             if get_user_encryption_key(app.state.encryption_key_from_arguments.clone()).is_ok() {
                 warn!("Encryption key already exists, please delete it first or move it if you are trying to create a second account");
-                app.send_warning_toast("Encryption key already exists, please delete it first or move it if you are trying to create a second account", Some(Duration::from_secs(10)));
+                send_warning_toast_with_duration(
+                    &mut app.widgets.toast_widget,
+                    "Encryption key already exists, please delete it first or move it if you are trying to create a second account",
+                    Duration::from_secs(10)
+                );
                 return Ok(());
             }
 
             info!("Signing up, please wait...");
-            app.send_info_toast("Signing up, please wait...", None);
+            send_info_toast(&mut app.widgets.toast_widget, "Signing up, please wait...");
         }
 
         let request_body = json!(
@@ -618,33 +677,38 @@ impl IoAsyncHandler<'_> {
                             if confirmation_sent.is_none() {
                                 error!("Error signing up");
                                 let mut app = self.app.lock().await;
-                                app.send_error_toast("Error signing up", None);
+                                send_error_toast(&mut app.widgets.toast_widget, "Error signing up");
                                 return Ok(());
                             }
                             info!("👍 Confirmation email sent");
                             let mut app = self.app.lock().await;
-                            app.send_info_toast(
+                            send_info_toast_with_duration(
+                                &mut app.widgets.toast_widget,
                                 "👍 Confirmation email sent",
-                                Some(Duration::from_secs(10)),
+                                Duration::from_secs(10),
                             );
                             let key = generate_new_encryption_key();
                             let save_result = save_user_encryption_key(&key);
                             if save_result.is_err() {
                                 error!("Error saving encryption key");
                                 debug!("Error saving encryption key: {:?}", save_result);
-                                app.send_error_toast("Error saving encryption key", None);
+                                send_error_toast(
+                                    &mut app.widgets.toast_widget,
+                                    "Error saving encryption key",
+                                );
                                 return Ok(());
                             } else {
                                 let save_path = save_result.unwrap();
                                 info!("👍 Encryption key saved at {}", save_path);
-                                app.send_info_toast(
+                                send_info_toast_with_duration(
+                                    &mut app.widgets.toast_widget,
                                     &format!("👍 Encryption key saved at {}", save_path),
-                                    Some(Duration::from_secs(10)),
+                                    Duration::from_secs(10),
                                 );
                                 warn!("Please keep this key safe, you will need it to decrypt your data, you will not be able to recover your data without it");
-                                app.send_warning_toast(
+                                send_warning_toast_with_duration(&mut app.widgets.toast_widget,
                                     "Please keep this key safe, you will need it to decrypt your data, you will not be able to recover your data without it",
-                                    Some(Duration::from_secs(10)),
+                                    Duration::from_secs(10),
                                 );
                                 let default_view = app.config.default_view;
                                 app.set_view(default_view);
@@ -653,26 +717,26 @@ impl IoAsyncHandler<'_> {
                         None => {
                             error!("Error signing up");
                             let mut app = self.app.lock().await;
-                            app.send_error_toast("Error signing up", None);
+                            send_error_toast(&mut app.widgets.toast_widget, "Error signing up");
                         }
                     }
                 }
                 Err(e) => {
                     error!("Error signing up: {}", e);
                     let mut app = self.app.lock().await;
-                    app.send_error_toast("Error signing up", None);
+                    send_error_toast(&mut app.widgets.toast_widget, "Error signing up");
                 }
             }
         } else if status == StatusCode::TOO_MANY_REQUESTS {
             error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
             debug!("status code {}, response body: {:?}", status, body);
             let mut app = self.app.lock().await;
-            app.send_error_toast("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢", None);
+            send_error_toast(&mut app.widgets.toast_widget,"Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
         } else {
             error!("Error signing up");
             debug!("status code {}, response body: {:?}", status, body);
             let mut app = self.app.lock().await;
-            app.send_error_toast("Error signing up", None);
+            send_error_toast(&mut app.widgets.toast_widget, "Error signing up");
         }
         Ok(())
     }
@@ -689,23 +753,26 @@ impl IoAsyncHandler<'_> {
                         "Please wait for {} seconds before sending another reset password email",
                         remaining_time.as_secs()
                     );
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         &format!(
                         "Please wait for {} seconds before sending another reset password email",
                         remaining_time.as_secs()
                     ),
-                        None,
                     );
                     return Ok(());
                 }
             }
             if email_id.is_empty() {
                 error!("Email cannot be empty");
-                app.send_error_toast("Email cannot be empty", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Email cannot be empty");
                 return Ok(());
             } else {
                 info!("Sending reset password email, please wait...");
-                app.send_info_toast("Sending reset password email, please wait...", None);
+                send_info_toast(
+                    &mut app.widgets.toast_widget,
+                    "Sending reset password email, please wait...",
+                );
             }
         }
 
@@ -725,17 +792,26 @@ impl IoAsyncHandler<'_> {
             info!("👍 Reset password email sent");
             let mut app = self.app.lock().await;
             app.state.last_reset_password_link_sent_time = Some(Instant::now());
-            app.send_info_toast("👍 Reset password email sent", None);
+            send_info_toast(
+                &mut app.widgets.toast_widget,
+                "👍 Reset password email sent",
+            );
         } else if status == StatusCode::TOO_MANY_REQUESTS {
             let body = response.json::<serde_json::Value>().await;
             error!("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢");
             debug!("status code {}, response body: {:?}", status, body);
             let mut app = self.app.lock().await;
-            app.send_error_toast("Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Too many requests, please try again later. Due to the free nature of supabase i am limited to only 4 signup requests per hour. Sorry! 😢"
+            );
         } else {
             error!("Error sending reset password email");
             let mut app = self.app.lock().await;
-            app.send_error_toast("Error sending reset password email", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Error sending reset password email",
+            );
         }
         Ok(())
     }
@@ -750,17 +826,17 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if reset_link.is_empty() {
                 error!("Reset link cannot be empty");
-                app.send_error_toast("Reset link cannot be empty", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Reset link cannot be empty");
                 return Ok(());
             }
             if new_password.is_empty() || confirm_password.is_empty() {
                 error!("Password cannot be empty");
-                app.send_error_toast("Password cannot be empty", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Password cannot be empty");
                 return Ok(());
             }
             if new_password != confirm_password {
                 error!("Passwords do not match");
-                app.send_error_toast("Passwords do not match", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Passwords do not match");
                 return Ok(());
             }
             let password_status = check_for_safe_password(&new_password);
@@ -768,30 +844,33 @@ impl IoAsyncHandler<'_> {
                 PasswordStatus::Strong => {}
                 PasswordStatus::MissingLowercase => {
                     error!("Password must contain at least one lowercase character");
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         "Password must contain at least one lowercase character",
-                        None,
                     );
                     return Ok(());
                 }
                 PasswordStatus::MissingUppercase => {
                     error!("Password must contain at least one uppercase character");
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         "Password must contain at least one uppercase character",
-                        None,
                     );
                     return Ok(());
                 }
                 PasswordStatus::MissingNumber => {
                     error!("Password must contain at least one number");
-                    app.send_error_toast("Password must contain at least one number", None);
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
+                        "Password must contain at least one number",
+                    );
                     return Ok(());
                 }
                 PasswordStatus::MissingSpecialChar => {
                     error!("Password must contain at least one special character");
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         "Password must contain at least one special character",
-                        None,
                     );
                     return Ok(());
                 }
@@ -800,12 +879,12 @@ impl IoAsyncHandler<'_> {
                         "Password must be at least {} characters long",
                         MIN_PASSWORD_LENGTH
                     );
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         &format!(
                             "Password must be at least {} characters long",
                             MIN_PASSWORD_LENGTH
                         ),
-                        None,
                     );
                     return Ok(());
                 }
@@ -814,18 +893,21 @@ impl IoAsyncHandler<'_> {
                         "Password must be at most {} characters long",
                         MAX_PASSWORD_LENGTH
                     );
-                    app.send_error_toast(
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
                         &format!(
                             "Password must be at most {} characters long",
                             MAX_PASSWORD_LENGTH
                         ),
-                        None,
                     );
                 }
             }
 
             info!("Resetting password, please wait...");
-            app.send_info_toast("Resetting password, please wait...", None);
+            send_info_toast(
+                &mut app.widgets.toast_widget,
+                "Resetting password, please wait...",
+            );
         }
 
         let client = reqwest::Client::new();
@@ -834,14 +916,20 @@ impl IoAsyncHandler<'_> {
             Ok(_) => {
                 error!("Error verifying reset password link");
                 let mut app = self.app.lock().await;
-                app.send_error_toast("Error verifying reset password link", None);
+                send_error_toast(
+                    &mut app.widgets.toast_widget,
+                    "Error verifying reset password link",
+                );
             }
             Err(e) => {
                 let mut app = self.app.lock().await;
                 let error_url = e.url();
                 if error_url.is_none() {
                     error!("Error verifying reset password link");
-                    app.send_error_toast("Error verifying reset password link", None);
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
+                        "Error verifying reset password link",
+                    );
                     return Ok(());
                 }
                 let error_url = error_url.unwrap();
@@ -851,7 +939,10 @@ impl IoAsyncHandler<'_> {
                 let access_token = access_token.last();
                 if access_token.is_none() {
                     error!("Error verifying reset password link");
-                    app.send_error_toast("Error verifying reset password link", None);
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
+                        "Error verifying reset password link",
+                    );
                     return Ok(());
                 }
                 let mut access_token = access_token.unwrap().split("&expires_at");
@@ -859,7 +950,10 @@ impl IoAsyncHandler<'_> {
                 debug!("access token: {:?}", access_token);
                 if access_token.is_none() {
                     error!("Error verifying reset password link");
-                    app.send_error_toast("Error verifying reset password link", None);
+                    send_error_toast(
+                        &mut app.widgets.toast_widget,
+                        "Error verifying reset password link",
+                    );
                     return Ok(());
                 }
                 drop(app);
@@ -883,7 +977,10 @@ impl IoAsyncHandler<'_> {
                         if app.state.current_view == View::ResetPassword {
                             handle_go_to_previous_view(&mut app).await;
                         }
-                        app.send_info_toast("👍 Password reset successful", None);
+                        send_info_toast(
+                            &mut app.widgets.toast_widget,
+                            "👍 Password reset successful",
+                        );
                     }
                     StatusCode::UNPROCESSABLE_ENTITY => {
                         error!(
@@ -893,9 +990,9 @@ impl IoAsyncHandler<'_> {
                             "Error resetting password: {:?}",
                             reset_response.text().await
                         );
-                        app.send_error_toast(
+                        send_error_toast(
+                            &mut app.widgets.toast_widget,
                             "Error resetting password, new password cannot be same as old password",
-                            None,
                         );
                     }
                     _ => {
@@ -904,7 +1001,7 @@ impl IoAsyncHandler<'_> {
                             "Error resetting password: {:?}",
                             reset_response.text().await
                         );
-                        app.send_error_toast("Error resetting password", None);
+                        send_error_toast(&mut app.widgets.toast_widget, "Error resetting password");
                     }
                 }
             }
@@ -917,11 +1014,14 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_none() {
                 error!("Not logged in");
-                app.send_error_toast("Not logged in", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Not logged in");
                 return Ok(());
             } else {
                 info!("Syncing local data, please wait...");
-                app.send_info_toast("Syncing local data, please wait...", None);
+                send_info_toast(
+                    &mut app.widgets.toast_widget,
+                    "Syncing local data, please wait...",
+                );
             }
         }
 
@@ -941,7 +1041,10 @@ impl IoAsyncHandler<'_> {
                 "Error syncing local data: {:?}, Could not get encryption key",
                 key.err()
             );
-            app.send_error_toast("Error syncing local data, Could not get encryption key, If you have lost it please generate a new one using the -g flag", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Error syncing local data, Could not get encryption key, If you have lost it please generate a new one using the -g flag"
+            );
             return Ok(());
         }
         let key = key.unwrap();
@@ -952,7 +1055,7 @@ impl IoAsyncHandler<'_> {
                 "Error syncing local data: {:?}, could not encrypt",
                 encrypt_result.err()
             );
-            app.send_error_toast("Error syncing local data", None);
+            send_error_toast(&mut app.widgets.toast_widget, "Error syncing local data");
             return Ok(());
         }
         let (encrypted_board_data, nonce) = encrypt_result.unwrap();
@@ -983,14 +1086,17 @@ impl IoAsyncHandler<'_> {
         let mut app = self.app.lock().await;
         if status == StatusCode::CREATED {
             info!("👍 Local data synced to the cloud");
-            app.send_info_toast("👍 Local data synced to the cloud", None);
+            send_info_toast(
+                &mut app.widgets.toast_widget,
+                "👍 Local data synced to the cloud",
+            );
             if app.state.cloud_data.is_some() {
                 app.dispatch(IoEvent::GetCloudData).await;
             }
         } else {
             error!("Error syncing local data");
             debug!("Error syncing local data: {:?}", response.text().await);
-            app.send_error_toast("Error syncing local data", None);
+            send_error_toast(&mut app.widgets.toast_widget, "Error syncing local data");
         }
         Ok(())
     }
@@ -1000,7 +1106,7 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_none() {
                 error!("Not logged in");
-                app.send_error_toast("Not logged in", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Not logged in");
                 return Ok(vec![]);
             }
         }
@@ -1023,7 +1129,7 @@ impl IoAsyncHandler<'_> {
             let error_string = format!("{:?}", result.err());
             error!("{}", error_string);
             let mut app = self.app.lock().await;
-            app.send_error_toast(&error_string, None);
+            send_error_toast(&mut app.widgets.toast_widget, &error_string);
             Ok(vec![])
         } else {
             let save_ids = result.unwrap();
@@ -1036,11 +1142,14 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_none() {
                 error!("Not logged in");
-                app.send_error_toast("Not logged in", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Not logged in");
                 return Ok(());
             } else {
                 info!("Refreshing cloud data, please wait...");
-                app.send_info_toast("Refreshing cloud data, please wait...", None);
+                send_info_toast(
+                    &mut app.widgets.toast_widget,
+                    "Refreshing cloud data, please wait...",
+                );
                 app.state.cloud_data = None;
             }
         }
@@ -1066,16 +1175,16 @@ impl IoAsyncHandler<'_> {
                 Ok(cloud_data) => {
                     app.state.cloud_data = Some(cloud_data);
                     info!("👍 Cloud data loaded");
-                    app.send_info_toast("👍 Cloud data loaded", None);
+                    send_info_toast(&mut app.widgets.toast_widget, "👍 Cloud data loaded");
                 }
                 Err(e) => {
                     error!("Error Refreshing cloud data: {}", e);
-                    app.send_error_toast("Error Refreshing cloud data", None);
+                    send_error_toast(&mut app.widgets.toast_widget, "Error Refreshing cloud data");
                 }
             }
         } else {
             error!("Error Refreshing cloud data");
-            app.send_error_toast("Error Refreshing cloud data", None);
+            send_error_toast(&mut app.widgets.toast_widget, "Error Refreshing cloud data");
         }
         Ok(())
     }
@@ -1085,7 +1194,7 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.app_list_states.load_save.selected().is_none() {
                 error!("No save selected to preview");
-                app.send_error_toast("No save selected to preview", None);
+                send_error_toast(&mut app.widgets.toast_widget, "No save selected to preview");
                 return Ok(());
             }
         }
@@ -1107,9 +1216,8 @@ impl IoAsyncHandler<'_> {
         if key.is_err() {
             error!("Error loading save file, Could not get user Encryption key .If lost please generate a new one by using the -g flag");
             debug!("Error loading save file: {:?}", key.err());
-            app.send_error_toast(
+            send_error_toast(&mut app.widgets.toast_widget,
                 "Error loading save file, Could not get user Encryption key .If lost please generate a new one by using the -g flag",
-                None,
             );
             return Ok(());
         }
@@ -1118,12 +1226,15 @@ impl IoAsyncHandler<'_> {
         if decrypt_result.is_err() {
             error!("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file");
             debug!("Error loading save file: {:?}", decrypt_result.err());
-            app.send_error_toast("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", Some(Duration::from_secs(5)));
+            send_error_toast_with_duration(
+                &mut app.widgets.toast_widget,
+                "Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file",
+                Duration::from_secs(5)
+            );
             return Ok(());
         }
         app.preview_boards_and_cards = Some(decrypt_result.unwrap());
-        let mut visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
-            LinkedHashMap::new();
+        let mut visible_boards_and_cards: VisibleBoardsAndCards = LinkedHashMap::new();
         for (counter, board) in app
             .preview_boards_and_cards
             .as_ref()
@@ -1151,8 +1262,7 @@ impl IoAsyncHandler<'_> {
                 }
             }
 
-            let mut visible_board: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
-                LinkedHashMap::new();
+            let mut visible_board: VisibleBoardsAndCards = LinkedHashMap::new();
             visible_board.insert(board.id, visible_cards);
             visible_boards_and_cards.extend(visible_board);
         }
@@ -1186,12 +1296,18 @@ impl IoAsyncHandler<'_> {
             cloud_saves
         } else {
             error!("Could not get local save files");
-            app.send_error_toast("Could not get local save files", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Could not get local save files",
+            );
             vec![]
         };
         if save_file_index >= local_files.len() {
             error!("Cannot load save file: No such file");
-            app.send_error_toast("Cannot load save file: No such file", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot load save file: No such file",
+            );
             return Ok(());
         }
         let save_file_number = local_files[save_file_index].save_id;
@@ -1201,9 +1317,8 @@ impl IoAsyncHandler<'_> {
         if key.is_err() {
             error!("Error loading save file, Could not get user Encryption key. If lost please generate a new one by using the -g flag");
             debug!("Error loading save file: {:?}", key.err());
-            app.send_error_toast(
+            send_error_toast(&mut app.widgets.toast_widget,
                 "Error loading save file, Could not get user Encryption key. If lost please generate a new one by using the -g flag",
-                None,
             );
             return Ok(());
         }
@@ -1216,15 +1331,19 @@ impl IoAsyncHandler<'_> {
         if decrypt_result.is_err() {
             error!("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file");
             debug!("Error loading save file: {:?}", decrypt_result.err());
-            app.send_error_toast("Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", Some(Duration::from_secs(5)));
+            send_error_toast_with_duration(
+                &mut app.widgets.toast_widget,
+                "Error loading save file, Could not decrypt save file. The save file must have been created with a different encryption key, either generate a new one with the -g flag or replace the current encryption key with the one used to create the save file", 
+                Duration::from_secs(5)
+        );
             return Ok(());
         }
         let decrypt_result = decrypt_result.unwrap();
         app.boards.set_boards(decrypt_result);
         info!("👍 Save file cloud_save_{} loaded", save_file_number);
-        app.send_info_toast(
+        send_info_toast(
+            &mut app.widgets.toast_widget,
             &format!("👍 Save file cloud_save_{} loaded", save_file_number),
-            None,
         );
         app.dispatch(IoEvent::ResetVisibleBoardsandCards).await;
         app.set_view(default_view);
@@ -1236,11 +1355,14 @@ impl IoAsyncHandler<'_> {
             let mut app = self.app.lock().await;
             if app.state.user_login_data.auth_token.is_none() {
                 error!("Not logged in");
-                app.send_error_toast("Not logged in", None);
+                send_error_toast(&mut app.widgets.toast_widget, "Not logged in");
                 return Ok(());
             } else {
                 info!("Deleting cloud save, please wait...");
-                app.send_info_toast("Deleting cloud save, please wait...", None);
+                send_info_toast(
+                    &mut app.widgets.toast_widget,
+                    "Deleting cloud save, please wait...",
+                );
             }
         }
 
@@ -1252,12 +1374,18 @@ impl IoAsyncHandler<'_> {
             cloud_saves
         } else {
             error!("Could not get local save files");
-            app.send_error_toast("Could not get local save files", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Could not get local save files",
+            );
             return Ok(());
         };
         if save_file_index >= cloud_saves.len() {
             error!("Cannot delete save file: No such file");
-            app.send_error_toast("Cannot delete save file: No such file", None);
+            send_error_toast(
+                &mut app.widgets.toast_widget,
+                "Cannot delete save file: No such file",
+            );
             return Ok(());
         }
         drop(app);
@@ -1268,11 +1396,11 @@ impl IoAsyncHandler<'_> {
                 .await;
         let mut app = self.app.lock().await;
         if delete_status.is_err() {
-            app.send_error_toast("Error deleting cloud save", None);
+            send_error_toast(&mut app.widgets.toast_widget, "Error deleting cloud save");
         } else {
-            app.send_info_toast(
+            send_info_toast(
+                &mut app.widgets.toast_widget,
                 &format!("👍 Cloud save cloud_save_{} deleted", save_number),
-                None,
             );
         }
 
@@ -1347,16 +1475,16 @@ fn prepare_boards(app: &mut App) {
             match local_data {
                 Ok(data) => {
                     info!("👍 Local data loaded from {:?}", latest_save_file);
-                    app.send_info_toast(
+                    send_info_toast(
+                        &mut app.widgets.toast_widget,
                         &format!("👍 Local data loaded from {:?}", latest_save_file),
-                        None,
                     );
                     data
                 }
                 Err(err) => {
                     debug!("Cannot get local data: {:?}", err);
                     error!("👎 Cannot get local data, Data might be corrupted or is not in the correct format");
-                    app.send_error_toast("👎 Cannot get local data, Data might be corrupted or is not in the correct format", None);
+                    send_error_toast(&mut app.widgets.toast_widget,"👎 Cannot get local data, Data might be corrupted or is not in the correct format");
                     Boards::default()
                 }
             }
@@ -1419,8 +1547,7 @@ fn get_latest_save_file(config: &AppConfig) -> Result<String, String> {
 }
 
 pub fn refresh_visible_boards_and_cards(app: &mut App) {
-    let mut visible_boards_and_cards: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> =
-        LinkedHashMap::new();
+    let mut visible_boards_and_cards: VisibleBoardsAndCards = LinkedHashMap::new();
     let boards = if app.filtered_boards.is_empty() {
         app.boards.get_boards()
     } else {
@@ -1446,13 +1573,14 @@ pub fn refresh_visible_boards_and_cards(app: &mut App) {
             }
         }
 
-        let mut visible_board: LinkedHashMap<(u64, u64), Vec<(u64, u64)>> = LinkedHashMap::new();
+        let mut visible_board: VisibleBoardsAndCards = LinkedHashMap::new();
         visible_board.insert(board.id, visible_cards);
         visible_boards_and_cards.extend(visible_board);
     }
-    app.visible_boards_and_cards = visible_boards_and_cards;
+    update_current_visible_boards_and_cards(app, visible_boards_and_cards);
     if !app.visible_boards_and_cards.is_empty() {
-        app.state.current_board_id = Some(*app.visible_boards_and_cards.keys().next().unwrap());
+        let mut new_current_card_id = app.state.current_card_id;
+        let new_current_board_id = Some(*app.visible_boards_and_cards.keys().next().unwrap());
         if !app
             .visible_boards_and_cards
             .values()
@@ -1460,9 +1588,10 @@ pub fn refresh_visible_boards_and_cards(app: &mut App) {
             .unwrap()
             .is_empty()
         {
-            app.state.current_card_id =
-                Some(app.visible_boards_and_cards.values().next().unwrap()[0]);
+            new_current_card_id = Some(app.visible_boards_and_cards.values().next().unwrap()[0]);
         }
+
+        update_current_board_and_card(&mut app.state, new_current_board_id, new_current_card_id);
     }
 }
 
